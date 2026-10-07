@@ -1,5 +1,5 @@
-"""سرویس مدیریت کاربران (sec.users) + دسترسیِ کاربر به شرکت‌ها
-(sec.user_companies). کاربر خودش شرکتی ندارد؛ فقط از طریق این جدولِ
+"""سرویس مدیریت کاربران (sec.users) + دسترسی کاربر به شرکت‌ها
+(sec.user_companies). کاربر خودش شرکتی ندارد؛ فقط از طریق این جدول
 واسط به یک یا چند شرکت دسترسی می‌گیرد (چندشرکتی)."""
 
 from __future__ import annotations
@@ -56,12 +56,12 @@ def list_users() -> list[UserRow]:
 
 
 def grant_company_access(user_id: int, company_id: int) -> None:
-    """طبقِ حسابرسیِ صریح: ساختنِ شرکتِ تازه از صفحه‌ی «شرکت‌ها» به‌خودی‌خود
-    هیچ دسترسی‌ای به هیچ کاربری نمی‌داد — یعنی شرکتِ تازه در سوییچرِ هدرِ
-    همان کاربرِ سازنده هم دیده نمی‌شد، مگر جداگانه از صفحه‌ی «کاربران»
-    دسترسی داده می‌شد. این تابع برایِ همان لحظه‌ی ساختِ شرکت صدا زده
-    می‌شود تا کاربرِ سازنده بلافاصله دسترسی داشته باشد؛ اگر این اولین
-    شرکتِ کاربر باشد، به‌طورِ خودکار پیش‌فرض هم می‌شود."""
+    """طبق حسابرسی صریح: ساختن شرکت تازه از صفحهٔ «شرکت‌ها» به‌خودی‌خود
+    هیچ دسترسی‌ای به هیچ کاربری نمی‌داد — یعنی شرکت تازه در سوییچر هدر
+    همان کاربر سازنده هم دیده نمی‌شد، مگر جداگانه از صفحهٔ «کاربران»
+    دسترسی داده می‌شد. این تابع برای همان لحظهٔ ساخت شرکت صدا زده
+    می‌شود تا کاربر سازنده بلافاصله دسترسی داشته باشد؛ اگر این اولین
+    شرکت کاربر باشد، به‌طور خودکار پیش‌فرض هم می‌شود."""
     with new_session() as session:
         existing_links = session.scalars(
             select(UserCompany).where(UserCompany.user_id == user_id)
@@ -190,9 +190,9 @@ MOBILE_CHANNEL_TYPE_CODES = ("VAN_SALES", "PRE_SALES")
 
 
 def get_mobile_channel_type(user_id: int, company_id: int) -> str | None:
-    """طبقِ درخواستِ صریح («تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم»):
-    اپِ موبایل بر اساسِ همین مقدار مسیرِ فروشِ گرم (فاکتورِ آنی) یا سردِ
-    (فقط سفارش‌گیری) را برایِ این ویزیتور انتخاب می‌کند -- None یعنی
+    """طبق درخواست صریح («تعیین کانال مجزا برای پخش سرد و گرم»):
+    برنامهٔ موبایل بر اساس همین مقدار مسیر فروش گرم (فاکتور آنی) یا سرد
+    (فقط سفارش‌گیری) را برای این ویزیتور انتخاب می‌کند — None یعنی
     هنوز تنظیم نشده."""
     with new_session() as session:
         uc = session.get(UserCompany, (user_id, company_id))
@@ -201,7 +201,7 @@ def get_mobile_channel_type(user_id: int, company_id: int) -> str | None:
 
 def set_mobile_channel_type(user_id: int, company_id: int, channel_type_code: str | None) -> None:
     if channel_type_code is not None and channel_type_code not in MOBILE_CHANNEL_TYPE_CODES:
-        raise ValueError("نوعِ کانالِ موبایل نامعتبر است.")
+        raise ValueError("نوع کانال موبایل نامعتبر است.")
     with new_session() as session:
         uc = session.get(UserCompany, (user_id, company_id))
         if uc is None:

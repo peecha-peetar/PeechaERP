@@ -1,4 +1,4 @@
-"""واحدهایِ سازمانی — هستهٔ منابع انسانی، فازِ ۱."""
+"""واحدهای سازمانی — هستهٔ منابع انسانی، فاز ۱."""
 
 from __future__ import annotations
 
@@ -39,13 +39,13 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         form_panel = self._build_form_panel()
         outer.addWidget(form_panel, stretch=2)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="واحدِ سازمانیِ جدید")
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="واحد سازمانی جدید")
 
         self.set_field_help([
-            (self.code_field, "کدِ یکتایِ این واحدِ سازمانی در سطحِ شرکت."),
-            (self.name_field, "نامِ واحدِ سازمانی، مثلاً «فناوری اطلاعات»."),
-            (self.parent_combo, "واحدِ سازمانیِ بالادست — اگر این واحد زیرمجموعهٔ واحدِ دیگری است."),
-            (self.is_active_checkbox, "واحدِ غیرِفعال دیگر در انتخابِ واحدِ سازمانی برایِ پست/قرارداد نشان داده نمی‌شود."),
+            (self.code_field, "کد یکتای این واحد سازمانی در سطح شرکت."),
+            (self.name_field, "نام واحد سازمانی، مثلاً «فناوری اطلاعات»."),
+            (self.parent_combo, "واحد سازمانی بالادست — اگر این واحد زیرمجموعهٔ واحد دیگری است."),
+            (self.is_active_checkbox, "واحد غیرفعال دیگر در انتخاب واحد سازمانی برای پست/قرارداد نشان داده نمی‌شود."),
         ])
         self.register_field_grids("hr_org_units", [self.form_grid])
 
@@ -55,7 +55,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("واحدهایِ سازمانی")
+        title = QLabel("واحدهای سازمانی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -75,7 +75,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("واحدِ سازمانیِ جدید")
+        self.form_title = QLabel("واحد سازمانی جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -131,7 +131,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.parent_combo.blockSignals(True)
         self.parent_combo.clear()
-        self.parent_combo.addItem("(بدونِ والد)", None)
+        self.parent_combo.addItem("(بدون والد)", None)
         for u in self._rows:
             self.parent_combo.addItem(f"{u.code} — {u.name}", u.org_unit_id)
         self.parent_combo.blockSignals(False)
@@ -157,7 +157,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, unit: hr_service.OrgUnitRow) -> None:
         self._editing_id = unit.org_unit_id
-        self.form_title.setText(f"ویرایشِ واحد — {unit.name}")
+        self.form_title.setText(f"ویرایش واحد — {unit.name}")
         self.status_label.setText("")
         self.code_field.setText(unit.code)
         self.code_field.setEnabled(False)
@@ -169,7 +169,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("واحدِ سازمانیِ جدید")
+        self.form_title.setText("واحد سازمانی جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -210,7 +210,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ واحدِ سازمانی", "این واحد حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف واحد سازمانی", "این واحد حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

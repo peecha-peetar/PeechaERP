@@ -1,5 +1,5 @@
-"""مدیریتِ وام و مساعده (فصلِ ۱۳) — درخواست، تایید، پرداخت، و مشاهده/
-موکول‌کردن/بخششِ اقساط، به‌ازایِ هر کارمند."""
+"""مدیریت وام و مساعده (فصل ۱۳) — درخواست، تایید، پرداخت، و مشاهده/
+موکول‌کردن/بخشش اقساط، به‌ازای هر کارمند."""
 
 from __future__ import annotations
 
@@ -36,11 +36,11 @@ from peecha.ui.widgets import (
     wrap_scrollable_with_footer,
 )
 
-_LOAN_COLUMNS = ["وضعیت", "منبعِ تامین", "تعدادِ اقساط", "نرخِ کارمزد", "مبلغِ اصل", "نوع"]
+_LOAN_COLUMNS = ["وضعیت", "منبع تامین", "تعداد اقساط", "نرخ کارمزد", "مبلغ اصل", "نوع"]
 _INSTALLMENT_COLUMNS = ["وضعیت", "مبلغ", "دورهٔ سررسید", "شمارهٔ قسط"]
 _LOAN_STATUS_LABELS = {
     "REQUESTED": "درخواست‌شده", "APPROVED": "تاییدشده", "DISBURSED": "پرداخت‌شده",
-    "ACTIVE": "درحالِ کسر", "SETTLED": "تسویه‌شده", "REJECTED": "ردشده", "CANCELLED": "لغوشده",
+    "ACTIVE": "درحال کسر", "SETTLED": "تسویه‌شده", "REJECTED": "ردشده", "CANCELLED": "لغوشده",
 }
 _INSTALLMENT_STATUS_LABELS = {"PENDING": "درانتظار", "DEDUCTED": "کسرشده", "DEFERRED": "موکول‌شده", "WAIVED": "بخشیده‌شده"}
 
@@ -66,15 +66,15 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_loans_panel(), stretch=3)
         outer.addWidget(self._build_installments_panel(), stretch=3)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.form_status_label.clear, new_tooltip="ثبتِ وام/مساعدهٔ جدید", handle_new=False)
+        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.form_status_label.clear, new_tooltip="ثبت وام/مساعدهٔ جدید", handle_new=False)
 
         self.set_field_help([
-            (self.employee_combo, "کارمندی که این وام/مساعده برایِ او ثبت می‌شود."),
+            (self.employee_combo, "کارمندی که این وام/مساعده برای او ثبت می‌شود."),
             (self.loan_type_combo, "وام معمولاً چندقسطی است؛ مساعده معمولاً یک‌جا یا تک‌قسطی کسر می‌شود."),
-            (self.principal_field, "مبلغِ اصلِ وام/مساعده."),
-            (self.fee_rate_field, "نرخِ کارمزد به‌صورتِ اعشاری (مثلاً ۰٫۰۵ برایِ ۵٪) — می‌تواند صفر باشد."),
-            (self.start_period_combo, "اولین دورهٔ حقوقی‌ای که قسطِ این وام از حقوقِ کارمند کسر می‌شود."),
-            (self.funding_source_field, "منبعِ تامینِ مالیِ این وام -- اختیاری، صرفاً اطلاعاتی."),
+            (self.principal_field, "مبلغ اصل وام/مساعده."),
+            (self.fee_rate_field, "نرخ کارمزد به‌صورت اعشاری (مثلاً ۰٫۰۵ برای ۵٪) — می‌تواند صفر باشد."),
+            (self.start_period_combo, "اولین دورهٔ حقوقی‌ای که قسط این وام از حقوق کارمند کسر می‌شود."),
+            (self.funding_source_field, "منبع تامین مالی این وام — اختیاری، صرفاً اطلاعاتی."),
         ])
 
     def _build_form_panel(self) -> QWidget:
@@ -83,7 +83,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("درخواستِ وام/مساعدهٔ تازه")
+        title = QLabel("درخواست وام/مساعدهٔ تازه")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -92,32 +92,32 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         self.employee_combo.currentIndexChanged.connect(self._on_employee_changed)
         layout.addWidget(self.employee_combo)
 
-        layout.addWidget(QLabel("نوعِ وام"))
+        layout.addWidget(QLabel("نوع وام"))
         self.loan_type_combo = QComboBox()
         self.loan_type_combo.addItem("وام (چندقسطی)", "LOAN")
         self.loan_type_combo.addItem("مساعده (معمولاً تک‌قسطی)", "ADVANCE")
         layout.addWidget(self.loan_type_combo)
 
-        layout.addWidget(QLabel("مبلغِ اصل"))
+        layout.addWidget(QLabel("مبلغ اصل"))
         self.principal_field = QLineEdit()
         layout.addWidget(self.principal_field)
 
-        layout.addWidget(QLabel("نرخِ کارمزد (۰ تا ۱)"))
+        layout.addWidget(QLabel("نرخ کارمزد (۰ تا ۱)"))
         self.fee_rate_field = QLineEdit()
         self.fee_rate_field.setText("0")
         layout.addWidget(self.fee_rate_field)
 
-        layout.addWidget(QLabel("تعدادِ اقساط"))
+        layout.addWidget(QLabel("تعداد اقساط"))
         self.installments_field = ZeroPaddedSpinBox()
         self.installments_field.setRange(1, 60)
         self.installments_field.setValue(1)
         layout.addWidget(self.installments_field)
 
-        layout.addWidget(QLabel("دورهٔ شروعِ کسر"))
+        layout.addWidget(QLabel("دورهٔ شروع کسر"))
         self.start_period_combo = QComboBox()
         layout.addWidget(self.start_period_combo)
 
-        layout.addWidget(QLabel("منبعِ تامینِ مالی"))
+        layout.addWidget(QLabel("منبع تامین مالی"))
         self.funding_source_field = QLineEdit()
         layout.addWidget(self.funding_source_field)
 
@@ -128,7 +128,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         create_button = QPushButton("➕")
         create_button.setObjectName("primaryIconButton")
         create_button.setFixedWidth(48)
-        create_button.setToolTip("ثبتِ درخواست")
+        create_button.setToolTip("ثبت درخواست")
         create_button.clicked.connect(self._create_loan)
 
         return wrap_scrollable_with_footer(panel, [create_button])
@@ -139,7 +139,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("وام‌هایِ کارمندِ انتخاب‌شده")
+        title = QLabel("وام‌های کارمند انتخاب‌شده")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -171,7 +171,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         disburse_button = QPushButton("💰")
         disburse_button.setObjectName("primaryIconButton")
         disburse_button.setFixedWidth(48)
-        disburse_button.setToolTip("پرداخت (تولیدِ اقساط)")
+        disburse_button.setToolTip("پرداخت (تولید اقساط)")
         disburse_button.clicked.connect(self._disburse_selected_loan)
 
         cancel_button = QPushButton("🚫")
@@ -190,7 +190,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("اقساطِ وامِ انتخاب‌شده")
+        title = QLabel("اقساط وام انتخاب‌شده")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -324,7 +324,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
             principal = decimal.Decimal(numerals.to_ascii_digits(self.principal_field.text()) or "0")
             fee_rate = decimal.Decimal(numerals.to_ascii_digits(self.fee_rate_field.text()) or "0")
         except decimal.InvalidOperation:
-            theme.set_status_label(self.form_status_label, "مبلغ/نرخِ واردشده نامعتبر است.", ok=False)
+            theme.set_status_label(self.form_status_label, "مبلغ/نرخ واردشده نامعتبر است.", ok=False)
             return
         try:
             loan_service.create_loan(
@@ -342,7 +342,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
 
     def _approve_selected_loan(self) -> None:
         if self._selected_loan_id is None:
-            QMessageBox.information(self, "تاییدِ وام", "یک وام را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "تایید وام", "یک وام را از فهرست انتخاب کنید.")
             return
         try:
             loan_service.approve_loan(self._selected_loan_id)
@@ -354,7 +354,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
 
     def _reject_selected_loan(self) -> None:
         if self._selected_loan_id is None:
-            QMessageBox.information(self, "ردِ وام", "یک وام را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "رد وام", "یک وام را از فهرست انتخاب کنید.")
             return
         try:
             loan_service.reject_loan(self._selected_loan_id)
@@ -366,7 +366,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
 
     def _disburse_selected_loan(self) -> None:
         if self._selected_loan_id is None:
-            QMessageBox.information(self, "پرداختِ وام", "یک وام را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "پرداخت وام", "یک وام را از فهرست انتخاب کنید.")
             return
         company_id = _company_id()
         if company_id is None:
@@ -376,12 +376,12 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         except ValueError as exc:
             theme.set_status_label(self.loan_status_label, str(exc), ok=False)
             return
-        theme.set_status_label(self.loan_status_label, "وام پرداخت شد و جدولِ اقساط ساخته شد.", ok=True)
+        theme.set_status_label(self.loan_status_label, "وام پرداخت شد و جدول اقساط ساخته شد.", ok=True)
         self.refresh()
 
     def _cancel_selected_loan(self) -> None:
         if self._selected_loan_id is None:
-            QMessageBox.information(self, "لغوِ وام", "یک وام را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "لغو وام", "یک وام را از فهرست انتخاب کنید.")
             return
         try:
             loan_service.cancel_loan(self._selected_loan_id)
@@ -395,12 +395,12 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         installment_id = self._selected_installment_id
         company_id = _company_id()
         if installment_id is None or company_id is None:
-            QMessageBox.information(self, "موکول‌کردنِ قسط", "یک قسط را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "موکول‌کردن قسط", "یک قسط را از فهرست انتخاب کنید.")
             return
         try:
             loan_service.defer_installment(installment_id, company_id)
         except ValueError as exc:
-            QMessageBox.warning(self, "موکول‌کردنِ قسط", str(exc))
+            QMessageBox.warning(self, "موکول‌کردن قسط", str(exc))
             return
         self._refresh_installments()
 
@@ -408,15 +408,15 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         installment_id = self._selected_installment_id
         company_id = _company_id()
         if installment_id is None or company_id is None:
-            QMessageBox.information(self, "بخششِ قسط", "یک قسط را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "بخشش قسط", "یک قسط را از فهرست انتخاب کنید.")
             return
-        reason, ok = QInputDialog.getText(self, "بخششِ قسط", "دلیلِ بخشش (الزامی):")
+        reason, ok = QInputDialog.getText(self, "بخشش قسط", "دلیل بخشش (الزامی):")
         if not ok:
             return
         user_id = app_session.current_user.user_id if app_session.current_user else None
         try:
             loan_service.waive_installment(installment_id, reason, company_id, user_id)
         except ValueError as exc:
-            QMessageBox.warning(self, "بخششِ قسط", str(exc))
+            QMessageBox.warning(self, "بخشش قسط", str(exc))
             return
         self._refresh_installments()

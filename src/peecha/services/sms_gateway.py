@@ -1,11 +1,11 @@
-"""ارسالِ پیامک از طریقِ یک درگاهِ عمومی -- طبقِ درخواستِ صریحِ کاربر
-(«یک تب برایِ بازاریابی و ارسالِ پیامکِ زمان‌بندی‌شده») و پاسخِ او به
-سوالِ ارائه‌دهنده («راه‌آفتاب، تقریباً همه مثل هم‌اند»): چون APIِ دقیقِ
-هیچ ارائه‌دهنده‌ای پیدا نشد، به‌جایِ سخت‌کدکردنِ یک ارائه‌دهنده، ادمین
-یک الگویِ URL با {phone}/{text} (و هرگونه کلیدِ API/نامِ‌کاربری/رمزِ
+"""ارسال پیامک از طریق یک درگاه عمومی — طبق درخواست صریح کاربر
+(«یک تب برای بازاریابی و ارسال پیامک زمان‌بندی‌شده») و پاسخ او به
+سوال ارائه‌دهنده («راه‌آفتاب، تقریباً همه مثل هم‌اند»): چون API دقیق
+هیچ ارائه‌دهنده‌ای پیدا نشد، به‌جای سخت‌کدکردن یک ارائه‌دهنده، ادمین
+یک الگوی URL با {phone}/{text} (و هرگونه کلید API/نام‌کاربری/رمز
 لازم، مستقیماً در همان URL) در تنظیمات وارد می‌کند؛ این تابع فقط
-جایگزینی می‌کند و درخواستِ HTTP می‌فرستد -- بدونِ فرضِ هیچ فرمتِ خاصی
-از پاسخ (چون فرمتِ موفقیت/خطایِ هر ارائه‌دهنده متفاوت است)."""
+جایگزینی می‌کند و درخواست HTTP می‌فرستد — بدون فرض هیچ قالب خاصی
+از پاسخ (چون قالب موفقیت/خطای هر ارائه‌دهنده متفاوت است)."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class SmsSendResult:
 
 def send_sms(request_template: str, http_method: str, phone_number: str, text: str, timeout: float = _DEFAULT_TIMEOUT_SECONDS) -> SmsSendResult:
     if not request_template:
-        return SmsSendResult(False, "درگاهِ پیامک تنظیم نشده است.")
+        return SmsSendResult(False, "درگاه پیامک تنظیم نشده است.")
     url = request_template.replace("{phone}", urllib.parse.quote(phone_number)).replace("{text}", urllib.parse.quote(text))
     try:
         if http_method.upper() == "POST":
@@ -71,7 +71,7 @@ def send_sms(request_template: str, http_method: str, phone_number: str, text: s
         else:
             response = requests.get(url, timeout=timeout)
         if response.status_code >= 400:
-            return SmsSendResult(False, f"درگاهِ پیامک با کدِ {response.status_code} پاسخ داد.")
+            return SmsSendResult(False, f"درگاه پیامک با کد {response.status_code} پاسخ داد.")
         return SmsSendResult(True, "پیامک ارسال شد.")
     except requests.RequestException as exc:
-        return SmsSendResult(False, f"ارسالِ پیامک ناموفق بود: {exc}")
+        return SmsSendResult(False, f"ارسال پیامک ناموفق بود: {exc}")

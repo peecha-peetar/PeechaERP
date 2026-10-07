@@ -1,7 +1,7 @@
-"""فهرست/جستجویِ کالا برایِ سفارش‌گیریِ موبایل -- رویِ همان
-services/inventory_catalog.py موجود (بدونِ منطقِ تازه‌یِ کاتالوگ).
-sync/pull هم فهرستِ کالا می‌دهد ولی بدونِ جستجو/فیلتر -- این‌جا برایِ
-جستجویِ سریع در حینِ سفارش‌گیری (بارکد/کد/نام) است."""
+"""فهرست/جستجوی کالا برای سفارش‌گیری موبایل — روی همان
+services/inventory_catalog.py موجود (بدون منطق تازهٔ کاتالوگ).
+sync/pull هم فهرست کالا می‌دهد ولی بدون جستجو/فیلتر — این‌جا برای
+جستجوی سریع در حین سفارش‌گیری (بارکد/کد/نام) است."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def list_products(q: str | None = None, ctx: AuthContext = Depends(get_current_c
 
 @router.get("/barcode/{barcode}")
 def resolve_barcode(barcode: str, price_list_id: int | None = None, ctx: AuthContext = Depends(get_current_context)) -> dict:
-    """اسکنِ بارکد -> کالا + واحد (مثلاً کارتن ×۲۴) + قیمتِ همان واحد. منطق فقط در
+    """اسکن بارکد -> کالا + واحد (مثلاً کارتن ×۲۴) + قیمت همان واحد. منطق فقط در
     services/unit_conversion.resolve_barcode است."""
     match = uc.resolve_barcode(ctx.company_id, barcode, price_list_id=price_list_id)
     if match is None:
@@ -63,15 +63,15 @@ def resolve_barcode(barcode: str, price_list_id: int | None = None, ctx: AuthCon
 def catalog(
     warehouse_id: int | None = None, price_list_id: int | None = None, ctx: AuthContext = Depends(get_current_context),
 ) -> dict:
-    """طبقِ درخواستِ صریحِ کاربر («مشتری انتخاب میشه، کاتالوگِ کالا باز
-    میشه که انواعِ فیلترها روش داره -- دسته‌بندی‌ها و برند -- و جستجویِ
-    زنده و اسکنِ بارکد»): کلِ کاتالوگِ قابلِ‌فروش در یک درخواست (تا
-    فیلتر/جستجو/بارکد همه رویِ گوشی و بدونِ رفت‌وبرگشتِ شبکه انجام
-    شود) + موجودیِ انبارِ داده‌شده (در پخشِ گرم: انبارِ خودرو). کالایِ
-    اصلیِ متغیردار حذف است (فقط متغیرهایش). قیمت این‌جا نیست -- هنگامِ
-    افزودن به سبد با /pricing/resolve (قیمتِ همان مشتری) گرفته می‌شود."""
+    """طبق درخواست صریح کاربر («مشتری انتخاب میشه، کاتالوگ کالا باز
+    میشه که انواع فیلترها روش داره — دسته‌بندی‌ها و برند — و جستجوی
+    زنده و اسکن بارکد»): کل کاتالوگ قابل‌فروش در یک درخواست (تا
+    فیلتر/جستجو/بارکد همه روی گوشی و بدون رفت‌وبرگشت شبکه انجام
+    شود) + موجودی انبار داده‌شده (در پخش گرم: انبار خودرو). کالای
+    اصلی متغیردار حذف است (فقط متغیرهایش). قیمت این‌جا نیست — هنگام
+    افزودن به سبد با /pricing/resolve (قیمت همان مشتری) گرفته می‌شود."""
     if warehouse_id is not None and locations_service.get_warehouse(warehouse_id, ctx.company_id) is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="انبارِ انتخاب‌شده برایِ این شرکت معتبر نیست.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="انبار انتخاب‌شده برای این شرکت معتبر نیست.")
     items = [it for it in catalog_service.list_items(ctx.company_id, active_only=True, transactable_only=True) if it.is_sellable]
     units = uc.get_units_for_items(ctx.company_id, [it.item_id for it in items], purpose="SALES", price_list_id=price_list_id)
     stock_by_item: dict[int, decimal.Decimal] = {}

@@ -1,15 +1,15 @@
-"""دستورِ تولید -- R267: چرخهٔ وضعیت، رزرو، مصرف/برگشت، رسیدِ محصول (اصلی/جانبی/مشترک)، ضایعات، WIP، اتمام/بستن.
+"""دستور تولید — R267: چرخهٔ وضعیت، رزرو، مصرف/برگشت، رسید محصول (اصلی/جانبی/مشترک)، ضایعات، کالای در جریان ساخت، اتمام/بستن.
 
-اتمیک بودن: هر عملیات در یک تراکنش انجام می‌شود -- سندِ انبار (موتورِ انبار با session)، سندِ حسابداری (موتورِ سند با
-session)، تراکنشِ دستور و ارقامِ کش‌شده؛ اگر هر مرحله خطا بدهد کلِ تراکنش برمی‌گردد.
-تکرارنشدن: هر عملیات کلیدِ idempotency می‌پذیرد؛ درخواستِ تکراری همان نتیجهٔ قبلی را برمی‌گرداند.
+اتمیک بودن: هر عملیات در یک تراکنش انجام می‌شود — سند انبار (موتور انبار با session)، سند حسابداری (موتور سند با
+session)، تراکنش دستور و ارقام کش‌شده؛ اگر هر مرحله خطا بدهد کل تراکنش برمی‌گردد.
+تکرارنشدن: هر عملیات کلید idempotency می‌پذیرد؛ درخواست تکراری همان نتیجهٔ قبلی را برمی‌گرداند.
 
-حساب‌ها (نقش‌محور، در نگاشتِ حساب‌هایِ انبار):
-  مصرفِ مواد    بدهکار WIP / بستانکار موجودی            (حواله با COGS ← WIP)
-  برگشتِ مواد   بدهکار موجودی / بستانکار WIP            (رسید با «مازادِ اصلاح» ← WIP)
-  رسیدِ محصول   بدهکار موجودیِ محصول / بستانکار WIP      (همان)
-  ضایعاتِ غیرعادی بدهکار زیانِ ضایعات / بستانکار WIP
-  ماندهٔ WIP در بستن ← انحرافِ تولید
+حساب‌ها (نقش‌محور، در نگاشت حساب‌های انبار):
+  مصرف مواد    بدهکار کالای در جریان ساخت / بستانکار موجودی            (حواله با COGS ← WIP)
+  برگشت مواد   بدهکار موجودی / بستانکار کالای در جریان ساخت            (رسید با «مازاد اصلاح» ← WIP)
+  رسید محصول   بدهکار موجودی محصول / بستانکار کالای در جریان ساخت      (همان)
+  ضایعات غیرعادی بدهکار زیان ضایعات / بستانکار کالای در جریان ساخت
+  ماندهٔ کالای در جریان ساخت در بستن ← انحراف تولید
 """
 
 from __future__ import annotations
@@ -38,11 +38,11 @@ ZERO, ONE = c.ZERO, c.ONE
 _HUNDRED = decimal.Decimal(100)
 RESERVATION_SOURCE = "PRODUCTION_ORDER"
 
-STATUS_LABELS = {"DRAFT": "پیش‌نویس", "PLANNED": "برنامه‌ریزی‌شده", "RELEASED": "صادرشده", "IN_PROGRESS": "در حالِ تولید",
+STATUS_LABELS = {"DRAFT": "پیش‌نویس", "PLANNED": "برنامه‌ریزی‌شده", "RELEASED": "صادرشده", "IN_PROGRESS": "در حال تولید",
                  "ON_HOLD": "متوقف", "COMPLETED": "تکمیل‌شده", "CLOSED": "بسته‌شده", "CANCELLED": "لغوشده"}
-TXN_LABELS = {"ISSUE": "مصرفِ مواد", "RETURN": "برگشتِ مواد", "RECEIPT": "رسیدِ محصول", "BY_PRODUCT": "محصولِ جانبی",
-              "CO_PRODUCT": "محصولِ مشترک", "SCRAP": "ضایعات", "LABOR": "دستمزد", "MACHINE": "ماشین", "OVERHEAD": "سربار",
-              "VARIANCE": "انحراف", "REVERSAL": "برگشتِ تولید"}
+TXN_LABELS = {"ISSUE": "مصرف مواد", "RETURN": "برگشت مواد", "RECEIPT": "رسید محصول", "BY_PRODUCT": "محصول جانبی",
+              "CO_PRODUCT": "محصول مشترک", "SCRAP": "ضایعات", "LABOR": "دستمزد", "MACHINE": "ماشین", "OVERHEAD": "سربار",
+              "VARIANCE": "انحراف", "REVERSAL": "برگشت تولید"}
 ACTIVE_STATUSES = ("RELEASED", "IN_PROGRESS", "ON_HOLD")
 WORKING_STATUSES = ("RELEASED", "IN_PROGRESS")
 EDITABLE_STATUSES = ("DRAFT", "PLANNED")
@@ -58,7 +58,7 @@ _RECEIPT_ROLES = {"INVENTORY_ADJUSTMENT_GAIN": c.WIP, "INVENTORY_COST_VARIANCE":
 def lock_order(session, company_id: int, order_id: int) -> ProductionOrder:
     order = session.scalar(select(ProductionOrder).where(ProductionOrder.order_id == order_id).with_for_update())
     if order is None or order.company_id != company_id:
-        raise ValueError("دستورِ تولید نامعتبر است.")
+        raise ValueError("دستور تولید نامعتبر است.")
     return order
 
 
@@ -91,7 +91,7 @@ def record(session, order: ProductionOrder, txn_type: str, date: datetime.date, 
 
 
 def _cost_estimate(session, item_id: int, warehouse_id: int | None, date: datetime.date) -> decimal.Decimal:
-    """بهایِ برآوردیِ واحد از موتورِ انبار: میانگینِ فعلیِ انبار ← آخرین بهایِ ثبت‌شده ← بهایِ استاندارد."""
+    """بهای برآوردی واحد از موتور انبار: میانگین فعلی انبار ← آخرین بهای ثبت‌شده ← بهای استاندارد."""
     value = engine._current_average_cost(session, item_id, warehouse_id) if warehouse_id else None
     if value is None:
         value = engine._last_known_unit_cost(session, item_id)
@@ -217,25 +217,25 @@ def _apply_defaults(session, company_id: int, f: OrderFields) -> None:
 def _validate(session, company_id: int, f: OrderFields) -> None:
     f.planned_qty = decimal.Decimal(f.planned_qty)
     if f.planned_qty <= 0:
-        raise ValueError("مقدارِ تولید باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مقدار تولید باید بزرگ‌تر از صفر باشد.")
     item = c.item_of(session, company_id, f.item_id)
     if not item.is_stock_tracked:
-        raise ValueError("کالایِ تولیدی باید موجودی‌محور باشد.")
+        raise ValueError("کالای تولیدی باید موجودی‌محور باشد.")
     if f.bom_id is None:
-        raise ValueError(f"برایِ «{c.item_label(session, f.item_id)}» هیچ BOMِ معتبری تعریف نشده است.")
+        raise ValueError(f"برای «{c.item_label(session, f.item_id)}» هیچ فهرست مواد معتبری تعریف نشده است.")
     bom = session.get(BomHeader, f.bom_id)
     if bom is None or bom.finished_item_id != f.item_id:
-        raise ValueError("BOM با محصولِ دستور هم‌خوان نیست.")
+        raise ValueError("فهرست مواد با محصول دستور هم‌خوان نیست.")
     if f.routing_id is not None:
         routing = session.get(Routing, f.routing_id)
         if routing is None or routing.company_id != company_id:
-            raise ValueError("مسیرِ تولید نامعتبر است.")
+            raise ValueError("مسیر تولید نامعتبر است.")
     if f.due_date < f.start_date:
-        raise ValueError("تاریخِ پایان پیش از تاریخِ شروع است.")
+        raise ValueError("تاریخ پایان پیش از تاریخ شروع است.")
     if not 1 <= int(f.priority) <= 5:
-        raise ValueError("اولویت باید بینِ ۱ تا ۵ باشد.")
+        raise ValueError("اولویت باید بین ۱ تا ۵ باشد.")
     if f.joint_cost_method not in c.JOINT_METHODS:
-        raise ValueError("روشِ تخصیصِ تولیدِ مشترک نامعتبر است.")
+        raise ValueError("روش تخصیص تولید مشترک نامعتبر است.")
     pm.check_lot_size(session, f.item_id, f.planned_qty)
 
 
@@ -272,7 +272,7 @@ def update_order(company_id: int, user_id: int, order_id: int, fields: OrderFiel
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code not in EDITABLE_STATUSES:
-            raise ValueError("فقط دستورِ پیش‌نویس/برنامه‌ریزی‌شده قابلِ ویرایش است.")
+            raise ValueError("فقط دستور پیش‌نویس/برنامه‌ریزی‌شده قابل ویرایش است.")
         _apply_defaults(session, company_id, fields)
         _validate(session, company_id, fields)
         changes = {}
@@ -293,7 +293,7 @@ def _transition(company_id: int, user_id: int, order_id: int, allowed: tuple, to
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code not in allowed:
-            raise ValueError(f"دستور در وضعیتِ «{STATUS_LABELS[order.status_code]}» است و این عملیات مجاز نیست.")
+            raise ValueError(f"دستور در وضعیت «{STATUS_LABELS[order.status_code]}» است و این عملیات مجاز نیست.")
         before = order.status_code
         order.status_code = to
         if to == "ON_HOLD":
@@ -306,7 +306,7 @@ def _transition(company_id: int, user_id: int, order_id: int, allowed: tuple, to
 # بررسیِ مواد / رزرو
 # =====================================================================================
 def material_plan(session, company_id: int, item_id: int, bom_id: int, quantity: decimal.Decimal) -> list[SimpleNamespace]:
-    """نیازِ سطحِ اولِ BOM برایِ مقدار (با ضایعات)."""
+    """نیاز سطح اول فهرست مواد برای مقدار (با ضایعات)."""
     bom = session.get(BomHeader, bom_id)
     rows = []
     for ln in session.scalars(select(BomLine).where(BomLine.bom_id == bom_id).order_by(BomLine.line_no)):
@@ -319,12 +319,12 @@ def material_plan(session, company_id: int, item_id: int, bom_id: int, quantity:
 
 def availability(company_id: int, order_id: int | None = None, *, item_id: int | None = None, quantity=None,
                  bom_id: int | None = None, warehouse_id: int | None = None) -> list[SimpleNamespace]:
-    """موجود / رزرو / نیاز / کمبود برایِ هر ماده -- برایِ دستورِ موجود یا پیش از ساختن (ویزارد)."""
+    """موجود / رزرو / نیاز / کمبود برای هر ماده — برای دستور موجود یا پیش از ساختن (ویزارد)."""
     with new_session() as session:
         if order_id is not None:
             order = session.get(ProductionOrder, order_id)
             if order is None or order.company_id != company_id:
-                raise ValueError("دستورِ تولید نامعتبر است.")
+                raise ValueError("دستور تولید نامعتبر است.")
             mats = list(session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == order_id).order_by(OrderMaterial.line_no)))
             if mats:
                 specs = [(m.item_id, m.warehouse_id or order.material_warehouse_id, m.planned_qty, m.consumed_qty,
@@ -336,7 +336,7 @@ def availability(company_id: int, order_id: int | None = None, *, item_id: int |
         else:
             bom_id = bom_id or pm.effective_bom_id(session, item_id)
             if bom_id is None:
-                raise ValueError("BOMِ معتبری برایِ این کالا وجود ندارد.")
+                raise ValueError("فهرست مواد معتبری برای این کالا وجود ندارد.")
             warehouse_id = warehouse_id or c.settings(session, company_id).default_material_warehouse_id
             specs = [(r.line.component_item_id, r.line.warehouse_id or warehouse_id, r.gross, ZERO, ZERO,
                       r.line.component_type or "MATERIAL", r.line.is_optional, None)
@@ -387,7 +387,7 @@ def _reserve_material(session, order: ProductionOrder, m: OrderMaterial) -> deci
 
 
 def _hold(session, res: StockReservation, delta: decimal.Decimal) -> None:
-    """همان ستونِ رزروِ ماندهٔ موجودی (هم‌الگو با رزروِ وظایفِ انبار) تا موجودیِ آزاد کم شود."""
+    """همان ستون رزرو ماندهٔ موجودی (هم‌الگو با رزرو وظایف انبار) تا موجودی آزاد کم شود."""
     bal = session.scalar(select(StockBalance).where(
         StockBalance.item_id == res.item_id, StockBalance.warehouse_id == res.warehouse_id,
         StockBalance.bin_location_id == res.bin_location_id, StockBalance.batch_id.is_(None)).with_for_update())
@@ -426,7 +426,7 @@ def reserve_materials(company_id: int, user_id: int, order_id: int) -> decimal.D
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code not in ACTIVE_STATUSES:
-            raise ValueError("رزرو فقط برایِ دستورِ صادرشده/در حالِ تولید ممکن است.")
+            raise ValueError("رزرو فقط برای دستور صادرشده/در حال تولید ممکن است.")
         total = sum((_reserve_material(session, order, m) for m in session.scalars(
             select(OrderMaterial).where(OrderMaterial.order_id == order_id))), ZERO)
         c.audit(session, company_id, user_id, "ProductionOrder", order_id, "RESERVE", {"quantity": str(total)})
@@ -446,19 +446,19 @@ def unreserve_materials(company_id: int, user_id: int, order_id: int) -> None:
 # صدور
 # =====================================================================================
 def release_order(company_id: int, user_id: int, order_id: int, reserve: bool | None = None) -> list[SimpleNamespace]:
-    """صدور: کپیِ ثابتِ BOM/مسیر رویِ دستور، قفلِ نسخهٔ BOM، بررسیِ موجودی (هشدار/توقف طبقِ تنظیمات) و رزرو."""
+    """صدور: کپی ثابت فهرست مواد/مسیر روی دستور، قفل نسخهٔ فهرست مواد، بررسی موجودی (هشدار/توقف طبق تنظیمات) و رزرو."""
     shortages = [a for a in availability(company_id, order_id) if a.status != "GREEN" and not a.is_optional]
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code not in EDITABLE_STATUSES:
-            raise ValueError(f"دستور در وضعیتِ «{STATUS_LABELS[order.status_code]}» است و قابلِ صدور نیست.")
+            raise ValueError(f"دستور در وضعیت «{STATUS_LABELS[order.status_code]}» است و قابل صدور نیست.")
         st = c.settings(session, company_id)
         _preflight(session, company_id, order, st)
         issues = pm.validate_bom(company_id, order.bom_id)
         if issues:
-            raise ValueError("BOMِ دستور مشکل دارد: " + " ".join(issues))
+            raise ValueError("فهرست مواد دستور مشکل دارد: " + " ".join(issues))
         if shortages and st.shortage_policy == "BLOCK" and not st.allow_negative_material:
-            raise ValueError("کمبودِ مواد: " + "، ".join(f"{a.item_label} ({a.shortage.normalize()})" for a in shortages))
+            raise ValueError("کمبود مواد: " + "، ".join(f"{a.item_label} ({a.shortage.normalize()})" for a in shortages))
         _snapshot(session, company_id, order)
         pm.lock_bom(session, order.bom_id)
         order.status_code, order.released_at = "RELEASED", datetime.datetime.now()
@@ -472,18 +472,18 @@ def release_order(company_id: int, user_id: int, order_id: int, reserve: bool | 
 
 
 def _preflight(session, company_id: int, order: ProductionOrder, st) -> None:
-    """کنترل‌هایِ «Block»: BOM، انبارها، مرکزِ هزینه، نگاشتِ حساب."""
+    """کنترل‌های «Block»: فهرست مواد، انبارها، مرکز هزینه، نگاشت حساب."""
     if order.bom_id is None:
-        raise ValueError("BOM برایِ این دستور تعیین نشده است.")
+        raise ValueError("فهرست مواد برای این دستور تعیین نشده است.")
     if order.material_warehouse_id is None:
-        raise ValueError("انبارِ مواد مشخص نشده است.")
+        raise ValueError("انبار مواد مشخص نشده است.")
     if order.fg_warehouse_id is None:
-        raise ValueError("انبارِ محصول مشخص نشده است.")
+        raise ValueError("انبار محصول مشخص نشده است.")
     if st.require_cost_center and order.cost_center_detail_account_id is None:
-        raise ValueError("مرکزِ هزینه برایِ دستورِ تولید الزامی است.")
+        raise ValueError("مرکز هزینه برای دستور تولید الزامی است.")
     c.require_roles(session, company_id, (c.WIP,))
     if engine._resolve_role_account(session, company_id, "INVENTORY_ASSET") is None:
-        raise ValueError("حسابِ موجودی تعیین نشده است.")
+        raise ValueError("حساب موجودی تعیین نشده است.")
 
 
 def _snapshot(session, company_id: int, order: ProductionOrder) -> None:
@@ -541,7 +541,7 @@ def _snapshot(session, company_id: int, order: ProductionOrder) -> None:
 
 
 def _asset_rate(session, asset_id: int, date: datetime.date) -> decimal.Decimal:
-    """نرخِ ماشین از ماژولِ دارایی (نرخِ دستی یا استهلاکِ دوره ÷ ساعتِ کارکرد)."""
+    """نرخ ماشین از ماژول دارایی (نرخ دستی یا استهلاک دوره ÷ ساعت کارکرد)."""
     from peecha.db.models.fixed_assets import Asset
 
     asset = session.get(Asset, asset_id)
@@ -565,7 +565,7 @@ def start_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code != "RELEASED":
-            raise ValueError("فقط دستورِ صادرشده قابلِ شروع است.")
+            raise ValueError("فقط دستور صادرشده قابل شروع است.")
         order.status_code = "IN_PROGRESS"
         order.actual_start_date = order.actual_start_date or date or datetime.date.today()
         first = session.scalar(select(OrderOperation).where(OrderOperation.order_id == order_id).order_by(OrderOperation.seq).limit(1))
@@ -577,7 +577,7 @@ def start_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
 
 def hold_order(company_id: int, user_id: int, order_id: int, reason: str) -> None:
     if not (reason or "").strip():
-        raise ValueError("دلیلِ توقف الزامی است.")
+        raise ValueError("دلیل توقف الزامی است.")
     _transition(company_id, user_id, order_id, ("RELEASED", "IN_PROGRESS"), "ON_HOLD", reason)
 
 
@@ -595,12 +595,12 @@ def resume_order(company_id: int, user_id: int, order_id: int) -> None:
 def set_operation_status(company_id: int, user_id: int, order_operation_id: int, status: str,
                          completed_qty: decimal.Decimal | None = None) -> None:
     if status not in ("PENDING", "IN_PROGRESS", "DONE", "SKIPPED"):
-        raise ValueError("وضعیتِ عملیات نامعتبر است.")
+        raise ValueError("وضعیت عملیات نامعتبر است.")
     with new_session() as session:
         op = session.get(OrderOperation, order_operation_id)
         order = lock_order(session, company_id, op.order_id) if op else None
         if order is None:
-            raise ValueError("عملیاتِ دستور نامعتبر است.")
+            raise ValueError("عملیات دستور نامعتبر است.")
         if order.status_code not in WORKING_STATUSES:
             raise ValueError("دستور فعال نیست.")
         op.status_code = status
@@ -634,12 +634,12 @@ class IssueLine:
 
 def _ensure_working(order: ProductionOrder) -> None:
     if order.status_code not in WORKING_STATUSES:
-        raise ValueError(f"دستور در وضعیتِ «{STATUS_LABELS[order.status_code]}» است و این عملیات مجاز نیست.")
+        raise ValueError(f"دستور در وضعیت «{STATUS_LABELS[order.status_code]}» است و این عملیات مجاز نیست.")
 
 
 def issue_materials(company_id: int, user_id: int, order_id: int, lines: list[IssueLine], date: datetime.date | None = None,
                     idempotency_key: str | None = None, reason: str | None = None) -> list[int]:
-    """ثبتِ مصرفِ واقعیِ مواد (حوالهٔ انبار، بدهکار WIP)."""
+    """ثبت مصرف واقعی مواد (حوالهٔ انبار، بدهکار WIP)."""
     with new_session() as session:
         if (done := _replayed(session, idempotency_key)) is not None:
             return [done.txn_id]
@@ -662,12 +662,12 @@ def _issue(session, order: ProductionOrder, lines: list[IssueLine], date: dateti
             continue
         m = session.get(OrderMaterial, ln.material_id)
         if m is None or m.order_id != order.order_id:
-            raise ValueError("ردیفِ موادِ دستور نامعتبر است.")
+            raise ValueError("ردیف مواد دستور نامعتبر است.")
         item_id = ln.item_id or m.item_id
         if item_id not in (m.item_id, m.substitute_item_id):
-            raise ValueError("کالایِ مصرفی با ردیفِ BOM یا جایگزینِ تعریف‌شده هم‌خوان نیست.")
+            raise ValueError("کالای مصرفی با ردیف فهرست مواد یا جایگزین تعریف‌شده هم‌خوان نیست.")
         if not st.allow_over_consumption and m.consumed_qty + q > decimal.Decimal(m.planned_qty):
-            raise ValueError(f"مصرفِ «{c.item_label(session, m.item_id)}» از مقدارِ استاندارد بیشتر می‌شود و در تنظیمات مجاز نیست.")
+            raise ValueError(f"مصرف «{c.item_label(session, m.item_id)}» از مقدار استاندارد بیشتر می‌شود و در تنظیمات مجاز نیست.")
         wh = ln.warehouse_id or m.warehouse_id or order.material_warehouse_id
         by_wh.setdefault(wh, []).append((m, ln, item_id))
     txns: list[OrderTransaction] = []
@@ -688,13 +688,13 @@ def _issue(session, order: ProductionOrder, lines: list[IssueLine], date: dateti
                 left -= take
             if left > 0:
                 if not st.allow_negative_material:
-                    raise ValueError(f"موجودیِ «{c.item_label(session, item_id)}» در انبار کافی نیست "
+                    raise ValueError(f"موجودی «{c.item_label(session, item_id)}» در انبار کافی نیست "
                                      f"(کمبود {c.qty(left).normalize()}).")
                 doc_lines.append(inv_docs.LineFields(item_id=item_id, uom_id=uom, quantity=left, quantity_base=left,
                                                      conversion_factor=ONE))
                 owners.append((m, item_id, left))
         result, line_ids = inv_docs.create_and_post_in_session(
-            session, order.company_id, user_id, "ISSUE", date, _header(order, "مصرفِ مواد" + (" (Backflush)" if backflush else ""),
+            session, order.company_id, user_id, "ISSUE", date, _header(order, "مصرف مواد" + (" (Backflush)" if backflush else ""),
                                                                        source_warehouse_id=wh),
             doc_lines, role_overrides=_ISSUE_ROLES)
         amounts = _ledger_amounts(session, line_ids, "OUT")
@@ -718,7 +718,7 @@ def _issue(session, order: ProductionOrder, lines: list[IssueLine], date: dateti
 
 def issue_all_remaining(company_id: int, user_id: int, order_id: int, date: datetime.date | None = None,
                         idempotency_key: str | None = None) -> list[int]:
-    """مصرفِ کاملِ باقیماندهٔ استاندارد (دکمهٔ «ثبتِ مصرف» برایِ کاربرِ ساده)."""
+    """مصرف کامل باقیماندهٔ استاندارد (دکمهٔ «ثبت مصرف» برای کاربر ساده)."""
     with new_session() as session:
         if (done := _replayed(session, idempotency_key)) is not None:
             return [done.txn_id]
@@ -726,13 +726,13 @@ def issue_all_remaining(company_id: int, user_id: int, order_id: int, date: date
         lines = [IssueLine(m.material_id, decimal.Decimal(m.planned_qty) - m.consumed_qty) for m in mats
                  if not m.is_optional and decimal.Decimal(m.planned_qty) > m.consumed_qty]
     if not lines:
-        raise ValueError("ماده‌ای برایِ مصرف باقی نمانده است.")
+        raise ValueError("ماده‌ای برای مصرف باقی نمانده است.")
     return issue_materials(company_id, user_id, order_id, lines, date, idempotency_key)
 
 
 def _backflush(session, order: ProductionOrder, produced_after: decimal.Decimal, date: datetime.date, user_id: int,
                key: str | None) -> None:
-    """مصرفِ خودکار بر اساسِ BOM تا سطحِ «تولیدِ تجمعی» (فقط کمبودِ مصرف نسبت به استاندارد)."""
+    """مصرف خودکار بر اساس فهرست مواد تا سطح «تولید تجمعی» (فقط کمبود مصرف نسبت به استاندارد)."""
     lines = []
     for m in session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == order.order_id)):
         if m.is_optional:
@@ -750,14 +750,14 @@ def _backflush(session, order: ProductionOrder, produced_after: decimal.Decimal,
 # =====================================================================================
 def return_materials(company_id: int, user_id: int, order_id: int, lines: list[IssueLine], date: datetime.date | None = None,
                      idempotency_key: str | None = None, reason: str | None = None) -> list[int]:
-    """برگشتِ موادِ مصرف‌نشده به انبار با همان بهایِ میانگینِ حوالهٔ همین دستور (بستانکار WIP)."""
+    """برگشت مواد مصرف‌نشده به انبار با همان بهای میانگین حوالهٔ همین دستور (بستانکار WIP)."""
     date = date or datetime.date.today()
     with new_session() as session:
         if (done := _replayed(session, idempotency_key)) is not None:
             return [done.txn_id]
         order = lock_order(session, company_id, order_id)
         if order.status_code not in ACTIVE_STATUSES + ("COMPLETED",):
-            raise ValueError(f"دستور در وضعیتِ «{STATUS_LABELS[order.status_code]}» است و برگشتِ مواد مجاز نیست.")
+            raise ValueError(f"دستور در وضعیت «{STATUS_LABELS[order.status_code]}» است و برگشت مواد مجاز نیست.")
         by_wh: dict[int, list] = {}
         for ln in lines:
             q = decimal.Decimal(ln.quantity)
@@ -765,9 +765,9 @@ def return_materials(company_id: int, user_id: int, order_id: int, lines: list[I
                 continue
             m = session.get(OrderMaterial, ln.material_id)
             if m is None or m.order_id != order_id:
-                raise ValueError("ردیفِ موادِ دستور نامعتبر است.")
+                raise ValueError("ردیف مواد دستور نامعتبر است.")
             if q > m.consumed_qty:
-                raise ValueError(f"مقدارِ برگشتِ «{c.item_label(session, m.item_id)}» از مقدارِ خالصِ حواله‌شده "
+                raise ValueError(f"مقدار برگشت «{c.item_label(session, m.item_id)}» از مقدار خالص حواله‌شده "
                                  f"({m.consumed_qty.normalize()}) بیشتر است.")
             unit = c.qty(m.consumed_amount / m.consumed_qty) if m.consumed_qty else ZERO
             wh = ln.warehouse_id or m.warehouse_id or order.material_warehouse_id
@@ -777,7 +777,7 @@ def return_materials(company_id: int, user_id: int, order_id: int, lines: list[I
             doc_lines = [inv_docs.LineFields(item_id=m.item_id, uom_id=session.get(Item, m.item_id).base_uom_id, quantity=q,
                                              quantity_base=q, unit_cost=unit, conversion_factor=ONE) for m, q, unit in group]
             result, line_ids = inv_docs.create_and_post_in_session(
-                session, company_id, user_id, "RECEIPT", date, _header(order, "برگشتِ مواد", destination_warehouse_id=wh),
+                session, company_id, user_id, "RECEIPT", date, _header(order, "برگشت مواد", destination_warehouse_id=wh),
                 doc_lines, role_overrides=_RECEIPT_ROLES)
             for i, (m, q, unit) in enumerate(group):
                 amount = c.money(unit * q)
@@ -810,7 +810,7 @@ class ReceiptInput:
 
 def report_production(company_id: int, user_id: int, order_id: int, data: ReceiptInput, date: datetime.date | None = None,
                       idempotency_key: str | None = None) -> int:
-    """رسیدِ محصول به انبار با بهایِ واقعیِ WIP (بهایِ برنامه‌ای، حداکثر تا ماندهٔ WIP؛ رسیدِ نهایی کلِ مانده را می‌برد)."""
+    """رسید محصول به انبار با بهای واقعی کالای در جریان ساخت (بهای برنامه‌ای، حداکثر تا ماندهٔ کالای در جریان ساخت؛ رسید نهایی کل مانده را می‌برد)."""
     date = date or datetime.date.today()
     with new_session() as session:
         if (done := _replayed(session, idempotency_key)) is not None:
@@ -846,13 +846,13 @@ def _weights(session, order: ProductionOrder, joint: list[tuple[OrderOutput, dec
         shares = manual or {}
         values = [decimal.Decimal(shares.get(o.item_id, o.cost_share_percent or 0)) for o, _q in joint]
         if method == "PERCENTAGE" and sum(values) != _HUNDRED:
-            raise ValueError("جمعِ درصدهایِ تخصیصِ تولیدِ مشترک باید ۱۰۰ باشد.")
+            raise ValueError("جمع درصدهای تخصیص تولید مشترک باید ۱۰۰ باشد.")
         return values
-    raise ValueError("روشِ تخصیصِ تولیدِ مشترک نامعتبر است.")
+    raise ValueError("روش تخصیص تولید مشترک نامعتبر است.")
 
 
 def _sales_price(session, item_id: int) -> decimal.Decimal:
-    """میانگینِ فیِ فروشِ ثبت‌شده (فاکتورهایِ فروش) -- مبنایِ پیش‌فرضِ «ارزشِ فروش»."""
+    """میانگین فی فروش ثبت‌شده (فاکتورهای فروش) — مبنای پیش‌فرض «ارزش فروش»."""
     from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
 
     q, v = session.execute(select(func.sum(CommercialDocumentLine.quantity), func.sum(CommercialDocumentLine.quantity * CommercialDocumentLine.unit_price))
@@ -863,14 +863,14 @@ def _sales_price(session, item_id: int) -> decimal.Decimal:
 
 
 def allocate_joint(total: decimal.Decimal, weights: list[decimal.Decimal], method: str = "QUANTITY") -> list[decimal.Decimal]:
-    """سرشکنِ هزینهٔ مشترک بر اساسِ وزن‌ها؛ گردکردن رویِ آخرین سهم. MANUAL = مبلغِ مستقیم."""
+    """سرشکن هزینهٔ مشترک بر اساس وزن‌ها؛ گردکردن روی آخرین سهم. MANUAL = مبلغ مستقیم."""
     if method == "MANUAL":
         if c.money(sum(weights)) != c.money(total):
-            raise ValueError(f"جمعِ مبالغِ دستی ({c.money(sum(weights))}) با هزینهٔ مشترک ({c.money(total)}) برابر نیست.")
+            raise ValueError(f"جمع مبالغ دستی ({c.money(sum(weights))}) با هزینهٔ مشترک ({c.money(total)}) برابر نیست.")
         return [c.money(w) for w in weights]
     base = sum(weights)
     if base <= 0:
-        raise ValueError("مبنایِ تخصیصِ تولیدِ مشترک صفر است (وزن/ارزشِ فروشِ محصولات تعریف نشده).")
+        raise ValueError("مبنای تخصیص تولید مشترک صفر است (وزن/ارزش فروش محصولات تعریف نشده).")
     shares = [c.money(total * w / base) for w in weights]
     if shares:
         shares[-1] += c.money(total) - sum(shares)
@@ -882,7 +882,7 @@ def _receive(session, order: ProductionOrder, data: ReceiptInput, date: datetime
     st = c.settings(session, order.company_id)
     q = decimal.Decimal(data.quantity)
     if q < 0:
-        raise ValueError("مقدارِ تولید نمی‌تواند منفی باشد.")
+        raise ValueError("مقدار تولید نمی‌تواند منفی باشد.")
     outputs = {o.item_id: o for o in session.scalars(select(OrderOutput).where(OrderOutput.order_id == order.order_id))}
     main = next((o for o in outputs.values() if o.output_type == "MAIN"), None)
     if main is None:
@@ -890,9 +890,9 @@ def _receive(session, order: ProductionOrder, data: ReceiptInput, date: datetime
     extra = [(outputs[iid], decimal.Decimal(v)) for iid, v in data.outputs.items() if decimal.Decimal(v) > 0]
     for iid in data.outputs:
         if iid not in outputs or outputs[iid].output_type == "MAIN":
-            raise ValueError("کالایِ خروجی در BOMِ این دستور تعریف نشده است.")
+            raise ValueError("کالای خروجی در فهرست مواد این دستور تعریف نشده است.")
     if q == 0 and not extra:
-        raise ValueError("مقدارِ تولید صفر است.")
+        raise ValueError("مقدار تولید صفر است.")
     remaining = order.remaining_qty
     final = data.final or (q > 0 and q >= remaining)
     if st.auto_consumption or _profile_backflush(session, order.item_id):
@@ -920,7 +920,7 @@ def _receive(session, order: ProductionOrder, data: ReceiptInput, date: datetime
     method = data.joint_method or order.joint_cost_method or "QUANTITY"
     if data.joint_method and data.joint_method != order.joint_cost_method:
         if data.joint_method not in c.JOINT_METHODS:
-            raise ValueError("روشِ تخصیصِ تولیدِ مشترک نامعتبر است.")
+            raise ValueError("روش تخصیص تولید مشترک نامعتبر است.")
         order.joint_cost_method = data.joint_method
     shares = (allocate_joint(joint_pool, _weights(session, order, joint, method, data.manual_shares, data.sales_values), method)
               if len(joint) > 1 else [c.money(joint_pool)] * len(joint))
@@ -936,7 +936,7 @@ def _receive(session, order: ProductionOrder, data: ReceiptInput, date: datetime
                                          conversion_factor=ONE))
         tracking[idx] = _tracking_for(session, order, item, v, date, data if o.output_type == "MAIN" else None)
     result, line_ids = inv_docs.create_and_post_in_session(
-        session, order.company_id, user_id, "RECEIPT", date, _header(order, "رسیدِ محصولِ تولید", destination_warehouse_id=order.fg_warehouse_id),
+        session, order.company_id, user_id, "RECEIPT", date, _header(order, "رسید محصول تولید", destination_warehouse_id=order.fg_warehouse_id),
         lines, role_overrides=_RECEIPT_ROLES, tracking=tracking)
     first = None
     for i, (o, v, amount, ttype) in enumerate(owners):
@@ -968,7 +968,7 @@ def _profile_backflush(session, item_id: int) -> bool:
 
 def _tracking_for(session, order: ProductionOrder, item: Item, quantity: decimal.Decimal, date: datetime.date,
                   data: ReceiptInput | None) -> list:
-    """بچ/سریالِ محصول: بچِ پیش‌فرض = کدِ دستور؛ سریال‌ها اگر داده نشده باشند خودکار ساخته می‌شوند."""
+    """بچ/سریال محصول: بچ پیش‌فرض = کد دستور؛ سریال‌ها اگر داده نشده باشند خودکار ساخته می‌شوند."""
     from peecha.services.lot_tracking import TrackingEntry
 
     if not (item.track_batch or item.track_serial):
@@ -976,42 +976,42 @@ def _tracking_for(session, order: ProductionOrder, item: Item, quantity: decimal
     batch = (data.batch_no if data and data.batch_no else order.order_code) if item.track_batch else None
     expiry = date + datetime.timedelta(days=item.shelf_life_days) if item.track_expiry and item.shelf_life_days else None
     if item.track_expiry and expiry is None:
-        raise ValueError(f"«{c.item_label(session, item.item_id)}» تاریخِ انقضا می‌خواهد ولی عمرِ مفید (shelf life) تعریف نشده است.")
+        raise ValueError(f"«{c.item_label(session, item.item_id)}» تاریخ انقضا می‌خواهد ولی عمر مفید (shelf life) تعریف نشده است.")
     if not item.track_serial:
         return [TrackingEntry(quantity=quantity, batch_no=batch, manufacture_date=date, expiry_date=expiry)]
     if quantity != quantity.to_integral_value():
-        raise ValueError("کالایِ سریال‌دار باید با مقدارِ صحیح تولید شود.")
+        raise ValueError("کالای سریال‌دار باید با مقدار صحیح تولید شود.")
     serials = list((data.serial_nos if data else None) or [])
     if not serials:
         start = int(decimal.Decimal(session.scalar(select(func.coalesce(func.sum(OrderOutput.produced_qty), 0)).where(
             OrderOutput.order_id == order.order_id, OrderOutput.item_id == item.item_id)) or 0))
         serials = [f"{order.order_code}-{start + i + 1:04d}" for i in range(int(quantity))]
     if len(serials) != int(quantity):
-        raise ValueError("تعدادِ سریال‌ها با مقدارِ تولید برابر نیست.")
+        raise ValueError("تعداد سریال‌ها با مقدار تولید برابر نیست.")
     return [TrackingEntry(quantity=ONE, batch_no=batch, manufacture_date=date, expiry_date=expiry, serial_no=s) for s in serials]
 
 
 def reverse_production(company_id: int, user_id: int, txn_id: int, reason: str, date: datetime.date | None = None,
                        idempotency_key: str | None = None) -> int:
-    """برگشتِ تولید: محصولِ رسیدشده با حواله از انبارِ محصول به WIP برمی‌گردد (ردیفِ برگشتی؛ ردیفِ اصلی دست نمی‌خورد)."""
+    """برگشت تولید: محصول رسیدشده با حواله از انبار محصول به کالای در جریان ساخت برمی‌گردد (ردیف برگشتی؛ ردیف اصلی دست نمی‌خورد)."""
     if not (reason or "").strip():
-        raise ValueError("دلیلِ برگشتِ تولید الزامی است.")
+        raise ValueError("دلیل برگشت تولید الزامی است.")
     date = date or datetime.date.today()
     with new_session() as session:
         if (done := _replayed(session, idempotency_key)) is not None:
             return done.txn_id
         txn = session.get(OrderTransaction, txn_id)
         if txn is None or txn.company_id != company_id or txn.txn_type not in ("RECEIPT", "CO_PRODUCT", "BY_PRODUCT"):
-            raise ValueError("فقط رسیدِ محصول قابلِ برگشت است.")
+            raise ValueError("فقط رسید محصول قابل برگشت است.")
         if session.scalar(select(OrderTransaction.txn_id).where(OrderTransaction.reversed_txn_id == txn_id)):
             raise ValueError("این رسید قبلاً برگشت خورده است.")
         order = lock_order(session, company_id, txn.order_id)
         if order.status_code in ("CLOSED", "CANCELLED"):
-            raise ValueError("دستورِ بسته/لغوشده قابلِ تغییر نیست -- ابتدا دستور را بازگشایی کنید.")
+            raise ValueError("دستور بسته/لغوشده قابل تغییر نیست — ابتدا دستور را بازگشایی کنید.")
         item = session.get(Item, txn.item_id)
         q = decimal.Decimal(txn.quantity)
         result, line_ids = inv_docs.create_and_post_in_session(
-            session, company_id, user_id, "ISSUE", date, _header(order, f"برگشتِ تولید -- {reason}", source_warehouse_id=order.fg_warehouse_id),
+            session, company_id, user_id, "ISSUE", date, _header(order, f"برگشت تولید -- {reason}", source_warehouse_id=order.fg_warehouse_id),
             [inv_docs.LineFields(item_id=txn.item_id, uom_id=item.base_uom_id, quantity=q, quantity_base=q, conversion_factor=ONE,
                                  bin_location_id=(_bins_with_stock(session, txn.item_id, order.fg_warehouse_id, False) or [(None, 0)])[0][0])],
             role_overrides=_ISSUE_ROLES)
@@ -1038,11 +1038,11 @@ def reverse_production(company_id: int, user_id: int, txn_id: int, reason: str, 
 def report_scrap(company_id: int, user_id: int, order_id: int, quantity, reason: str, *, material_id: int | None = None,
                  scrap_item_id: int | None = None, recovery_value_per_unit=None, date: datetime.date | None = None,
                  idempotency_key: str | None = None) -> int:
-    """ضایعاتِ محصول (یا ثبتِ ضایعاتِ ماده برایِ تحلیل). ضایعاتِ قابلِ فروش با ارزشِ بازیافت به انبارِ ضایعات می‌رود
-    (بستانکار WIP)؛ مازادِ «ضایعاتِ عادی» (درصدِ تنظیمات/کالا) به زیانِ ضایعاتِ غیرعادی منتقل می‌شود."""
+    """ضایعات محصول (یا ثبت ضایعات ماده برای تحلیل). ضایعات قابل فروش با ارزش بازیافت به انبار ضایعات می‌رود
+    (بستانکار WIP)؛ مازاد «ضایعات عادی» (درصد تنظیمات/کالا) به زیان ضایعات غیرعادی منتقل می‌شود."""
     quantity = decimal.Decimal(quantity)
     if quantity <= 0:
-        raise ValueError("مقدارِ ضایعات باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مقدار ضایعات باید بزرگ‌تر از صفر باشد.")
     date = date or datetime.date.today()
     with new_session() as session:
         if (done := _replayed(session, idempotency_key)) is not None:
@@ -1052,7 +1052,7 @@ def report_scrap(company_id: int, user_id: int, order_id: int, quantity, reason:
         if material_id is not None:  # ضایعاتِ ماده: فقط ثبتِ تحلیلی (مصرفِ واقعی قبلاً در حواله آمده)
             m = session.get(OrderMaterial, material_id)
             if m is None or m.order_id != order_id:
-                raise ValueError("ردیفِ موادِ دستور نامعتبر است.")
+                raise ValueError("ردیف مواد دستور نامعتبر است.")
             t = record(session, order, "SCRAP", date, user_id, item_id=m.item_id, quantity=quantity, material_id=material_id,
                        reason=reason, key=idempotency_key, details={"kind": "MATERIAL"})
             c.audit(session, company_id, user_id, "ProductionOrder", order_id, "SCRAP_MATERIAL", {"item_id": m.item_id, "qty": str(quantity)})
@@ -1068,7 +1068,7 @@ def report_scrap(company_id: int, user_id: int, order_id: int, quantity, reason:
             unit = c.qty(recovery / quantity)
             item = c.item_of(session, company_id, scrap_item_id)
             result, _ids = inv_docs.create_and_post_in_session(
-                session, company_id, user_id, "RECEIPT", date, _header(order, "ضایعاتِ قابلِ بازیافت", destination_warehouse_id=wh),
+                session, company_id, user_id, "RECEIPT", date, _header(order, "ضایعات قابل بازیافت", destination_warehouse_id=wh),
                 [inv_docs.LineFields(item_id=scrap_item_id, uom_id=item.base_uom_id, quantity=quantity, quantity_base=quantity,
                                      unit_cost=unit, conversion_factor=ONE)], role_overrides=_RECEIPT_ROLES)
             recovery, doc_id, je_id = c.money(unit * quantity), result.stock_document_id, result.journal_entry_id
@@ -1089,7 +1089,7 @@ def normal_scrap_percent(session, order: ProductionOrder) -> decimal.Decimal:
 
 
 def _abnormal_scrap(session, order: ProductionOrder, date: datetime.date, user_id: int, key: str | None) -> None:
-    """واحدهایِ ضایعاتِ بیش از حدِ عادی × بهایِ برنامه‌ای ← زیانِ ضایعات (یک بار برایِ هر واحد)."""
+    """واحدهای ضایعات بیش از حد عادی × بهای برنامه‌ای ← زیان ضایعات (یک بار برای هر واحد)."""
     allowed = normal_scrap_percent(session, order) * decimal.Decimal(order.planned_qty) / _HUNDRED
     abnormal_units = max(ZERO, decimal.Decimal(order.scrapped_qty) - allowed)
     booked = decimal.Decimal(session.scalar(select(func.coalesce(func.sum(OrderTransaction.quantity), 0)).where(
@@ -1099,7 +1099,7 @@ def _abnormal_scrap(session, order: ProductionOrder, date: datetime.date, user_i
     if new_units <= 0:
         return
     amount = min(max(ZERO, wip_balance(session, order.order_id)), c.money(new_units * decimal.Decimal(order.planned_unit_cost or 0)))
-    je = c.post_journal(session, order.company_id, user_id, date, f"{order.order_code} -- ضایعاتِ غیرعادی",
+    je = c.post_journal(session, order.company_id, user_id, date, f"{order.order_code} -- ضایعات غیرعادی",
                         [(c.SCRAP_LOSS, amount, ZERO, _dims(order)), (c.WIP, ZERO, amount, _dims(order))]) if amount else None
     record(session, order, "VARIANCE", date, user_id, item_id=order.item_id, quantity=new_units, amount=amount, wip_delta=-amount,
            journal_entry_id=je, reason="ABNORMAL_SCRAP", key=f"{key}:abn" if key else None,
@@ -1111,27 +1111,27 @@ def _abnormal_scrap(session, order: ProductionOrder, date: datetime.date, user_i
 # =====================================================================================
 def complete_order(company_id: int, user_id: int, order_id: int, final: ReceiptInput | None = None,
                    date: datetime.date | None = None, idempotency_key: str | None = None) -> None:
-    """اتمامِ تولید (اختیاری با رسیدِ نهایی). مقدارِ تولیدِ صفر = توقف."""
+    """اتمام تولید (اختیاری با رسید نهایی). مقدار تولید صفر = توقف."""
     date = date or datetime.date.today()
     with new_session() as session:
         if idempotency_key and _replayed(session, idempotency_key) is not None:
             return
         order = lock_order(session, company_id, order_id)
         if order.status_code == "ON_HOLD":
-            raise ValueError("دستورِ متوقف را ابتدا ادامه دهید.")
+            raise ValueError("دستور متوقف را ابتدا ادامه دهید.")
         _ensure_working(order)
         st = c.settings(session, company_id)
         if final is not None and (decimal.Decimal(final.quantity) > 0 or final.outputs):
             final.final = True
             _receive(session, order, final, date, user_id, f"{idempotency_key}:rcv" if idempotency_key else None)
         if decimal.Decimal(order.produced_qty) <= 0:
-            raise ValueError("مقدارِ تولید صفر است -- ابتدا تولید را ثبت کنید.")
+            raise ValueError("مقدار تولید صفر است — ابتدا تولید را ثبت کنید.")
         if not st.allow_under_consumption:
             for m in session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == order_id)):
                 _net, std = pm.line_requirement(m.quantity_per_base, m.quantity_type, m.scrap_percent, order.produced_qty,
                                                 m.batch_size_qty)
                 if not m.is_optional and m.consumed_qty < std:
-                    raise ValueError(f"مصرفِ «{c.item_label(session, m.item_id)}» کمتر از استاندارد است و در تنظیمات مجاز نیست.")
+                    raise ValueError(f"مصرف «{c.item_label(session, m.item_id)}» کمتر از استاندارد است و در تنظیمات مجاز نیست.")
         if st.auto_cost_calculation:
             from peecha.services.production import costing as pcost
 
@@ -1152,11 +1152,11 @@ def complete_order(company_id: int, user_id: int, order_id: int, final: ReceiptI
 
 
 def closing_checklist(company_id: int, order_id: int) -> list[SimpleNamespace]:
-    """کنترل‌هایِ پیش از بستن (بند ۴۵)."""
+    """کنترل‌های پیش از بستن (بند ۴۵)."""
     with new_session() as session:
         order = session.get(ProductionOrder, order_id)
         if order is None or order.company_id != company_id:
-            raise ValueError("دستورِ تولید نامعتبر است.")
+            raise ValueError("دستور تولید نامعتبر است.")
         return _checklist(session, order)
 
 
@@ -1173,13 +1173,13 @@ def _checklist(session, order: ProductionOrder) -> list[SimpleNamespace]:
     item = lambda key, label, ok, note="": SimpleNamespace(key=key, label=label, ok=bool(ok), note=note)  # noqa: E731
     return [
         item("STATUS", "تولید تکمیل شده", order.status_code == "COMPLETED", STATUS_LABELS[order.status_code]),
-        item("CONSUMPTION", "مصرفِ مواد ثبت شده", "ISSUE" in types),
-        item("RETURN", "رزروِ باز/موادِ برگشت‌نشده ندارد", not open_res, f"{open_res} رزروِ باز" if open_res else ""),
-        item("RECEIPT", "رسیدِ محصول ثبت شده", decimal.Decimal(order.produced_qty) > 0),
+        item("CONSUMPTION", "مصرف مواد ثبت شده", "ISSUE" in types),
+        item("RETURN", "رزرو باز/مواد برگشت‌نشده ندارد", not open_res, f"{open_res} رزرو باز" if open_res else ""),
+        item("RECEIPT", "رسید محصول ثبت شده", decimal.Decimal(order.produced_qty) > 0),
         item("SCRAP", "ضایعات بررسی شده", True, f"{decimal.Decimal(order.scrapped_qty).normalize()} واحد"),
-        item("COST", "بهایِ تمام‌شده محاسبه شده", has_conversion or not has_ops or not st.auto_cost_calculation),
+        item("COST", "بهای تمام‌شده محاسبه شده", has_conversion or not has_ops or not st.auto_cost_calculation),
         item("OVERHEAD", "سربار تخصیص یافته", "OVERHEAD" in types or not has_ops, ""),
-        item("ACCOUNTING", "اسنادِ حسابداری کامل", not missing_je, f"{len(missing_je)} تراکنشِ بی‌سند" if missing_je else ""),
+        item("ACCOUNTING", "اسناد حسابداری کامل", not missing_je, f"{len(missing_je)} تراکنش بی‌سند" if missing_je else ""),
         item("VARIANCE", "انحراف‌ها محاسبه شده", True, ""),
     ]
 
@@ -1189,7 +1189,7 @@ BLOCKING_CHECKS = ("STATUS", "CONSUMPTION", "RECEIPT", "ACCOUNTING")
 
 def close_order(company_id: int, user_id: int, order_id: int, date: datetime.date | None = None,
                 reason: str | None = None) -> SimpleNamespace:
-    """بستن: ماندهٔ WIP به انحرافِ تولید، ثبتِ خلاصهٔ بها/انحراف، قفلِ دستور."""
+    """بستن: ماندهٔ کالای در جریان ساخت به انحراف تولید، ثبت خلاصهٔ بها/انحراف، قفل دستور."""
     date = date or datetime.date.today()
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
@@ -1204,7 +1204,7 @@ def close_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
         if residual:
             lines = [(c.VARIANCE, residual, ZERO, _dims(order)), (c.WIP, ZERO, residual, _dims(order))] if residual > 0 else [
                 (c.WIP, -residual, ZERO, _dims(order)), (c.VARIANCE, ZERO, -residual, _dims(order))]
-            je = c.post_journal(session, company_id, user_id, date, f"{order.order_code} -- انحرافِ بستنِ دستورِ تولید", lines)
+            je = c.post_journal(session, company_id, user_id, date, f"{order.order_code} -- انحراف بستن دستور تولید", lines)
             record(session, order, "VARIANCE", date, user_id, item_id=order.item_id, amount=residual, wip_delta=-residual,
                    journal_entry_id=je, reason="CLOSE_RESIDUAL", details={"kind": "CLOSE_RESIDUAL"})
         from peecha.services.production import costing as pcost
@@ -1219,17 +1219,17 @@ def close_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
 
 
 def reopen_order(company_id: int, user_id: int, order_id: int, reason: str) -> None:
-    """بازگشایی (مجوزِ ویژه در UI): دستورِ بسته به «تکمیل‌شده» برمی‌گردد؛ اسنادِ قبلی دست نمی‌خورند."""
+    """بازگشایی (مجوز ویژه در UI): دستور بسته به «تکمیل‌شده» برمی‌گردد؛ اسناد قبلی دست نمی‌خورند."""
     if not (reason or "").strip():
-        raise ValueError("دلیلِ بازگشایی الزامی است.")
+        raise ValueError("دلیل بازگشایی الزامی است.")
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code != "CLOSED":
-            raise ValueError("فقط دستورِ بسته قابلِ بازگشایی است.")
+            raise ValueError("فقط دستور بسته قابل بازگشایی است.")
         from peecha.services.production import costing as pcost
 
         if pcost.period_is_closed(session, company_id, order.closed_at.date() if order.closed_at else datetime.date.today()):
-            raise ValueError("دورهٔ بهایِ این دستور بسته شده است -- ابتدا بستنِ دوره را بازگشایی کنید.")
+            raise ValueError("دورهٔ بهای این دستور بسته شده است — ابتدا بستن دوره را بازگشایی کنید.")
         order.status_code, order.closed_at, order.closed_by_user_id = "IN_PROGRESS", None, None
         c.audit(session, company_id, user_id, "ProductionOrder", order_id, "REOPEN", {"reason": reason})
         session.commit()
@@ -1237,13 +1237,13 @@ def reopen_order(company_id: int, user_id: int, order_id: int, reason: str) -> N
 
 def cancel_order(company_id: int, user_id: int, order_id: int, reason: str) -> None:
     if not (reason or "").strip():
-        raise ValueError("دلیلِ لغو الزامی است.")
+        raise ValueError("دلیل لغو الزامی است.")
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
         if order.status_code in ("COMPLETED", "CLOSED", "CANCELLED"):
-            raise ValueError("دستورِ تکمیل/بسته/لغوشده قابلِ لغو نیست.")
+            raise ValueError("دستور تکمیل/بسته/لغوشده قابل لغو نیست.")
         if decimal.Decimal(order.produced_qty) > 0 or wip_balance(session, order_id) != 0:
-            raise ValueError("این دستور تولید یا WIP دارد -- ابتدا مواد را برگشت و تولید را برگشت بزنید.")
+            raise ValueError("این دستور تولید یا کالای در جریان ساخت دارد — ابتدا مواد را برگشت و تولید را برگشت بزنید.")
         _release_all(session, order_id)
         before = order.status_code
         order.status_code = "CANCELLED"
@@ -1255,7 +1255,7 @@ def cancel_order(company_id: int, user_id: int, order_id: int, reason: str) -> N
 # چندسطحی
 # =====================================================================================
 def create_child_orders(company_id: int, user_id: int, order_id: int, shortage_only: bool = True) -> list[int]:
-    """دستورِ تولیدِ نیمه‌ساخته‌ها (مرحله‌به‌مرحله): خروجیِ فرزند به انبارِ موادِ دستورِ والد می‌رود."""
+    """دستور تولید نیمه‌ساخته‌ها (مرحله‌به‌مرحله): خروجی فرزند به انبار مواد دستور والد می‌رود."""
     created = []
     with new_session() as session:
         parent = lock_order(session, company_id, order_id)
@@ -1324,20 +1324,20 @@ def get_order(company_id: int, order_id: int) -> ProductionOrder:
     with new_session() as session:
         order = session.get(ProductionOrder, order_id)
         if order is None or order.company_id != company_id:
-            raise ValueError("دستورِ تولید نامعتبر است.")
+            raise ValueError("دستور تولید نامعتبر است.")
         session.expunge(order)
         return order
 
 
 def order_view(company_id: int, order_id: int) -> SimpleNamespace:
-    """همهٔ اطلاعاتِ صفحهٔ مرکزیِ دستور: سرِ دستور، مواد، عملیات، خروجی‌ها، هزینه‌ها، تراکنش‌ها."""
+    """همهٔ اطلاعات صفحهٔ مرکزی دستور: سر دستور، مواد، عملیات، خروجی‌ها، هزینه‌ها، تراکنش‌ها."""
     from peecha.services.production import costing as pcost
 
     avail = {a.material_id: a for a in availability(company_id, order_id)}
     with new_session() as session:
         order = session.get(ProductionOrder, order_id)
         if order is None or order.company_id != company_id:
-            raise ValueError("دستورِ تولید نامعتبر است.")
+            raise ValueError("دستور تولید نامعتبر است.")
         mats = list(session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == order_id).order_by(OrderMaterial.line_no)))
         ops = list(session.scalars(select(OrderOperation).where(OrderOperation.order_id == order_id).order_by(OrderOperation.seq)))
         outs = list(session.scalars(select(OrderOutput).where(OrderOutput.order_id == order_id).order_by(OrderOutput.output_id)))

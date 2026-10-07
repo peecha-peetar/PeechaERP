@@ -1,5 +1,5 @@
-"""تنظیماتِ ماژولِ انبار — واحد/برند/تولیدکننده، روشِ قیمت‌گذاری، نگاشتِ
-حساب‌هایِ حسابداری، و دلیل‌هایِ ساختاریافتهٔ اصلاح/برگشت."""
+"""تنظیمات ماژول انبار — واحد/برند/تولیدکننده، روش قیمت‌گذاری، نگاشت
+حساب‌های حسابداری، و دلیل‌های ساختاریافتهٔ اصلاح/برگشت."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import unit_conversion as uc
-from peecha.ui.widgets import FieldGrid, FieldSpec, FormDrawer, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldSpec, FormDrawer, LayoutEditMixin, set_widget_help
 
 # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
 # برایِ انتخابش نیست»): این بُعدها یا از سرِسند (مرکزِ هزینه/پروژه)، یا
@@ -54,12 +54,12 @@ def _company_id() -> int | None:
 
 
 class _UomDialog(QDialog):
-    """فرمِ تعریف/ویرایشِ واحدِ اندازه‌گیری (R225): نام، کد، نماد، نوع، واحدِ پایه،
-    ضریبِ تبدیل، تعدادِ اعشار، اعشارِ مجاز، وضعیت، توضیحات."""
+    """فرم تعریف/ویرایش واحد اندازه‌گیری (R225): نام، کد، نماد، نوع، واحد پایه،
+    ضریب تبدیل، تعداد اعشار، اعشار مجاز، وضعیت، توضیحات."""
 
     def __init__(self, parent: QWidget, rows: list, row=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ویرایشِ واحد" if row is not None else "واحدِ جدید")
+        self.setWindowTitle("ویرایش واحد" if row is not None else "واحد جدید")
         self.setMinimumWidth(420)
         self.name_field = QLineEdit(row.name if row else "")
         self.code_field = QLineEdit(row.code if row else "")
@@ -68,7 +68,7 @@ class _UomDialog(QDialog):
         for code, label in uc.UOM_TYPE_LABELS.items():
             self.type_combo.addItem(label, code)
         self.base_combo = QComboBox()
-        self.base_combo.addItem("(بدونِ واحدِ پایه -- خودش مبناست)", None)
+        self.base_combo.addItem("(بدون واحد پایه — خودش مبناست)", None)
         for r in rows:
             if row is None or r.uom_id != row.uom_id:
                 self.base_combo.addItem(f"{r.name} ({r.code})", r.uom_id)
@@ -93,19 +93,19 @@ class _UomDialog(QDialog):
 
         layout = QVBoxLayout(self)
         grid = FieldGrid([
-            FieldSpec("name", "نامِ واحد", self.name_field, span=1),
+            FieldSpec("name", "نام واحد", self.name_field, span=1),
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("symbol", "نماد", self.symbol_field, span=1),
             FieldSpec("type", "نوع", self.type_combo, span=1),
-            FieldSpec("base", "واحدِ پایه", self.base_combo, span=1),
-            FieldSpec("factor", "ضریبِ تبدیل به واحدِ پایه", self.factor_field, span=1),
-            FieldSpec("decimals", "تعدادِ اعشار", self.decimal_spin, span=1),
+            FieldSpec("base", "واحد پایه", self.base_combo, span=1),
+            FieldSpec("factor", "ضریب تبدیل به واحد پایه", self.factor_field, span=1),
+            FieldSpec("decimals", "تعداد اعشار", self.decimal_spin, span=1),
             FieldSpec("allow_decimal", "", self.allow_decimal_checkbox, span=1),
             FieldSpec("active", "", self.active_checkbox, span=1),
             FieldSpec("description", "توضیحات", self.description_field, span=3),
         ])
         layout.addWidget(grid)
-        hint = QLabel("مثال: کیلوگرم ← واحدِ پایه «گرم»، ضریب ۱۰۰۰. واحدِ بسته‌بندی (کارتن/بسته) ضریبِ واقعی‌اش را در فرمِ هر کالا می‌گیرد.")
+        hint = QLabel("مثال: کیلوگرم ← واحد پایه «گرم»، ضریب ۱۰۰۰. واحد بسته‌بندی (کارتن/بسته) ضریب واقعی‌اش را در فرم هر کالا می‌گیرد.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -123,7 +123,7 @@ class _UomDialog(QDialog):
         try:
             factor = decimal.Decimal(numerals.to_ascii_digits(self.factor_field.text().strip() or "1"))
         except decimal.InvalidOperation as exc:
-            raise ValueError("ضریبِ تبدیل باید عدد باشد.") from exc
+            raise ValueError("ضریب تبدیل باید عدد باشد.") from exc
         return dict(
             code=self.code_field.text().strip(), name=self.name_field.text().strip(),
             uom_type_code=self.type_combo.currentData(), decimal_places=self.decimal_spin.value(),
@@ -134,10 +134,10 @@ class _UomDialog(QDialog):
 
 
 class _UomTab(QWidget):
-    """مدیریتِ واحدهایِ اندازه‌گیری (R225): جست‌وجو، فیلترِ نوع/وضعیت، افزودن،
-    ویرایش، غیرفعال‌سازی. واحدِ استفاده‌شده هرگز حذفِ سخت نمی‌شود."""
+    """مدیریت واحدهای اندازه‌گیری (R225): جست‌وجو، فیلتر نوع/وضعیت، افزودن،
+    ویرایش، غیرفعال‌سازی. واحد استفاده‌شده هرگز حذف سخت نمی‌شود."""
 
-    _COLUMNS = ["کد", "نام", "نماد", "نوع", "واحدِ پایه", "ضریب", "اعشار", "وضعیت", "سیستمی"]
+    _COLUMNS = ["کد", "نام", "نماد", "نوع", "واحد پایه", "ضریب", "اعشار", "وضعیت", "سیستمی"]
 
     def __init__(self) -> None:
         super().__init__()
@@ -145,7 +145,7 @@ class _UomTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        _title_label = QLabel("مدیریتِ واحدهایِ اندازه‌گیری")
+        _title_label = QLabel("مدیریت واحدهای اندازه‌گیری")
         _title_label.setObjectName("pageTitle")
         layout.addWidget(_title_label)
 
@@ -169,7 +169,7 @@ class _UomTab(QWidget):
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(48)
-        add_button.setToolTip("واحدِ جدید")
+        add_button.setToolTip("واحد جدید")
         add_button.clicked.connect(self._add)
         filter_row.addWidget(add_button)
         layout.addLayout(filter_row)
@@ -196,7 +196,7 @@ class _UomTab(QWidget):
         delete_button = QPushButton("🚫")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
-        delete_button.setToolTip("غیرفعال‌سازی/حذف (واحدِ استفاده‌شده فقط غیرفعال می‌شود)")
+        delete_button.setToolTip("غیرفعال‌سازی/حذف (واحد استفاده‌شده فقط غیرفعال می‌شود)")
         delete_button.clicked.connect(self._delete_selected)
         buttons.addWidget(delete_button)
         layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
@@ -235,7 +235,7 @@ class _UomTab(QWidget):
                 u.code, u.name, u.symbol or "", uc.UOM_TYPE_LABELS.get(u.uom_type_code, u.uom_type_code),
                 names.get(u.base_uom_id, "") if u.base_uom_id else "",
                 numerals.to_persian_digits(format(u.conversion_factor.normalize(), "f")) if u.base_uom_id else "",
-                numerals.to_persian_digits(str(u.decimal_places)) if u.allow_decimal else "بدونِ اعشار",
+                numerals.to_persian_digits(str(u.decimal_places)) if u.allow_decimal else "بدون اعشار",
                 "فعال" if u.is_active else "غیرفعال", "بله" if u.is_global else "",
             ]
             for col_index, value in enumerate(values):
@@ -274,7 +274,7 @@ class _UomTab(QWidget):
         if row is None:
             return
         if row.is_global:
-            QMessageBox.information(self, "واحدِ سیستمی", "واحدهایِ سیستمی (استاندارد) قابلِ‌ویرایش نیستند؛ برایِ نیازِ خاص، واحدِ اختصاصی بسازید.")
+            QMessageBox.information(self, "واحد سیستمی", "واحدهای سیستمی (استاندارد) قابل‌ویرایش نیستند؛ برای نیاز خاص، واحد اختصاصی بسازید.")
             return
         dialog = _UomDialog(self, self._rows, row)
         if dialog.exec() != QDialog.Accepted:
@@ -297,7 +297,7 @@ class _UomTab(QWidget):
             return
         confirm = QMessageBox.question(
             self, "حذف/غیرفعال‌سازی",
-            "این واحد حذف شود؟ (اگر در کالا/سند/فهرستِ قیمت استفاده شده باشد، فقط غیرفعال می‌شود.)",
+            "این واحد حذف شود؟ (اگر در کالا/سند/فهرست قیمت استفاده شده باشد، فقط غیرفعال می‌شود.)",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -312,8 +312,8 @@ class _UomTab(QWidget):
 
 
 class _BarcodeManagerTab(QWidget):
-    """Barcode Manager (R225): جست‌وجویِ مرکزیِ بارکد، نمایشِ کالا/واحدِ هر بارکد،
-    و کنترلِ تکراری‌ها (شاملِ بارکدهایِ قدیمیِ پیش از سیستمِ واحد)."""
+    """Barcode Manager (R225): جست‌وجوی مرکزی بارکد، نمایش کالا/واحد هر بارکد،
+    و کنترل تکراری‌ها (شامل بارکدهای قدیمی پیش از سیستم واحد)."""
 
     _COLUMNS = ["بارکد", "نوع", "کالا", "واحد", "ضریب", "اصلی", "وضعیت"]
 
@@ -322,7 +322,7 @@ class _BarcodeManagerTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("مدیریتِ بارکد")
+        title = QLabel("مدیریت بارکد")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         row = QHBoxLayout()
@@ -345,7 +345,7 @@ class _BarcodeManagerTab(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         layout.addWidget(self.table, stretch=2)
-        layout.addWidget(QLabel("بارکدهایِ تکراری بینِ کالاها"))
+        layout.addWidget(QLabel("بارکدهای تکراری بین کالاها"))
         self.duplicates_table = QTableWidget(0, 2)
         self.duplicates_table.setHorizontalHeaderLabels(["بارکد", "کالاها"])
         self.duplicates_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -372,7 +372,7 @@ class _BarcodeManagerTab(QWidget):
             match = uc.resolve_barcode(company_id, search, with_price=False)
             self.resolve_label.setText(
                 f"اسکن: {match.item_code} — {match.item_name} | واحد: {match.unit_name} | ضریب: "
-                f"{numerals.to_persian_digits(format(match.factor.normalize(), 'f'))}" if match else "این بارکد به هیچ کالایِ فعالی وصل نیست."
+                f"{numerals.to_persian_digits(format(match.factor.normalize(), 'f'))}" if match else "این بارکد به هیچ کالای فعالی وصل نیست."
             )
         else:
             self.resolve_label.setText("")
@@ -385,8 +385,8 @@ class _BarcodeManagerTab(QWidget):
 
 
 class _BrandManufacturerTab(QWidget):
-    """هم‌الگو با _UomTab برایِ برند و تولیدکننده — چون هردو ساختاری
-    مشابه دارند (کد/نام/فعال)، هر دو در همین تب کنارِ هم می‌آیند."""
+    """هم‌الگو با _UomTab برای برند و تولیدکننده — چون هردو ساختاری
+    مشابه دارند (کد/نام/فعال)، هر دو در همین تب کنار هم می‌آیند."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -418,7 +418,7 @@ class _BrandManufacturerTab(QWidget):
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
-        delete_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        delete_button.setToolTip("حذف ردیف انتخاب‌شده")
         delete_button.clicked.connect(lambda: self._delete(is_brand))
         panel_layout.addWidget(delete_button)
         if is_brand:
@@ -502,7 +502,7 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        _title_label = QLabel("تنظیماتِ قیمت‌گذاریِ شرکت")
+        _title_label = QLabel("تنظیمات قیمت‌گذاری شرکت")
         _title_label.setObjectName("pageTitle")
         layout.addWidget(_title_label)
 
@@ -511,20 +511,20 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
             if code not in NOT_YET_AVAILABLE:
                 self.method_combo.addItem(label, code)
 
-        self.allow_override_checkbox = QCheckBox("اجازهٔ override در سطحِ کالا")
+        self.allow_override_checkbox = QCheckBox("اجازهٔ override در سطح کالا")
         self.allow_override_checkbox.setChecked(True)
         # R257: رفتارِ موجودیِ منفی
         self.negative_combo = QComboBox()
         for code, label in NEGATIVE_POLICIES.items():
             self.negative_combo.addItem(label, code)
         self.reason_field = QLineEdit()
-        self.reason_field.setPlaceholderText("علتِ تغییر (برایِ Audit)")
+        self.reason_field.setPlaceholderText("علت تغییر (برای سابقهٔ تغییرات)")
 
         self.costing_grid = FieldGrid([
-            FieldSpec("method", "روشِ ارزش‌گذاریِ موجودی", self.method_combo, span=1),
+            FieldSpec("method", "روش ارزش‌گذاری موجودی", self.method_combo, span=1),
             FieldSpec("allow_override", "", self.allow_override_checkbox, span=1),
-            FieldSpec("negative", "رفتارِ موجودیِ منفی", self.negative_combo, span=2),
-            FieldSpec("reason", "علتِ تغییر", self.reason_field, span=2),
+            FieldSpec("negative", "رفتار موجودی منفی", self.negative_combo, span=2),
+            FieldSpec("reason", "علت تغییر", self.reason_field, span=2),
         ])
         layout.addWidget(self.costing_grid)
         self.register_field_grids("inventory_settings_costing", [self.costing_grid])
@@ -558,9 +558,9 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
         if company_id is None:
             return
         if self.method_combo.currentData() != getattr(self, "_loaded_method", None) and QMessageBox.question(
-                self, "تغییرِ روشِ ارزش‌گذاری",
-                "تغییرِ روش بر بهایِ تمام‌شدهٔ خروج‌هایِ بعدی اثر می‌گذارد. برایِ موجودیِ فعلیِ کالاهایی که لایه ندارند، "
-                "در نخستین خروج یک «لایهٔ آغازین» با میانگینِ فعلی ساخته می‌شود. ادامه می‌دهید؟",
+                self, "تغییر روش ارزش‌گذاری",
+                "تغییر روش بر بهای تمام‌شدهٔ خروج‌های بعدی اثر می‌گذارد. برای موجودی فعلی کالاهایی که لایه ندارند، "
+                "در نخستین خروج یک «لایهٔ آغازین» با میانگین فعلی ساخته می‌شود. ادامه می‌دهید؟",
                 QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
         user = app_session.current_user
@@ -590,10 +590,10 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        _title_label = QLabel("نگاشتِ حساب‌هایِ حسابداری")
+        _title_label = QLabel("نگاشت حساب‌های حسابداری")
         _title_label.setObjectName("pageTitle")
         layout.addWidget(_title_label)
-        layout.addWidget(QLabel("هر عملیاتِ انبار به یک حساب (معین) نگاشت می‌شود؛ بدونِ نگاشت، ثبتِ سندِ خودکار متوقف می‌شود."))
+        layout.addWidget(QLabel("هر عملیات انبار به یک حساب (معین) نگاشت می‌شود؛ بدون نگاشت، ثبت سند خودکار متوقف می‌شود."))
 
         mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
@@ -611,6 +611,8 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
             combo.currentIndexChanged.connect(lambda _index, k=key: self._on_account_changed(k))
             self._combos[key] = combo
             self._detail_combos[key] = detail_combo
+            set_widget_help(combo, f"حساب معینی که «{label}» در اسناد خودکار انبار به آن ثبت می‌شود.")
+            set_widget_help(detail_combo, "اگر این حساب معین، تفصیلی الزامی دارد، تفصیلی ثابتی که همیشه همراه آن ثبت می‌شود.")
             mapping_fields.append(FieldSpec(key, label, row_widget, span=3))
         self.mapping_grid = FieldGrid(mapping_fields, columns=3)
         layout.addWidget(self.mapping_grid)
@@ -706,7 +708,7 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
                 continue
             if self._detail_required.get(key) and self._detail_combos[key].currentData() is None:
                 self.status_label.setObjectName("statusError")
-                self.status_label.setText(f"حسابِ «{engine_service.MAPPING_LABELS[key]}» یک تفصیلیِ ثابت هم لازم دارد.")
+                self.status_label.setText(f"حساب «{engine_service.MAPPING_LABELS[key]}» یک تفصیلی ثابت هم لازم دارد.")
                 return
             engine_service.set_account_mapping(company_id, key, account_id, self._detail_combos[key].currentData())
         self.status_label.setObjectName("statusSuccess")
@@ -720,10 +722,10 @@ class _FeatureToggleTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("قابلیت‌هایِ فعال (Feature Toggle)")
+        title = QLabel("قابلیت‌های فعال")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("فعال‌سازیِ هر قابلیت ممکن است به قابلیتِ دیگری وابسته باشد."))
+        layout.addWidget(QLabel("فعال‌سازی هر قابلیت ممکن است به قابلیت دیگری وابسته باشد."))
 
         self.rows_layout = QVBoxLayout()
         layout.addLayout(self.rows_layout)
@@ -773,9 +775,9 @@ class _ReasonCodesTab(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(16)
-        layout.addWidget(self._build_section("دلیل‌هایِ اصلاح", "ADJUSTMENT"), stretch=1)
-        layout.addWidget(self._build_section("دلیل‌هایِ برگشت از فروش", "RETURN_IN"), stretch=1)
-        layout.addWidget(self._build_section("دلیل‌هایِ برگشت به تامین‌کننده", "RETURN_OUT"), stretch=1)
+        layout.addWidget(self._build_section("دلیل‌های اصلاح", "ADJUSTMENT"), stretch=1)
+        layout.addWidget(self._build_section("دلیل‌های برگشت از فروش", "RETURN_IN"), stretch=1)
+        layout.addWidget(self._build_section("دلیل‌های برگشت به تامین‌کننده", "RETURN_OUT"), stretch=1)
 
     def _build_section(self, title: str, applies_to: str) -> QWidget:
         panel = QWidget()
@@ -799,7 +801,7 @@ class _ReasonCodesTab(QWidget):
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
-        delete_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        delete_button.setToolTip("حذف ردیف انتخاب‌شده")
         delete_button.clicked.connect(lambda: self._delete(applies_to))
         panel_layout.addWidget(delete_button)
         self._tables[applies_to] = table
@@ -820,7 +822,7 @@ class _ReasonCodesTab(QWidget):
 
     def _add(self, applies_to: str) -> None:
         dialog = QDialog(self)
-        dialog.setWindowTitle("افزودنِ دلیل")
+        dialog.setWindowTitle("افزودن دلیل")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("کد"))
         code_field = QLineEdit()
@@ -862,9 +864,9 @@ class _ReasonCodesTab(QWidget):
 
 
 class _CategoriesTab(LayoutEditMixin, QWidget):
-    """دسته‌بندیِ کالا (بخشِ ۱) + نگاشتِ حسابِ حسابداری در سطحِ دسته (بخشِ ۱۴،
-    override رویِ نگاشتِ سراسری — فعلاً فقط تنظیم؛ اتصال به موتورِ ثبت در
-    دورِ بعدی)."""
+    """دسته‌بندی کالا (بخش ۱) + نگاشت حساب حسابداری در سطح دسته (بخش ۱۴،
+    override روی نگاشت سراسری — فعلاً فقط تنظیم؛ اتصال به موتور ثبت در
+    دور بعدی)."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -884,7 +886,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         panel_layout = QVBoxLayout(panel)
-        title = QLabel("دسته‌بندیِ کالا")
+        title = QLabel("دسته‌بندی کالا")
         title.setObjectName("pageTitle")
         panel_layout.addWidget(title)
 
@@ -926,10 +928,10 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
     def _build_mapping_panel(self) -> QWidget:
         panel = QWidget()
         panel_layout = QVBoxLayout(panel)
-        title = QLabel("نگاشتِ حسابِ این دسته (override)")
+        title = QLabel("نگاشت حساب این دسته (override)")
         title.setObjectName("pageTitle")
         panel_layout.addWidget(title)
-        panel_layout.addWidget(QLabel("اگر دسته‌ای انتخاب نشده باشد یا برایِ کلیدی مقداری تعیین نشود، نگاشتِ سراسریِ شرکت استفاده می‌شود."))
+        panel_layout.addWidget(QLabel("اگر دسته‌ای انتخاب نشده باشد یا برای کلیدی مقداری تعیین نشود، نگاشت سراسری شرکت استفاده می‌شود."))
 
         mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
@@ -985,7 +987,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         for key, combo in self._mapping_combos.items():
             combo.blockSignals(True)
             combo.clear()
-            combo.addItem("(از نگاشتِ سراسری پیروی کند)", None)
+            combo.addItem("(از نگاشت سراسری پیروی کند)", None)
             for account_id, label in accounts:
                 combo.addItem(label, account_id)
             combo.setCurrentIndex(max(0, combo.findData(current_by_key.get(key))))
@@ -1016,7 +1018,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         layout.addWidget(name_field)
         layout.addWidget(QLabel("دستهٔ والد (اختیاری)"))
         parent_combo = QComboBox()
-        parent_combo.addItem("(بدونِ والد)", None)
+        parent_combo.addItem("(بدون والد)", None)
         for c in self._rows:
             parent_combo.addItem(f"{c.code} — {c.name}", c.category_id)
         layout.addWidget(parent_combo)
@@ -1041,7 +1043,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         if row is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("ویرایشِ دسته")
+        dialog.setWindowTitle("ویرایش دسته")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("نام"))
         name_field = QLineEdit(row.name)

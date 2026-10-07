@@ -1,10 +1,10 @@
-"""فروشِ تلفنی -- طبقِ درخواستِ صریحِ کاربر: پخشِ سرد از ۳ مسیر سفارش
-می‌گیرد (سفارشِ عمده، سفارشِ موبایلی، و این‌جا سفارشِ تلفنی). این صفحه
-فهرستِ مشتریانِ ویزیتورِ واردشده (چه ویزیتورِ مقیمِ شرکت، چه ویزیتورِ
-تلفنی -- هردو از همان assigned_visitor_user_id در برنامهٔ مراجعه
-استفاده می‌کنند) را نشان می‌دهد و برایِ هر مشتری امکانِ یادداشت، دیدنِ
-مانده‌حساب، بازکردنِ معینِ حساب، و ثبتِ سفارش/صدورِ فاکتور (با
-توضیحِ پیش‌فرضِ «سفارشِ تلفنی») را در همان صفحه فراهم می‌کند."""
+"""فروش تلفنی — طبق درخواست صریح کاربر: پخش سرد از ۳ مسیر سفارش
+می‌گیرد (سفارش عمده، سفارش موبایلی، و این‌جا سفارش تلفنی). این صفحه
+فهرست مشتریان ویزیتور واردشده (چه ویزیتور مقیم شرکت، چه ویزیتور
+تلفنی — هردو از همان assigned_visitor_user_id در برنامهٔ مراجعه
+استفاده می‌کنند) را نشان می‌دهد و برای هر مشتری امکان یادداشت، دیدن
+مانده‌حساب، بازکردن معین حساب، و ثبت سفارش/صدور فاکتور (با
+توضیح پیش‌فرض «سفارش تلفنی») را در همان صفحه فراهم می‌کند."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ _COLUMNS = ["کد", "نام", "ماندهٔ حساب", "آخرین یادداش�
 
 
 class _OriginateWorker(QObject):
-    """اجرایِ originate_call در یک QThreadِ جدا -- طبقِ اصلِ «اتصال به
-    سیستمِ بیرونی نباید UI را قفل کند» (سوکتِ AMI می‌تواند تا چند ثانیه
+    """اجرای originate_call در یک QThread جدا — طبق اصل «اتصال به
+    سیستم بیرونی نباید UI را قفل کند» (سوکت AMI می‌تواند تا چند ثانیه
     طول بکشد یا timeout بخورد)."""
 
     finished = Signal(bool, str)
@@ -59,11 +59,11 @@ class _OriginateWorker(QObject):
 
 
 class Customer360Dialog(QDialog):
-    """داشبوردِ معلقِ مشتری -- طبقِ درخواستِ صریحِ کاربر: «با زدنِ اطلاعاتِ
-    مشتری خلاصه‌اطلاعات و یک داشبوردِ معلق از مشتری نشان بده... گزارشِ
-    آماری از فروش و چک‌ها و فروش بر اساسِ کالا و ماه به‌صورتِ نموداری و
+    """داشبورد معلق مشتری — طبق درخواست صریح کاربر: «با زدن اطلاعات
+    مشتری خلاصه‌اطلاعات و یک داشبورد معلق از مشتری نشان بده... گزارش
+    آماری از فروش و چک‌ها و فروش بر اساس کالا و ماه به‌صورت نموداری و
     شماره‌تماس». مودال نیست (exec نمی‌شود، show می‌شود) تا واقعاً «معلق»
-    باشد و کارِ فروشِ تلفنی را قطع نکند."""
+    باشد و کار فروش تلفنی را قطع نکند."""
 
     def __init__(self, company_id: int, customer_id: int, parent=None) -> None:
         super().__init__(parent)
@@ -103,13 +103,13 @@ class Customer360Dialog(QDialog):
         self._pending_calls: list[tuple[QThread, "_OriginateWorker"]] = []
 
         charts_row = QHBoxLayout()
-        month_card, self._month_chart_view = build_chart_card("فروشِ ماهانه")
-        item_card, self._item_chart_view = build_chart_card("فروش به تفکیکِ کالا (۱۰ کالایِ برتر)")
+        month_card, self._month_chart_view = build_chart_card("فروش ماهانه")
+        item_card, self._item_chart_view = build_chart_card("فروش به تفکیک کالا (۱۰ کالای برتر)")
         charts_row.addWidget(month_card, stretch=1)
         charts_row.addWidget(item_card, stretch=1)
         outer.addLayout(charts_row, stretch=1)
 
-        outer.addWidget(QLabel("چک‌هایِ مرتبط:"))
+        outer.addWidget(QLabel("چک‌های مرتبط:"))
         self._cheques_table = QTableWidget(0, 5)
         self._cheques_table.setHorizontalHeaderLabels(["نوع", "شماره", "مبلغ", "سررسید", "وضعیت"])
         self._cheques_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -119,7 +119,7 @@ class Customer360Dialog(QDialog):
 
         # طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره
         # بشه»): سوابقِ تماس‌هایِ Originateشده از همین داشبورد (R138).
-        outer.addWidget(QLabel("سوابقِ تماس:"))
+        outer.addWidget(QLabel("سوابق تماس:"))
         self._calls_list = QListWidget()
         self._calls_list.setMaximumHeight(120)
         outer.addWidget(self._calls_list)
@@ -135,7 +135,7 @@ class Customer360Dialog(QDialog):
         contact = customer_dashboard_service.get_contact_info(self._company_id, self._customer_id)
         if contact is None:
             return
-        self.setWindowTitle(f"داشبوردِ مشتری -- {contact.name}")
+        self.setWindowTitle(f"داشبورد مشتری -- {contact.name}")
         decimal_places = companies_service.get_base_currency_decimal_places(self._company_id)
 
         self._clear_layout(self._header_layout)
@@ -200,7 +200,7 @@ class Customer360Dialog(QDialog):
         if conn is None or not conn.is_active or not extension:
             self._open_tel_fallback(phone_number)
             return
-        self._call_status_label.setText("درحالِ برقراریِ تماس از طریقِ سانترال...")
+        self._call_status_label.setText("درحال برقراری تماس از طریق سانترال...")
         worker = _OriginateWorker(
             conn.host, conn.port, conn.ami_username, conn.ami_secret, conn.dial_context,
             conn.channel_tech_prefix, extension, phone_number,
@@ -250,7 +250,7 @@ class Customer360Dialog(QDialog):
 class _CustomerNoteDialog(QDialog):
     def __init__(self, company_id: int, customer_id: int, customer_name: str, user_id: int, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"یادداشت‌هایِ {customer_name}")
+        self.setWindowTitle(f"یادداشت‌های {customer_name}")
         self.resize(420, 420)
         self._company_id = company_id
         self._customer_id = customer_id
@@ -260,12 +260,12 @@ class _CustomerNoteDialog(QDialog):
         self.history_list = QListWidget()
         layout.addWidget(self.history_list, stretch=1)
 
-        layout.addWidget(QLabel("یادداشتِ تازه:"))
+        layout.addWidget(QLabel("یادداشت تازه:"))
         self.text_edit = QTextEdit()
         self.text_edit.setFixedHeight(80)
         layout.addWidget(self.text_edit)
 
-        add_button = QPushButton("افزودنِ یادداشت")
+        add_button = QPushButton("افزودن یادداشت")
         add_button.clicked.connect(self._add_note)
         layout.addWidget(add_button)
 
@@ -299,11 +299,11 @@ class TelesalesScreen(QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("فروشِ تلفنی")
+        title = QLabel("فروش تلفنی")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
-        hint = QLabel("فهرستِ مشتریانِ اختصاص‌یافته به شما (طبقِ برنامهٔ مراجعه) -- برایِ ویزیتورِ مقیم یا تلفنی.")
+        hint = QLabel("فهرست مشتریان اختصاص‌یافته به شما (طبق برنامهٔ مراجعه) — برای ویزیتور مقیم یا تلفنی.")
         hint.setObjectName("sectionHint")
         outer.addWidget(hint)
 
@@ -363,30 +363,30 @@ class TelesalesScreen(QWidget):
         layout.setSpacing(6)
 
         note_button = QPushButton("یادداشت")
-        note_button.setToolTip("دیدن/افزودنِ یادداشت برایِ این مشتری")
+        note_button.setToolTip("دیدن/افزودن یادداشت برای این مشتری")
         note_button.clicked.connect(
             lambda _checked=False, c=customer: self._open_notes(company_id, c.customer_detail_account_id, c.name, user_id)
         )
         layout.addWidget(note_button)
 
         ledger_button = QPushButton("معین")
-        ledger_button.setToolTip("بازکردنِ معینِ حسابِ این مشتری")
+        ledger_button.setToolTip("بازکردن معین حساب این مشتری")
         ledger_button.clicked.connect(lambda _checked=False, c=customer: self._open_ledger(c.customer_detail_account_id, c.name))
         layout.addWidget(ledger_button)
 
         order_button = QPushButton("سفارش")
-        order_button.setToolTip("ثبتِ سفارشِ تلفنی برایِ این مشتری")
+        order_button.setToolTip("ثبت سفارش تلفنی برای این مشتری")
         order_button.clicked.connect(lambda _checked=False, c=customer: self._open_new_document("SALES_ORDER", c.customer_detail_account_id))
         layout.addWidget(order_button)
 
         invoice_button = QPushButton("فاکتور")
-        invoice_button.setToolTip("صدورِ فاکتورِ فروش برایِ این مشتری")
+        invoice_button.setToolTip("صدور فاکتور فروش برای این مشتری")
         invoice_button.clicked.connect(lambda _checked=False, c=customer: self._open_new_document("SALES_INVOICE", c.customer_detail_account_id))
         layout.addWidget(invoice_button)
 
         dashboard_button = QPushButton("📊")
         dashboard_button.setObjectName("iconButton")
-        dashboard_button.setToolTip("بازکردنِ داشبوردِ معلقِ این مشتری")
+        dashboard_button.setToolTip("بازکردن داشبورد معلق این مشتری")
         dashboard_button.clicked.connect(lambda _checked=False, c=customer: self._open_customer_dashboard(company_id, c.customer_detail_account_id))
         layout.addWidget(dashboard_button)
 
@@ -422,5 +422,5 @@ class TelesalesScreen(QWidget):
         # تلفنی» است تا در فهرستِ اسناد/گزارش‌ها از سفارشِ عمده یا
         # موبایلی متمایز باشد -- کاربر همچنان می‌تواند آن را ویرایش کند.
         self._main_window.open_screen(
-            nav_code, then=lambda screen: screen.prefill_for_new(customer_id, description="سفارشِ تلفنی"),
+            nav_code, then=lambda screen: screen.prefill_for_new(customer_id, description="سفارش تلفنی"),
         )

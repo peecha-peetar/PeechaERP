@@ -1,9 +1,9 @@
-"""سینکِ مقاله با CMS (وردپرس) -- طبقِ ادامه‌یِ اولویتِ بخشِ محتوا/
-بازاریابی («قسمتِ سئو و پست خودکار ... و تقویمِ محتوایی» → مرحله‌یِ
-بعدی: سینکِ محتوا با وردپرس). معماری هم‌الگو با commercial_social.py:
-اعتبارِ اتصال (نامِ‌کاربری + رمزِ‌کاره/Application Password) رمزنگاری‌شده
+"""همگام‌سازی مقاله با CMS (وردپرس) — طبق ادامهٔ اولویت بخش محتوا/
+بازاریابی («قسمت سئو و پست خودکار ... و تقویم محتوایی» → مرحلهٔ
+بعدی: همگام‌سازی محتوا با وردپرس). معماری هم‌الگو با commercial_social.py:
+اعتبار اتصال (نام‌کاربری + رمز‌کاره/Application Password) رمزنگاری‌شده
 ذخیره می‌شود؛ هر مقاله به یک اتصال متصل است و external_post_id پس از
-اولین انتشار برایِ به‌روزرسانی‌هایِ بعدی نگه داشته می‌شود."""
+اولین انتشار برای به‌روزرسانی‌های بعدی نگه داشته می‌شود."""
 
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ def list_connections(company_id: int) -> list[CmsConnection]:
 
 def create_connection(company_id: int, platform_code: str, display_name: str, site_url: str, username: str, app_password: str) -> int:
     if platform_code not in _SUPPORTED_PLATFORMS:
-        raise ValueError("پلتفرمِ نامعتبر است.")
+        raise ValueError("پلتفرم نامعتبر است.")
     if not display_name.strip() or not site_url.strip() or not username.strip() or not app_password.strip():
-        raise ValueError("نام، آدرسِ سایت، نامِ‌کاربری، و رمزِ‌کاره الزامی‌اند.")
+        raise ValueError("نام، آدرس سایت، نام‌کاربری، و رمز‌کاره الزامی‌اند.")
     from peecha.services import ecommerce_credentials
 
     with new_session() as session:
@@ -63,12 +63,12 @@ def _decrypt_app_password(connection: CmsConnection) -> str:
     creds = ecommerce_credentials.decrypt_credentials(connection.app_password_encrypted)
     app_password = creds.get("app_password", "")
     if not app_password:
-        raise ValueError("این اتصال رمزِ‌کاره‌یِ معتبری ندارد.")
+        raise ValueError("این اتصال رمز‌کارهٔ معتبری ندارد.")
     return app_password
 
 
 def _record_connection_health(connection_id: int, error_message: str | None) -> None:
-    """طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»/«بررسیِ سلامتِ سایت»):
+    """طبق ادامهٔ اولویت‌بندی («نگهبان اتصال»/«بررسی سلامت سایت»):
     هم‌الگو با commercial_ecommerce/commercial_social._record_connection_health."""
     with new_session() as session:
         row = session.get(CmsConnection, connection_id)
@@ -96,9 +96,9 @@ def test_connection(connection_id: int) -> tuple[bool, str]:
 
 def create_article(company_id: int, connection_id: int, title: str, body_html: str) -> int:
     if not title.strip():
-        raise ValueError("عنوانِ مقاله نمی‌تواند خالی باشد.")
+        raise ValueError("عنوان مقاله نمی‌تواند خالی باشد.")
     if not body_html.strip():
-        raise ValueError("متنِ مقاله نمی‌تواند خالی باشد.")
+        raise ValueError("متن مقاله نمی‌تواند خالی باشد.")
     with new_session() as session:
         row = CmsArticle(
             company_id=company_id, connection_id=connection_id, title=title.strip(),
@@ -116,10 +116,10 @@ def list_articles(company_id: int) -> list[CmsArticle]:
 
 
 def publish_article(article_id: int) -> None:
-    """طبقِ هم‌الگو با پستِ خودکار: وضعیت همیشه صریحاً به PUBLISHED یا
-    FAILED به‌روزرسانی می‌شود -- نه اینکه در حالتِ نامشخص باقی بماند.
+    """طبق هم‌الگو با پست خودکار: وضعیت همیشه صریحاً به PUBLISHED یا
+    FAILED به‌روزرسانی می‌شود — نه اینکه در حالت نامشخص باقی بماند.
     اگر مقاله قبلاً منتشر شده باشد (external_post_id موجود است)، همان
-    پستِ وردپرس به‌روزرسانی می‌شود، نه اینکه پستِ تازه ساخته شود."""
+    پست وردپرس به‌روزرسانی می‌شود، نه اینکه پست تازه ساخته شود."""
     from peecha.integrations.cms import wordpress_client
 
     with new_session() as session:

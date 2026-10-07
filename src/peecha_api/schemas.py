@@ -1,5 +1,5 @@
-"""مدل‌هایِ Pydanticِ درخواست/پاسخِ API -- طبقِ اصلِ معماری: این‌ها فقط
-لایهٔ سریالایز/اعتبارسنجیِ ورودی‌اند، هیچ منطقی این‌جا محاسبه نمی‌شود."""
+"""مدل‌های Pydantic درخواست/پاسخ API — طبق اصل معماری: این‌ها فقط
+لایهٔ سریالایز/اعتبارسنجی ورودی‌اند، هیچ منطقی این‌جا محاسبه نمی‌شود."""
 
 from __future__ import annotations
 
@@ -70,8 +70,8 @@ class OrderLineRequest(BaseModel):
 
 
 class ReceivedCheckRequest(BaseModel):
-    """طبقِ درخواستِ صریح («فیلدهایِ چک دقیقاً همون فیلدهایِ دسکتاپ»):
-    هم‌فرمت با چکِ دریافتیِ فرمِ دریافتِ خزانه‌داریِ دسکتاپ."""
+    """طبق درخواست صریح («فیلدهای چک دقیقاً همون فیلدهای دسکتاپ»):
+    هم‌قالب با چک دریافتی فرم دریافت خزانه‌داری دسکتاپ."""
 
     check_no: str
     due_date: datetime.date
@@ -182,7 +182,7 @@ class CustomerCreateRequest(BaseModel):
 
 
 class PartyAddressRequest(BaseModel):
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۲ -- چندآدرسیِ
+    """طبق بازبینی ساختار «تعریف مشتری» (R216، بخش ۲ — چندآدرسی
     واقعی + GeoFence)."""
 
     address_type_code: str  # OFFICE|STORE|WAREHOUSE|DELIVERY|BILLING|RETURN
@@ -197,7 +197,7 @@ class PartyAddressRequest(BaseModel):
 
 
 class CustomerGuaranteeRequest(BaseModel):
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۵ -- چک/سفته/
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۵ — چک/سفته/
     ضمانت‌نامه/ضامن/وثیقه)."""
 
     guarantee_type_code: str  # CHECK|PROMISSORY_NOTE|BANK_GUARANTEE|GUARANTOR|COLLATERAL
@@ -210,7 +210,7 @@ class CustomerGuaranteeRequest(BaseModel):
 
 
 class CustomerContractRequest(BaseModel):
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷ -- قراردادِ
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۷ — قرارداد
     نمایندگی/سازمانی + سهمیه + تعهدات)."""
 
     contract_category_code: str = "STANDARD"  # STANDARD|AGENCY|ORGANIZATIONAL
@@ -224,7 +224,7 @@ class CustomerContractRequest(BaseModel):
 
 
 class CustomerMerchandisingRequest(BaseModel):
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۰ --
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۰ --
     Merchandising)."""
 
     store_area_sqm: decimal.Decimal | None = None
@@ -237,8 +237,8 @@ class CustomerMerchandisingRequest(BaseModel):
 
 
 class CustomerActivityRequest(BaseModel):
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۱ -- CRMِ کامل:
-    شکایت/جلسه/فرصتِ فروش/وظیفه)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۱ — CRM کامل:
+    شکایت/جلسه/فرصت فروش/وظیفه)."""
 
     activity_type_code: str  # COMPLAINT|MEETING|OPPORTUNITY|TASK
     subject: str

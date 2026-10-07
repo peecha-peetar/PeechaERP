@@ -1,8 +1,8 @@
-"""پنلِ اختصاصیِ «کالا» — طبقِ ادغامِ فرمِ مستقلِ کالا/خدمت در گروهِ تفصیلیِ
-INVENTORY_ITEM (هم‌الگو با یکپارچه‌سازیِ HR/PERSONNEL): این ویجت فقط
-تب‌هایِ اختصاصیِ کالا را می‌سازد (کد/نام/فعال/والد و دکمه‌هایِ ذخیره/حذف
-در فرمِ میزبان — detail_dimensions.py — هستند) و توسطِ آن فرم، فقط در
-سطحِ‌آخرِ گروهِ کالا embed و نمایان می‌شود."""
+"""پنل اختصاصی «کالا» — طبق ادغام فرم مستقل کالا/خدمت در گروه تفصیلی
+INVENTORY_ITEM (هم‌الگو با یکپارچه‌سازی HR/PERSONNEL): این ویجت فقط
+تب‌های اختصاصی کالا را می‌سازد (کد/نام/فعال/والد و دکمه‌های ذخیره/حذف
+در فرم میزبان — detail_dimensions.py — هستند) و توسط آن فرم، فقط در
+سطح‌آخر گروه کالا embed و نمایان می‌شود."""
 
 from __future__ import annotations
 
@@ -60,11 +60,11 @@ _KIND_LABELS = {
 _LIFECYCLE_LABELS = {"DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "DISCONTINUED": "متوقف‌شده"}
 from peecha.services.costing.strategies import METHOD_LABELS as _METHOD_LABELS  # noqa: E402
 
-_COSTING_LABELS = {"": "(پیش‌فرضِ شرکت)", **_METHOD_LABELS}
+_COSTING_LABELS = {"": "(پیش‌فرض شرکت)", **_METHOD_LABELS}
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
 _RELATION_LABELS = {"SUBSTITUTE": "جایگزین", "COMPLEMENTARY": "مکمل"}
-_UNIT_COLUMNS = ["واحد", "ضریب", "خرید", "فروش", "پیش‌فرضِ خرید", "پیش‌فرضِ فروش", "بارکدها", "قیمت", "وضعیت"]
-_DEPRECIATION_LABELS = {"STRAIGHT_LINE": "خطِ‌مستقیم", "DECLINING_BALANCE": "نزولی"}
+_UNIT_COLUMNS = ["واحد", "ضریب", "خرید", "فروش", "پیش‌فرض خرید", "پیش‌فرض فروش", "بارکدها", "قیمت", "وضعیت"]
+_DEPRECIATION_LABELS = {"STRAIGHT_LINE": "خط‌مستقیم", "DECLINING_BALANCE": "نزولی"}
 _CONSUMER_FACING_KINDS = ("GOOD", "FINISHED_GOOD", "BUNDLE", "KIT")
 _ECOMMERCE_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
 
@@ -108,21 +108,21 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.tabs = QTabWidget()
         self.tab_indexes: dict[str, int] = {}
         tab_defs = [
-            ("basic", self._build_basic_info_tab(), "اطلاعاتِ پایه"),
+            ("basic", self._build_basic_info_tab(), "اطلاعات پایه"),
             ("tracking", self._build_sales_tracking_tab(), "فروش/خرید و ردیابی"),
             ("grouping", self._build_grouping_tab(), "گروه‌بندی و شناسه"),
             ("units", self._build_units_tab(), "واحدها و بسته‌بندی"),
             ("purchasing", self._build_purchasing_tab(), "خرید"),
             ("variants", self._build_variants_tab(), "ویژگی‌ها و متغیرها"),
-            ("sales_extra", self._build_sales_extra_tab(), "فروشِ تکمیلی"),
+            ("sales_extra", self._build_sales_extra_tab(), "فروش تکمیلی"),
             ("production", self._build_production_tab(), "تولید (BOM)"),
-            ("ecommerce", self._build_ecommerce_tab(), "فروشگاهِ اینترنتی"),
-            ("pos", self._build_pos_tab(), "فروشِ حضوری (POS)"),
+            ("ecommerce", self._build_ecommerce_tab(), "فروشگاه اینترنتی"),
+            ("pos", self._build_pos_tab(), "فروش حضوری (POS)"),
             ("shipping", self._build_shipping_tab(), "حمل‌ونقل"),
-            ("qc", self._build_qc_tab(), "کنترلِ کیفیت"),
+            ("qc", self._build_qc_tab(), "کنترل کیفیت"),
             ("asset", self._build_asset_tab(), "دارایی"),
-            ("locations", self._build_locations_tab(), "محل‌هایِ انبار"),  # R248
-            ("cost", self._build_cost_tab(), "اطلاعاتِ بها"),  # R259
+            ("locations", self._build_locations_tab(), "محل‌های انبار"),  # R248
+            ("cost", self._build_cost_tab(), "اطلاعات بها"),  # R259
         ]
         for key, widget, label in tab_defs:
             self.tab_indexes[key] = self.tabs.addTab(widget, label)
@@ -130,92 +130,92 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.set_field_help([
             # اطلاعاتِ پایه
-            (self.latin_name_field, "نامِ لاتینِ کالا -- برایِ فاکتور/برچسبِ صادراتی یا مشتریانِ خارجی."),
-            (self.short_name_field, "نامِ کوتاه -- در جاهایی که فضایِ نمایش محدود است (مثلاً دکمه‌هایِ POS) به‌جایِ نامِ کامل نمایش داده می‌شود."),
-            (self.kind_combo, "نوعِ کالا؛ تب‌هایِ مرتبط بر اساسِ همین انتخاب نمایان می‌شوند."),
-            (self.uom_combo, "واحدِ پایه — پس از اولین حرکتِ انبار دیگر قابلِ‌تغییر نیست."),
-            (self.brand_combo, "برندِ سازنده/عرضه‌کننده -- اختیاری، برایِ فیلترِ گزارش‌ها."),
-            (self.manufacturer_combo, "تولیدکننده‌یِ اصلیِ کالا -- اختیاری، برایِ فیلترِ گزارش‌ها."),
-            (self.country_of_origin_field, "کشورِ سازنده -- برایِ فاکتور/فرم‌هایِ گمرکی."),
-            (self.costing_combo, "روشِ قیمت‌گذاریِ اختصاصیِ این کالا؛ خالی یعنی از تنظیماتِ شرکت پیروی می‌کند."),
-            (self.lifecycle_combo, "وضعیتِ چرخهٔ‌عمرِ کالا (مثلاً فعال/درحالِ‌توقفِ‌تولید) -- صرفاً اطلاعاتی."),
-            (self.notes_field, "یادداشتِ آزادِ داخلی دربارهٔ این کالا -- در فاکتور/گزارش نمایش داده نمی‌شود."),
+            (self.latin_name_field, "نام لاتین کالا — برای فاکتور/برچسب صادراتی یا مشتریان خارجی."),
+            (self.short_name_field, "نام کوتاه — در جاهایی که فضای نمایش محدود است (مثلاً دکمه‌های POS) به‌جای نام کامل نمایش داده می‌شود."),
+            (self.kind_combo, "نوع کالا؛ تب‌های مرتبط بر اساس همین انتخاب نمایان می‌شوند."),
+            (self.uom_combo, "واحد پایه — پس از اولین حرکت انبار دیگر قابل‌تغییر نیست."),
+            (self.brand_combo, "برند سازنده/عرضه‌کننده — اختیاری، برای فیلتر گزارش‌ها."),
+            (self.manufacturer_combo, "تولیدکنندهٔ اصلی کالا — اختیاری، برای فیلتر گزارش‌ها."),
+            (self.country_of_origin_field, "کشور سازنده — برای فاکتور/فرم‌های گمرکی."),
+            (self.costing_combo, "روش قیمت‌گذاری اختصاصی این کالا؛ خالی یعنی از تنظیمات شرکت پیروی می‌کند."),
+            (self.lifecycle_combo, "وضعیت چرخهٔ‌عمر کالا (مثلاً فعال/درحال‌توقف‌تولید) — صرفاً اطلاعاتی."),
+            (self.notes_field, "یادداشت آزاد داخلی دربارهٔ این کالا — در فاکتور/گزارش نمایش داده نمی‌شود."),
             # فروش/خرید و ردیابی
-            (self.is_sellable_checkbox, "این کالا در فاکتور/فرمِ فروش قابلِ‌انتخاب است."),
-            (self.is_purchasable_checkbox, "این کالا در فاکتور/فرمِ خرید قابلِ‌انتخاب است."),
-            (self.is_stock_tracked_checkbox, "موجودیِ این کالا در انبار پیگیری می‌شود؛ خدمت نمی‌تواند موجودی‌محور باشد."),
-            (self.track_batch_checkbox, "هر رسید/حواله باید بچ/پارتیِ مشخصی را ثبت کند -- برایِ ردیابیِ تولید/تامین‌کننده."),
-            (self.track_expiry_checkbox, "ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است -- هر بچ تاریخِ انقضایِ خودش را دارد."),
-            (self.track_serial_checkbox, "هر واحدِ این کالا با شماره‌سریالِ منحصربه‌فردِ خودش ردیابی می‌شود."),
+            (self.is_sellable_checkbox, "این کالا در فاکتور/فرم فروش قابل‌انتخاب است."),
+            (self.is_purchasable_checkbox, "این کالا در فاکتور/فرم خرید قابل‌انتخاب است."),
+            (self.is_stock_tracked_checkbox, "موجودی این کالا در انبار پیگیری می‌شود؛ خدمت نمی‌تواند موجودی‌محور باشد."),
+            (self.track_batch_checkbox, "هر رسید/حواله باید بچ/پارتی مشخصی را ثبت کند — برای ردیابی تولید/تامین‌کننده."),
+            (self.track_expiry_checkbox, "ردیابی انقضا نیازمند فعال‌بودن ردیابی بچ است — هر بچ تاریخ انقضای خودش را دارد."),
+            (self.track_serial_checkbox, "هر واحد این کالا با شماره‌سریال منحصربه‌فرد خودش ردیابی می‌شود."),
             # گروه‌بندی و شناسه
-            (self.default_warehouse_combo, "انباری که در فرم‌هایِ سند، اگر انبارِ دیگری انتخاب نشود، برایِ این کالا پیشنهاد می‌شود."),
-            (self.barcode_field, "بارکدِ اصلیِ کالا -- با اسکنر در فروشِ حضوری/انبار قابلِ‌جست‌وجوست."),
-            (self.qr_code_field, "محتوایِ کدِ QR (در صورتِ نیاز به بارکدِ متفاوت از بارکدِ خطی)."),
-            (self.sku_field, "کدِ داخلیِ کالا (SKU) -- مستقل از کدِ حسابداریِ کالا، برایِ انبارداری/فروشگاهِ اینترنتی."),
+            (self.default_warehouse_combo, "انباری که در فرم‌های سند، اگر انبار دیگری انتخاب نشود، برای این کالا پیشنهاد می‌شود."),
+            (self.barcode_field, "بارکد اصلی کالا — با اسکنر در فروش حضوری/انبار قابل‌جست‌وجوست."),
+            (self.qr_code_field, "محتوای کد QR (در صورت نیاز به بارکد متفاوت از بارکد خطی)."),
+            (self.sku_field, "کد داخلی کالا (SKU) — مستقل از کد حسابداری کالا، برای انبارداری/فروشگاه اینترنتی."),
             # خرید
-            (self.purchase_lead_time_field, "میانگینِ روزهایِ لازم از ثبتِ سفارشِ خرید تا رسیدنِ کالا -- برایِ محاسبهٔ نقطهٔ سفارش."),
-            (self.purchase_min_order_field, "کمترین مقداری که در یک سفارشِ خرید از این کالا قابلِ‌ثبت است."),
-            (self.purchase_package_qty_field, "تعدادِ هر بسته‌بندیِ خریدِ تامین‌کننده (مثلاً کارتن) -- سفارش‌ها بهتر است مضربی از این عدد باشند."),
+            (self.purchase_lead_time_field, "میانگین روزهای لازم از ثبت سفارش خرید تا رسیدن کالا — برای محاسبهٔ نقطهٔ سفارش."),
+            (self.purchase_min_order_field, "کمترین مقداری که در یک سفارش خرید از این کالا قابل‌ثبت است."),
+            (self.purchase_package_qty_field, "تعداد هر بسته‌بندی خرید تامین‌کننده (مثلاً کارتن) — سفارش‌ها بهتر است مضربی از این عدد باشند."),
             # فروشِ تکمیلی
-            (self.max_discount_field, "بیشترین درصدِ تخفیفی که فروشنده می‌تواند بدونِ تاییدِ اضافه رویِ این کالا بدهد."),
-            (self.sales_commission_field, "درصدِ کمیسیونِ فروشِ این کالا برایِ نماینده/فروشنده."),
-            (self.warranty_months_field, "مدتِ گارانتیِ استانداردِ این کالا از تاریخِ فروش، به ماه."),
-            (self.default_tax_percent_field, "درصدِ مالیاتِ این کالا -- طبقِ سیاستِ اولویتی، فقط وقتی تنظیماتِ شرکت و انبار هردو خالی باشند اثر می‌کند."),
+            (self.max_discount_field, "بیشترین درصد تخفیفی که فروشنده می‌تواند بدون تایید اضافه روی این کالا بدهد."),
+            (self.sales_commission_field, "درصد کمیسیون فروش این کالا برای نماینده/فروشنده."),
+            (self.warranty_months_field, "مدت گارانتی استاندارد این کالا از تاریخ فروش، به ماه."),
+            (self.default_tax_percent_field, "درصد مالیات این کالا — طبق سیاست اولویتی، فقط وقتی تنظیمات شرکت و انبار هردو خالی باشند اثر می‌کند."),
             # فروشگاهِ اینترنتی
-            (self.seo_title_field, "عنوانِ صفحه‌یِ این کالا در نتایجِ موتورِ جست‌وجو -- خالی یعنی از نامِ کالا استفاده می‌شود."),
-            (self.seo_slug_field, "بخشِ آخرِ آدرسِ صفحه‌یِ این کالا در فروشگاهِ اینترنتی (باید یکتا و بدونِ فاصله باشد)."),
-            (self.seo_description_field, "توضیحاتِ کوتاهی که موتورهایِ جست‌وجو زیرِ عنوانِ صفحه نشان می‌دهند."),
-            (self.seo_keywords_field, "کلیدواژه‌هایِ سئو، با کاما جدا -- برایِ کمک به یافته‌شدنِ کالا در جست‌وجو."),
-            (self.website_category_field, "دسته‌بندیِ نمایشِ این کالا در فروشگاهِ اینترنتی (می‌تواند با دسته‌بندیِ داخلیِ ERP فرق کند)."),
-            (self.website_tags_field, "برچسب‌هایِ نمایشِ این کالا در فروشگاهِ اینترنتی، با کاما جدا."),
-            (self.ecommerce_stock_mode_combo, "فقط رویِ نمایشِ موجودی در فروشگاهِ اینترنتی اثر دارد -- موجودیِ واقعیِ ERP/سایرِ اسناد را تغییر نمی‌دهد."),
+            (self.seo_title_field, "عنوان صفحهٔ این کالا در نتایج موتور جست‌وجو — خالی یعنی از نام کالا استفاده می‌شود."),
+            (self.seo_slug_field, "بخش آخر آدرس صفحهٔ این کالا در فروشگاه اینترنتی (باید یکتا و بدون فاصله باشد)."),
+            (self.seo_description_field, "توضیحات کوتاهی که موتورهای جست‌وجو زیر عنوان صفحه نشان می‌دهند."),
+            (self.seo_keywords_field, "کلیدواژه‌های سئو، با کاما جدا — برای کمک به یافته‌شدن کالا در جست‌وجو."),
+            (self.website_category_field, "دسته‌بندی نمایش این کالا در فروشگاه اینترنتی (می‌تواند با دسته‌بندی داخلی ERP فرق کند)."),
+            (self.website_tags_field, "برچسب‌های نمایش این کالا در فروشگاه اینترنتی، با کاما جدا."),
+            (self.ecommerce_stock_mode_combo, "فقط روی نمایش موجودی در فروشگاه اینترنتی اثر دارد — موجودی واقعی ERP/سایر اسناد را تغییر نمی‌دهد."),
             # فروشِ حضوری (POS)
-            (self.pos_shortcut_field, "کلیدِ میان‌برِ صفحه‌کلید برایِ افزودنِ سریعِ این کالا در فروشِ حضوری."),
-            (self.pos_color_field, "رنگِ دکمه‌یِ این کالا در تبِ دسترسیِ‌سریعِ فروشِ حضوری -- با دکمه‌یِ کنارش از پالت انتخاب می‌شود."),
-            (self.pos_menu_group_combo, "تبِ دسترسیِ‌سریعی که این کالا در صفحه‌یِ فروشِ حضوری زیرش نمایش داده می‌شود -- مستقل از دسته‌بندیِ عمومیِ کالا."),
-            (self.pos_requires_weight_checkbox, "این کالا در فروشِ حضوری با ترازو توزین می‌شود (مثلاً بارکدِ وزنی)."),
-            (self.pos_requires_serial_checkbox, "فروشِ این کالا در POS ثبتِ شماره‌سریال را الزامی می‌کند."),
+            (self.pos_shortcut_field, "کلید میان‌بر صفحه‌کلید برای افزودن سریع این کالا در فروش حضوری."),
+            (self.pos_color_field, "رنگ دکمهٔ این کالا در تب دسترسی‌سریع فروش حضوری — با دکمهٔ کنارش از پالت انتخاب می‌شود."),
+            (self.pos_menu_group_combo, "تب دسترسی‌سریعی که این کالا در صفحهٔ فروش حضوری زیرش نمایش داده می‌شود — مستقل از دسته‌بندی عمومی کالا."),
+            (self.pos_requires_weight_checkbox, "این کالا در فروش حضوری با ترازو توزین می‌شود (مثلاً بارکد وزنی)."),
+            (self.pos_requires_serial_checkbox, "فروش این کالا در POS ثبت شماره‌سریال را الزامی می‌کند."),
             # حمل‌ونقل
-            (self.length_field, "طولِ بسته‌بندیِ این کالا، به سانتی‌متر -- برایِ محاسبهٔ هزینه/ظرفیتِ حمل."),
-            (self.width_field, "عرضِ بسته‌بندیِ این کالا، به سانتی‌متر."),
-            (self.height_field, "ارتفاعِ بسته‌بندیِ این کالا، به سانتی‌متر."),
-            (self.package_type_field, "نوعِ بسته‌بندیِ حمل (مثلاً کارتن، پالت)."),
-            (self.freight_class_field, "کلاسِ حملِ باربری -- برایِ محاسبهٔ نرخِ حمل‌ونقلِ باری."),
+            (self.length_field, "طول بسته‌بندی این کالا، به سانتی‌متر — برای محاسبهٔ هزینه/ظرفیت حمل."),
+            (self.width_field, "عرض بسته‌بندی این کالا، به سانتی‌متر."),
+            (self.height_field, "ارتفاع بسته‌بندی این کالا، به سانتی‌متر."),
+            (self.package_type_field, "نوع بسته‌بندی حمل (مثلاً کارتن، پالت)."),
+            (self.freight_class_field, "کلاس حمل باربری — برای محاسبهٔ نرخ حمل‌ونقل باری."),
             # کنترلِ کیفیت
-            (self.requires_qc_checkbox, "رسیدِ این کالا پیش از افزوده‌شدن به موجودیِ قابلِ‌فروش، نیازمندِ بازرسیِ کیفیت است."),
-            (self.qc_standard_field, "استاندارد/مرجعِ کیفیتی که این کالا باید مطابقش بازرسی شود."),
-            (self.qc_interval_field, "فاصلهٔ زمانیِ بازرسیِ دوره‌ای برایِ کالایِ موجود در انبار، به روز."),
-            (self.qc_test_spec_field, "شرحِ کاملِ آزمون/معیارهایِ پذیرشِ کیفیت برایِ این کالا."),
+            (self.requires_qc_checkbox, "رسید این کالا پیش از افزوده‌شدن به موجودی قابل‌فروش، نیازمند بازرسی کیفیت است."),
+            (self.qc_standard_field, "استاندارد/مرجع کیفیتی که این کالا باید مطابقش بازرسی شود."),
+            (self.qc_interval_field, "فاصلهٔ زمانی بازرسی دوره‌ای برای کالای موجود در انبار، به روز."),
+            (self.qc_test_spec_field, "شرح کامل آزمون/معیارهای پذیرش کیفیت برای این کالا."),
             # دارایی
-            (self.asset_tag_field, "شمارهٔ برچسبِ فیزیکی/اموالِ این قلمِ دارایی."),
-            (self.depreciation_group_field, "گروهِ استهلاکی که نرخ/روشِ استهلاکِ این دارایی از آن پیروی می‌کند."),
-            (self.useful_life_field, "عمرِ مفیدِ برآوردی‌شده‌یِ این دارایی، به ماه -- مبنایِ محاسبهٔ استهلاک."),
-            (self.depreciation_method_combo, "روشِ محاسبهٔ استهلاکِ این دارایی (خطِ‌مستقیم/نزولی)."),
-            (self.acquisition_date_field, "تاریخِ خرید/تحصیلِ این دارایی -- مبدأِ محاسبهٔ استهلاک."),
-            (self.acquisition_cost_field, "بهایِ تمام‌شدهٔ خریدِ این دارایی."),
-            (self.salvage_value_field, "ارزشِ برآوردیِ این دارایی در پایانِ عمرِ مفیدش -- از مبلغِ مستهلک‌شونده کسر می‌شود."),
+            (self.asset_tag_field, "شمارهٔ برچسب فیزیکی/اموال این قلم دارایی."),
+            (self.depreciation_group_field, "گروه استهلاکی که نرخ/روش استهلاک این دارایی از آن پیروی می‌کند."),
+            (self.useful_life_field, "عمر مفید برآوردی‌شدهٔ این دارایی، به ماه — مبنای محاسبهٔ استهلاک."),
+            (self.depreciation_method_combo, "روش محاسبهٔ استهلاک این دارایی (خط‌مستقیم/نزولی)."),
+            (self.acquisition_date_field, "تاریخ خرید/تحصیل این دارایی — مبدأ محاسبهٔ استهلاک."),
+            (self.acquisition_cost_field, "بهای تمام‌شدهٔ خرید این دارایی."),
+            (self.salvage_value_field, "ارزش برآوردی این دارایی در پایان عمر مفیدش — از مبلغ مستهلک‌شونده کسر می‌شود."),
             # گروه‌بندی -- کالاهایِ مرتبط
-            (self.category_combo, "دسته‌بندیِ داخلیِ این کالا -- برایِ فیلترِ فهرست‌ها و نگاشتِ حساب‌هایِ گروهی."),
-            (self.related_item_combo, "کالایِ دیگری که با این کالا رابطه دارد (جایگزین یا مکمل)."),
-            (self.relation_type_combo, "نوعِ رابطه با کالایِ انتخاب‌شده -- جایگزین (می‌تواند به‌جایش فروخته شود) یا مکمل (معمولاً همراهش پیشنهاد می‌شود)."),
-            (self.uom_conversion_combo, "واحدِ دیگری که این کالا می‌تواند با آن هم سنجیده شود (مثلاً کارتن/بسته) -- واحدِ پایه در این فهرست نیست."),
-            (self.uom_conversion_factor_field, "یک واحدِ انتخاب‌شده معادلِ چند واحدِ پایه است (مثلاً اگر واحدِ پایه «عدد» و این واحد «کارتن» باشد و هر کارتن ۲۴ عدد داشته باشد، عددِ ۲۴ را وارد کنید)."),
-            (self.uom_conversion_purchase_default_checkbox, "در فرمِ سفارش/فاکتورِ خرید، این واحد به‌صورتِ پیش‌فرض برایِ این کالا پیشنهاد شود."),
-            (self.uom_conversion_sales_default_checkbox, "در فرمِ سفارش/فاکتورِ فروش، این واحد به‌صورتِ پیش‌فرض برایِ این کالا پیشنهاد شود."),
+            (self.category_combo, "دسته‌بندی داخلی این کالا — برای فیلتر فهرست‌ها و نگاشت حساب‌های گروهی."),
+            (self.related_item_combo, "کالای دیگری که با این کالا رابطه دارد (جایگزین یا مکمل)."),
+            (self.relation_type_combo, "نوع رابطه با کالای انتخاب‌شده — جایگزین (می‌تواند به‌جایش فروخته شود) یا مکمل (معمولاً همراهش پیشنهاد می‌شود)."),
+            (self.uom_conversion_combo, "واحد دیگری که این کالا می‌تواند با آن هم سنجیده شود (مثلاً کارتن/بسته) — واحد پایه در این فهرست نیست."),
+            (self.uom_conversion_factor_field, "یک واحد انتخاب‌شده معادل چند واحد پایه است (مثلاً اگر واحد پایه «عدد» و این واحد «کارتن» باشد و هر کارتن ۲۴ عدد داشته باشد، عدد ۲۴ را وارد کنید)."),
+            (self.uom_conversion_purchase_default_checkbox, "در فرم سفارش/فاکتور خرید، این واحد به‌صورت پیش‌فرض برای این کالا پیشنهاد شود."),
+            (self.uom_conversion_sales_default_checkbox, "در فرم سفارش/فاکتور فروش، این واحد به‌صورت پیش‌فرض برای این کالا پیشنهاد شود."),
             # خرید -- کدهایِ تامین‌کننده
             (self.supplier_combo, "تامین‌کننده‌ای که این کالا از او خریداری می‌شود."),
-            (self.item_code_type_combo, "نوعِ کدِ ثبت‌شده نزدِ این تامین‌کننده -- کدِ کالایِ اوست یا نامِ کالا نزدِ اوست."),
-            (self.item_code_supplier_combo, "تامین‌کننده‌ای که این کد/نام نزدِ اوست."),
-            (self.item_code_value_field, "خودِ کد یا نامِ این کالا نزدِ همان تامین‌کننده -- برایِ تطبیقِ سریع‌تر هنگامِ ثبتِ فاکتورِ خرید."),
+            (self.item_code_type_combo, "نوع کد ثبت‌شده نزد این تامین‌کننده — کد کالای اوست یا نام کالا نزد اوست."),
+            (self.item_code_supplier_combo, "تامین‌کننده‌ای که این کد/نام نزد اوست."),
+            (self.item_code_value_field, "خود کد یا نام این کالا نزد همان تامین‌کننده — برای تطبیق سریع‌تر هنگام ثبت فاکتور خرید."),
             # ویژگی‌ها و متغیرها
-            (self.variant_attribute_combo, "ویژگی‌ای که برایِ این کالا متغیر تعریف می‌شود (مثلاً «سایز» یا «رنگ»)."),
-            (self.variant_value_field, "مقدارِ تازه‌ای که به فهرستِ مقادیرِ همین ویژگی اضافه می‌شود (مثلاً M یا قرمز)."),
-            (self.variant_notes_field, "توضیحاتِ اختصاصیِ همین متغیر -- جدا از یادداشتِ کالایِ اصلی."),
-            (self.variant_price_list_combo, "فهرستِ قیمتی که قیمتِ زیر رویش تنظیم می‌شود."),
-            (self.variant_price_field, "قیمتِ فروشِ این متغیرِ مشخص در همان فهرستِ قیمتِ انتخاب‌شده."),
+            (self.variant_attribute_combo, "ویژگی‌ای که برای این کالا متغیر تعریف می‌شود (مثلاً «سایز» یا «رنگ»)."),
+            (self.variant_value_field, "مقدار تازه‌ای که به فهرست مقادیر همین ویژگی اضافه می‌شود (مثلاً M یا قرمز)."),
+            (self.variant_notes_field, "توضیحات اختصاصی همین متغیر — جدا از یادداشت کالای اصلی."),
+            (self.variant_price_list_combo, "فهرست قیمتی که قیمت زیر رویش تنظیم می‌شود."),
+            (self.variant_price_field, "قیمت فروش این متغیر مشخص در همان فهرست قیمت انتخاب‌شده."),
             # تولید (BOM)
-            (self.bom_component_combo, "کالایی که به‌عنوانِ مادهٔ مصرفی در ساختِ این کالا به‌کار می‌رود."),
-            (self.bom_qty_field, "مقدارِ مصرفیِ این جزء برایِ تولیدِ یک واحد از کالایِ نهایی."),
+            (self.bom_component_combo, "کالایی که به‌عنوان مادهٔ مصرفی در ساخت این کالا به‌کار می‌رود."),
+            (self.bom_qty_field, "مقدار مصرفی این جزء برای تولید یک واحد از کالای نهایی."),
         ])
         self.register_field_grids("inventory_item_panel", [
             self.basic_info_grid, self.sales_tracking_grid, self.grouping_grid, self.purchasing_grid,
@@ -239,7 +239,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.uom_combo = QComboBox()
         self.uom_combo.currentIndexChanged.connect(self._rebuild_uom_conversion_combo)
-        uom_row = self._make_combo_with_add_row("واحدِ پایه", self.uom_combo, self._quick_add_uom)
+        uom_row = self._make_combo_with_add_row("واحد پایه", self.uom_combo, self._quick_add_uom)
 
         self.brand_combo = QComboBox()
         brand_row = self._make_combo_with_add_row("برند", self.brand_combo, self._quick_add_brand)
@@ -264,15 +264,15 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.notes_field.setMaximumHeight(60)
 
         self.basic_info_grid = FieldGrid([
-            FieldSpec("latin_name", "نامِ لاتین", self.latin_name_field, span=1),
-            FieldSpec("short_name", "نامِ کوتاه", self.short_name_field, span=1),
+            FieldSpec("latin_name", "نام لاتین", self.latin_name_field, span=1),
+            FieldSpec("short_name", "نام کوتاه", self.short_name_field, span=1),
             FieldSpec("kind", "نوع", self.kind_combo, span=1),
             FieldSpec("uom", "", uom_row, span=1),
             FieldSpec("brand", "", brand_row, span=1),
             FieldSpec("manufacturer", "", manufacturer_row, span=1),
-            FieldSpec("country_of_origin", "کشورِ سازنده", self.country_of_origin_field, span=1),
-            FieldSpec("costing", "روشِ قیمت‌گذاری", self.costing_combo, span=1),
-            FieldSpec("lifecycle", "وضعیتِ چرخهٔ‌عمر", self.lifecycle_combo, span=1),
+            FieldSpec("country_of_origin", "کشور سازنده", self.country_of_origin_field, span=1),
+            FieldSpec("costing", "روش قیمت‌گذاری", self.costing_combo, span=1),
+            FieldSpec("lifecycle", "وضعیت چرخهٔ‌عمر", self.lifecycle_combo, span=1),
             FieldSpec("notes", "یادداشت", self.notes_field, span=3),
         ])
         layout.addWidget(self.basic_info_grid)
@@ -285,19 +285,19 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         tab = QWidget()
         layout = build_section_layout(tab)
 
-        self.is_sellable_checkbox = QCheckBox("قابلِ‌فروش")
+        self.is_sellable_checkbox = QCheckBox("قابل‌فروش")
         self.is_sellable_checkbox.setChecked(True)
         self.is_sellable_checkbox.toggled.connect(self._apply_visibility)
 
-        self.is_purchasable_checkbox = QCheckBox("قابلِ‌خرید")
+        self.is_purchasable_checkbox = QCheckBox("قابل‌خرید")
         self.is_purchasable_checkbox.setChecked(True)
 
         self.is_stock_tracked_checkbox = QCheckBox("موجودی‌محور")
         self.is_stock_tracked_checkbox.setChecked(True)
 
-        self.track_batch_checkbox = QCheckBox("ردیابیِ بچ")
-        self.track_expiry_checkbox = QCheckBox("ردیابیِ انقضا")
-        self.track_serial_checkbox = QCheckBox("ردیابیِ سریال")
+        self.track_batch_checkbox = QCheckBox("ردیابی بچ")
+        self.track_expiry_checkbox = QCheckBox("ردیابی انقضا")
+        self.track_serial_checkbox = QCheckBox("ردیابی سریال")
 
         self.sales_tracking_grid = FieldGrid([
             FieldSpec("is_sellable", "", self.is_sellable_checkbox, span=1),
@@ -327,14 +327,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.grouping_grid = FieldGrid([
             FieldSpec("category", "", category_row, span=1),
-            FieldSpec("default_warehouse", "انبارِ پیش‌فرض", self.default_warehouse_combo, span=1),
+            FieldSpec("default_warehouse", "انبار پیش‌فرض", self.default_warehouse_combo, span=1),
             FieldSpec("barcode", "بارکد", self.barcode_field, span=1),
-            FieldSpec("qr_code", "محتوایِ QR", self.qr_code_field, span=1),
+            FieldSpec("qr_code", "محتوای QR", self.qr_code_field, span=1),
             FieldSpec("sku", "SKU", self.sku_field, span=1),
         ])
         layout.addWidget(self.grouping_grid)
 
-        layout.addWidget(QLabel("کالاهایِ مرتبط (جایگزین/مکمل)"))
+        layout.addWidget(QLabel("کالاهای مرتبط (جایگزین/مکمل)"))
         self.related_item_combo = QComboBox()
         self.relation_type_combo = QComboBox()
         for code, label in _RELATION_LABELS.items():
@@ -359,7 +359,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         remove_related_button = QPushButton("🗑️")
         remove_related_button.setObjectName("dangerIconButton")
         remove_related_button.setFixedWidth(44)
-        remove_related_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_related_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_related_button.clicked.connect(self._remove_related_item)
         layout.addWidget(remove_related_button)
         return tab
@@ -367,8 +367,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ خرید -------------------------------------------------------------
     # --- تبِ واحدها و بسته‌بندی (R225) ----------------------------------------
     def _build_units_tab(self) -> QWidget:
-        """واحدهایِ مجازِ کالا (پایه + بسته‌بندی‌ها)، ضریبِ تبدیل، مجاز برایِ
-        خرید/فروش، پیش‌فرض‌ها، قیمتِ هر واحد و بارکدهایِ هر واحد. همهٔ منطق در
+        """واحدهای مجاز کالا (پایه + بسته‌بندی‌ها)، ضریب تبدیل، مجاز برای
+        خرید/فروش، پیش‌فرض‌ها، قیمت هر واحد و بارکدهای هر واحد. همهٔ منطق در
         services/unit_conversion.py است؛ این‌جا فقط UI."""
         tab = QWidget()
         layout = build_section_layout(tab)
@@ -377,16 +377,16 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.base_unit_label.setWordWrap(True)
         layout.addWidget(self.base_unit_label)
 
-        layout.addWidget(QLabel("افزودنِ واحد (مثلاً ۱ کارتن = ۲۴ عدد)"))
+        layout.addWidget(QLabel("افزودن واحد (مثلاً ۱ کارتن = ۲۴ عدد)"))
         self.uom_conversion_combo = QComboBox()
         self.uom_conversion_factor_field = QLineEdit()
-        self.uom_conversion_factor_field.setPlaceholderText("ضریبِ تبدیل به واحدِ پایه")
+        self.uom_conversion_factor_field.setPlaceholderText("ضریب تبدیل به واحد پایه")
         self.uom_conversion_purchase_unit_checkbox = QCheckBox("خرید")
         self.uom_conversion_purchase_unit_checkbox.setChecked(True)
         self.uom_conversion_sales_unit_checkbox = QCheckBox("فروش")
         self.uom_conversion_sales_unit_checkbox.setChecked(True)
-        self.uom_conversion_purchase_default_checkbox = QCheckBox("پیش‌فرضِ خرید")
-        self.uom_conversion_sales_default_checkbox = QCheckBox("پیش‌فرضِ فروش")
+        self.uom_conversion_purchase_default_checkbox = QCheckBox("پیش‌فرض خرید")
+        self.uom_conversion_sales_default_checkbox = QCheckBox("پیش‌فرض فروش")
         conversion_row = QHBoxLayout()
         conversion_row.addWidget(self.uom_conversion_combo, stretch=2)
         conversion_row.addWidget(self.uom_conversion_factor_field, stretch=1)
@@ -398,13 +398,13 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_conversion_button = QPushButton("+")
         add_conversion_button.setObjectName("iconButton")
         add_conversion_button.setFixedWidth(28)
-        add_conversion_button.setToolTip("افزودنِ واحد")
+        add_conversion_button.setToolTip("افزودن واحد")
         add_conversion_button.clicked.connect(self._add_uom_conversion)
         conversion_row.addWidget(add_conversion_button)
         layout.addLayout(conversion_row)
 
         price_row = QHBoxLayout()
-        price_row.addWidget(QLabel("فهرستِ قیمتِ نمایش/ثبتِ قیمتِ واحد"))
+        price_row.addWidget(QLabel("فهرست قیمت نمایش/ثبت قیمت واحد"))
         self.unit_price_list_combo = QComboBox()
         self.unit_price_list_combo.currentIndexChanged.connect(lambda _i=0: self._refresh_uom_conversions_table())
         price_row.addWidget(self.unit_price_list_combo, stretch=1)
@@ -418,7 +418,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.uom_conversion_table.verticalHeader().setVisible(False)
         self.uom_conversion_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.uom_conversion_table.setMinimumHeight(150)
-        self.uom_conversion_table.setToolTip("برایِ ویرایشِ واحد (ضریب، مجاز/پیش‌فرض، حداقل/حداکثر، وزن/حجم، فعال) دوبار کلیک کنید.")
+        self.uom_conversion_table.setToolTip("برای ویرایش واحد (ضریب، مجاز/پیش‌فرض، حداقل/حداکثر، وزن/حجم، فعال) دوبار کلیک کنید.")
         self.uom_conversion_table.cellDoubleClicked.connect(lambda _r, _c: self._edit_item_unit())
         self.uom_conversion_table.itemSelectionChanged.connect(self._refresh_unit_barcodes_table)
         layout.addWidget(self.uom_conversion_table, stretch=1)
@@ -427,30 +427,30 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         edit_unit_button = QPushButton("✏️")
         edit_unit_button.setObjectName("iconButton")
         edit_unit_button.setFixedWidth(44)
-        edit_unit_button.setToolTip("ویرایشِ واحدِ انتخاب‌شده")
+        edit_unit_button.setToolTip("ویرایش واحد انتخاب‌شده")
         edit_unit_button.clicked.connect(self._edit_item_unit)
         unit_buttons.addWidget(edit_unit_button)
         remove_conversion_button = QPushButton("🗑️")
         remove_conversion_button.setObjectName("dangerIconButton")
         remove_conversion_button.setFixedWidth(44)
-        remove_conversion_button.setToolTip("حذف/غیرفعال‌سازیِ واحد (واحدِ استفاده‌شده فقط غیرفعال می‌شود)")
+        remove_conversion_button.setToolTip("حذف/غیرفعال‌سازی واحد (واحد استفاده‌شده فقط غیرفعال می‌شود)")
         remove_conversion_button.clicked.connect(self._remove_uom_conversion)
         unit_buttons.addWidget(remove_conversion_button)
         self.unit_price_field = QLineEdit()
-        self.unit_price_field.setPlaceholderText("قیمتِ واحدِ انتخاب‌شده")
+        self.unit_price_field.setPlaceholderText("قیمت واحد انتخاب‌شده")
         unit_buttons.addWidget(self.unit_price_field, stretch=1)
-        set_price_button = QPushButton("💲 ثبتِ قیمتِ واحد")
+        set_price_button = QPushButton("💲 ثبت قیمت واحد")
         set_price_button.clicked.connect(self._set_unit_price)
         unit_buttons.addWidget(set_price_button)
         layout.addLayout(unit_buttons)
 
-        layout.addWidget(QLabel("بارکدهایِ واحدِ انتخاب‌شده"))
+        layout.addWidget(QLabel("بارکدهای واحد انتخاب‌شده"))
         barcode_row = QHBoxLayout()
         self.unit_barcode_field = QLineEdit()
         self.unit_barcode_field.setPlaceholderText("بارکد را وارد/اسکن کنید")
         barcode_row.addWidget(self.unit_barcode_field, stretch=2)
         self.unit_barcode_type_combo = QComboBox()
-        self.unit_barcode_type_combo.addItem("(تشخیصِ خودکار)", None)
+        self.unit_barcode_type_combo.addItem("(تشخیص خودکار)", None)
         for code, label in uc.BARCODE_TYPE_LABELS.items():
             self.unit_barcode_type_combo.addItem(label, code)
         barcode_row.addWidget(self.unit_barcode_type_combo, stretch=1)
@@ -459,7 +459,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_barcode_button = QPushButton("➕")
         add_barcode_button.setObjectName("iconButton")
         add_barcode_button.setFixedWidth(44)
-        add_barcode_button.setToolTip("افزودنِ بارکد")
+        add_barcode_button.setToolTip("افزودن بارکد")
         add_barcode_button.clicked.connect(self._add_unit_barcode)
         barcode_row.addWidget(add_barcode_button)
         layout.addLayout(barcode_row)
@@ -470,7 +470,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.unit_barcodes_table.verticalHeader().setVisible(False)
         self.unit_barcodes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.unit_barcodes_table.setMinimumHeight(110)
-        self.unit_barcodes_table.setToolTip("برایِ ویرایشِ بارکد دوبار کلیک کنید.")
+        self.unit_barcodes_table.setToolTip("برای ویرایش بارکد دوبار کلیک کنید.")
         self.unit_barcodes_table.cellDoubleClicked.connect(lambda _r, _c: self._edit_unit_barcode())
         layout.addWidget(self.unit_barcodes_table, stretch=1)
         barcode_buttons = QHBoxLayout()
@@ -497,9 +497,9 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.purchase_package_qty_field = QLineEdit()
 
         self.purchasing_grid = FieldGrid([
-            FieldSpec("lead_time", "زمانِ تامین (روز)", self.purchase_lead_time_field, span=1),
-            FieldSpec("min_order", "حداقلِ سفارش", self.purchase_min_order_field, span=1),
-            FieldSpec("package_qty", "تعدادِ بسته‌بندیِ خرید", self.purchase_package_qty_field, span=1),
+            FieldSpec("lead_time", "زمان تامین (روز)", self.purchase_lead_time_field, span=1),
+            FieldSpec("min_order", "حداقل سفارش", self.purchase_min_order_field, span=1),
+            FieldSpec("package_qty", "تعداد بسته‌بندی خرید", self.purchase_package_qty_field, span=1),
         ])
         layout.addWidget(self.purchasing_grid)
 
@@ -514,7 +514,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         supplier_row.addWidget(add_supplier_button)
         layout.addLayout(supplier_row)
         self.supplier_table = QTableWidget(0, 3)
-        self.supplier_table.setHorizontalHeaderLabels(["ترجیحی", "زمانِ تامین", "تامین‌کننده"])
+        self.supplier_table.setHorizontalHeaderLabels(["ترجیحی", "زمان تامین", "تامین‌کننده"])
         self.supplier_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.supplier_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.supplier_table.verticalHeader().setVisible(False)
@@ -524,7 +524,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         remove_supplier_button = QPushButton("🗑️")
         remove_supplier_button.setObjectName("dangerIconButton")
         remove_supplier_button.setFixedWidth(44)
-        remove_supplier_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_supplier_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_supplier_button.clicked.connect(self._remove_supplier)
         layout.addWidget(remove_supplier_button)
 
@@ -534,7 +534,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         # می‌دارد، این یکی «آن تامین‌کننده این کالا را با چه کد/نامی در
         # فایلِ قیمتِ خودش صدا می‌زند» را -- برایِ شناساییِ خودکار در
         # وارداتِ قیمتِ تامین‌کننده.
-        layout.addWidget(QLabel("کد/نامِ کالا نزدِ تامین‌کننده (برایِ شناساییِ خودکار در وارداتِ قیمت)"))
+        layout.addWidget(QLabel("کد/نام کالا نزد تامین‌کننده (برای شناسایی خودکار در واردات قیمت)"))
         code_form = QHBoxLayout()
         self.item_code_type_combo = QComboBox()
         self.item_code_type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["CODE"], "CODE")
@@ -543,7 +543,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.item_code_supplier_combo = QComboBox()
         code_form.addWidget(self.item_code_supplier_combo, stretch=1)
         self.item_code_value_field = QLineEdit()
-        self.item_code_value_field.setPlaceholderText("کد یا نامِ کالا نزدِ این تامین‌کننده")
+        self.item_code_value_field.setPlaceholderText("کد یا نام کالا نزد این تامین‌کننده")
         code_form.addWidget(self.item_code_value_field, stretch=1)
         add_code_button = QPushButton("➕")
         add_code_button.setObjectName("iconButton")
@@ -560,44 +560,44 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.item_codes_table.verticalHeader().setVisible(False)
         self.item_codes_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.item_codes_table.setMinimumHeight(180)
-        self.item_codes_table.setToolTip("برایِ ویرایش، رویِ ردیف دوبار کلیک کنید.")
+        self.item_codes_table.setToolTip("برای ویرایش، روی ردیف دوبار کلیک کنید.")
         self.item_codes_table.cellDoubleClicked.connect(self._edit_item_supplier_code)
         layout.addWidget(self.item_codes_table, stretch=1)
         remove_code_button = QPushButton("🗑️")
         remove_code_button.setObjectName("dangerIconButton")
         remove_code_button.setFixedWidth(44)
-        remove_code_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_code_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_code_button.clicked.connect(self._remove_item_supplier_code)
         layout.addWidget(remove_code_button)
         return tab
 
     # --- تبِ ویژگی‌ها و متغیرها --------------------------------------------------
     def _build_variants_tab(self) -> QWidget:
-        """طبقِ درخواستِ صریح: ویژگی (سایز/وزن/مدل/...) قابلِ‌تعریف، مقادیرِ
-        هر ویژگی، تولیدِ ترکیبی‌ِ متغیرها برایِ این کالا، بارکدِ مجزا برایِ
-        خودِ کالا و بارکدِ ترکیبی برایِ هر متغیر + پرینت."""
+        """طبق درخواست صریح: ویژگی (سایز/وزن/مدل/...) قابل‌تعریف، مقادیر
+        هر ویژگی، تولید ترکیبی‌ متغیرها برای این کالا، بارکد مجزا برای
+        خود کالا و بارکد ترکیبی برای هر متغیر + پرینت."""
         tab = QWidget()
         layout = build_section_layout(tab)
         self._variant_selection: dict[int, set[int]] = {}
 
-        layout.addWidget(QLabel("بارکدِ کالایِ اصلی"))
+        layout.addWidget(QLabel("بارکد کالای اصلی"))
         own_barcode_row = QHBoxLayout()
-        self.own_barcode_label = QLabel("(بدونِ بارکد)")
+        self.own_barcode_label = QLabel("(بدون بارکد)")
         own_barcode_row.addWidget(self.own_barcode_label, stretch=1)
         make_own_barcode_button = QPushButton("🏷️")
         make_own_barcode_button.setObjectName("iconButton")
-        make_own_barcode_button.setToolTip("ساختنِ بارکدِ کالایِ اصلی")
+        make_own_barcode_button.setToolTip("ساختن بارکد کالای اصلی")
         make_own_barcode_button.clicked.connect(self._make_own_barcode)
         own_barcode_row.addWidget(make_own_barcode_button)
         print_own_barcode_button = QPushButton("🖨️")
         print_own_barcode_button.setObjectName("iconButton")
-        print_own_barcode_button.setToolTip("پرینتِ بارکدِ کالایِ اصلی")
+        print_own_barcode_button.setToolTip("پرینت بارکد کالای اصلی")
         print_own_barcode_button.clicked.connect(self._print_own_barcode)
         own_barcode_row.addWidget(print_own_barcode_button)
         layout.addLayout(own_barcode_row)
 
         layout.addWidget(
-            QLabel("ویژگی‌ها و مقادیرِ قابلِ‌انتخاب برایِ تولیدِ متغیر -- ترتیبِ زیر همان اولویتِ نام‌گذاریِ خودکارِ متغیر است")
+            QLabel("ویژگی‌ها و مقادیر قابل‌انتخاب برای تولید متغیر — ترتیب زیر همان اولویت نام‌گذاری خودکار متغیر است")
         )
         attribute_row = QHBoxLayout()
         self.variant_attribute_combo = QComboBox()
@@ -611,31 +611,31 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         move_up_button = QPushButton("⬆️")
         move_up_button.setObjectName("iconButton")
         move_up_button.setFixedWidth(32)
-        move_up_button.setToolTip("افزایشِ اولویتِ این ویژگی (بالاتر/زودتر)")
+        move_up_button.setToolTip("افزایش اولویت این ویژگی (بالاتر/زودتر)")
         move_up_button.clicked.connect(lambda: self._move_item_attribute("UP"))
         attribute_row.addWidget(move_up_button)
         move_down_button = QPushButton("⬇️")
         move_down_button.setObjectName("iconButton")
         move_down_button.setFixedWidth(32)
-        move_down_button.setToolTip("کاهشِ اولویتِ این ویژگی (پایین‌تر/دیرتر)")
+        move_down_button.setToolTip("کاهش اولویت این ویژگی (پایین‌تر/دیرتر)")
         move_down_button.clicked.connect(lambda: self._move_item_attribute("DOWN"))
         attribute_row.addWidget(move_down_button)
         add_attribute_button = QPushButton("+")
         add_attribute_button.setObjectName("iconButton")
         add_attribute_button.setFixedWidth(28)
-        add_attribute_button.setToolTip("ویژگیِ تازه")
+        add_attribute_button.setToolTip("ویژگی تازه")
         add_attribute_button.clicked.connect(self._add_item_attribute)
         attribute_row.addWidget(add_attribute_button)
         layout.addLayout(attribute_row)
 
         value_row = QHBoxLayout()
         self.variant_value_field = QLineEdit()
-        self.variant_value_field.setPlaceholderText("مقدارِ تازه (مثلاً M یا قرمز)")
+        self.variant_value_field.setPlaceholderText("مقدار تازه (مثلاً M یا قرمز)")
         value_row.addWidget(self.variant_value_field, stretch=1)
         add_value_button = QPushButton("+")
         add_value_button.setObjectName("iconButton")
         add_value_button.setFixedWidth(28)
-        add_value_button.setToolTip("افزودنِ مقدار به همین ویژگی")
+        add_value_button.setToolTip("افزودن مقدار به همین ویژگی")
         add_value_button.clicked.connect(self._add_item_attribute_value)
         value_row.addWidget(add_value_button)
         layout.addLayout(value_row)
@@ -651,11 +651,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         generate_button = QPushButton("⚙️")
         generate_button.setObjectName("iconButton")
-        generate_button.setToolTip("تولیدِ متغیرها از ترکیبِ انتخاب‌شده")
+        generate_button.setToolTip("تولید متغیرها از ترکیب انتخاب‌شده")
         generate_button.clicked.connect(self._generate_variants)
         layout.addWidget(generate_button)
 
-        layout.addWidget(QLabel("متغیرهایِ ساخته‌شده برایِ این کالا"))
+        layout.addWidget(QLabel("متغیرهای ساخته‌شده برای این کالا"))
         self.variants_table = QTableWidget(0, 4)
         self.variants_table.setHorizontalHeaderLabels(["کد", "نام", "ویژگی‌ها", "بارکد"])
         self.variants_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -669,14 +669,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ درخواستِ صریح («برایِ هر متغیر بتوان توضیحات و قیمتِ مجزا و
         # عکس هم معرفی کرد»): هرکدام یک ردیفِ فشرده -- عمل رویِ متغیرِ
         # انتخاب‌شده در جدولِ بالا.
-        layout.addWidget(QLabel("ویرایشِ متغیرِ انتخاب‌شده"))
+        layout.addWidget(QLabel("ویرایش متغیر انتخاب‌شده"))
         notes_row = QHBoxLayout()
         self.variant_notes_field = QLineEdit()
-        self.variant_notes_field.setPlaceholderText("توضیحاتِ این متغیر")
+        self.variant_notes_field.setPlaceholderText("توضیحات این متغیر")
         notes_row.addWidget(self.variant_notes_field, stretch=1)
         save_notes_button = QPushButton("💾")
         save_notes_button.setObjectName("iconButton")
-        save_notes_button.setToolTip("ذخیرهٔ توضیحاتِ این متغیر")
+        save_notes_button.setToolTip("ذخیرهٔ توضیحات این متغیر")
         save_notes_button.clicked.connect(self._save_variant_notes)
         notes_row.addWidget(save_notes_button)
         layout.addLayout(notes_row)
@@ -686,16 +686,16 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.variant_price_list_combo.currentIndexChanged.connect(self._load_variant_price)
         price_row.addWidget(self.variant_price_list_combo, stretch=1)
         self.variant_price_field = QLineEdit()
-        self.variant_price_field.setPlaceholderText("قیمتِ فروش")
+        self.variant_price_field.setPlaceholderText("قیمت فروش")
         price_row.addWidget(self.variant_price_field, stretch=1)
         save_price_button = QPushButton("💾")
         save_price_button.setObjectName("iconButton")
-        save_price_button.setToolTip("ذخیرهٔ قیمتِ این متغیر در همین لیستِ قیمت")
+        save_price_button.setToolTip("ذخیرهٔ قیمت این متغیر در همین لیست قیمت")
         save_price_button.clicked.connect(self._save_variant_price)
         price_row.addWidget(save_price_button)
         add_photo_button = QPushButton("🖼️")
         add_photo_button.setObjectName("iconButton")
-        add_photo_button.setToolTip("افزودنِ عکسِ این متغیر")
+        add_photo_button.setToolTip("افزودن عکس این متغیر")
         add_photo_button.clicked.connect(self._add_variant_photo)
         price_row.addWidget(add_photo_button)
         layout.addLayout(price_row)
@@ -703,17 +703,17 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         variants_action_row = QHBoxLayout()
         print_selected_button = QPushButton("🖨️")
         print_selected_button.setObjectName("iconButton")
-        print_selected_button.setToolTip("پرینتِ بارکدِ انتخاب‌شده")
+        print_selected_button.setToolTip("پرینت بارکد انتخاب‌شده")
         print_selected_button.clicked.connect(self._print_selected_variant_barcode)
         variants_action_row.addWidget(print_selected_button)
         print_all_button = QPushButton("📇")
         print_all_button.setObjectName("iconButton")
-        print_all_button.setToolTip("پرینتِ بارکدِ همه‌یِ متغیرها")
+        print_all_button.setToolTip("پرینت بارکد همهٔ متغیرها")
         print_all_button.clicked.connect(self._print_all_variant_barcodes)
         variants_action_row.addWidget(print_all_button)
         remove_variant_button = QPushButton("🗑️")
         remove_variant_button.setObjectName("dangerIconButton")
-        remove_variant_button.setToolTip("حذفِ متغیرِ انتخاب‌شده")
+        remove_variant_button.setToolTip("حذف متغیر انتخاب‌شده")
         remove_variant_button.clicked.connect(self._remove_selected_variant)
         variants_action_row.addWidget(remove_variant_button)
         layout.addLayout(variants_action_row)
@@ -754,7 +754,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("ویژگیِ تازه")
+        dialog.setWindowTitle("ویژگی تازه")
         form = QVBoxLayout(dialog)
         code_field = QLineEdit()
         code_field.setPlaceholderText("کد (مثلاً SIZE)")
@@ -841,7 +841,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _print_own_barcode(self) -> None:
         barcode = self.own_barcode_label.text().strip()
         if not barcode or not barcode.isdigit():
-            self.variants_status_label.setText("ابتدا بارکدِ کالا را بسازید.")
+            self.variants_status_label.setText("ابتدا بارکد کالا را بسازید.")
             return
         title = f"{self.latin_name_field.text().strip() or ''}".strip() or "کالا"
         print_barcode_labels(self, [(title, "", barcode)])
@@ -857,7 +857,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.variants_status_label.setText(str(exc))
             return
         self.variants_status_label.setText(
-            f"{len(created_ids)} متغیرِ تازه ساخته شد." if created_ids else "همه‌یِ ترکیب‌ها از قبل موجود بودند."
+            f"{len(created_ids)} متغیر تازه ساخته شد." if created_ids else "همهٔ ترکیب‌ها از قبل موجود بودند."
         )
         self._refresh_variants_table()
         self._sync_transactability_checkboxes()
@@ -895,7 +895,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         rows = variants_service.list_item_variants(self._company_id, self._item_id)
         labels = [(r.name or r.code, r.attribute_labels, r.barcode) for r in rows if r.barcode]
         if not labels:
-            self.variants_status_label.setText("هیچ متغیرِ بارکددار‌ی برایِ چاپ وجود ندارد.")
+            self.variants_status_label.setText("هیچ متغیر بارکددار‌ی برای چاپ وجود ندارد.")
             return
         print_barcode_labels(self, labels)
 
@@ -914,11 +914,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._sync_transactability_checkboxes()
 
     def _sync_transactability_checkboxes(self) -> None:
-        """طبقِ تصمیمِ صریح («کالایِ اصلیِ دارایِ متغیر، غیرِقابلِ‌فروش/
-        غیرِموجودی‌محور شود»): تولید/حذفِ متغیر می‌تواند این سه پرچمِ کالایِ
-        اصلی را در دیتابیس مستقیماً عوض کند -- اگر تیک‌هایِ همین فرم
-        رفرش نشوند، دکمهٔ ذخیرهٔ فرمِ میزبان با مقدارِ باسیاتِ چک‌باکس‌ها
-        همان تغییرِ خودکار را بازنویسی می‌کند."""
+        """طبق تصمیم صریح («کالای اصلی دارای متغیر، غیرقابل‌فروش/
+        غیرموجودی‌محور شود»): تولید/حذف متغیر می‌تواند این سه پرچم کالای
+        اصلی را در دیتابیس مستقیماً عوض کند — اگر تیک‌های همین فرم
+        رفرش نشوند، دکمهٔ ذخیرهٔ فرم میزبان با مقدار باسیات چک‌باکس‌ها
+        همان تغییر خودکار را بازنویسی می‌کند."""
         if self._item_id is None:
             return
         item = catalog_service.get_item(self._item_id)
@@ -957,7 +957,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.variants_status_label.setText(str(exc))
             return
-        self.variants_status_label.setText("توضیحاتِ متغیر ذخیره شد.")
+        self.variants_status_label.setText("توضیحات متغیر ذخیره شد.")
 
     def _reload_variant_price_lists(self) -> None:
         if self._company_id is None:
@@ -991,11 +991,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         variant_item_id = self._selected_variant_item_id()
         price_list_id = self.variant_price_list_combo.currentData()
         if variant_item_id is None or price_list_id is None:
-            self.variants_status_label.setText("یک متغیر و یک لیستِ قیمت انتخاب کنید.")
+            self.variants_status_label.setText("یک متغیر و یک لیست قیمت انتخاب کنید.")
             return
         price = _decimal_or_none(self.variant_price_field.text())
         if price is None:
-            self.variants_status_label.setText("قیمتِ معتبر وارد کنید.")
+            self.variants_status_label.setText("قیمت معتبر وارد کنید.")
             return
         item = catalog_service.get_item(variant_item_id)
         if item is None:
@@ -1004,7 +1004,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             price_list_id, variant_item_id, item.base_uom_id, price,
             changed_by_user_id=app_session.current_user.user_id if app_session.current_user else None,
         )
-        self.variants_status_label.setText("قیمتِ متغیر ذخیره شد.")
+        self.variants_status_label.setText("قیمت متغیر ذخیره شد.")
 
     def _add_variant_photo(self) -> None:
         variant_item_id = self._selected_variant_item_id()
@@ -1021,7 +1021,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if row is None:
             return
         path, _filter = QFileDialog.getOpenFileName(
-            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+            self, "انتخاب عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
         )
         if not path:
             return
@@ -1033,7 +1033,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.variants_status_label.setText(str(exc))
             return
-        self.variants_status_label.setText("عکسِ متغیر ذخیره شد.")
+        self.variants_status_label.setText("عکس متغیر ذخیره شد.")
 
     # --- تبِ فروشِ تکمیلی -------------------------------------------------------
     def _build_sales_extra_tab(self) -> QWidget:
@@ -1048,10 +1048,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.default_tax_percent_field = QLineEdit()
 
         self.sales_extra_grid = FieldGrid([
-            FieldSpec("max_discount", "حداکثرِ درصدِ تخفیف", self.max_discount_field, span=1),
-            FieldSpec("sales_commission", "درصدِ کمیسیونِ فروش", self.sales_commission_field, span=1),
-            FieldSpec("warranty_months", "مدتِ گارانتی (ماه)", self.warranty_months_field, span=1),
-            FieldSpec("default_tax_percent", "درصدِ مالیات (خالی = تنظیماتِ کلیِ شرکت)", self.default_tax_percent_field, span=1),
+            FieldSpec("max_discount", "حداکثر درصد تخفیف", self.max_discount_field, span=1),
+            FieldSpec("sales_commission", "درصد کمیسیون فروش", self.sales_commission_field, span=1),
+            FieldSpec("warranty_months", "مدت گارانتی (ماه)", self.warranty_months_field, span=1),
+            FieldSpec("default_tax_percent", "درصد مالیات (خالی = تنظیمات کلی شرکت)", self.default_tax_percent_field, span=1),
         ])
         layout.addWidget(self.sales_extra_grid)
 
@@ -1069,13 +1069,13 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         create_bom_button = QPushButton("➕")
         create_bom_button.setObjectName("primaryIconButton")
         create_bom_button.setFixedWidth(48)
-        create_bom_button.setToolTip("نسخهٔ تازهٔ فهرستِ موادِ اولیه")
+        create_bom_button.setToolTip("نسخهٔ تازهٔ فهرست مواد اولیه")
         create_bom_button.clicked.connect(self._create_bom)
         layout.addWidget(create_bom_button, alignment=Qt.AlignLeft)
 
         self.bom_component_combo = QComboBox()
         self.bom_qty_field = QLineEdit()
-        self.bom_qty_field.setPlaceholderText("مقدارِ مصرفی")
+        self.bom_qty_field.setPlaceholderText("مقدار مصرفی")
         bom_row = QHBoxLayout()
         bom_row.addWidget(self.bom_component_combo, stretch=2)
         bom_row.addWidget(self.bom_qty_field, stretch=1)
@@ -1087,7 +1087,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addLayout(bom_row)
 
         self.bom_lines_table = QTableWidget(0, 2)
-        self.bom_lines_table.setHorizontalHeaderLabels(["مقدارِ مصرفی", "کالایِ مصرفی"])
+        self.bom_lines_table.setHorizontalHeaderLabels(["مقدار مصرفی", "کالای مصرفی"])
         self.bom_lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.bom_lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.bom_lines_table.verticalHeader().setVisible(False)
@@ -1096,7 +1096,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         remove_bom_line_button = QPushButton("🗑️")
         remove_bom_line_button.setObjectName("dangerIconButton")
         remove_bom_line_button.setFixedWidth(44)
-        remove_bom_line_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_bom_line_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_bom_line_button.clicked.connect(self._remove_bom_line)
         layout.addWidget(remove_bom_line_button)
 
@@ -1118,25 +1118,25 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         # این تنظیم فقط رویِ سینکِ فروشگاهِ اینترنتی اثر دارد -- روی
         # موجودیِ واقعیِ خودِ ERP/دیگر اسناد هیچ تاثیری ندارد.
         self.ecommerce_stock_mode_combo = QComboBox()
-        self.ecommerce_stock_mode_combo.addItem("بر اساسِ دیتابیس (پیش‌فرض)", "DATABASE")
+        self.ecommerce_stock_mode_combo.addItem("بر اساس دیتابیس (پیش‌فرض)", "DATABASE")
         self.ecommerce_stock_mode_combo.addItem("همیشه موجود", "ALWAYS_IN_STOCK")
-        self.ecommerce_stock_mode_combo.addItem("ناموجود (فروشِ اینترنتی متوقف)", "OUT_OF_STOCK")
+        self.ecommerce_stock_mode_combo.addItem("ناموجود (فروش اینترنتی متوقف)", "OUT_OF_STOCK")
 
         self.ecommerce_grid = FieldGrid([
-            FieldSpec("seo_title", "عنوانِ سئو", self.seo_title_field, span=1),
-            FieldSpec("seo_slug", "نامکِ آدرس (Slug)", self.seo_slug_field, span=1),
-            FieldSpec("seo_description", "توضیحاتِ متا", self.seo_description_field, span=1),
-            FieldSpec("seo_keywords", "کلیدواژه‌هایِ متا", self.seo_keywords_field, span=1),
+            FieldSpec("seo_title", "عنوان سئو", self.seo_title_field, span=1),
+            FieldSpec("seo_slug", "نامک آدرس (Slug)", self.seo_slug_field, span=1),
+            FieldSpec("seo_description", "توضیحات متا", self.seo_description_field, span=1),
+            FieldSpec("seo_keywords", "کلیدواژه‌های متا", self.seo_keywords_field, span=1),
             FieldSpec("website_category", "دستهٔ فروشگاهی", self.website_category_field, span=1),
             FieldSpec("website_tags", "برچسب‌ها", self.website_tags_field, span=1),
-            FieldSpec("ecommerce_stock_mode", "حالتِ موجودی در فروشگاهِ اینترنتی", self.ecommerce_stock_mode_combo, span=1),
+            FieldSpec("ecommerce_stock_mode", "حالت موجودی در فروشگاه اینترنتی", self.ecommerce_stock_mode_combo, span=1),
         ])
         layout.addWidget(self.ecommerce_grid)
 
         # طبقِ بازخوردِ صریحِ کاربر («تطبیقِ کد/SKU بینِ سایت و ERP بهتر
         # است در فرمِ تعریفِ کالا انجام شود»): به‌ازایِ هر اتصالِ فعالِ
         # فروشگاهی، یک ردیف با SKUِ سایت و دکمه‌یِ اتصال/جست‌وجو.
-        ecommerce_mapping_label = QLabel("نگاشتِ کالا در فروشگاه‌هایِ اینترنتی")
+        ecommerce_mapping_label = QLabel("نگاشت کالا در فروشگاه‌های اینترنتی")
         layout.addWidget(ecommerce_mapping_label)
         self.ecommerce_mapping_container = QWidget()
         self.ecommerce_mapping_layout = QVBoxLayout(self.ecommerce_mapping_container)
@@ -1160,11 +1160,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._clear_ecommerce_mapping_rows()
         self.ecommerce_mapping_status_label.setText("")
         if self._item_id is None or self._company_id is None:
-            self.ecommerce_mapping_layout.addWidget(QLabel("ابتدا کالا را ذخیره کنید، سپس نگاشتِ فروشگاهی را انجام دهید."))
+            self.ecommerce_mapping_layout.addWidget(QLabel("ابتدا کالا را ذخیره کنید، سپس نگاشت فروشگاهی را انجام دهید."))
             return
         connections = [c for c in ecommerce_service.list_connections(self._company_id) if c.sync_status == "ACTIVE"]
         if not connections:
-            self.ecommerce_mapping_layout.addWidget(QLabel("هیچ اتصالِ فروشگاهیِ فعالی وجود ندارد."))
+            self.ecommerce_mapping_layout.addWidget(QLabel("هیچ اتصال فروشگاهی فعالی وجود ندارد."))
             return
         mappings_by_connection = {m.connection_id: m for m in ecommerce_service.list_item_mappings_for_item(self._item_id)}
         for connection in connections:
@@ -1176,7 +1176,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             existing = mappings_by_connection.get(connection.connection_id)
             if existing is not None:
                 sku_field.setText(existing.external_sku)
-            sku_field.setPlaceholderText("SKU/کدِ سایت")
+            sku_field.setPlaceholderText("کد کالا در سایت")
             row.addWidget(sku_field, stretch=1)
             connect_button = QPushButton("🔗 اتصال/جست‌وجو")
             connect_button.setObjectName("flatButton")
@@ -1187,7 +1187,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _connect_ecommerce_mapping(self, connection_id: int, field: QLineEdit) -> None:
         sku = field.text().strip()
         if not sku:
-            self.ecommerce_mapping_status_label.setText("ابتدا SKU/کدِ سایت را وارد کنید.")
+            self.ecommerce_mapping_status_label.setText("ابتدا کد کالا در سایت را وارد کنید.")
             return
         try:
             product_name = ecommerce_service.search_external_product(connection_id, sku)
@@ -1195,7 +1195,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.ecommerce_mapping_status_label.setText(str(exc))
             return
         if product_name is None:
-            self.ecommerce_mapping_status_label.setText(f"محصولی با SKU «{sku}» در فروشگاه پیدا نشد.")
+            self.ecommerce_mapping_status_label.setText(f"محصولی با کد کالا «{sku}» در فروشگاه پیدا نشد.")
             return
         ecommerce_service.map_item(connection_id, sku, self._item_id)
         theme.set_status_label(self.ecommerce_mapping_status_label, f"به «{product_name}» نگاشته شد.", ok=True)
@@ -1215,7 +1215,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         pos_color_button = QPushButton("🎨")
         pos_color_button.setObjectName("iconButton")
         pos_color_button.setFixedWidth(32)
-        pos_color_button.setToolTip("انتخابِ رنگ از پالت")
+        pos_color_button.setToolTip("انتخاب رنگ از پالت")
         pos_color_button.clicked.connect(self._pick_pos_color)
         pos_color_row = QWidget()
         pos_color_row_layout = QHBoxLayout(pos_color_row)
@@ -1223,19 +1223,19 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         pos_color_row_layout.setSpacing(3)
         pos_color_row_layout.addWidget(self.pos_color_field, stretch=1)
         pos_color_row_layout.addWidget(pos_color_button)
-        self.pos_requires_weight_checkbox = QCheckBox("نیازمندِ توزین")
-        self.pos_requires_serial_checkbox = QCheckBox("نیازمندِ سریال")
+        self.pos_requires_weight_checkbox = QCheckBox("نیازمند توزین")
+        self.pos_requires_serial_checkbox = QCheckBox("نیازمند سریال")
         # طبقِ بازخوردِ صریح («دسته‌بندیِ مخصوصِ POS، جدا از دسته‌بندیِ
         # عمومیِ کالا»): این گروه فقط تعیین می‌کند این کالا در کدام تبِ
         # دسترسیِ‌سریعِ صفحه‌یِ فروشِ حضوری نمایش داده شود.
         self.pos_menu_group_combo = QComboBox()
         pos_menu_group_row = self._make_combo_with_add_row(
-            "گروهِ POS (تبِ دسترسیِ‌سریع)", self.pos_menu_group_combo, self._quick_add_pos_menu_group,
+            "گروه POS (تب دسترسی‌سریع)", self.pos_menu_group_combo, self._quick_add_pos_menu_group,
         )
 
         self.pos_grid = FieldGrid([
-            FieldSpec("shortcut", "کلیدِ میان‌بر", self.pos_shortcut_field, span=1),
-            FieldSpec("color", "رنگِ دکمه", pos_color_row, span=1),
+            FieldSpec("shortcut", "کلید میان‌بر", self.pos_shortcut_field, span=1),
+            FieldSpec("color", "رنگ دکمه", pos_color_row, span=1),
             FieldSpec("menu_group", "", pos_menu_group_row, span=1),
             FieldSpec("requires_weight", "", self.pos_requires_weight_checkbox, span=1),
             FieldSpec("requires_serial", "", self.pos_requires_serial_checkbox, span=1),
@@ -1260,8 +1260,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("length", "طول (سانتی‌متر)", self.length_field, span=1),
             FieldSpec("width", "عرض (سانتی‌متر)", self.width_field, span=1),
             FieldSpec("height", "ارتفاع (سانتی‌متر)", self.height_field, span=1),
-            FieldSpec("package_type", "نوعِ بسته‌بندی", self.package_type_field, span=1),
-            FieldSpec("freight_class", "کلاسِ حمل", self.freight_class_field, span=1),
+            FieldSpec("package_type", "نوع بسته‌بندی", self.package_type_field, span=1),
+            FieldSpec("freight_class", "کلاس حمل", self.freight_class_field, span=1),
         ])
         layout.addWidget(self.shipping_grid)
 
@@ -1273,7 +1273,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         tab = QWidget()
         layout = build_section_layout(tab)
 
-        self.requires_qc_checkbox = QCheckBox("نیازمندِ کنترلِ کیفیت")
+        self.requires_qc_checkbox = QCheckBox("نیازمند کنترل کیفیت")
         self.qc_standard_field = QLineEdit()
         self.qc_test_spec_field = QTextEdit()
         self.qc_test_spec_field.setMaximumHeight(60)
@@ -1281,9 +1281,9 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.qc_grid = FieldGrid([
             FieldSpec("requires_qc", "", self.requires_qc_checkbox, span=1),
-            FieldSpec("qc_standard", "استانداردِ کیفیت", self.qc_standard_field, span=1),
+            FieldSpec("qc_standard", "استاندارد کیفیت", self.qc_standard_field, span=1),
             FieldSpec("qc_interval", "فاصلهٔ بازرسی (روز)", self.qc_interval_field, span=1),
-            FieldSpec("qc_test_spec", "مشخصاتِ آزمون", self.qc_test_spec_field, span=3),
+            FieldSpec("qc_test_spec", "مشخصات آزمون", self.qc_test_spec_field, span=3),
         ])
         layout.addWidget(self.qc_grid)
 
@@ -1311,27 +1311,27 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.asset_grid = FieldGrid([
             FieldSpec("asset_tag", "شمارهٔ اموال", self.asset_tag_field, span=1),
-            FieldSpec("depreciation_group", "گروهِ استهلاک", self.depreciation_group_field, span=1),
-            FieldSpec("useful_life", "عمرِ مفید (ماه)", self.useful_life_field, span=1),
-            FieldSpec("depreciation_method", "روشِ استهلاک", self.depreciation_method_combo, span=1),
-            FieldSpec("acquisition_date", "تاریخِ تحصیل", self.acquisition_date_field, span=1),
-            FieldSpec("acquisition_cost", "بهایِ تحصیل", self.acquisition_cost_field, span=1),
-            FieldSpec("salvage_value", "ارزشِ اسقاط", self.salvage_value_field, span=1),
+            FieldSpec("depreciation_group", "گروه استهلاک", self.depreciation_group_field, span=1),
+            FieldSpec("useful_life", "عمر مفید (ماه)", self.useful_life_field, span=1),
+            FieldSpec("depreciation_method", "روش استهلاک", self.depreciation_method_combo, span=1),
+            FieldSpec("acquisition_date", "تاریخ تحصیل", self.acquisition_date_field, span=1),
+            FieldSpec("acquisition_cost", "بهای تحصیل", self.acquisition_cost_field, span=1),
+            FieldSpec("salvage_value", "ارزش اسقاط", self.salvage_value_field, span=1),
         ])
         layout.addWidget(self.asset_grid)
 
         save_asset_button = QPushButton("💾")
         save_asset_button.setObjectName("primaryIconButton")
         save_asset_button.setFixedWidth(48)
-        save_asset_button.setToolTip("ذخیرهٔ اطلاعاتِ دارایی")
+        save_asset_button.setToolTip("ذخیرهٔ اطلاعات دارایی")
         save_asset_button.clicked.connect(self._save_asset_detail)
         layout.addWidget(save_asset_button, alignment=Qt.AlignLeft)
 
         self.asset_status_label = QLabel("")
         layout.addWidget(self.asset_status_label)
         # R265: مدیریتِ کاملِ دارایی (استهلاکِ دوره‌ای، انتقال، فروش، ...) در ماژولِ «دارایی‌هایِ ثابت»
-        fa_hint = QLabel("مدیریتِ کاملِ دارایی (ثبت با ویزارد، استهلاکِ دوره‌ای، انتقال، فروش و اسقاط) در منویِ «دارایی‌هایِ ثابت» است؛ "
-                         "اطلاعاتِ این بخش هنگامِ نصب به آن منتقل شده است.")
+        fa_hint = QLabel("مدیریت کامل دارایی (ثبت با ویزارد، استهلاک دوره‌ای، انتقال، فروش و اسقاط) در منوی «دارایی‌های ثابت» است؛ "
+                         "اطلاعات این بخش هنگام نصب به آن منتقل شده است.")
         fa_hint.setObjectName("sectionHint")
         fa_hint.setWordWrap(True)
         layout.addWidget(fa_hint)
@@ -1351,7 +1351,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_button = QPushButton("+")
         add_button.setObjectName("iconButton")
         add_button.setFixedWidth(28)
-        add_button.setToolTip(f"{label_text}ِ تازه")
+        add_button.setToolTip(f"{label_text} تازه")
         add_button.clicked.connect(quick_add)
         combo_row.addWidget(add_button)
         row_layout.addLayout(combo_row)
@@ -1361,7 +1361,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("واحدِ تازه")
+        dialog.setWindowTitle("واحد تازه")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("کد"))
         code_field = QLineEdit()
@@ -1394,7 +1394,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "برندِ تازه", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
+            "برند تازه", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
         )
         if new_id is None:
             return
@@ -1416,7 +1416,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "دسته‌بندیِ تازه", lambda code, name: catalog_service.create_category(self._company_id, code, name)
+            "دسته‌بندی تازه", lambda code, name: catalog_service.create_category(self._company_id, code, name)
         )
         if new_id is None:
             return
@@ -1427,7 +1427,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         current = QColor(self.pos_color_field.text().strip()) if self.pos_color_field.text().strip() else QColor("#4A90D9")
         if not current.isValid():
             current = QColor("#4A90D9")
-        color = QColorDialog.getColor(current, self, "رنگِ دکمهٔ کالا در POS")
+        color = QColorDialog.getColor(current, self, "رنگ دکمهٔ کالا در POS")
         if not color.isValid():
             return
         self.pos_color_field.setText(color.name())
@@ -1447,7 +1447,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("گروهِ POSِ تازه")
+        dialog.setWindowTitle("گروه POS تازه")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("نام"))
         name_field = QLineEdit()
@@ -1469,7 +1469,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _reload_menu_groups(self) -> None:
         self.pos_menu_group_combo.blockSignals(True)
         self.pos_menu_group_combo.clear()
-        self.pos_menu_group_combo.addItem("(بدونِ گروه)", None)
+        self.pos_menu_group_combo.addItem("(بدون گروه)", None)
         for g in pos_service.list_menu_groups(self._company_id):
             self.pos_menu_group_combo.addItem(g.name, g.group_id)
         self.pos_menu_group_combo.blockSignals(False)
@@ -1510,7 +1510,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _reload_brands(self) -> None:
         self.brand_combo.blockSignals(True)
         self.brand_combo.clear()
-        self.brand_combo.addItem("(بدونِ برند)", None)
+        self.brand_combo.addItem("(بدون برند)", None)
         for b in catalog_service.list_brands(self._company_id, active_only=True):
             self.brand_combo.addItem(f"{b.code} — {b.name}", b.brand_id)
         self.brand_combo.blockSignals(False)
@@ -1518,7 +1518,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _reload_manufacturers(self) -> None:
         self.manufacturer_combo.blockSignals(True)
         self.manufacturer_combo.clear()
-        self.manufacturer_combo.addItem("(بدونِ تولیدکننده)", None)
+        self.manufacturer_combo.addItem("(بدون تولیدکننده)", None)
         for m in catalog_service.list_manufacturers(self._company_id, active_only=True):
             self.manufacturer_combo.addItem(f"{m.code} — {m.name}", m.manufacturer_id)
         self.manufacturer_combo.blockSignals(False)
@@ -1527,7 +1527,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._categories = catalog_service.list_categories(self._company_id, active_only=True)
         self.category_combo.blockSignals(True)
         self.category_combo.clear()
-        self.category_combo.addItem("(بدونِ دسته)", None)
+        self.category_combo.addItem("(بدون دسته)", None)
         for c in self._categories:
             self.category_combo.addItem(f"{c.code} — {c.name}", c.category_id)
         self.category_combo.blockSignals(False)
@@ -1568,8 +1568,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- API عمومی برایِ فرمِ میزبان (detail_dimensions.py) -------------------
     def refresh(self, company_id: int) -> None:
-        """بارگذاریِ همه‌یِ کمبوهایِ وابسته به داده — باید هر بار که فرمِ
-        میزبان تفصیلی‌ها را رفرش می‌کند (تغییرِ گروه/شرکت) صدا زده شود."""
+        """بارگذاری همهٔ فهرست‌های وابسته به داده — باید هر بار که فرم
+        میزبان تفصیلی‌ها را رفرش می‌کند (تغییر گروه/شرکت) صدا زده شود."""
         self._company_id = company_id
         self._rows = catalog_service.list_items(company_id)
         self._enabled_features = {f.feature_code for f in engine_service.list_features(company_id) if f.is_enabled}
@@ -1581,7 +1581,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.default_warehouse_combo.blockSignals(True)
         self.default_warehouse_combo.clear()
-        self.default_warehouse_combo.addItem("(بدونِ انبارِ پیش‌فرض)", None)
+        self.default_warehouse_combo.addItem("(بدون انبار پیش‌فرض)", None)
         for w in locations_service.list_warehouses(company_id, active_only=True):
             self.default_warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
         self.default_warehouse_combo.blockSignals(False)
@@ -1614,10 +1614,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._apply_visibility()
 
     def _rebuild_uom_conversion_combo(self) -> None:
-        """هم‌الگو با _rebuild_related_item_combo: واحدِ پایهٔ کالایِ در
-        حالِ ویرایش (یا کالایِ درحالِ‌تعریف) از فهرست حذف می‌شود -- ضریبِ
-        تبدیلِ واحدِ پایه نسبت به خودش همیشه ۱ است و معنایی برایِ تعریف
-        ندارد. با تغییرِ واحدِ پایه (uom_combo) هم دوباره صدا زده می‌شود."""
+        """هم‌الگو با _rebuild_related_item_combo: واحد پایهٔ کالای در
+        حال ویرایش (یا کالای درحال‌تعریف) از فهرست حذف می‌شود — ضریب
+        تبدیل واحد پایه نسبت به خودش همیشه ۱ است و معنایی برای تعریف
+        ندارد. با تغییر واحد پایه (uom_combo) هم دوباره صدا زده می‌شود."""
         if self._company_id is None:
             return
         current_selection = self.uom_conversion_combo.currentData()
@@ -1633,12 +1633,12 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
                 self.uom_conversion_combo.setCurrentIndex(idx)
 
     def _rebuild_related_item_combo(self) -> None:
-        """طبقِ رفعِ باگِ واقعی: قبلاً این کمبو خودِ کالایِ در حالِ ویرایش
-        را هم به‌عنوانِ گزینه‌یِ «جایگزین/مکملِ خودش» نشان می‌داد (فقط در
-        لایه‌ی سرویس رد می‌شد، نه در UI) — این‌جا حذف می‌شود. چون هنگامِ
-        refresh (تعویضِ گروه/شرکت) هنوز self._item_id معلوم نیست، این
-        تابع دوباره در load() هم صدا زده می‌شود تا با شناخته‌شدنِ کالایِ
-        در حالِ ویرایش، خودش از فهرست حذف شود."""
+        """طبق رفع باگ واقعی: قبلاً این فهرست خود کالای در حال ویرایش
+        را هم به‌عنوان گزینهٔ «جایگزین/مکمل خودش» نشان می‌داد (فقط در
+        لایهٔ سرویس رد می‌شد، نه در UI) — این‌جا حذف می‌شود. چون هنگام
+        refresh (تعویض گروه/شرکت) هنوز self._item_id معلوم نیست، این
+        تابع دوباره در load() هم صدا زده می‌شود تا با شناخته‌شدن کالای
+        در حال ویرایش، خودش از فهرست حذف شود."""
         self.related_item_combo.clear()
         self.bom_component_combo.clear()
         for r in self._rows:
@@ -1649,8 +1649,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.bom_component_combo.addItem(label, r.item_id)
 
     def load(self, item_row: catalog_service.ItemRow | None) -> None:
-        """پرکردنِ فرم از رویِ یک کالایِ سطحِ‌آخرِ ازپیش‌ذخیره‌شده؛ با
-        None یعنی رکوردِ تازه (reset کاملِ فیلدها)."""
+        """پرکردن فرم از روی یک کالای سطح‌آخر ازپیش‌ذخیره‌شده؛ با
+        None یعنی رکورد تازه (reset کامل فیلدها)."""
         if item_row is None:
             self.reset()
             return
@@ -1679,7 +1679,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.barcode_field.setText(it.barcode or "")
         self.qr_code_field.setText(it.qr_code_data or "")
         self.sku_field.setText(it.sku or "")
-        self.own_barcode_label.setText(it.barcode or "(بدونِ بارکد)")
+        self.own_barcode_label.setText(it.barcode or "(بدون بارکد)")
 
         self.purchase_lead_time_field.setText(str(it.purchase_lead_time_days) if it.purchase_lead_time_days is not None else "")
         self.purchase_min_order_field.setText(str(it.purchase_min_order_qty) if it.purchase_min_order_qty is not None else "")
@@ -1753,13 +1753,13 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_locations_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        hint = QLabel("موجودیِ این کالا به تفکیکِ محلِ نگهداری؛ یک کالا می‌تواند در چند محل و چند انبار باشد. "
-                      "دابل‌کلیک یا «نمایش روی نقشه» محل را رویِ نقشهٔ انبار نشان می‌دهد.")
+        hint = QLabel("موجودی این کالا به تفکیک محل نگهداری؛ یک کالا می‌تواند در چند محل و چند انبار باشد. "
+                      "دابل‌کلیک یا «نمایش روی نقشه» محل را روی نقشهٔ انبار نشان می‌دهد.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.locations_table = QTableWidget(0, 8)
-        self.locations_table.setHorizontalHeaderLabels(["انبار", "منطقه", "راهرو", "قفسه", "طبقه", "محل", "کدِ محل", "مقدار"])
+        self.locations_table.setHorizontalHeaderLabels(["انبار", "منطقه", "راهرو", "قفسه", "طبقه", "محل", "کد محل", "مقدار"])
         self.locations_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.locations_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.locations_table.verticalHeader().setVisible(False)
@@ -1781,7 +1781,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         box = QWidget()
         grid = QHBoxLayout(box)
-        title = QLabel("شرایطِ نگهداری:")
+        title = QLabel("شرایط نگهداری:")
         title.setObjectName("cardTitle")
         grid.addWidget(title)
         self.storage_temp_min, self.storage_temp_max = QDoubleSpinBox(), QDoubleSpinBox()
@@ -1791,7 +1791,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             spin.setSpecialValueText("—")
             spin.setValue(-80.01)
         self.storage_hazard_combo = QComboBox()
-        self.storage_hazard_combo.addItem("— غیرِ خطرناک —", None)
+        self.storage_hazard_combo.addItem("— غیر خطرناک —", None)
         for code, label in wl_service.HAZARD_CLASSES.items():
             self.storage_hazard_combo.addItem(label, code)
         self.storage_type_combo = QComboBox()
@@ -1799,12 +1799,12 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in wl_service.LOCATION_TYPES.items():
             self.storage_type_combo.addItem(label, code)
         self.storage_fragile_checkbox = QCheckBox("شکستنی")
-        for label, widget in (("دما از", self.storage_temp_min), ("تا", self.storage_temp_max), ("کلاسِ خطر", self.storage_hazard_combo),
-                              ("فقط در محلِ", self.storage_type_combo)):
+        for label, widget in (("دما از", self.storage_temp_min), ("تا", self.storage_temp_max), ("کلاس خطر", self.storage_hazard_combo),
+                              ("فقط در محل", self.storage_type_combo)):
             grid.addWidget(QLabel(label))
             grid.addWidget(widget)
         grid.addWidget(self.storage_fragile_checkbox)
-        save = QPushButton("ذخیرهٔ شرایطِ نگهداری")
+        save = QPushButton("ذخیرهٔ شرایط نگهداری")
         save.setObjectName("flatButton")
         save.clicked.connect(self.save_storage_profile)
         grid.addWidget(save)
@@ -1826,7 +1826,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         from peecha.services import warehouse_locations as wl_service
 
         if self._company_id is None or self._item_id is None:
-            QMessageBox.information(self, "شرایطِ نگهداری", "ابتدا کالا را ذخیره کنید.")
+            QMessageBox.information(self, "شرایط نگهداری", "ابتدا کالا را ذخیره کنید.")
             return False
         temp = lambda s: decimal.Decimal(str(round(s.value(), 1))) if s.value() > -80 else None  # noqa: E731
         try:
@@ -1836,14 +1836,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
                 required_location_type_code=self.storage_type_combo.currentData()),
                 app_session.current_user.user_id if app_session.current_user else None)
         except ValueError as exc:
-            QMessageBox.warning(self, "شرایطِ نگهداری", str(exc))
+            QMessageBox.warning(self, "شرایط نگهداری", str(exc))
             return False
         return True
 
     # --- R259: اطلاعاتِ بها (از موتورِ بهایِ تمام‌شده) ---------------------------------
-    _COST_FIELDS = (("method_label", "روشِ ارزش‌گذاری"), ("current_cost", "بهایِ جاری"), ("average_cost", "میانگینِ بها"),
-                    ("last_purchase_cost", "آخرین بهایِ خرید"), ("replacement_cost", "بهایِ جایگزینی"),
-                    ("quantity", "موجودی"), ("inventory_value", "ارزشِ موجودی"), ("pending_allocations", "بهایِ در انتظار"))
+    _COST_FIELDS = (("method_label", "روش ارزش‌گذاری"), ("current_cost", "بهای جاری"), ("average_cost", "میانگین بها"),
+                    ("last_purchase_cost", "آخرین بهای خرید"), ("replacement_cost", "بهای جایگزینی"),
+                    ("quantity", "موجودی"), ("inventory_value", "ارزش موجودی"), ("pending_allocations", "بهای در انتظار"))
 
     def _build_cost_tab(self) -> QWidget:
         tab = QWidget()
@@ -1966,7 +1966,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.barcode_field.clear()
         self.qr_code_field.clear()
         self.sku_field.clear()
-        self.own_barcode_label.setText("(بدونِ بارکد)")
+        self.own_barcode_label.setText("(بدون بارکد)")
         self.variants_table.setRowCount(0)
         self.variant_notes_field.clear()
         self.variant_price_field.clear()
@@ -2025,7 +2025,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.uom_conversion_sales_default_checkbox.setChecked(False)
         self.unit_barcodes_table.setRowCount(0)
         self._item_units = []
-        self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهایِ بسته‌بندی و بارکدها را تعریف کنید.")
+        self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهای بسته‌بندی و بارکدها را تعریف کنید.")
         self.units_status_label.setText("")
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
@@ -2037,7 +2037,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def collect_fields(self) -> catalog_service.ItemFields:
         if self.uom_combo.currentData() is None:
-            raise ValueError("ابتدا یک واحدِ اندازه‌گیری تعریف کنید.")
+            raise ValueError("ابتدا یک واحد اندازه‌گیری تعریف کنید.")
         return catalog_service.ItemFields(
             item_kind_code=self.kind_combo.currentData(),
             base_uom_id=self.uom_combo.currentData(),
@@ -2109,14 +2109,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.uom_conversion_table.setRowCount(0)
         self._item_units = []
         if self._item_id is None:
-            self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهایِ بسته‌بندی و بارکدها را تعریف کنید.")
+            self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهای بسته‌بندی و بارکدها را تعریف کنید.")
             self.unit_barcodes_table.setRowCount(0)
             return
         self._item_units = uc.get_item_units(self._item_id, active_only=False)
         base = next((u for u in self._item_units if u.is_base), None)
         self.base_unit_label.setText(
-            f"واحدِ پایهٔ موجودی: «{base.label}» -- همهٔ موجودی‌ها به این واحد نگه‌داری می‌شوند؛ "
-            "هر واحدِ دیگر با ضریبِ تبدیلش به همین واحد تبدیل می‌شود." if base else ""
+            f"واحد پایهٔ موجودی: «{base.label}» — همهٔ موجودی‌ها به این واحد نگه‌داری می‌شوند؛ "
+            "هر واحد دیگر با ضریب تبدیلش به همین واحد تبدیل می‌شود." if base else ""
         )
         price_list_id = self.unit_price_list_combo.currentData()
         self.uom_conversion_table.setRowCount(len(self._item_units))
@@ -2141,14 +2141,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _add_uom_conversion(self) -> None:
         if self._item_id is None:
-            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس واحدِ بسته‌بندی اضافه کنید.")
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس واحد بسته‌بندی اضافه کنید.")
             return
         uom_id = self.uom_conversion_combo.currentData()
         if uom_id is None:
             return
         factor = _decimal_or_none(self.uom_conversion_factor_field.text())
         if factor is None:
-            QMessageBox.warning(self, "خطا", "ضریبِ تبدیل را وارد کنید.")
+            QMessageBox.warning(self, "خطا", "ضریب تبدیل را وارد کنید.")
             return
         try:
             uc.set_item_unit(
@@ -2176,7 +2176,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self.units_status_label.setText(
-            "واحد حذف شد." if outcome == "DELETED" else "این واحد در اسناد/قیمت‌ها/بارکدها استفاده شده بود و غیرفعال شد (اسنادِ قبلی دست‌نخورده‌اند)."
+            "واحد حذف شد." if outcome == "DELETED" else "این واحد در اسناد/قیمت‌ها/بارکدها استفاده شده بود و غیرفعال شد (اسناد قبلی دست‌نخورده‌اند)."
         )
         self._refresh_uom_conversions_table()
 
@@ -2185,19 +2185,19 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._item_id is None or unit is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"ویرایشِ واحدِ «{unit.label}»")
+        dialog.setWindowTitle(f"ویرایش واحد «{unit.label}»")
         dlayout = QVBoxLayout(dialog)
         factor_field = QLineEdit(format(unit.factor.normalize(), "f"))
         factor_field.setEnabled(not unit.is_base)
-        purchase_cb = QCheckBox("مجاز برایِ خرید")
+        purchase_cb = QCheckBox("مجاز برای خرید")
         purchase_cb.setChecked(unit.is_purchase_unit or unit.is_base)
-        sales_cb = QCheckBox("مجاز برایِ فروش")
+        sales_cb = QCheckBox("مجاز برای فروش")
         sales_cb.setChecked(unit.is_sales_unit or unit.is_base)
-        inventory_cb = QCheckBox("واحدِ انبار/شمارش")
+        inventory_cb = QCheckBox("واحد انبار/شمارش")
         inventory_cb.setChecked(unit.is_inventory_unit or unit.is_base)
-        default_purchase_cb = QCheckBox("پیش‌فرضِ خرید")
+        default_purchase_cb = QCheckBox("پیش‌فرض خرید")
         default_purchase_cb.setChecked(unit.is_default_purchase)
-        default_sales_cb = QCheckBox("پیش‌فرضِ فروش")
+        default_sales_cb = QCheckBox("پیش‌فرض فروش")
         default_sales_cb.setChecked(unit.is_default_sales)
         decimals_field = QLineEdit(str(unit.decimal_places))
         min_field = QLineEdit(format(unit.min_quantity.normalize(), "f") if unit.min_quantity is not None else "")
@@ -2208,20 +2208,20 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         active_cb.setChecked(unit.is_active)
         active_cb.setEnabled(not unit.is_base)
         dlayout.addWidget(FieldGrid([
-            FieldSpec("factor", "ضریبِ تبدیل به واحدِ پایه", factor_field, span=1),
-            FieldSpec("decimals", "تعدادِ اعشار", decimals_field, span=1),
+            FieldSpec("factor", "ضریب تبدیل به واحد پایه", factor_field, span=1),
+            FieldSpec("decimals", "تعداد اعشار", decimals_field, span=1),
             FieldSpec("purchase", "", purchase_cb, span=1),
             FieldSpec("sales", "", sales_cb, span=1),
             FieldSpec("inventory", "", inventory_cb, span=1),
             FieldSpec("default_purchase", "", default_purchase_cb, span=1),
             FieldSpec("default_sales", "", default_sales_cb, span=1),
-            FieldSpec("min", "حداقلِ مقدار (همین واحد)", min_field, span=1),
-            FieldSpec("max", "حداکثرِ مقدار (همین واحد)", max_field, span=1),
-            FieldSpec("weight", "وزنِ هر واحد (kg)", weight_field, span=1),
-            FieldSpec("volume", "حجمِ هر واحد (m³)", volume_field, span=1),
+            FieldSpec("min", "حداقل مقدار (همین واحد)", min_field, span=1),
+            FieldSpec("max", "حداکثر مقدار (همین واحد)", max_field, span=1),
+            FieldSpec("weight", "وزن هر واحد (kg)", weight_field, span=1),
+            FieldSpec("volume", "حجم هر واحد (m³)", volume_field, span=1),
             FieldSpec("active", "", active_cb, span=1),
         ]))
-        hint = QLabel("تغییرِ ضریب فقط رویِ اسنادِ تازه اثر دارد؛ اسنادِ ثبت‌شده ضریبِ لحظهٔ ثبتِ خودشان را نگه می‌دارند.")
+        hint = QLabel("تغییر ضریب فقط روی اسناد تازه اثر دارد؛ اسناد ثبت‌شده ضریب لحظهٔ ثبت خودشان را نگه می‌دارند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         dlayout.addWidget(hint)
@@ -2254,7 +2254,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         price_list_id = self.unit_price_list_combo.currentData()
         price = _decimal_or_none(self.unit_price_field.text())
         if self._item_id is None or unit is None or price_list_id is None or price is None:
-            QMessageBox.information(self, "قیمتِ واحد", "واحد، فهرستِ قیمت و مبلغ را مشخص کنید.")
+            QMessageBox.information(self, "قیمت واحد", "واحد، فهرست قیمت و مبلغ را مشخص کنید.")
             return
         user = app_session.current_user
         pricing_service.set_price_list_item(
@@ -2291,7 +2291,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _add_unit_barcode(self) -> None:
         unit = self._selected_item_unit()
         if self._item_id is None or unit is None:
-            QMessageBox.information(self, "بارکد", "ابتدا واحدِ موردِ نظر را در جدولِ واحدها انتخاب کنید.")
+            QMessageBox.information(self, "بارکد", "ابتدا واحد مورد نظر را در جدول واحدها انتخاب کنید.")
             return
         try:
             uc.add_barcode(
@@ -2299,7 +2299,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
                 self.unit_barcode_type_combo.currentData(), self.unit_barcode_primary_checkbox.isChecked(),
             )
         except ValueError as exc:
-            QMessageBox.warning(self, "خطا در ثبتِ بارکد", str(exc))
+            QMessageBox.warning(self, "خطا در ثبت بارکد", str(exc))
             return
         self.unit_barcode_field.clear()
         self.unit_barcode_primary_checkbox.setChecked(False)
@@ -2320,7 +2320,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if b is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("ویرایشِ بارکد")
+        dialog.setWindowTitle("ویرایش بارکد")
         dlayout = QVBoxLayout(dialog)
         code_field = QLineEdit(b.barcode)
         type_combo = QComboBox()
@@ -2440,7 +2440,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _add_item_supplier_code(self) -> None:
         if self._item_id is None:
-            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کد/نامِ تامین‌کننده اضافه کنید.")
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کد/نام تامین‌کننده اضافه کنید.")
             return
         value = self.item_code_value_field.text().strip()
         if not value:
@@ -2465,7 +2465,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("ویرایشِ کد/نامِ تامین‌کننده")
+        dialog.setWindowTitle("ویرایش کد/نام تامین‌کننده")
         form = QVBoxLayout(dialog)
         type_combo = QComboBox()
         type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["CODE"], "CODE")
@@ -2524,7 +2524,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _add_related_item(self) -> None:
         if self._item_id is None:
-            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کالایِ جایگزین/مکمل اضافه کنید.")
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کالای جایگزین/مکمل اضافه کنید.")
             return
         related_item_id = self.related_item_combo.currentData()
         relation_type_code = self.relation_type_combo.currentData()
@@ -2553,7 +2553,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         boms = extended_service.list_boms(self._item_id)
         if not boms:
-            self.bom_status_label.setText("هنوز فهرستِ موادِ اولیه‌ای ثبت نشده است.")
+            self.bom_status_label.setText("هنوز فهرست مواد اولیه‌ای ثبت نشده است.")
             return
         latest = boms[-1]
         self._current_bom_id = latest.bom_id
@@ -2615,7 +2615,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         useful_life = _int_or_none(self.useful_life_field.text())
         cost = _decimal_or_none(self.acquisition_cost_field.text())
         if useful_life is None or cost is None:
-            self.asset_status_label.setText("عمرِ مفید و بهایِ تحصیل را وارد کنید.")
+            self.asset_status_label.setText("عمر مفید و بهای تحصیل را وارد کنید.")
             return
         try:
             extended_service.set_asset_detail(
@@ -2631,4 +2631,4 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.asset_status_label.setText(str(exc))
             return
-        self.asset_status_label.setText("اطلاعاتِ دارایی ذخیره شد.")
+        self.asset_status_label.setText("اطلاعات دارایی ذخیره شد.")

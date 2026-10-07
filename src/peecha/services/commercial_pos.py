@@ -1,6 +1,6 @@
-"""فروشگاه و صندوق (مرحلهٔ ۷): جلسهٔ صندوق، پرداختِ چندروشی، وفاداری،
-کارتِ‌هدیه، فروشِ اقساطی. تراکنشِ POS خودش یک comm.commercial_documents
-با channel_code='POS' است — این فایل فقط قابلیت‌هایِ واقعاً تازه را
+"""فروشگاه و صندوق (مرحلهٔ ۷): جلسهٔ صندوق، پرداخت چندروشی، وفاداری،
+کارت‌هدیه، فروش اقساطی. تراکنش POS خودش یک comm.commercial_documents
+با channel_code='POS' است — این فایل فقط قابلیت‌های واقعاً تازه را
 اضافه می‌کند."""
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def list_terminals(company_id: int) -> list[PosTerminal]:
 def create_terminal(company_id: int, warehouse_id: int, code: str, name: str) -> int:
     with new_session() as session:
         if session.scalar(select(PosTerminal.terminal_id).where(PosTerminal.company_id == company_id, PosTerminal.code == code)):
-            raise ValueError("این کدِ ترمینال قبلاً تعریف شده است.")
+            raise ValueError("این کد ترمینال قبلاً تعریف شده است.")
         row = PosTerminal(company_id=company_id, warehouse_id=warehouse_id, code=code, name=name)
         session.add(row)
         session.commit()
@@ -62,10 +62,10 @@ def create_terminal(company_id: int, warehouse_id: int, code: str, name: str) ->
 
 
 def update_terminal(company_id: int, terminal_id: int, warehouse_id: int, name: str, is_active: bool = True) -> None:
-    """R276: ویرایشِ نام/انبار/فعال‌بودنِ ترمینال (کد ثابت می‌ماند)."""
+    """R276: ویرایش نام/انبار/فعال‌بودن ترمینال (کد ثابت می‌ماند)."""
     name = (name or "").strip()
     if not name or warehouse_id is None:
-        raise ValueError("نام و انبارِ ترمینال الزامی است.")
+        raise ValueError("نام و انبار ترمینال الزامی است.")
     with new_session() as session:
         row = session.get(PosTerminal, terminal_id)
         if row is None or row.company_id != company_id:
@@ -105,7 +105,7 @@ def open_session(terminal_id: int, opened_by_user_id: int, opening_cash_amount: 
             last_session is not None and last_session.variance_amount is not None
             and abs(last_session.variance_amount) > threshold and last_session.variance_override_by_user_id is None
         ):
-            raise ValueError("مغایرتِ جلسهٔ قبلیِ این ترمینال هنوز آزادسازی نشده — ابتدا مدیر باید تاییدِ استثنا کند.")
+            raise ValueError("مغایرت جلسهٔ قبلی این ترمینال هنوز آزادسازی نشده — ابتدا مدیر باید تایید استثنا کند.")
         open_row = session.scalar(select(PosSession).where(PosSession.terminal_id == terminal_id, PosSession.status_code == "OPEN"))
         if open_row is not None:
             raise ValueError("این ترمینال هم‌اکنون یک جلسهٔ باز دارد.")
@@ -119,14 +119,14 @@ def close_session(session_id: int, closed_by_user_id: int, closing_cash_amount: 
     with new_session() as session:
         pos_session = session.get(PosSession, session_id)
         if pos_session is None or pos_session.status_code != "OPEN":
-            raise ValueError("فقط جلسهٔ باز قابلِ‌بستن است.")
+            raise ValueError("فقط جلسهٔ باز قابل‌بستن است.")
         open_drafts = session.scalar(
             select(CommercialDocument).where(
                 CommercialDocument.pos_session_id == session_id, CommercialDocument.status_code.in_(("DRAFT", "CONFIRMED", "APPROVED"))
             )
         )
         if open_drafts is not None:
-            raise ValueError("این جلسه سندِ ثبت‌نهایی‌نشده دارد — ابتدا Post یا لغو کنید.")
+            raise ValueError("این جلسه سند ثبت‌نهایی‌نشده دارد — ابتدا Post یا لغو کنید.")
         total_cash = session.execute(
             select(PosPayment.amount)
             .join(CommercialDocument, CommercialDocument.document_id == PosPayment.document_id)
@@ -144,10 +144,10 @@ def close_session(session_id: int, closed_by_user_id: int, closing_cash_amount: 
 
 @dataclass
 class PosSessionSalesSummary:
-    """طبقِ درخواستِ صریح («جمعِ فروشِ صندوق و تخفیف و تعدادِ فاکتور و
-    مالیات در زیرِ صندوق نمایش داده شود»): رویِ همه‌یِ فروش‌هایِ همین
-    شیفت (هر وضعیتی جز CANCELLED)، نه فقط فاکتورهایِ ثبتِ‌نهایی‌شده --
-    چون هدف نمایشِ زنده‌یِ کارِ همین شیفت است، نه گزارشِ مالیِ رسمی."""
+    """طبق درخواست صریح («جمع فروش صندوق و تخفیف و تعداد فاکتور و
+    مالیات در زیر صندوق نمایش داده شود»): روی همهٔ فروش‌های همین
+    شیفت (هر وضعیتی جز CANCELLED)، نه فقط فاکتورهای ثبت‌نهایی‌شده --
+    چون هدف نمایش زندهٔ کار همین شیفت است، نه گزارش مالی رسمی."""
 
     invoice_count: int
     total_amount: decimal.Decimal
@@ -174,7 +174,7 @@ def override_session_variance(session_id: int, overridden_by_user_id: int, reaso
     with new_session() as session:
         pos_session = session.get(PosSession, session_id)
         if pos_session is None or pos_session.status_code != "CLOSED":
-            raise ValueError("فقط جلسهٔ بستهٔ دارایِ مغایرت قابلِ‌آزادسازی است.")
+            raise ValueError("فقط جلسهٔ بستهٔ دارای مغایرت قابل‌آزادسازی است.")
         pos_session.variance_override_by_user_id = overridden_by_user_id
         pos_session.variance_override_reason = reason
         session.commit()
@@ -191,7 +191,7 @@ def set_intended_payment_type(document_id: int, company_id: int, payment_type: s
     # طبقِ همان الگو -- برایِ فروشی که صندوق‌دار از دیالوگِ «نحوهٔ
     # تسویه» (نه دو دکمهٔ نقدی/نسیه) استفاده کرده.
     if payment_type not in ("CASH", "CREDIT", "MIXED"):
-        raise ValueError("نوعِ پرداخت نامعتبر است.")
+        raise ValueError("نوع پرداخت نامعتبر است.")
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -201,9 +201,9 @@ def set_intended_payment_type(document_id: int, company_id: int, payment_type: s
 
 
 def list_pending_pos_documents(company_id: int, pos_session_id: int) -> list[CommercialDocument]:
-    """فاکتورهایِ این شیفت که کاریر تایید کرده ولی هنوز سرپرست
-    approve/post نکرده -- برایِ صفحه‌یِ تاییدِ سرپرست و برایِ لیستِ
-    «فروش‌هایِ درجریان/رزروشده» در خودِ صفحه‌یِ فروش."""
+    """فاکتورهای این شیفت که کاریر تایید کرده ولی هنوز سرپرست
+    approve/post نکرده — برای صفحهٔ تایید سرپرست و برای لیست
+    «فروش‌های درجریان/رزروشده» در خود صفحهٔ فروش."""
     with new_session() as session:
         return list(
             session.scalars(
@@ -230,20 +230,20 @@ def _get_reopenable_pos_document(session, document_id: int, company_id: int) -> 
     if doc is None or doc.company_id != company_id:
         raise ValueError("سند نامعتبر است.")
     if doc.pos_session_id is None or doc.document_type_code != "SALES_INVOICE":
-        raise ValueError("این عملیات فقط برایِ فروشِ صندوق ممکن است.")
+        raise ValueError("این عملیات فقط برای فروش صندوق ممکن است.")
     if doc.status_code != "CONFIRMED":
-        raise ValueError("فقط فروشِ تاییدشده (پیش از تاییدِ سرپرست) قابلِ‌اصلاح/حذف است.")
+        raise ValueError("فقط فروش تاییدشده (پیش از تایید سرپرست) قابل‌اصلاح/حذف است.")
     return doc
 
 
 def reopen_confirmed_sale(document_id: int, company_id: int, user_id: int) -> None:
-    """صندوق‌دار یک فروشِ تاییدشده را برایِ اصلاح (افزودن/حذف/تغییرِ
-    ردیف) دوباره به پیش‌نویس برمی‌گرداند -- بعدِ اصلاح، دوباره از همان
-    دکمه‌هایِ تاییدِ فروش عبور می‌کند. طبقِ درخواستِ صریح («روشِ
-    پرداخت‌هایِ مربوط به همان فاکتور نیز به‌همراهِ فاکتور ویرایش یا حذف
-    بشه»): نقشه‌یِ تسویه‌یِ قبلی (اگر باشد) هم حذف می‌شود -- چون بعدِ
-    اصلاحِ سبد، مبلغِ کلِ فاکتور احتمالاً عوض شده و نقشه‌یِ قدیمی دیگر
-    معتبر نیست؛ صندوق‌دار بعدِ تاییدِ دوباره، نحوه‌یِ تسویه را از نو
+    """صندوق‌دار یک فروش تاییدشده را برای اصلاح (افزودن/حذف/تغییر
+    ردیف) دوباره به پیش‌نویس برمی‌گرداند — بعد اصلاح، دوباره از همان
+    دکمه‌های تایید فروش عبور می‌کند. طبق درخواست صریح («روش
+    پرداخت‌های مربوط به همان فاکتور نیز به‌همراه فاکتور ویرایش یا حذف
+    بشه»): نقشهٔ تسویهٔ قبلی (اگر باشد) هم حذف می‌شود — چون بعد
+    اصلاح سبد، مبلغ کل فاکتور احتمالاً عوض شده و نقشهٔ قدیمی دیگر
+    معتبر نیست؛ صندوق‌دار بعد تایید دوباره، نحوهٔ تسویه را از نو
     مشخص می‌کند."""
     with new_session() as session:
         doc = _get_reopenable_pos_document(session, document_id, company_id)
@@ -260,10 +260,10 @@ def reopen_confirmed_sale(document_id: int, company_id: int, user_id: int) -> No
 
 
 def delete_confirmed_sale(document_id: int, company_id: int, user_id: int) -> None:
-    """صندوق‌دار یک فروشِ تاییدشده (پیش از تاییدِ سرپرست) را لغو می‌کند --
-    طبقِ الگویِ عمومیِ برنامه، لغو (نه حذفِ خام) تا تاریخچه از بین
-    نرود؛ در گزارشِ بستنِ شیفت به‌عنوانِ «حذف‌شده» نشان داده می‌شود. طبقِ
-    همان درخواستِ صریح، نقشه‌یِ تسویه‌یِ این فاکتور هم همراهِ آن حذف
+    """صندوق‌دار یک فروش تاییدشده (پیش از تایید سرپرست) را لغو می‌کند --
+    طبق الگوی عمومی برنامه، لغو (نه حذف خام) تا تاریخچه از بین
+    نرود؛ در گزارش بستن شیفت به‌عنوان «حذف‌شده» نشان داده می‌شود. طبق
+    همان درخواست صریح، نقشهٔ تسویهٔ این فاکتور هم همراه آن حذف
     می‌شود."""
     with new_session() as session:
         doc = _get_reopenable_pos_document(session, document_id, company_id)
@@ -288,8 +288,8 @@ class PosInvoiceAuditEntry:
 
 
 def list_session_audit_log(pos_session_id: int) -> list[PosInvoiceAuditEntry]:
-    """فهرستِ فاکتورهایِ اصلاح‌شده/حذف‌شده‌یِ این شیفت -- برایِ گزارش به
-    سرپرست هنگامِ بستنِ شیفت."""
+    """فهرست فاکتورهای اصلاح‌شده/حذف‌شدهٔ این شیفت — برای گزارش به
+    سرپرست هنگام بستن شیفت."""
     with new_session() as session:
         rows = session.scalars(
             select(PosInvoiceAuditLog)
@@ -310,7 +310,7 @@ def list_session_audit_log(pos_session_id: int) -> list[PosInvoiceAuditEntry]:
 # ---------------------------------------------------------------------
 def record_payment(document_id: int, method_code: str, amount: decimal.Decimal, reference_no: str | None = None) -> int:
     if method_code not in ("CASH", "CARD", "WALLET", "GIFT_CARD", "STORE_CREDIT"):
-        raise ValueError("روشِ پرداخت نامعتبر است.")
+        raise ValueError("روش پرداخت نامعتبر است.")
     if amount <= 0:
         raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
@@ -337,11 +337,11 @@ def payments_cover_total(document_id: int) -> bool:
 def _resolve_receivable_counterparty_details(
     company_id: int, person_dimension_type_id: int, customer_id: int, cost_center_type_id: int, project_type_id: int,
 ) -> dict[int, int]:
-    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ حسابِ
-    مشتری مرکزِ هزینه/پروژه می‌خواهد»): اگر حسابِ نگاشت‌شدهٔ دریافتِ
-    مشتری این ابعاد را الزامی کرده باشد، پیش‌فرضِ تنظیم‌شده در
-    PosSettings.default_receivable_cost_center/project به طرفِ حسابِ
-    (بستانکارِ) سندِ RECEIPT هم اضافه می‌شود."""
+    """طبق رفع باگ واقعی گزارش‌شده («در فرم تایید سرپرست، برای حساب
+    مشتری مرکز هزینه/پروژه می‌خواهد»): اگر حساب نگاشت‌شدهٔ دریافت
+    مشتری این ابعاد را الزامی کرده باشد، پیش‌فرض تنظیم‌شده در
+    PosSettings.default_receivable_cost_center/project به طرف حساب
+    (بستانکار) سند RECEIPT هم اضافه می‌شود."""
     details = {person_dimension_type_id: customer_id}
     pos_settings = get_pos_settings(company_id)
     if pos_settings is not None:
@@ -356,27 +356,27 @@ def record_payment_and_settle_batch(
     company_id: int, user_id: int, document_ids: list[int], method_code: str,
     amounts: dict[int, decimal.Decimal] | None = None, reference_no: str | None = None,
 ) -> list[int]:
-    """طبقِ رفعِ شکافِ کشف‌شده: record_payment (بالا) از اول فقط یک
-    ردیفِ comm.pos_payments ثبت می‌کرد -- بدونِ هیچ اثری در حساب‌هایِ
-    نقد/بانک یا در comm.invoice_settlements؛ یعنی مشتری برایِ همیشه در
-    گزارش‌هایِ تسویه «بدهکار» می‌ماند و نقدِ واقعاً دریافت‌شده هیچ‌وقت به
-    صندوق/بانک نمی‌رسید. این تابع هر پرداختِ POS را به نتیجهٔ حسابداریِ
+    """طبق رفع شکاف کشف‌شده: record_payment (بالا) از اول فقط یک
+    ردیف comm.pos_payments ثبت می‌کرد — بدون هیچ اثری در حساب‌های
+    نقد/بانک یا در comm.invoice_settlements؛ یعنی مشتری برای همیشه در
+    گزارش‌های تسویه «بدهکار» می‌ماند و نقد واقعاً دریافت‌شده هیچ‌وقت به
+    صندوق/بانک نمی‌رسید. این تابع هر پرداخت POS را به نتیجهٔ حسابداری
     واقعی‌اش وصل می‌کند:
-    - نقد/کارت‌خوان: یک سندِ خزانه‌داریِ واقعی (create_treasury_voucher،
-      دقیقاً هم‌الگو با فرمِ دریافتِ معمولی) ساخته و به فاکتور(ها) تسویه
+    - نقد/کارت‌خوان: یک سند خزانه‌داری واقعی (create_treasury_voucher،
+      دقیقاً هم‌الگو با فرم دریافت معمولی) ساخته و به فاکتور(ها) تسویه
       می‌شود.
-    - کیف‌پول/کارتِ‌هدیه/اعتبارِ فروشگاهی: نیازی به سندِ خزانه‌داریِ تازه
-      نیست (این‌ها از پیش داخلِ سیستم‌اند)، فقط تسویه (بدونِ ژورنالِ
+    - کیف‌پول/کارت‌هدیه/اعتبار فروشگاهی: نیازی به سند خزانه‌داری تازه
+      نیست (این‌ها از پیش داخل سیستم‌اند)، فقط تسویه (بدون ژورنال
       جدید) ثبت می‌شود.
 
-    طبقِ تصمیمِ صریح («ادغام فقط رویِ سندِ حسابداری باشد، نه خودِ
-    فاکتور -- تعداد فاکتورها ممکنه زیاد بشه»): وقتی چند document_id
-    (همه‌ متعلق به یک طرفِ‌حساب) با هم پاس داده شوند و روشِ پرداخت
-    نقد/کارت‌خوان باشد، به‌جایِ N سندِ حسابداریِ جدا، فقط یک سندِ واحد
-    برایِ مجموع ساخته می‌شود -- خودِ فاکتورها دست‌نخورده و جدا می‌مانند،
-    هرکدام فقط یک ردیفِ تسویه به همان یک سندِ حسابداری می‌گیرند (پس
-    ریزِ فاکتورهایِ یک سند از طریقِ list_settlements_for_invoice/
-    فیلترِ journal_entry_id هنوز قابلِ‌مشاهده است)."""
+    طبق تصمیم صریح («ادغام فقط روی سند حسابداری باشد، نه خود
+    فاکتور — تعداد فاکتورها ممکنه زیاد بشه»): وقتی چند document_id
+    (همه‌ متعلق به یک طرف‌حساب) با هم پاس داده شوند و روش پرداخت
+    نقد/کارت‌خوان باشد، به‌جای N سند حسابداری جدا، فقط یک سند واحد
+    برای مجموع ساخته می‌شود — خود فاکتورها دست‌نخورده و جدا می‌مانند،
+    هرکدام فقط یک ردیف تسویه به همان یک سند حسابداری می‌گیرند (پس
+    ریز فاکتورهای یک سند از طریق list_settlements_for_invoice/
+    فیلتر journal_entry_id هنوز قابل‌مشاهده است)."""
     with new_session() as session:
         docs = []
         for document_id in document_ids:
@@ -385,7 +385,7 @@ def record_payment_and_settle_batch(
                 raise ValueError("سند نامعتبر است.")
             docs.append(doc)
         if len({d.counterparty_detail_account_id for d in docs}) > 1:
-            raise ValueError("ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب مجاز است.")
+            raise ValueError("ادغام سند حسابداری فقط برای فاکتورهای یک طرف‌حساب مجاز است.")
         customer_id = docs[0].counterparty_detail_account_id
         document_date = docs[0].document_date
         document_numbers = [d.document_no for d in docs]
@@ -397,7 +397,7 @@ def record_payment_and_settle_batch(
         amount = amounts[doc.document_id]
         if method_code == "GIFT_CARD":
             if not reference_no:
-                raise ValueError("کدِ کارتِ‌هدیه را وارد کنید.")
+                raise ValueError("کد کارت‌هدیه را وارد کنید.")
             redeem_gift_card(reference_no, amount)
         elif method_code == "WALLET":
             redeem_wallet(customer_id, amount, document_id=doc.document_id)
@@ -418,12 +418,12 @@ def record_payment_and_settle_batch(
             None,
         )
         if mapping_account_id is None:
-            raise ValueError("نگاشتِ حسابِ دریافت برایِ گروهِ «مشتری» در تنظیماتِ خزانه‌داری مشخص نشده است.")
+            raise ValueError("نگاشت حساب دریافت برای گروه «مشتری» در تنظیمات خزانه‌داری مشخص نشده است.")
         treasury_method = "CASH" if method_code == "CASH" else "BANK"
         total_amount = sum(amounts[d.document_id] for d in docs)
         description = (
-            f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_numbers[0]}" if len(docs) == 1
-            else f"دریافتِ صندوق (POS) -- بابتِ {numerals.to_persian_digits(str(len(docs)))} فاکتورِ فروش"
+            f"دریافت صندوق (POS) — بابت فاکتور فروش #{document_numbers[0]}" if len(docs) == 1
+            else f"دریافت صندوق (POS) — بابت {numerals.to_persian_digits(str(len(docs)))} فاکتور فروش"
         )
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («بعد از تاییدِ سرپرست می‌گوید
         # حساب مرکزِ هزینه و پروژه ندارد»): برخلافِ record_mixed_payment_
@@ -462,7 +462,7 @@ def record_payment_and_settle_batch(
         )
         journal_entry_id = voucher_result.journal_entry_id
 
-    description = "تسویه‌یِ خودکارِ فروشِ حضوری (POS)" if len(docs) == 1 else "تسویه‌یِ ادغام‌شده‌یِ فروشِ حضوری (POS)"
+    description = "تسویهٔ خودکار فروش حضوری (POS)" if len(docs) == 1 else "تسویهٔ ادغام‌شدهٔ فروش حضوری (POS)"
     for doc in docs:
         settlements_service.allocate_settlement(
             company_id, doc.document_id, journal_entry_id, datetime.date.today(), amounts[doc.document_id], user_id,
@@ -484,16 +484,16 @@ def record_combined_settlement(
     company_id: int, user_id: int, document_plans: list[tuple[int, list[tuple]]],
     reference_no: str | None = None,
 ) -> int | None:
-    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («وقتی ادغامِ سند تیک می‌خورد همه‌یِ
-    اسناد باز هم جدا ثبت می‌شود»): تعمیمِ record_mixed_payment_and_settle
-    به چند سند -- برایِ همه‌یِ سندهایِ ورودی (چه پلنِ تسویهٔ واقعیِ خودشان
-    را داشته باشند، چه فقط یک ردیفِ ساده باشد) یک سندِ حسابداریِ
-    خزانه‌داریِ واحد ساخته می‌شود؛ هرکدام فقط یک ردیفِ تسویه به همان یک
-    سندِ حسابداری می‌گیرد (ریزِ هر فاکتور از طریقِ فیلترِ journal_entry_id
-    هنوز قابلِ‌مشاهده است). همه‌یِ اسناد باید یک طرفِ‌حساب داشته باشند.
+    """طبق رفع باگ واقعی گزارش‌شده («وقتی ادغام سند تیک می‌خورد همهٔ
+    اسناد باز هم جدا ثبت می‌شود»): تعمیم record_mixed_payment_and_settle
+    به چند سند — برای همهٔ سندهای ورودی (چه پلن تسویهٔ واقعی خودشان
+    را داشته باشند، چه فقط یک ردیف ساده باشد) یک سند حسابداری
+    خزانه‌داری واحد ساخته می‌شود؛ هرکدام فقط یک ردیف تسویه به همان یک
+    سند حسابداری می‌گیرد (ریز هر فاکتور از طریق فیلتر journal_entry_id
+    هنوز قابل‌مشاهده است). همهٔ اسناد باید یک طرف‌حساب داشته باشند.
 
     document_plans: [(document_id, method_lines), ...] -- method_lines
-    دقیقاً هم‌فرمتِ record_mixed_payment_and_settle: هر ردیف ۲ تا ۴ عضو
+    دقیقاً هم‌قالب record_mixed_payment_and_settle: هر ردیف ۲ تا ۴ عضو
     دارد: (method_code, amount[, note[, detail_account_id]])."""
     if not document_plans:
         return None
@@ -505,7 +505,7 @@ def record_combined_settlement(
                 raise ValueError("سند نامعتبر است.")
             docs[document_id] = doc
         if len({d.counterparty_detail_account_id for d in docs.values()}) > 1:
-            raise ValueError("ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب مجاز است.")
+            raise ValueError("ادغام سند حسابداری فقط برای فاکتورهای یک طرف‌حساب مجاز است.")
         first_doc = next(iter(docs.values()))
         customer_id = first_doc.counterparty_detail_account_id
         document_date = first_doc.document_date
@@ -524,7 +524,7 @@ def record_combined_settlement(
         None,
     )
     if mapping_account_id is None:
-        raise ValueError("نگاشتِ حسابِ دریافت برایِ گروهِ «مشتری» در تنظیماتِ خزانه‌داری مشخص نشده است.")
+        raise ValueError("نگاشت حساب دریافت برای گروه «مشتری» در تنظیمات خزانه‌داری مشخص نشده است.")
 
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(
         company_id, dimensions_service.COST_CENTER_CODE
@@ -566,8 +566,8 @@ def record_combined_settlement(
 
     total_amount = sum(document_totals.values(), decimal.Decimal("0"))
     description = (
-        f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_numbers[0]}" if len(document_numbers) == 1
-        else f"دریافتِ صندوق (POS) -- بابتِ {numerals.to_persian_digits(str(len(document_numbers)))} فاکتورِ فروش"
+        f"دریافت صندوق (POS) — بابت فاکتور فروش #{document_numbers[0]}" if len(document_numbers) == 1
+        else f"دریافت صندوق (POS) — بابت {numerals.to_persian_digits(str(len(document_numbers)))} فاکتور فروش"
     )
     counterparty_details = _resolve_receivable_counterparty_details(
         company_id, person_dimension_type_id, customer_id, cost_center_type_id, project_type_id,
@@ -578,8 +578,8 @@ def record_combined_settlement(
         voucher_lines,
     )
     settle_description = (
-        "تسویه‌یِ خودکارِ فروشِ حضوری (POS)" if len(document_totals) == 1
-        else "تسویه‌یِ ادغام‌شده‌یِ فروشِ حضوری (POS)"
+        "تسویهٔ خودکار فروش حضوری (POS)" if len(document_totals) == 1
+        else "تسویهٔ ادغام‌شدهٔ فروش حضوری (POS)"
     )
     for document_id, amount in document_totals.items():
         settlements_service.allocate_settlement(
@@ -593,21 +593,21 @@ def record_mixed_payment_and_settle(
     company_id: int, user_id: int, document_id: int,
     method_lines: list[tuple], reference_no: str | None = None,
 ) -> int | None:
-    """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
-    روش‌ها را نمی‌تونه ثبت کنه»): نسخهٔ چندروشیِ record_payment_and_settle
-    -- برایِ فروشی که صندوق‌دار از دیالوگِ «نحوهٔ تسویه» (کدهایِ روشِ
+    """طبق درخواست صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایر
+    روش‌ها را نمی‌تونه ثبت کنه»): نسخهٔ چندروشی record_payment_and_settle
+    -- برای فروشی که صندوق‌دار از دیالوگ «نحوهٔ تسویه» (کدهای روش
     هم‌الگو با treasury.METHOD_CODES: CASH/BANK/DISCOUNT/GOODS_COUPON/
-    VOUCHER، نه واژگانِ CARD/WALLET/GIFT_CARDِ منویِ تکی‌روشِ سرپرست)
-    استفاده کرده. برخلافِ نسخهٔ تک‌روشی، همه‌یِ ردیف‌ها در یک سندِ
-    حسابداریِ واحد (create_treasury_voucher با چند MethodLine) ثبت
-    می‌شوند -- دقیقاً هم‌الگو با فرمِ فاکتورِ عمومی.
+    VOUCHER، نه واژگان CARD/WALLET/GIFT_CARD منوی تکی‌روش سرپرست)
+    استفاده کرده. برخلاف نسخهٔ تک‌روشی، همهٔ ردیف‌ها در یک سند
+    حسابداری واحد (create_treasury_voucher با چند MethodLine) ثبت
+    می‌شوند — دقیقاً هم‌الگو با فرم فاکتور عمومی.
 
-    هر ردیفِ method_lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code,
-    amount[, note[, detail_account_id]]) -- طبقِ درخواستِ صریح (تفصیلیِ
-    انتخاب‌شده/پیش‌فرضِ همان روش هم به سندِ حسابداری منتقل شود). پیاده‌سازیِ
-    واقعی در record_combined_settlement است -- این فقط پوششِ تک‌سندیِ
-    همان تابع است (تا امکانِ ادغامِ چندسندی هم -- بدونِ تکرارِ کد --
-    برایِ فرمِ تاییدِ سرپرست فراهم شود)."""
+    هر ردیف method_lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code,
+    amount[, note[, detail_account_id]]) — طبق درخواست صریح (تفصیلی
+    انتخاب‌شده/پیش‌فرض همان روش هم به سند حسابداری منتقل شود). پیاده‌سازی
+    واقعی در record_combined_settlement است — این فقط پوشش تک‌سندی
+    همان تابع است (تا امکان ادغام چندسندی هم — بدون تکرار کد --
+    برای فرم تایید سرپرست فراهم شود)."""
     if not method_lines:
         return None
     return record_combined_settlement(company_id, user_id, [(document_id, method_lines)], reference_no)
@@ -641,7 +641,7 @@ def redeem_wallet(customer_detail_account_id: int, amount: decimal.Decimal, docu
     with new_session() as session:
         account_row = session.get(LoyaltyAccount, account.loyalty_account_id)
         if account_row.wallet_balance < amount:
-            raise ValueError("موجودیِ کیف‌پول کافی نیست.")
+            raise ValueError("موجودی کیف‌پول کافی نیست.")
         account_row.wallet_balance -= amount
         session.add(
             LoyaltyTransaction(
@@ -681,15 +681,15 @@ def redeem_gift_card(code: str, amount: decimal.Decimal) -> None:
     with new_session() as session:
         card = session.scalar(select(GiftCard).where(GiftCard.code == code))
         if card is None:
-            raise ValueError("کارتِ‌هدیه نامعتبر است.")
+            raise ValueError("کارت‌هدیه نامعتبر است.")
         if card.status_code != "ACTIVE":
-            raise ValueError("این کارتِ‌هدیه فعال نیست.")
+            raise ValueError("این کارت‌هدیه فعال نیست.")
         if card.expires_at is not None and card.expires_at < datetime.datetime.now(datetime.timezone.utc):
             card.status_code = "EXPIRED"
             session.commit()
-            raise ValueError("کارتِ‌هدیه منقضی شده است.")
+            raise ValueError("کارت‌هدیه منقضی شده است.")
         if card.current_balance < amount:
-            raise ValueError("موجودیِ کارتِ‌هدیه کافی نیست.")
+            raise ValueError("موجودی کارت‌هدیه کافی نیست.")
         card.current_balance -= amount
         if card.current_balance == 0:
             card.status_code = "REDEEMED"
@@ -766,8 +766,8 @@ def set_pos_settings(
 def set_weight_barcode_settings(
     company_id: int, enabled: bool, prefix: str, item_code_digits: int, weight_digits: int, weight_decimals: int,
 ) -> None:
-    """طبقِ درخواستِ صریح («ترازوی آفلاین با بارکدِ وزنی -- تنظیماتِ
-    تعدادِ ارقامِ هر بخش توسطِ کاربر»): جدا از set_pos_settings، هم‌الگو
+    """طبق درخواست صریح («ترازوی آفلاین با بارکد وزنی — تنظیمات
+    تعداد ارقام هر بخش توسط کاربر»): جدا از set_pos_settings، هم‌الگو
     با set_pos_receivable_dimension_defaults."""
     with new_session() as session:
         row = session.get(PosSettings, company_id)
@@ -791,10 +791,10 @@ def set_weight_barcode_settings(
 def set_scale_connection_settings(
     company_id: int, online_enabled: bool, connection_type: str, address: str | None, batch_barcode_prefix: str,
 ) -> None:
-    """طبقِ توافقِ صریح («فعلاً فقط چارچوبِ اولیه/تنظیماتی برایِ ترازویِ
-    آنلاین»): این تابع فقط تنظیمات را ذخیره می‌کند -- خودِ ارتباطِ
+    """طبق توافق صریح («فعلاً فقط چارچوب اولیه/تنظیماتی برای ترازوی
+    آنلاین»): این تابع فقط تنظیمات را ذخیره می‌کند — خود ارتباط
     واقعی با دستگاه (سریال/TCP) هنوز پیاده‌سازی نشده (نگاه کن:
-    pos_scale.py -- ScaleNotConfiguredError)."""
+    pos_scale.py — ScaleNotConfiguredError)."""
     with new_session() as session:
         row = session.get(PosSettings, company_id)
         if row is None:
@@ -815,9 +815,9 @@ def set_scale_connection_settings(
 def set_pos_receivable_dimension_defaults(
     company_id: int, cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
 ) -> None:
-    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
-    حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد»): جدا از set_pos_settings
-    (که فیلدهایِ عمومیِ بیشتری دارد) -- فقط همین دو فیلد را به‌روز
+    """طبق رفع باگ واقعی گزارش‌شده («در فرم تایید سرپرست، برای
+    حساب مشتری مرکز هزینه/پروژه می‌خواهد»): جدا از set_pos_settings
+    (که فیلدهای عمومی بیشتری دارد) — فقط همین دو فیلد را به‌روز
     می‌کند، هم‌الگو با set_quick_button_layout."""
     with new_session() as session:
         row = session.get(PosSettings, company_id)
@@ -854,7 +854,7 @@ def list_menu_groups(company_id: int, active_only: bool = False) -> list[PosMenu
 def create_menu_group(company_id: int, name: str, display_order: int = 0) -> int:
     name = name.strip()
     if not name:
-        raise ValueError("نامِ گروه را وارد کنید.")
+        raise ValueError("نام گروه را وارد کنید.")
     with new_session() as session:
         row = PosMenuGroup(company_id=company_id, name=name, display_order=display_order)
         session.add(row)
@@ -868,7 +868,7 @@ def update_menu_group(
 ) -> None:
     name = name.strip()
     if not name:
-        raise ValueError("نامِ گروه را وارد کنید.")
+        raise ValueError("نام گروه را وارد کنید.")
     with new_session() as session:
         row = session.get(PosMenuGroup, group_id)
         if row is None or row.company_id != company_id:
@@ -881,11 +881,11 @@ def update_menu_group(
 
 
 def resolve_target_printers_for_document(company_id: int, document_id: int) -> list[str]:
-    """طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
-    مختلف»): فهرستِ نام‌هایِ متمایزِ پرینترهایی که اقلامِ این فاکتور
-    (بر اساسِ pos_menu_group_id) به آن‌ها تخصیص یافته‌اند -- خالی یعنی
-    هیچ‌کدام از گروه‌هایِ اقلامِ این فاکتور پرینترِ اختصاصی ندارند (پس
-    از همان جریانِ چاپِ معمولی/پیش‌فرض استفاده شود)."""
+    """طبق درخواست صریح («ارسال هم‌زمان چند فاکتور به چند چاپگر
+    مختلف»): فهرست نام‌های متمایز چاپگرهایی که اقلام این فاکتور
+    (بر اساس pos_menu_group_id) به آن‌ها تخصیص یافته‌اند — خالی یعنی
+    هیچ‌کدام از گروه‌های اقلام این فاکتور چاپگر اختصاصی ندارند (پس
+    از همان جریان چاپ معمولی/پیش‌فرض استفاده شود)."""
     with new_session() as session:
         line_item_ids = list(
             session.scalars(
@@ -917,7 +917,7 @@ def delete_menu_group(group_id: int, company_id: int) -> None:
             raise ValueError("گروه نامعتبر است.")
         in_use = session.scalar(select(func.count()).select_from(Item).where(Item.pos_menu_group_id == group_id))
         if in_use:
-            raise ValueError("این گروه به کالایی نسبت داده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این گروه به کالایی نسبت داده شده و قابل‌حذف نیست.")
         session.delete(row)
         session.commit()
 
@@ -958,11 +958,11 @@ def set_cashier_settings(
 def set_quick_button_layout(
     user_id: int, company_id: int, order: str | None, width_override: int | None, height_override: int | None,
 ) -> None:
-    """طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس + عرضِ
-    قابلِ‌تنظیم، به‌ازایِ هر کاربر»): برخلافِ set_cashier_settings (که
-    ترمینال/فهرستِ‌قیمت/مشتری را یک‌جا جایگزین می‌کند)، این تابع فقط
-    همین سه فیلدِ چیدمان را به‌روز می‌کند -- بدونِ نیاز به دانستنِ سایرِ
-    مقادیرِ تنظیماتِ صندوق‌دار در هر بار."""
+    """طبق درخواست صریح («جابه‌جایی دستی کلیدهای فوری با ماوس + عرض
+    قابل‌تنظیم، به‌ازای هر کاربر»): برخلاف set_cashier_settings (که
+    ترمینال/فهرست‌قیمت/مشتری را یک‌جا جایگزین می‌کند)، این تابع فقط
+    همین سه فیلد چیدمان را به‌روز می‌کند — بدون نیاز به دانستن سایر
+    مقادیر تنظیمات صندوق‌دار در هر بار."""
     with new_session() as session:
         row = session.get(PosCashierSettings, {"user_id": user_id, "company_id": company_id})
         if row is None:
@@ -980,10 +980,10 @@ def set_quick_button_layout(
 
 
 def list_recent_pos_invoices(company_id: int, limit: int = 10) -> list[CommercialDocument]:
-    """طبقِ درخواستِ صریح («۱۰ فاکتور یا تعدادِ دلخواهِ تک‌فروشی را نمایش
-    و از همان‌جا هم بتوان اصلاح کرد»): برخلافِ list_pending_pos_documents
-    (که فقط رزروها/تاییدشده‌هایِ همین شیفتِ باز را می‌خواند)، این‌جا
-    آخرین فاکتورهایِ تک‌فروشیِ همین شرکت -- در هر وضعیت و هر شیفتی --
+    """طبق درخواست صریح («۱۰ فاکتور یا تعداد دلخواه تک‌فروشی را نمایش
+    و از همان‌جا هم بتوان اصلاح کرد»): برخلاف list_pending_pos_documents
+    (که فقط رزروها/تاییدشده‌های همین شیفت باز را می‌خواند)، این‌جا
+    آخرین فاکتورهای تک‌فروشی همین شرکت — در هر وضعیت و هر شیفتی --
     برمی‌گردد."""
     with new_session() as session:
         stmt = (
@@ -1003,13 +1003,13 @@ _CHECK_METHOD_CODES = ("CHECK", "CHECK_DISBURSEMENT")
 
 
 def post_invoice_settlement_plan(company_id: int, user_id: int, document_id: int) -> tuple[int | None, decimal.Decimal]:
-    """R230: پس از ثبتِ نهاییِ فاکتورِ خرید/فروش، «نحوهٔ تسویه»ٔ تاییدشده خودکار
-    سندِ دریافت/پرداختِ خزانه‌داری (و سندِ حسابداری) می‌سازد و به همان فاکتور
-    تخصیص می‌یابد -- قبلاً فقط فرمِ دریافت/پرداخت پیش‌پر می‌شد و اگر کاربر آن را
-    ذخیره نمی‌کرد هیچ سندی در دفترِ روزنامه ثبت نمی‌شد.
-    ردیف‌هایِ چک (نیازمندِ شماره/سررسید) خودکار ثبت نمی‌شوند؛ مبلغِ آن‌ها
-    برگردانده می‌شود تا فرمِ دریافت/پرداخت فقط برایِ همان بخش باز شود.
-    خروجی: (شناسهٔ سندِ حسابداری یا None، مبلغِ باقی‌ماندهٔ چکی)."""
+    """R230: پس از ثبت نهایی فاکتور خرید/فروش، «نحوهٔ تسویه»ٔ تاییدشده خودکار
+    سند دریافت/پرداخت خزانه‌داری (و سند حسابداری) می‌سازد و به همان فاکتور
+    تخصیص می‌یابد — قبلاً فقط فرم دریافت/پرداخت پیش‌پر می‌شد و اگر کاربر آن را
+    ذخیره نمی‌کرد هیچ سندی در دفتر روزنامه ثبت نمی‌شد.
+    ردیف‌های چک (نیازمند شماره/سررسید) خودکار ثبت نمی‌شوند؛ مبلغ آن‌ها
+    برگردانده می‌شود تا فرم دریافت/پرداخت فقط برای همان بخش باز شود.
+    خروجی: (شناسهٔ سند حسابداری یا None، مبلغ باقی‌ماندهٔ چکی)."""
     plan = settlements_service.get_settlement_plan(document_id, company_id)
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
@@ -1035,8 +1035,8 @@ def post_invoice_settlement_plan(company_id: int, user_id: int, document_id: int
     )
     if mapping_account_id is None:
         raise ValueError(
-            f"نگاشتِ حسابِ {'دریافت' if is_sales else 'پرداخت'} برایِ گروهِ «{'مشتری' if is_sales else 'تامین‌کننده'}» "
-            "در تنظیماتِ خزانه‌داری مشخص نشده است."
+            f"نگاشت حساب {'دریافت' if is_sales else 'پرداخت'} برای گروه «{'مشتری' if is_sales else 'تامین‌کننده'}» "
+            "در تنظیمات خزانه‌داری مشخص نشده است."
         )
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
     project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
@@ -1060,13 +1060,13 @@ def post_invoice_settlement_plan(company_id: int, user_id: int, document_id: int
     counterparty_details = _resolve_receivable_counterparty_details(
         company_id, person_dimension_type_id, counterparty_id, cost_center_type_id, project_type_id,
     )
-    title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+    title = "فاکتور فروش" if is_sales else "فاکتور خرید"
     result = treasury_service.create_treasury_voucher(
         company_id, user_id, direction, mapping_account_id, counterparty_details, document_date,
-        f"{'دریافت' if is_sales else 'پرداخت'} بابتِ {title} #{document_no}", voucher_lines,
+        f"{'دریافت' if is_sales else 'پرداخت'} بابت {title} #{document_no}", voucher_lines,
     )
     settlements_service.allocate_settlement(
         company_id, document_id, result.journal_entry_id, datetime.date.today(), total, user_id,
-        description=f"تسویهٔ خودکار طبقِ نحوهٔ تسویهٔ {title}",
+        description=f"تسویهٔ خودکار طبق نحوهٔ تسویهٔ {title}",
     )
     return result.journal_entry_id, check_total

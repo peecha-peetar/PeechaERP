@@ -1,12 +1,12 @@
-"""دیالوگِ ورود/انتخابِ بچ/سریال/تاریخِ انقضا برایِ یک ردیفِ سند -- R227/R228.
+"""دیالوگ ورود/انتخاب بچ/سریال/تاریخ انقضا برای یک ردیف سند — R227/R228.
 
 سه حالت:
-- IN  (رسید، تاییدِ رسیدِ سفارشِ خرید، فاکتورِ خرید، امانیِ ورودی): ورودِ بچ/انقضا/سریال.
-- OUT (فروش، حواله، برگشت به تامین‌کننده، انتقال): جدولِ «موجودیِ قابلِ‌انتخاب» در
-  انبارِ سند -- هر بچ/سریال با انقضا، تامین‌کننده و امانی/خریداری‌شده -- تا کاربر
-  دقیقاً همان منبع را انتخاب کند (حتی کالایِ امانیِ یک تامین‌کنندهٔ خاص بدونِ بچ/سریال).
-- COUNT (انبارگردانی): موجودیِ دفتریِ هر بچ/سریال پیش‌پر می‌شود و کاربر شمارشِ واقعی را وارد می‌کند.
-مقادیر به واحدِ پایهٔ کالا هستند.
+- IN  (رسید، تایید رسید سفارش خرید، فاکتور خرید، امانی ورودی): ورود بچ/انقضا/سریال.
+- OUT (فروش، حواله، برگشت به تامین‌کننده، انتقال): جدول «موجودی قابل‌انتخاب» در
+  انبار سند — هر بچ/سریال با انقضا، تامین‌کننده و امانی/خریداری‌شده — تا کاربر
+  دقیقاً همان منبع را انتخاب کند (حتی کالای امانی یک تامین‌کنندهٔ خاص بدون بچ/سریال).
+- COUNT (انبارگردانی): موجودی دفتری هر بچ/سریال پیش‌پر می‌شود و کاربر شمارش واقعی را وارد می‌کند.
+مقادیر به واحد پایهٔ کالا هستند.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from peecha import numerals
 from peecha.services import lot_tracking
 from peecha.ui.widgets import JalaliDateEdit
 
-_COLUMNS = ["شمارهٔ بچ", "تاریخِ تولید", "تاریخِ انقضا", "سریال", "منبع", "مقدار (واحدِ پایه)"]
-_AVAILABLE_COLUMNS = ["بچ", "تاریخِ انقضا", "سریال", "تامین‌کننده", "نوع", "موجودی"]
+_COLUMNS = ["شمارهٔ بچ", "تاریخ تولید", "تاریخ انقضا", "سریال", "منبع", "مقدار (واحد پایه)"]
+_AVAILABLE_COLUMNS = ["بچ", "تاریخ انقضا", "سریال", "تامین‌کننده", "نوع", "موجودی"]
 
 
 def _style_table(table: QTableWidget, row_height: int) -> None:
@@ -59,8 +59,8 @@ class LotTrackingDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle({
-            "OUT": "انتخابِ بچ / سریال / منبعِ کالا", "COUNT": "انبارگردانی به تفکیکِ بچ / سریال",
-        }.get(direction, "ردیابی: بچ / سریال / تاریخِ انقضا"))
+            "OUT": "انتخاب بچ / سریال / منبع کالا", "COUNT": "انبارگردانی به تفکیک بچ / سریال",
+        }.get(direction, "ردیابی: بچ / سریال / تاریخ انقضا"))
         self.setMinimumWidth(960)
         self.resize(1040, 720 if direction in ("OUT", "COUNT") else 620)
         self._company_id = company_id
@@ -76,22 +76,22 @@ class LotTrackingDialog(QDialog):
         self._available: list[lot_tracking.LotBalanceRow] = []
 
         layout = QVBoxLayout(self)
-        need = [k for k, on in (("بچ", self.track_batch), ("تاریخِ انقضا", self.track_expiry), ("سریال", self.track_serial)) if on]
+        need = [k for k, on in (("بچ", self.track_batch), ("تاریخ انقضا", self.track_expiry), ("سریال", self.track_serial)) if on]
         qty_text = (
-            f" -- مقدارِ ردیف: {numerals.to_persian_digits(str(self._quantity_base.normalize()))} {base_uom_label}"
+            f" -- مقدار ردیف: {numerals.to_persian_digits(str(self._quantity_base.normalize()))} {base_uom_label}"
             if self._quantity_base is not None else ""
         )
         header = QLabel(
             f"«{item_label}»{qty_text}"
-            + (f" -- {'الزامی' if direction == 'IN' else 'ردیابی'}: {'، '.join(need)}" if need else " -- بدونِ بچ/سریال (ردیابی بر اساسِ تامین‌کننده/امانی).")
+            + (f" -- {'الزامی' if direction == 'IN' else 'ردیابی'}: {'، '.join(need)}" if need else " -- بدون بچ/سریال (ردیابی بر اساس تامین‌کننده/امانی).")
         )
         header.setWordWrap(True)
         layout.addWidget(header)
 
         if direction in ("OUT", "COUNT") and warehouse_id is not None:
             hint = QLabel(
-                "موجودیِ قابلِ‌انتخاب در همین انبار -- ردیف(ها) را انتخاب و «افزودنِ انتخاب‌شده‌ها» را بزنید:"
-                if direction == "OUT" else "موجودیِ دفتریِ هر بچ/سریال در این انبار:"
+                "موجودی قابل‌انتخاب در همین انبار — ردیف(ها) را انتخاب و «افزودن انتخاب‌شده‌ها» را بزنید:"
+                if direction == "OUT" else "موجودی دفتری هر بچ/سریال در این انبار:"
             )
             layout.addWidget(hint)
             self.available_table = QTableWidget(0, len(_AVAILABLE_COLUMNS))
@@ -103,7 +103,7 @@ class LotTrackingDialog(QDialog):
             self.available_table.cellDoubleClicked.connect(lambda *_: self._add_selected_available())
             layout.addWidget(self.available_table, stretch=1)
             if direction == "OUT":
-                pick_button = QPushButton("⬇ افزودنِ انتخاب‌شده‌ها")
+                pick_button = QPushButton("⬇ افزودن انتخاب‌شده‌ها")
                 pick_button.setObjectName("primaryButton")
                 pick_button.setEnabled(not read_only)
                 pick_button.clicked.connect(self._add_selected_available)
@@ -125,25 +125,25 @@ class LotTrackingDialog(QDialog):
         self.add_button = QPushButton("➕ ردیف")
         self.add_button.clicked.connect(lambda: self._add_row())
         buttons_row.addWidget(self.add_button)
-        self.remove_button = QPushButton("✕ حذفِ ردیف")
+        self.remove_button = QPushButton("✕ حذف ردیف")
         self.remove_button.clicked.connect(self._remove_row)
         buttons_row.addWidget(self.remove_button)
         buttons_row.addStretch(1)
         layout.addLayout(buttons_row)
 
         if self.track_serial and direction in ("IN", "COUNT"):
-            layout.addWidget(QLabel("ورودِ گروهیِ سریال‌ها (هر سطر یک سریال؛ اسکنِ پشتِ‌سرِهم با بارکدخوان):"))
+            layout.addWidget(QLabel("ورود گروهی سریال‌ها (هر سطر یک سریال؛ اسکن پشت‌سرهم با بارکدخوان):"))
             self.bulk_serials = QPlainTextEdit()
             self.bulk_serials.setFixedHeight(80)
             layout.addWidget(self.bulk_serials)
             bulk_row = QHBoxLayout()
-            bulk_row.addWidget(QLabel("بچِ مشترک (اختیاری):"))
+            bulk_row.addWidget(QLabel("بچ مشترک (اختیاری):"))
             self.bulk_batch = QLineEdit()
             bulk_row.addWidget(self.bulk_batch)
             bulk_row.addWidget(QLabel("انقضا:"))
             self.bulk_expiry = JalaliDateEdit(allow_empty=True)
             bulk_row.addWidget(self.bulk_expiry)
-            bulk_button = QPushButton("افزودنِ سریال‌ها")
+            bulk_button = QPushButton("افزودن سریال‌ها")
             bulk_button.clicked.connect(self._add_bulk_serials)
             bulk_row.addWidget(bulk_button)
             layout.addLayout(bulk_row)

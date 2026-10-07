@@ -1,7 +1,7 @@
-"""دستیارِ فروشگاهِ اینترنتی (Peecha Advisor) -- طبقِ بازخوردِ صریحِ کاربر
-(«امکاناتِ حیاتیِ PeechaSync -- دستیارِ فروشگاهِ اینترنتی»): برخلافِ
-نگهبانِ اتصال/فیلدهایِ سئو/مرکزِ رسانه که هرکدام جداگانه‌اند، این سرویس
-سلامتِ اتصال + کاملیِ سئو + آمادگیِ عکسِ کالاهایِ منتشرشده در فروشگاه را
+"""دستیار فروشگاه اینترنتی (Peecha Advisor) — طبق بازخورد صریح کاربر
+(«امکانات حیاتی PeechaSync — دستیار فروشگاه اینترنتی»): برخلاف
+نگهبان اتصال/فیلدهای سئو/مرکز رسانه که هرکدام جداگانه‌اند، این سرویس
+سلامت اتصال + کاملی سئو + آمادگی عکس کالاهای منتشرشده در فروشگاه را
 یک‌جا جمع‌بندی و اولویت‌بندی می‌کند."""
 
 from __future__ import annotations
@@ -64,8 +64,8 @@ def compute_advisor_summary(company_id: int) -> AdvisorSummary:
     for connection in unhealthy_connections:
         issues.append(AdvisorIssue(
             severity="DANGER",
-            message=f"اتصالِ «{connection.display_name}» ({connection.platform_label}) ناسالم است -- {connection.consecutive_failure_count} شکستِ پیاپی",
-            fix_hint="تبِ «نگهبانِ اتصال» در همینِ هاب",
+            message=f"اتصال «{connection.display_name}» ({connection.platform_label}) ناسالم است -- {connection.consecutive_failure_count} شکست پیاپی",
+            fix_hint="تب «نگهبان اتصال» در همین هاب",
         ))
 
     if not online_items:
@@ -79,8 +79,8 @@ def compute_advisor_summary(company_id: int) -> AdvisorSummary:
     if seo_incomplete:
         issues.append(AdvisorIssue(
             severity="WARNING",
-            message=f"{len(seo_incomplete)} کالایِ منتشرشده در فروشگاه، اطلاعاتِ سئویِ ناقص دارند (عنوان/اسلاگ/توضیح/کلیدواژه)",
-            fix_hint="تبِ «فروشگاهیِ اینترنتی» در فرمِ تعریفِ همان کالا",
+            message=f"{len(seo_incomplete)} کالای منتشرشده در فروشگاه، اطلاعات سئوی ناقص دارند (عنوان/نامک/توضیح/کلیدواژه)",
+            fix_hint="تب «فروشگاهی اینترنتی» در فرم تعریف همان کالا",
         ))
 
     items_without_image = [
@@ -91,8 +91,8 @@ def compute_advisor_summary(company_id: int) -> AdvisorSummary:
     if items_without_image:
         issues.append(AdvisorIssue(
             severity="DANGER" if len(items_without_image) > len(online_items) / 2 else "WARNING",
-            message=f"{len(items_without_image)} کالایِ منتشرشده در فروشگاه، هیچ عکسی ندارند",
-            fix_hint="تبِ «فایل‌ها/عکس‌ها» در فرمِ تعریفِ همان کالا",
+            message=f"{len(items_without_image)} کالای منتشرشده در فروشگاه، هیچ عکسی ندارند",
+            fix_hint="تب «فایل‌ها/عکس‌ها» در فرم تعریف همان کالا",
         ))
 
     issues.sort(key=lambda i: 0 if i.severity == "DANGER" else 1)

@@ -57,16 +57,16 @@ from peecha.services import commercial_credit as credit_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k1 = coa_service.create_account(company_id, "11", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "101", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k1 = coa_service.create_account(company_id, "11", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "101", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -82,27 +82,27 @@ def _release_holds(order_id):
 
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9001", "کالایِ عادی",
+    company_id, "9001", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
+    company_id, "WH-1", "انبار آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
 )
-channel_code = pricing_service.create_channel(company_id, "COLD-1", "پخشِ سردِ منطقه‌یِ ۱", "PRE_SALES")
+channel_code = pricing_service.create_channel(company_id, "COLD-1", "پخش سرد منطقهٔ ۱", "PRE_SALES")
 
 # --- گروهِ مشتریان و مسیرِ توزیع (منطقه > مسیر) ---
-group_a = partners_service.create_customer_group(company_id, "VIP", "مشتریانِ ویژه")
-group_b = partners_service.create_customer_group(company_id, "REG", "مشتریانِ عادی")
+group_a = partners_service.create_customer_group(company_id, "VIP", "مشتریان ویژه")
+group_b = partners_service.create_customer_group(company_id, "REG", "مشتریان عادی")
 route_dim_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE)
 region_north = dimensions_service.create_detail_account(company_id, route_dim_id, "N", "شمال").detail_account_id
-route_north_1 = dimensions_service.create_detail_account(company_id, route_dim_id, "N1", "مسیرِ شمالِ ۱", parent_detail_account_id=region_north).detail_account_id
+route_north_1 = dimensions_service.create_detail_account(company_id, route_dim_id, "N1", "مسیر شمال ۱", parent_detail_account_id=region_north).detail_account_id
 region_south = dimensions_service.create_detail_account(company_id, route_dim_id, "S", "جنوب").detail_account_id
 
 customer_vip_north = partners_service.create_customer_detail_account(
-    company_id, "C-VIP-N", "مشتریِ ویژه شمالی", customer_group_id=group_a, distribution_route_detail_account_id=route_north_1,
+    company_id, "C-VIP-N", "مشتری ویژه شمالی", customer_group_id=group_a, distribution_route_detail_account_id=route_north_1,
 )
 customer_reg_south = partners_service.create_customer_detail_account(
-    company_id, "C-REG-S", "مشتریِ عادیِ جنوبی", customer_group_id=group_b, distribution_route_detail_account_id=region_south,
+    company_id, "C-REG-S", "مشتری عادی جنوبی", customer_group_id=group_b, distribution_route_detail_account_id=region_south,
 )
 
 
@@ -133,39 +133,39 @@ order_reg, invoice_reg = _make_invoice(customer_reg_south, "CHECK")
 
 # ۱: نوعِ تسویه از سفارش به فاکتور منتقل شده باشد.
 doc, _ = documents_service.get_document(invoice_vip, company_id)
-check(doc.settlement_type_code == "CASH", f"نوعِ تسویه از سفارش به فاکتورِ VIP منتقل شد (got {doc.settlement_type_code})")
+check(doc.settlement_type_code == "CASH", f"نوع تسویه از سفارش به فاکتور VIP منتقل شد (got {doc.settlement_type_code})")
 doc, _ = documents_service.get_document(invoice_reg, company_id)
-check(doc.settlement_type_code == "CHECK", f"نوعِ تسویه از سفارش به فاکتورِ REG منتقل شد (got {doc.settlement_type_code})")
+check(doc.settlement_type_code == "CHECK", f"نوع تسویه از سفارش به فاکتور REG منتقل شد (got {doc.settlement_type_code})")
 
 # ۲: فیلترِ گروهِ مشتریان.
 eligible_vip_group = distribution_service.list_eligible_invoices(company_id, customer_group_id=group_a)
 check(
     invoice_vip in [e.document_id for e in eligible_vip_group] and invoice_reg not in [e.document_id for e in eligible_vip_group],
-    "فیلترِ گروهِ مشتریان فقط فاکتورِ همان گروه را برمی‌گرداند",
+    "فیلتر گروه مشتریان فقط فاکتور همان گروه را برمی‌گرداند",
 )
 
 # ۳: فیلترِ مسیر/منطقه -- انتخابِ سطحِ منطقه باید زیرمسیرهایش را هم بگیرد.
 eligible_region_north = distribution_service.list_eligible_invoices(company_id, route_detail_account_id=region_north)
 check(
     invoice_vip in [e.document_id for e in eligible_region_north] and invoice_reg not in [e.document_id for e in eligible_region_north],
-    "فیلترِ سطحِ «منطقه» زیرمسیرهایش را هم شامل می‌شود",
+    "فیلتر سطح «منطقه» زیرمسیرهایش را هم شامل می‌شود",
 )
 eligible_region_south = distribution_service.list_eligible_invoices(company_id, route_detail_account_id=region_south)
 check(
     invoice_reg in [e.document_id for e in eligible_region_south] and invoice_vip not in [e.document_id for e in eligible_region_south],
-    "فیلترِ منطقهٔ جنوب فقط فاکتورِ همان منطقه را برمی‌گرداند",
+    "فیلتر منطقهٔ جنوب فقط فاکتور همان منطقه را برمی‌گرداند",
 )
 
 # ۴: بدونِ فیلتر، هر دو فاکتور دیده می‌شوند.
 eligible_all = distribution_service.list_eligible_invoices(company_id)
 check(
     invoice_vip in [e.document_id for e in eligible_all] and invoice_reg in [e.document_id for e in eligible_all],
-    "بدونِ فیلتر، هر دو فاکتور در فهرستِ واجدِ شرایط هستند",
+    "بدون فیلتر، هر دو فاکتور در فهرست واجد شرایط هستند",
 )
 
 # ۵: نوعِ تسویه رویِ ردیفِ فاکتورِ برگردانده‌شده هم موجود است.
 row = next(e for e in eligible_all if e.document_id == invoice_vip)
-check(row.settlement_type_code == "CASH", f"نوعِ تسویه رویِ ردیفِ فاکتورِ واجدِ شرایط درست است (got {row.settlement_type_code})")
+check(row.settlement_type_code == "CASH", f"نوع تسویه روی ردیف فاکتور واجد شرایط درست است (got {row.settlement_type_code})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

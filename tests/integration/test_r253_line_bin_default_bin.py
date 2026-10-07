@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -168,41 +168,41 @@ def qty_at(item_id, bin_id):
             StockBalance.item_id == item_id, StockBalance.bin_location_id == bin_id)) or 0
 
 # ۱) پیش‌فرض: بدونِ تنظیم = GENERAL؛ با تنظیم = همان مکان
-check(locations_service.get_default_bin_location(wh).bin_location_id == general, "بدونِ تنظیم، مکانِ پیش‌فرض همان GENERAL است")
+check(locations_service.get_default_bin_location(wh).bin_location_id == general, "بدون تنظیم، مکان پیش‌فرض همان GENERAL است")
 locations_service.set_default_bin_location(company_id, wh, bulk2, user.user_id)
-check(locations_service.get_explicit_default_bin_id(wh) == bulk2, "مکانِ پیش‌فرضِ انبار ذخیره شد")
+check(locations_service.get_explicit_default_bin_id(wh) == bulk2, "مکان پیش‌فرض انبار ذخیره شد")
 with new_session() as s:
     logged = s.scalar(select(sa_func.count()).select_from(ActivityLog).where(ActivityLog.entity_type == "Warehouse", ActivityLog.entity_id == wh))
-check(logged >= 1, "تغییرِ مکانِ پیش‌فرض در Audit ثبت شد")
+check(logged >= 1, "تغییر مکان پیش‌فرض در Audit ثبت شد")
 post(draft("RECEIPT", g2, 7, dst=wh))
-check(qty_at(g2, bulk2) == 7, "رسیدِ بی‌مکان در مکانِ پیش‌فرضِ انتخابی (نه GENERAL) ثبت شد")
+check(qty_at(g2, bulk2) == 7, "رسید بی‌مکان در مکان پیش‌فرض انتخابی (نه GENERAL) ثبت شد")
 check(qty_at(g2, general) == 0, "چیزی در GENERAL ننشست")
 
 # ۲) اعتبارسنجی
 wh2 = locations_service.create_warehouse(company_id, "WH02", "فرعی", locations_service.WarehouseFields(allow_negative_stock=True))
 other = wl.create_location(company_id, wh2, "AREA", "Y01")
-check(raises(lambda: locations_service.set_default_bin_location(company_id, wh, other)), "مکانِ انبارِ دیگر پیش‌فرض نمی‌شود")
+check(raises(lambda: locations_service.set_default_bin_location(company_id, wh, other)), "مکان انبار دیگر پیش‌فرض نمی‌شود")
 spare = wl.create_location(company_id, wh, "BIN", "B09", rb)
 with new_session() as s:
     s.get(BinLocation, spare).is_active = False
     s.commit()
-check(raises(lambda: locations_service.set_default_bin_location(company_id, wh, spare)), "مکانِ غیرفعال پیش‌فرض نمی‌شود")
+check(raises(lambda: locations_service.set_default_bin_location(company_id, wh, spare)), "مکان غیرفعال پیش‌فرض نمی‌شود")
 
 # ۳) غیرفعال‌شدنِ پیش‌فرض → بازگشت به GENERAL؛ حذفِ پیش‌فرض → پاک‌شدنِ تنظیم
 locations_service.set_default_bin_location(company_id, wh, bulk2, user.user_id)
 with new_session() as s:
     s.get(BinLocation, bulk2).is_active = False
     s.commit()
-check(locations_service.get_default_bin_location(wh).bin_location_id == general, "پیش‌فرضِ غیرفعال‌شده → GENERAL")
+check(locations_service.get_default_bin_location(wh).bin_location_id == general, "پیش‌فرض غیرفعال‌شده → GENERAL")
 post(draft("RECEIPT", g2, 1, dst=wh))
-check(qty_at(g2, general) == 1, "موتورِ انبار هم به GENERAL برمی‌گردد")
+check(qty_at(g2, general) == 1, "موتور انبار هم به GENERAL برمی‌گردد")
 with new_session() as s:
     s.get(BinLocation, bulk2).is_active = True
     s.commit()
 temp = wl.create_location(company_id, wh, "BIN", "B08", rb)
 locations_service.set_default_bin_location(company_id, wh, temp, user.user_id)
 wl.delete_location(company_id, temp, user.user_id)
-check(locations_service.get_explicit_default_bin_id(wh) is None, "حذفِ مکانِ پیش‌فرض، تنظیمِ انبار را پاک کرد")
+check(locations_service.get_explicit_default_bin_id(wh) is None, "حذف مکان پیش‌فرض، تنظیم انبار را پاک کرد")
 check(locations_service.get_default_bin_location(wh).bin_location_id == general, "پس از حذف، پیش‌فرض GENERAL است")
 locations_service.set_default_bin_location(company_id, wh, bulk2, user.user_id)
 
@@ -215,28 +215,28 @@ HF = lambda: documents_service.DocumentHeaderFields(counterparty_detail_account_
 inv = documents_service.create_document(company_id, user.user_id, "PURCHASE_INVOICE", today, HF())
 ln_a = documents_service.add_line(inv, company_id, milk, pcs, D(4), D(4), unit_price=D(500))
 ln_b = documents_service.add_line(inv, company_id, acid, pcs, D(3), D(3), unit_price=D(500))
-check(raises(lambda: documents_service.set_line_bin(company_id, ln_a, other)), "مکانِ انبارِ دیگر برایِ ردیف رد شد")
-check(raises(lambda: documents_service.set_line_bin(company_id, ln_a, spare)), "مکانِ غیرفعال برایِ ردیف رد شد")
+check(raises(lambda: documents_service.set_line_bin(company_id, ln_a, other)), "مکان انبار دیگر برای ردیف رد شد")
+check(raises(lambda: documents_service.set_line_bin(company_id, ln_a, spare)), "مکان غیرفعال برای ردیف رد شد")
 documents_service.set_line_bin(company_id, ln_a, pick2)
 
 from peecha.ui.screens.commercial_document import CommercialDocumentScreen, _LINE_COLUMNS, _BIN_COL, _ACTIONS_COL
 from PySide6.QtWidgets import QComboBox
 screen = CommercialDocumentScreen("PURCHASE_INVOICE", None)
 screen.edit_document(inv)
-check(_LINE_COLUMNS[_BIN_COL] == "مکان" and _ACTIONS_COL == len(_LINE_COLUMNS) - 1, "ستونِ «مکان» پیش از «عملیات»")
-check(not screen.lines_table.isColumnHidden(_BIN_COL), "ستونِ مکان در فاکتورِ خرید دیده می‌شود")
+check(_LINE_COLUMNS[_BIN_COL] == "مکان" and _ACTIONS_COL == len(_LINE_COLUMNS) - 1, "ستون «مکان» پیش از «عملیات»")
+check(not screen.lines_table.isColumnHidden(_BIN_COL), "ستون مکان در فاکتور خرید دیده می‌شود")
 combo = screen.lines_table.cellWidget(0, _BIN_COL)
-check(isinstance(combo, QComboBox) and combo.currentData() == pick2, "کمبویِ مکانِ ردیف مقدارِ ذخیره‌شده را نشان می‌دهد")
-check(screen.lines_table.cellWidget(0, _ACTIONS_COL) is not None, "دکمه‌هایِ عملیات به ستونِ آخر رفتند")
+check(isinstance(combo, QComboBox) and combo.currentData() == pick2, "فهرست مکان ردیف مقدار ذخیره‌شده را نشان می‌دهد")
+check(screen.lines_table.cellWidget(0, _ACTIONS_COL) is not None, "دکمه‌های عملیات به ستون آخر رفتند")
 combo_b = screen.lines_table.cellWidget(1, _BIN_COL)
 idx = combo_b.findData(cold1)
-check(idx > 0 and combo_b.findData(zb) < 0, "فقط محل‌هایِ برگ (نه منطقه/قفسه) در کمبو هستند")
+check(idx > 0 and combo_b.findData(zb) < 0, "فقط محل‌های برگ (نه منطقه/قفسه) در فهرست هستند")
 combo_b.setCurrentIndex(idx)
 with new_session() as s:
-    check(s.get(CommercialDocumentLine, ln_b).bin_location_id == cold1, "تغییرِ کمبو در ردیف ذخیره شد")
+    check(s.get(CommercialDocumentLine, ln_b).bin_location_id == cold1, "تغییر فهرست در ردیف ذخیره شد")
 documents_service.set_line_bin(company_id, ln_b, None)
 sales_screen = CommercialDocumentScreen("SALES_INVOICE", None)
-check(sales_screen.lines_table.isColumnHidden(_BIN_COL), "ستونِ مکان در فاکتورِ فروش پنهان است")
+check(sales_screen.lines_table.isColumnHidden(_BIN_COL), "ستون مکان در فاکتور فروش پنهان است")
 
 documents_service.confirm_document(inv, company_id, user.user_id)
 settlements_service.auto_approve_settlement_plan(inv, company_id, user.user_id, [])
@@ -246,13 +246,13 @@ with new_session() as s:
     b = s.get(CommercialDocumentLine, ln_b)
     sa = s.get(StockDocumentLine, a.stock_document_line_id)
     sb = s.get(StockDocumentLine, b.stock_document_line_id)
-check(sa is not None and sa.bin_location_id == pick2, "ردیفِ رسیدِ انبار همان مکانِ انتخابیِ فاکتور را گرفت")
-check(qty_at(milk, pick2) == 4, "موجودیِ کالا در همان مکان نشست")
-check(qty_at(acid, bulk2) == 3, "ردیفِ بی‌مکان در مکانِ پیش‌فرضِ انبار نشست")
-check(raises(lambda: documents_service.set_line_bin(company_id, ln_a, pick1)), "پس از صدورِ رسید، مکانِ ردیف قفل است")
+check(sa is not None and sa.bin_location_id == pick2, "ردیف رسید انبار همان مکان انتخابی فاکتور را گرفت")
+check(qty_at(milk, pick2) == 4, "موجودی کالا در همان مکان نشست")
+check(qty_at(acid, bulk2) == 3, "ردیف بی‌مکان در مکان پیش‌فرض انبار نشست")
+check(raises(lambda: documents_service.set_line_bin(company_id, ln_a, pick1)), "پس از صدور رسید، مکان ردیف قفل است")
 screen.edit_document(inv)
 cell = screen.lines_table.item(0, _BIN_COL)
-check(cell is not None and "B02" in cell.text(), "در سندِ ثبت‌شده کدِ مکان به‌صورتِ متن نمایش داده می‌شود")
+check(cell is not None and "B02" in cell.text(), "در سند ثبت‌شده کد مکان به‌صورت متن نمایش داده می‌شود")
 
 # ۵) تبدیلِ سفارش به فاکتور مکان را منتقل می‌کند
 csettings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL", True)
@@ -263,7 +263,7 @@ documents_service.confirm_document(po, company_id, user.user_id)
 documents_service.post_document(po, company_id, user.user_id)
 inv2 = documents_service.convert_to_invoice(po, company_id, user.user_id, today)
 inv2_line = documents_service.get_document(inv2, company_id)[1][0]
-check(inv2_line.bin_location_id == pick1, "مکانِ ردیفِ سفارش به فاکتورِ تبدیلی منتقل شد")
+check(inv2_line.bin_location_id == pick1, "مکان ردیف سفارش به فاکتور تبدیلی منتقل شد")
 
 # ۶) فرمِ انبار: کمبویِ مکانِ پیش‌فرض
 from peecha.ui.screens.inventory_warehouses import InventoryWarehousesScreen
@@ -271,32 +271,32 @@ ws = InventoryWarehousesScreen()
 ws.refresh()
 row = next(r for r in ws._rows if r.warehouse_id == wh)
 ws._load_into_form(row)
-check(ws.default_bin_combo.currentData() == bulk2, "فرمِ انبار مکانِ پیش‌فرضِ فعلی را نشان می‌دهد")
+check(ws.default_bin_combo.currentData() == bulk2, "فرم انبار مکان پیش‌فرض فعلی را نشان می‌دهد")
 ws.default_bin_combo.setCurrentIndex(ws.default_bin_combo.findData(pick2))
 ws._save()
-check(locations_service.get_explicit_default_bin_id(wh) == pick2, "ذخیرهٔ فرمِ انبار مکانِ پیش‌فرض را تغییر داد")
+check(locations_service.get_explicit_default_bin_id(wh) == pick2, "ذخیرهٔ فرم انبار مکان پیش‌فرض را تغییر داد")
 row = next(r for r in ws._rows if r.warehouse_id == wh)
 ws._load_into_form(row)
 ws.default_bin_combo.setCurrentIndex(0)
 ws._save()
-check(locations_service.get_explicit_default_bin_id(wh) is None, "انتخابِ «—» پیش‌فرض را به GENERAL برگرداند")
+check(locations_service.get_explicit_default_bin_id(wh) is None, "انتخاب «—» پیش‌فرض را به GENERAL برگرداند")
 locations_service.set_default_bin_location(company_id, wh, bulk2, user.user_id)
 
 # ۷) گزارشِ «جانمایی‌نشده» مکانِ پیش‌فرضِ تازه را مبنا می‌گیرد
 from peecha.services import purchase_reports as pr
 rep = pr.run_report(company_id, "UNLOCATED_STOCK", pr.PurchaseFilters(today - datetime.timedelta(days=30), today, side="INVENTORY"))
 labels = [r[0] for r in rep.rows]
-check(any("انبردست" in str(l) for l in labels), "موجودیِ مکانِ پیش‌فرضِ انتخابی در گزارشِ جانمایی‌نشده آمد")
+check(any("انبردست" in str(l) for l in labels), "موجودی مکان پیش‌فرض انتخابی در گزارش جانمایی‌نشده آمد")
 
 # ۸) نقشه: دکمهٔ «مکانِ پیش‌فرض»
 from peecha.ui.screens.warehouse_map import WarehouseMapScreen
 ms = WarehouseMapScreen(None); ms.refresh(); ms.load_warehouse(wh)
 ms.select_location(pick1, focus=False)
 ms.run_operation("DEFAULT")
-check(locations_service.get_explicit_default_bin_id(wh) == pick1, "از نقشه مکانِ پیش‌فرض تعیین شد")
-check("پیش‌فرض" in ms.detail_info.text(), "جزئیاتِ نقشه پیش‌فرض بودن را نشان می‌دهد")
+check(locations_service.get_explicit_default_bin_id(wh) == pick1, "از نقشه مکان پیش‌فرض تعیین شد")
+check("پیش‌فرض" in ms.detail_info.text(), "جزئیات نقشه پیش‌فرض بودن را نشان می‌دهد")
 ms.run_operation("DEFAULT")
-check(locations_service.get_explicit_default_bin_id(wh) is None, "زدنِ دوباره پیش‌فرض را برمی‌دارد")
+check(locations_service.get_explicit_default_bin_id(wh) is None, "زدن دوباره پیش‌فرض را برمی‌دارد")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

@@ -1,7 +1,7 @@
-"""اطلاعاتِ پایهٔ تولید -- R266: BOM (نسخه‌دار، چندسطحی، جانبی/مشترک)، مسیرِ تولید، مرکزِ کاری، ماشین، دستمزد، عملیات.
+"""اطلاعات پایهٔ تولید — R266: فهرست مواد (نسخه‌دار، چندسطحی، جانبی/مشترک)، مسیر تولید، مرکز کاری، ماشین، دستمزد، عملیات.
 
-BOM همان inv.bom_headers/bom_lines است. نسخه‌ای که در دستورِ تولیدِ صادرشده استفاده شده قفل می‌شود و فقط با ساختنِ
-نسخهٔ تازه تغییر می‌کند (ردیف‌هایِ BOM هنگامِ صدورِ دستور هم رویِ خودِ دستور کپی می‌شوند)، پس سوابقِ قبلی ثابت می‌مانند.
+فهرست مواد همان inv.bom_headers/bom_lines است. نسخه‌ای که در دستور تولید صادرشده استفاده شده قفل می‌شود و فقط با ساختن
+نسخهٔ تازه تغییر می‌کند (ردیف‌های فهرست مواد هنگام صدور دستور هم روی خود دستور کپی می‌شوند)، پس سوابق قبلی ثابت می‌مانند.
 """
 
 from __future__ import annotations
@@ -58,20 +58,20 @@ class WorkCenterFields:
 def save_work_center(company_id: int, fields: WorkCenterFields, work_center_id: int | None = None,
                      user_id: int | None = None) -> int:
     if not fields.code.strip() or not fields.name.strip():
-        raise ValueError("کد و نامِ مرکزِ کاری الزامی است.")
+        raise ValueError("کد و نام مرکز کاری الزامی است.")
     if fields.center_type not in c.CENTER_TYPES:
-        raise ValueError("نوعِ مرکزِ کاری نامعتبر است.")
-    for label, v in (("نرخِ دستمزد", fields.labor_rate), ("نرخِ ماشین", fields.machine_rate), ("نرخِ سربار", fields.overhead_rate)):
+        raise ValueError("نوع مرکز کاری نامعتبر است.")
+    for label, v in (("نرخ دستمزد", fields.labor_rate), ("نرخ ماشین", fields.machine_rate), ("نرخ سربار", fields.overhead_rate)):
         if decimal.Decimal(v or 0) < 0:
             raise ValueError(f"{label} نمی‌تواند منفی باشد.")
     with new_session() as session:
         dup = session.scalar(select(WorkCenter.work_center_id).where(WorkCenter.company_id == company_id,
                                                                      WorkCenter.code == fields.code.strip()))
         if dup is not None and dup != work_center_id:
-            raise ValueError("این کدِ مرکزِ کاری قبلاً تعریف شده است.")
+            raise ValueError("این کد مرکز کاری قبلاً تعریف شده است.")
         row = session.get(WorkCenter, work_center_id) if work_center_id else WorkCenter(company_id=company_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("مرکزِ کاری نامعتبر است.")
+            raise ValueError("مرکز کاری نامعتبر است.")
         before = {k: str(getattr(row, k, None)) for k in ("labor_rate", "machine_rate", "overhead_rate", "cost_center_detail_account_id")}
         for k, v in fields.__dict__.items():
             setattr(row, k, v.strip() if isinstance(v, str) else v)
@@ -97,20 +97,20 @@ def get_work_center(company_id: int, work_center_id: int) -> WorkCenter:
     with new_session() as session:
         row = session.get(WorkCenter, work_center_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("مرکزِ کاری نامعتبر است.")
+            raise ValueError("مرکز کاری نامعتبر است.")
         session.expunge(row)
         return row
 
 
 def link_machine(company_id: int, work_center_id: int, asset_id: int, user_id: int | None = None) -> None:
-    """ماشین = داراییِ ثابتِ «ماشینِ تولیدی» (ماژولِ دارایی‌ها)."""
+    """ماشین = دارایی ثابت «ماشین تولیدی» (ماژول دارایی‌ها)."""
     with new_session() as session:
         wc = session.get(WorkCenter, work_center_id)
         asset = session.get(Asset, asset_id)
         if wc is None or wc.company_id != company_id or asset is None or asset.company_id != company_id:
-            raise ValueError("مرکزِ کاری یا دارایی نامعتبر است.")
+            raise ValueError("مرکز کاری یا دارایی نامعتبر است.")
         if not asset.is_production_machine:
-            raise ValueError("این دارایی در ماژولِ دارایی‌ها «ماشینِ تولیدی» تعریف نشده است.")
+            raise ValueError("این دارایی در ماژول دارایی‌ها «ماشین تولیدی» تعریف نشده است.")
         if session.get(WorkCenterMachine, (work_center_id, asset_id)) is None:
             session.add(WorkCenterMachine(work_center_id=work_center_id, asset_id=asset_id))
             c.audit(session, company_id, user_id, "WorkCenter", work_center_id, "LINK_MACHINE", {"asset_id": asset_id})
@@ -127,11 +127,11 @@ def unlink_machine(company_id: int, work_center_id: int, asset_id: int) -> None:
 
 
 def work_center_machines(company_id: int, work_center_id: int) -> list[SimpleNamespace]:
-    """ماشین‌هایِ لینک‌شده + دارایی‌هایی که «کدِ مرکزِ کار»شان در ماژولِ دارایی همین کد است."""
+    """ماشین‌های لینک‌شده + دارایی‌هایی که «کد مرکز کار»شان در ماژول دارایی همین کد است."""
     with new_session() as session:
         wc = session.get(WorkCenter, work_center_id)
         if wc is None or wc.company_id != company_id:
-            raise ValueError("مرکزِ کاری نامعتبر است.")
+            raise ValueError("مرکز کاری نامعتبر است.")
         linked = set(session.scalars(select(WorkCenterMachine.asset_id).where(WorkCenterMachine.work_center_id == work_center_id)))
         rows = session.scalars(select(Asset).where(Asset.company_id == company_id, Asset.is_production_machine.is_(True),
                                                    or_(Asset.asset_id.in_(linked or {-1}), Asset.work_center_code == wc.code)))
@@ -140,7 +140,7 @@ def work_center_machines(company_id: int, work_center_id: int) -> list[SimpleNam
 
 
 def capacity_hours(wc: WorkCenter, date_from: datetime.date, date_to: datetime.date) -> decimal.Decimal:
-    """ظرفیتِ ساعتیِ مؤثر در بازه = روزهایِ کاری × شیفت × ساعتِ شیفت × راندمان."""
+    """ظرفیت ساعتی مؤثر در بازه = روزهای کاری × شیفت × ساعت شیفت × راندمان."""
     days = (date_to - date_from).days + 1
     if days <= 0:
         return ZERO
@@ -154,11 +154,11 @@ def save_labor_rate(company_id: int, code: str, name: str, hourly_rate, employee
                     user_id: int | None = None) -> int:
     hourly_rate = decimal.Decimal(hourly_rate)
     if not code.strip() or not name.strip() or hourly_rate < 0:
-        raise ValueError("کد، نام و نرخِ معتبر الزامی است.")
+        raise ValueError("کد، نام و نرخ معتبر الزامی است.")
     with new_session() as session:
         dup = session.scalar(select(LaborRate.labor_rate_id).where(LaborRate.company_id == company_id, LaborRate.code == code.strip()))
         if dup is not None and dup != labor_rate_id:
-            raise ValueError("این کدِ نرخِ دستمزد قبلاً تعریف شده است.")
+            raise ValueError("این کد نرخ دستمزد قبلاً تعریف شده است.")
         row = session.get(LaborRate, labor_rate_id) if labor_rate_id else LaborRate(company_id=company_id)
         old = str(row.hourly_rate) if labor_rate_id else None
         row.code, row.name, row.employee_id, row.hourly_rate = code.strip(), name.strip(), employee_id, hourly_rate
@@ -180,7 +180,7 @@ def list_labor_rates(company_id: int) -> list[LaborRate]:
 
 def labor_rate_for(session, company_id: int, employee_id: int | None, work_center_id: int | None,
                    fallback: decimal.Decimal | None = None) -> tuple[decimal.Decimal, decimal.Decimal]:
-    """(نرخِ ساعتی، ضریبِ اضافه‌کار): نرخِ کارمند ← نرخِ عملیات/مسیر ← نرخِ مرکزِ کاری."""
+    """(نرخ ساعتی، ضریب اضافه‌کار): نرخ کارمند ← نرخ عملیات/مسیر ← نرخ مرکز کاری."""
     if employee_id is not None:
         row = session.scalar(select(LaborRate).where(LaborRate.company_id == company_id, LaborRate.employee_id == employee_id,
                                                      LaborRate.is_active.is_(True)))
@@ -199,11 +199,11 @@ def save_operation(company_id: int, code: str, name: str, default_work_center_id
                    default_setup_minutes=ZERO, default_run_minutes=ZERO, is_qc: bool = False,
                    operation_id: int | None = None) -> int:
     if not code.strip() or not name.strip():
-        raise ValueError("کد و نامِ عملیات الزامی است.")
+        raise ValueError("کد و نام عملیات الزامی است.")
     with new_session() as session:
         dup = session.scalar(select(Operation.operation_id).where(Operation.company_id == company_id, Operation.code == code.strip()))
         if dup is not None and dup != operation_id:
-            raise ValueError("این کدِ عملیات قبلاً تعریف شده است.")
+            raise ValueError("این کد عملیات قبلاً تعریف شده است.")
         row = session.get(Operation, operation_id) if operation_id else Operation(company_id=company_id, is_active=True)
         row.code, row.name, row.default_work_center_id = code.strip(), name.strip(), default_work_center_id
         row.default_setup_minutes, row.default_run_minutes, row.is_qc = (decimal.Decimal(default_setup_minutes),
@@ -238,14 +238,14 @@ def save_item_profile(company_id: int, item_id: int, user_id: int | None = None,
         changes = {}
         for k, v in fields.items():
             if k not in PROFILE_FIELDS:
-                raise ValueError(f"فیلدِ نامعتبر: {k}")
+                raise ValueError(f"فیلد نامعتبر: {k}")
             if k == "make_or_buy" and v not in ("MAKE", "BUY"):
-                raise ValueError("نوعِ تأمین باید «ساخت» یا «خرید» باشد.")
+                raise ValueError("نوع تامین باید «ساخت» یا «خرید» باشد.")
             if getattr(row, k, None) != v:
                 changes[k] = [str(getattr(row, k, None)), str(v)]
                 setattr(row, k, v)
         if row.min_lot_qty and row.max_lot_qty and row.max_lot_qty < row.min_lot_qty:
-            raise ValueError("حداکثرِ تولید از حداقل کمتر است.")
+            raise ValueError("حداکثر تولید از حداقل کمتر است.")
         session.flush()
         if changes:
             c.audit(session, company_id, user_id, "ItemProductionProfile", item_id, "UPDATE", changes)
@@ -272,9 +272,9 @@ def check_lot_size(session, item_id: int, quantity: decimal.Decimal) -> None:
     if prof is None:
         return
     if prof.min_lot_qty and quantity < prof.min_lot_qty:
-        raise ValueError(f"مقدارِ تولید از حداقلِ تعریف‌شده ({prof.min_lot_qty.normalize()}) کمتر است.")
+        raise ValueError(f"مقدار تولید از حداقل تعریف‌شده ({prof.min_lot_qty.normalize()}) کمتر است.")
     if prof.max_lot_qty and quantity > prof.max_lot_qty:
-        raise ValueError(f"مقدارِ تولید از حداکثرِ تعریف‌شده ({prof.max_lot_qty.normalize()}) بیشتر است.")
+        raise ValueError(f"مقدار تولید از حداکثر تعریف‌شده ({prof.max_lot_qty.normalize()}) بیشتر است.")
 
 
 # =====================================================================================
@@ -315,7 +315,7 @@ def create_routing(company_id: int, item_id: int, name: str | None = None, opera
         if copy_from_routing_id:
             src = session.get(Routing, copy_from_routing_id)
             if src is None or src.company_id != company_id:
-                raise ValueError("مسیرِ مبدأ نامعتبر است.")
+                raise ValueError("مسیر مبدأ نامعتبر است.")
             for op in session.scalars(select(RoutingOperation).where(RoutingOperation.routing_id == copy_from_routing_id)):
                 data = {k: getattr(op, k) for k in RoutingOpFields.__dataclass_fields__}
                 session.add(RoutingOperation(routing_id=row.routing_id, **data))
@@ -340,21 +340,21 @@ def set_default_routing(company_id: int, routing_id: int) -> None:
     with new_session() as session:
         row = session.get(Routing, routing_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("مسیرِ تولید نامعتبر است.")
+            raise ValueError("مسیر تولید نامعتبر است.")
         _set_default_routing(session, row)
         session.commit()
 
 
 def _add_op(session, company_id: int, routing_id: int, op: RoutingOpFields) -> RoutingOperation:
     if op.seq <= 0 or not op.name.strip():
-        raise ValueError("ترتیب و نامِ عملیات الزامی است.")
+        raise ValueError("ترتیب و نام عملیات الزامی است.")
     if session.scalar(select(RoutingOperation.routing_operation_id).where(RoutingOperation.routing_id == routing_id,
                                                                           RoutingOperation.seq == op.seq)):
-        raise ValueError(f"ترتیبِ {op.seq} در این مسیر تکراری است.")
+        raise ValueError(f"ترتیب {op.seq} در این مسیر تکراری است.")
     if op.work_center_id is not None:
         wc = session.get(WorkCenter, op.work_center_id)
         if wc is None or wc.company_id != company_id:
-            raise ValueError("مرکزِ کاری نامعتبر است.")
+            raise ValueError("مرکز کاری نامعتبر است.")
     for v in (op.setup_minutes, op.run_minutes, op.queue_minutes, op.move_minutes):
         if decimal.Decimal(v or 0) < 0:
             raise ValueError("زمان‌ها نمی‌توانند منفی باشند.")
@@ -368,7 +368,7 @@ def add_routing_operation(company_id: int, routing_id: int, op: RoutingOpFields,
     with new_session() as session:
         routing = session.get(Routing, routing_id)
         if routing is None or routing.company_id != company_id:
-            raise ValueError("مسیرِ تولید نامعتبر است.")
+            raise ValueError("مسیر تولید نامعتبر است.")
         row = _add_op(session, company_id, routing_id, op)
         c.audit(session, company_id, user_id, "Routing", routing_id, "ADD_OPERATION", {"seq": op.seq, "name": op.name})
         session.commit()
@@ -380,11 +380,11 @@ def update_routing_operation(company_id: int, routing_operation_id: int, op: Rou
         row = session.get(RoutingOperation, routing_operation_id)
         routing = session.get(Routing, row.routing_id) if row else None
         if routing is None or routing.company_id != company_id:
-            raise ValueError("عملیاتِ مسیر نامعتبر است.")
+            raise ValueError("عملیات مسیر نامعتبر است.")
         dup = session.scalar(select(RoutingOperation.routing_operation_id).where(
             RoutingOperation.routing_id == row.routing_id, RoutingOperation.seq == op.seq))
         if dup is not None and dup != routing_operation_id:
-            raise ValueError(f"ترتیبِ {op.seq} در این مسیر تکراری است.")
+            raise ValueError(f"ترتیب {op.seq} در این مسیر تکراری است.")
         before = {k: str(getattr(row, k)) for k in op.__dict__}
         for k, v in op.__dict__.items():
             setattr(row, k, v)
@@ -398,7 +398,7 @@ def remove_routing_operation(company_id: int, routing_operation_id: int, user_id
         row = session.get(RoutingOperation, routing_operation_id)
         routing = session.get(Routing, row.routing_id) if row else None
         if routing is None or routing.company_id != company_id:
-            raise ValueError("عملیاتِ مسیر نامعتبر است.")
+            raise ValueError("عملیات مسیر نامعتبر است.")
         c.audit(session, company_id, user_id, "Routing", routing.routing_id, "REMOVE_OPERATION", {"seq": row.seq, "name": row.name})
         session.delete(row)
         session.commit()
@@ -416,7 +416,7 @@ def routing_operations(company_id: int, routing_id: int) -> list[RoutingOperatio
     with new_session() as session:
         routing = session.get(Routing, routing_id)
         if routing is None or routing.company_id != company_id:
-            raise ValueError("مسیرِ تولید نامعتبر است.")
+            raise ValueError("مسیر تولید نامعتبر است.")
         return _expunge(session, list(session.scalars(select(RoutingOperation).where(RoutingOperation.routing_id == routing_id)
                                                       .order_by(RoutingOperation.seq))))
 
@@ -427,7 +427,7 @@ def default_routing_id(session, item_id: int) -> int | None:
 
 
 def op_hours(op, quantity: decimal.Decimal) -> SimpleNamespace:
-    """ساعتِ استانداردِ یک عملیات برایِ یک مقدار: آماده‌سازی + اجرا × مقدار (و ساعتِ ماشین)."""
+    """ساعت استاندارد یک عملیات برای یک مقدار: آماده‌سازی + اجرا × مقدار (و ساعت ماشین)."""
     quantity = decimal.Decimal(quantity)
     run = decimal.Decimal(op.run_minutes or 0) * quantity
     setup = decimal.Decimal(op.setup_minutes or 0)
@@ -489,32 +489,32 @@ def _bom_company(session, bom: BomHeader) -> int:
 def _get_bom(session, company_id: int, bom_id: int, for_edit: bool = False) -> BomHeader:
     bom = session.get(BomHeader, bom_id)
     if bom is None or _bom_company(session, bom) != company_id:
-        raise ValueError("فهرستِ مواد (BOM) نامعتبر است.")
+        raise ValueError("فهرست مواد (BOM) نامعتبر است.")
     if for_edit and bom.is_locked:
-        raise ValueError(f"نسخهٔ {bom.version_no} این BOM در دستورِ تولید استفاده شده و قفل است -- برایِ تغییر، نسخهٔ تازه بسازید.")
+        raise ValueError(f"نسخهٔ {bom.version_no} این فهرست مواد در دستور تولید استفاده شده و قفل است — برای تغییر، نسخهٔ تازه بسازید.")
     return bom
 
 
 def _validate_bom_fields(fields: BomFields) -> None:
     if decimal.Decimal(fields.batch_size_qty) <= 0:
-        raise ValueError("مقدارِ تولیدِ BOM باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مقدار تولید فهرست مواد باید بزرگ‌تر از صفر باشد.")
     if not ZERO <= decimal.Decimal(fields.scrap_percent or 0) < _HUNDRED:
-        raise ValueError("درصدِ ضایعات نامعتبر است.")
+        raise ValueError("درصد ضایعات نامعتبر است.")
     if fields.valid_from and fields.valid_to and fields.valid_to < fields.valid_from:
-        raise ValueError("تاریخِ پایانِ اعتبار پیش از تاریخِ شروع است.")
+        raise ValueError("تاریخ پایان اعتبار پیش از تاریخ شروع است.")
     if fields.status_code not in c.BOM_STATUS:
-        raise ValueError("وضعیتِ BOM نامعتبر است.")
+        raise ValueError("وضعیت فهرست مواد نامعتبر است.")
 
 
 def create_bom_version(company_id: int, item_id: int, fields: BomFields | None = None, copy_from_bom_id: int | None = None,
                        make_default: bool | None = None, user_id: int | None = None) -> int:
-    """نسخهٔ تازهٔ BOM؛ با copy_from تمامِ ردیف‌ها و خروجی‌ها کپی می‌شوند. اولین نسخهٔ کالا خودکار پیش‌فرض می‌شود."""
+    """نسخهٔ تازهٔ فهرست مواد؛ با copy_from تمام ردیف‌ها و خروجی‌ها کپی می‌شوند. اولین نسخهٔ کالا خودکار پیش‌فرض می‌شود."""
     fields = fields or BomFields()
     _validate_bom_fields(fields)
     with new_session() as session:
         item = c.item_of(session, company_id, item_id)
         if not item.is_stock_tracked:
-            raise ValueError("کالایِ تولیدی باید موجودی‌محور باشد.")
+            raise ValueError("کالای تولیدی باید موجودی‌محور باشد.")
         version = (session.scalar(select(func.max(BomHeader.version_no)).where(BomHeader.finished_item_id == item_id)) or 0) + 1
         has_default = session.scalar(select(BomHeader.bom_id).where(BomHeader.finished_item_id == item_id,
                                                                     BomHeader.is_default.is_(True)))
@@ -546,13 +546,13 @@ _LINE_COPY = ("component_item_id", "quantity_per", "scrap_percent", "uom_id", "c
 
 
 def update_bom(company_id: int, bom_id: int, fields: BomFields, user_id: int | None = None, reason: str | None = None) -> None:
-    """ویرایشِ سرِ BOM. نسخهٔ قفل‌شده فقط اعتبار/وضعیت (بایگانی) را می‌پذیرد."""
+    """ویرایش سر فهرست مواد. نسخهٔ قفل‌شده فقط اعتبار/وضعیت (بایگانی) را می‌پذیرد."""
     _validate_bom_fields(fields)
     with new_session() as session:
         bom = _get_bom(session, company_id, bom_id)
         changed = {k: [str(getattr(bom, k)), str(v)] for k, v in fields.__dict__.items() if _differs(getattr(bom, k), v)}
         if bom.is_locked and set(changed) - {"valid_to", "status_code", "name", "notes"}:
-            raise ValueError("این نسخه قفل است؛ فقط پایانِ اعتبار، وضعیت و توضیحات قابلِ تغییر است -- نسخهٔ تازه بسازید.")
+            raise ValueError("این نسخه قفل است؛ فقط پایان اعتبار، وضعیت و توضیحات قابل تغییر است — نسخهٔ تازه بسازید.")
         for k, v in fields.__dict__.items():
             setattr(bom, k, v)
         bom.is_active = fields.status_code == "ACTIVE"
@@ -591,22 +591,22 @@ def set_default_bom(company_id: int, bom_id: int, user_id: int | None = None) ->
 def _line_values(session, company_id: int, bom: BomHeader, f: BomLineFields) -> dict:
     comp = c.item_of(session, company_id, f.component_item_id)
     if comp.item_id == bom.finished_item_id:
-        raise ValueError("یک کالا نمی‌تواند جزوِ موادِ خودش باشد.")
+        raise ValueError("یک کالا نمی‌تواند جزو مواد خودش باشد.")
     if not comp.is_stock_tracked:
-        raise ValueError(f"جزءِ «{c.item_label(session, comp.item_id)}» موجودی‌محور نیست.")
+        raise ValueError(f"جزء «{c.item_label(session, comp.item_id)}» موجودی‌محور نیست.")
     quantity = decimal.Decimal(f.quantity)
     if quantity <= 0:
-        raise ValueError("مقدارِ مصرف باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مقدار مصرف باید بزرگ‌تر از صفر باشد.")
     if f.quantity_type not in ("VARIABLE", "FIXED"):
-        raise ValueError("نوعِ مقدار نامعتبر است.")
+        raise ValueError("نوع مقدار نامعتبر است.")
     if f.component_type not in c.COMPONENT_TYPES:
-        raise ValueError("نوعِ جزء نامعتبر است.")
+        raise ValueError("نوع جزء نامعتبر است.")
     if not ZERO <= decimal.Decimal(f.scrap_percent or 0) < _HUNDRED:
-        raise ValueError("درصدِ ضایعات نامعتبر است.")
+        raise ValueError("درصد ضایعات نامعتبر است.")
     if f.substitute_item_id is not None:
         c.item_of(session, company_id, f.substitute_item_id)
     if _creates_cycle(session, bom.finished_item_id, comp.item_id):
-        raise ValueError("افزودنِ این جزء حلقه در BOMِ چندسطحی ایجاد می‌کند (کالا به‌طورِ غیرمستقیم جزوِ خودش می‌شود).")
+        raise ValueError("افزودن این جزء حلقه در فهرست مواد چندسطحی ایجاد می‌کند (کالا به‌طور غیرمستقیم جزو خودش می‌شود).")
     return dict(component_item_id=comp.item_id, quantity_per=quantity, uom_id=f.uom_id,
                 conversion_factor=c.factor(session, comp.item_id, f.uom_id), scrap_percent=decimal.Decimal(f.scrap_percent or 0),
                 quantity_type=f.quantity_type, component_type=f.component_type, warehouse_id=f.warehouse_id,
@@ -615,7 +615,7 @@ def _line_values(session, company_id: int, bom: BomHeader, f: BomLineFields) -> 
 
 
 def _creates_cycle(session, parent_item_id: int, component_item_id: int) -> bool:
-    """آیا parent در زیرشاخهٔ component (از طریقِ BOMهایِ فعالِ آن) هست؟"""
+    """آیا parent در زیرشاخهٔ component (از طریق فهرست موادهای فعال آن) هست؟"""
     seen, stack = set(), [component_item_id]
     while stack:
         node = stack.pop()
@@ -648,7 +648,7 @@ def update_bom_component(company_id: int, bom_line_id: int, fields: BomLineField
     with new_session() as session:
         line = session.get(BomLine, bom_line_id)
         if line is None:
-            raise ValueError("ردیفِ BOM نامعتبر است.")
+            raise ValueError("ردیف فهرست مواد نامعتبر است.")
         bom = _get_bom(session, company_id, line.bom_id, for_edit=True)
         values = _line_values(session, company_id, bom, fields)
         changes = {k: [str(getattr(line, k)), str(v)] for k, v in values.items() if _differs(getattr(line, k), v)}
@@ -664,7 +664,7 @@ def remove_bom_component(company_id: int, bom_line_id: int, user_id: int | None 
     with new_session() as session:
         line = session.get(BomLine, bom_line_id)
         if line is None:
-            raise ValueError("ردیفِ BOM نامعتبر است.")
+            raise ValueError("ردیف فهرست مواد نامعتبر است.")
         bom = _get_bom(session, company_id, line.bom_id, for_edit=True)
         c.audit(session, company_id, user_id, "BOM", bom.bom_id, "REMOVE_COMPONENT",
                 {"line_no": line.line_no, "item_id": line.component_item_id, "quantity": str(line.quantity_per)})
@@ -674,14 +674,14 @@ def remove_bom_component(company_id: int, bom_line_id: int, user_id: int | None 
 
 def save_bom_output(company_id: int, bom_id: int, fields: BomOutputFields, user_id: int | None = None) -> int:
     if fields.output_type not in ("BY_PRODUCT", "CO_PRODUCT"):
-        raise ValueError("نوعِ خروجی باید «جانبی» یا «مشترک» باشد.")
+        raise ValueError("نوع خروجی باید «جانبی» یا «مشترک» باشد.")
     if decimal.Decimal(fields.quantity_per) <= 0:
-        raise ValueError("مقدارِ خروجی باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مقدار خروجی باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         bom = _get_bom(session, company_id, bom_id, for_edit=True)
         item = c.item_of(session, company_id, fields.item_id)
         if item.item_id == bom.finished_item_id:
-            raise ValueError("محصولِ اصلی نمی‌تواند خروجیِ جانبی/مشترکِ خودش باشد.")
+            raise ValueError("محصول اصلی نمی‌تواند خروجی جانبی/مشترک خودش باشد.")
         row = session.scalar(select(BomOutput).where(BomOutput.bom_id == bom_id, BomOutput.item_id == fields.item_id))
         if row is None:
             row = BomOutput(bom_id=bom_id, item_id=fields.item_id, output_type=fields.output_type, quantity_per=ONE)
@@ -699,7 +699,7 @@ def remove_bom_output(company_id: int, bom_output_id: int, user_id: int | None =
     with new_session() as session:
         row = session.get(BomOutput, bom_output_id)
         if row is None:
-            raise ValueError("خروجیِ BOM نامعتبر است.")
+            raise ValueError("خروجی فهرست مواد نامعتبر است.")
         _get_bom(session, company_id, row.bom_id, for_edit=True)
         c.audit(session, company_id, user_id, "BOM", row.bom_id, "REMOVE_OUTPUT", {"item_id": row.item_id})
         session.delete(row)
@@ -753,7 +753,7 @@ def bom_outputs(company_id: int, bom_id: int) -> list[BomOutput]:
 
 
 def effective_bom_id(session, item_id: int, on_date: datetime.date | None = None) -> int | None:
-    """نسخهٔ معتبر در تاریخ: پیش‌فرضِ فعال (اگر در بازهٔ اعتبار است)، وگرنه آخرین نسخهٔ فعالِ معتبر."""
+    """نسخهٔ معتبر در تاریخ: پیش‌فرض فعال (اگر در بازهٔ اعتبار است)، وگرنه آخرین نسخهٔ فعال معتبر."""
     on_date = on_date or datetime.date.today()
     valid = ((BomHeader.valid_from.is_(None)) | (BomHeader.valid_from <= on_date)) & (
         (BomHeader.valid_to.is_(None)) | (BomHeader.valid_to >= on_date))
@@ -770,7 +770,7 @@ def get_effective_bom_id(company_id: int, item_id: int, on_date: datetime.date |
 
 def line_requirement(quantity_per_base: decimal.Decimal, quantity_type: str, scrap_percent: decimal.Decimal,
                      order_qty: decimal.Decimal, batch_size: decimal.Decimal) -> tuple[decimal.Decimal, decimal.Decimal]:
-    """(نیازِ خالص، نیاز با ضایعات). متغیر: سرانه × (مقدار ÷ دستهٔ BOM)؛ ثابت: یک بار برایِ کلِ دستور.
+    """(نیاز خالص، نیاز با ضایعات). متغیر: سرانه × (مقدار ÷ دستهٔ BOM)؛ ثابت: یک بار برای کل دستور.
     مثال: ۱۰۰ کیلو با ۳٪ ضایعات ← ۱۰۳ کیلو."""
     net = decimal.Decimal(quantity_per_base) if quantity_type == "FIXED" else (
         decimal.Decimal(quantity_per_base) * decimal.Decimal(order_qty) / decimal.Decimal(batch_size or 1))
@@ -780,7 +780,7 @@ def line_requirement(quantity_per_base: decimal.Decimal, quantity_type: str, scr
 
 def explode(company_id: int, item_id: int, quantity, on_date: datetime.date | None = None, bom_id: int | None = None,
             max_levels: int = 10) -> list[SimpleNamespace]:
-    """انفجارِ چندسطحیِ BOM: هر نیمه‌ساختهٔ «ساختنی» که BOMِ معتبر دارد باز می‌شود. خروجی ردیف به ردیف با سطح و مسیر."""
+    """انفجار چندسطحی فهرست مواد: هر نیمه‌ساختهٔ «ساختنی» که فهرست مواد معتبر دارد باز می‌شود. خروجی ردیف به ردیف با سطح و مسیر."""
     quantity = decimal.Decimal(quantity)
     out: list[SimpleNamespace] = []
     with new_session() as session:
@@ -828,27 +828,27 @@ def where_used(company_id: int, component_item_id: int) -> list[SimpleNamespace]
 
 
 def validate_bom(company_id: int, bom_id: int) -> list[str]:
-    """مشکلاتِ BOM پیش از استفاده در دستورِ تولید (خالی = سالم)."""
+    """مشکلات فهرست مواد پیش از استفاده در دستور تولید (خالی = سالم)."""
     issues: list[str] = []
     with new_session() as session:
         bom = _get_bom(session, company_id, bom_id)
         lines = list(session.scalars(select(BomLine).where(BomLine.bom_id == bom_id)))
         if not [ln for ln in lines if not ln.is_optional]:
-            issues.append("BOM هیچ جزءِ اجباری ندارد.")
+            issues.append("فهرست مواد هیچ جزء اجباری ندارد.")
         if bom.status_code != "ACTIVE":
-            issues.append("نسخهٔ BOM فعال نیست.")
+            issues.append("نسخهٔ فهرست مواد فعال نیست.")
         for ln in lines:
             comp = session.get(Item, ln.component_item_id)
             if comp is None or comp.lifecycle_status_code != "ACTIVE":
-                issues.append(f"جزءِ «{c.item_label(session, ln.component_item_id)}» فعال نیست.")
+                issues.append(f"جزء «{c.item_label(session, ln.component_item_id)}» فعال نیست.")
             if _creates_cycle(session, bom.finished_item_id, ln.component_item_id):
-                issues.append(f"جزءِ «{c.item_label(session, ln.component_item_id)}» حلقه ایجاد می‌کند.")
+                issues.append(f"جزء «{c.item_label(session, ln.component_item_id)}» حلقه ایجاد می‌کند.")
     return issues
 
 
 def quick_bom(company_id: int, item_id: int, components: list[tuple[int, decimal.Decimal]], batch_size=ONE,
               user_id: int | None = None) -> int:
-    """ساختِ سریعِ BOM (کاربرِ ساده): فقط کالا و مقدار؛ بقیه پیش‌فرض."""
+    """ساخت سریع فهرست مواد (کاربر ساده): فقط کالا و مقدار؛ بقیه پیش‌فرض."""
     bom_id = create_bom_version(company_id, item_id, BomFields(batch_size_qty=decimal.Decimal(batch_size)), user_id=user_id)
     for comp, q in components:
         add_bom_component(company_id, bom_id, BomLineFields(component_item_id=comp, quantity=decimal.Decimal(q)), user_id=user_id)

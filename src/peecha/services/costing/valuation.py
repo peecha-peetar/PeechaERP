@@ -1,8 +1,8 @@
-"""ارزش‌گذاریِ موجودی، اطلاعاتِ بهایِ کالا و تاریخچهٔ بها -- R259 (فقط خواندنی).
+"""ارزش‌گذاری موجودی، اطلاعات بهای کالا و تاریخچهٔ بها — R259 (فقط خواندنی).
 
-مبنایِ ارزش در هر تاریخ همان دفترِ انبار (inv.stock_ledger: ورود منهایِ خروج با بهایِ ثبت‌شده) به‌اضافهٔ
-لاگِ اصلاحِ بهایِ تاریخ‌دار (inv.cost_adjustment_log) است -- همان مبنایی که سندِ حسابداریِ موجودی دارد؛
-سیستمِ موجودیِ موازی ساخته نمی‌شود. ریزِ بچ/سریالِ ارزشِ جاری از لایه‌هایِ باز (روش‌هایِ لایه‌ای).
+مبنای ارزش در هر تاریخ همان دفتر انبار (inv.stock_ledger: ورود منهای خروج با بهای ثبت‌شده) به‌اضافهٔ
+لاگ اصلاح بهای تاریخ‌دار (inv.cost_adjustment_log) است — همان مبنایی که سند حسابداری موجودی دارد؛
+سیستم موجودی موازی ساخته نمی‌شود. ریز بچ/سریال ارزش جاری از لایه‌های باز (روش‌های لایه‌ای).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ _ZERO = decimal.Decimal(0)
 
 def positions(company_id: int, as_of: datetime.date | None = None, item_id: int | None = None,
               warehouse_id: int | None = None) -> dict[tuple[int, int], tuple[decimal.Decimal, decimal.Decimal]]:
-    """(کالا، انبار) → (مقدار، ارزش) تا پایانِ as_of از دفترِ انبار + اصلاحاتِ بهایِ تاریخ‌دار."""
+    """(کالا، انبار) → (مقدار، ارزش) تا پایان as_of از دفتر انبار + اصلاحات بهای تاریخ‌دار."""
     as_of = as_of or datetime.date.today()
     sign = case((StockLedger.movement_direction == "IN", 1), else_=-1)
     with new_session() as session:
@@ -48,7 +48,7 @@ def positions(company_id: int, as_of: datetime.date | None = None, item_id: int 
 
 
 def lot_values(company_id: int, item_id: int | None = None, warehouse_id: int | None = None) -> list[SimpleNamespace]:
-    """ارزشِ جاریِ لایه‌هایِ باز به تفکیکِ کالا/انبار/بچ/سریال (روش‌هایِ لایه‌ای)."""
+    """ارزش جاری لایه‌های باز به تفکیک کالا/انبار/بچ/سریال (روش‌های لایه‌ای)."""
     with new_session() as session:
         q = (select(CostLayer.item_id, CostLayer.warehouse_id, CostLayer.batch_id, CostLayer.serial_id,
                     func.sum(CostLayer.remaining_quantity), func.sum(CostLayer.remaining_quantity * CostLayer.unit_cost))
@@ -80,7 +80,7 @@ def last_purchase_cost(company_id: int, item_id: int) -> decimal.Decimal | None:
 
 
 def item_cost_info(company_id: int, item_id: int) -> SimpleNamespace:
-    """بخشِ «اطلاعاتِ بها» در فرمِ کالا: بهایِ جاری/میانگین/آخرین خرید/جایگزینی، ارزشِ موجودی و روش."""
+    """بخش «اطلاعات بها» در فرم کالا: بهای جاری/میانگین/آخرین خرید/جایگزینی، ارزش موجودی و روش."""
     pos = positions(company_id, item_id=item_id)
     qty = sum((v[0] for v in pos.values()), _ZERO)
     value = sum((v[1] for v in pos.values()), _ZERO)
@@ -108,7 +108,7 @@ def item_cost_info(company_id: int, item_id: int) -> SimpleNamespace:
 
 def cost_history(company_id: int, item_id: int | None = None, date_from: datetime.date | None = None,
                  date_to: datetime.date | None = None) -> list[SimpleNamespace]:
-    """تاریخچهٔ بها: هر ورود (بهایِ ورودی) و هر خروج (بهایِ تخصیص‌یافته) با سند، تامین‌کننده، انبار و روش."""
+    """تاریخچهٔ بها: هر ورود (بهای ورودی) و هر خروج (بهای تخصیص‌یافته) با سند، تامین‌کننده، انبار و روش."""
     from peecha.services import detail_dimensions as dimensions_service
 
     date_from = date_from or datetime.date(1900, 1, 1)
@@ -148,7 +148,7 @@ def cost_history(company_id: int, item_id: int | None = None, date_from: datetim
 
 
 def summary(company_id: int, date_from: datetime.date, date_to: datetime.date) -> SimpleNamespace:
-    """شاخص‌هایِ داشبوردِ بهایِ تمام‌شده."""
+    """شاخص‌های داشبورد بهای تمام‌شده."""
     pos = positions(company_id, date_to)
     value = sum((v[1] for v in pos.values()), _ZERO)
     qty = sum((v[0] for v in pos.values() if v[0] > 0), _ZERO)

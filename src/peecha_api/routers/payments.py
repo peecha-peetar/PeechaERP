@@ -1,9 +1,9 @@
-"""وصول/دریافتِ وجه از موبایل (Collection، R134) -- رویِ همان
-services/treasury.create_treasury_voucher موجود سوار می‌شود (بدونِ
-بازنویسیِ منطقِ حسابداریِ چندروشی/چندارزی)؛ فقط طرفِ‌حسابِ مشتری از
-رویِ شناسهٔ تفصیلی resolve می‌شود (treasury.resolve_counterparty_for_detail_account)
-چون کلاینتِ موبایل کدِ معینِ نگاشته‌شده را نمی‌داند. جهت همیشه RECEIPT
-است -- ویزیتور/راننده فقط از مشتری وصول می‌کند، نه پرداخت به او."""
+"""وصول/دریافت وجه از موبایل (Collection، R134) — روی همان
+services/treasury.create_treasury_voucher موجود سوار می‌شود (بدون
+بازنویسی منطق حسابداری چندروشی/چندارزی)؛ فقط طرف‌حساب مشتری از
+روی شناسهٔ تفصیلی resolve می‌شود (treasury.resolve_counterparty_for_detail_account)
+چون کلاینت موبایل کد معین نگاشته‌شده را نمی‌داند. جهت همیشه RECEIPT
+است — ویزیتور/راننده فقط از مشتری وصول می‌کند، نه پرداخت به او."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def create_payment(
     idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> dict:
     if not payload.method_lines:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="حداقل یک ردیفِ روشِ وصول لازم است.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="حداقل یک ردیف روش وصول لازم است.")
     # طبقِ درخواستِ صریحِ کاربر («فقط مشتریانِ خودش»): مدیر از این محدودیت معاف است.
     if not roles_service.is_manager(ctx.user_id, ctx.company_id) and not field_sales_service.is_customer_assigned_to_user(
         ctx.company_id, payload.customer_detail_account_id, ctx.user_id
@@ -43,7 +43,7 @@ def create_payment(
         if line.method not in _ALLOWED_METHODS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="روشِ وصول برایِ اپِ موبایل فقط نقد/بانک/چک می‌تواند باشد.",
+                detail="روش وصول برای برنامهٔ موبایل فقط نقد/بانک/چک می‌تواند باشد.",
             )
 
     try:
@@ -75,7 +75,7 @@ def _create_payment(payload: PaymentCreateRequest, ctx: AuthContext):
         )
         for line in payload.method_lines
     ]
-    description = payload.description or "وصولِ میدانی از اپِ موبایل"
+    description = payload.description or "وصول میدانی از برنامهٔ موبایل"
     if payload.customer_visit_id is not None:
         # طبقِ محدودیتِ شناخته‌شده: سندِ خزانه‌داری فیلدِ ساختاریافته‌یِ
         # customer_visit_id ندارد (یک مهاجرتِ جداگانه‌یِ آینده لازم دارد)

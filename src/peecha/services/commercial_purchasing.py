@@ -1,4 +1,4 @@
-"""بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده (مرحلهٔ ۴)."""
+"""بهای تمام‌شدهٔ وارداتی و تخفیف حجمی تامین‌کننده (مرحلهٔ ۴)."""
 
 from __future__ import annotations
 
@@ -45,9 +45,9 @@ def add_landed_cost_line(
     with new_session() as session:
         doc = session.get(CommercialDocument, purchase_invoice_document_id)
         if doc is None or doc.document_type_code != "PURCHASE_INVOICE":
-            raise ValueError("فقط رویِ فاکتورِ خرید قابلِ‌ثبت است.")
+            raise ValueError("فقط روی فاکتور خرید قابل‌ثبت است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("پسِ Post، هزینه‌هایِ جانبیِ خرید فقط از طریقِ اصلاحیه قابلِ‌تغییر است.")
+            raise ValueError("پس Post، هزینه‌های جانبی خرید فقط از طریق اصلاحیه قابل‌تغییر است.")
         row = LandedCostAllocation(
             purchase_invoice_document_id=purchase_invoice_document_id, amount=amount,
             credit_account_id=credit_account_id, credit_detail_account_id=credit_detail_account_id, notes=notes,
@@ -71,7 +71,7 @@ def delete_landed_cost_line(allocation_id: int, company_id: int) -> None:
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("پسِ Post، هزینه‌هایِ جانبیِ خرید فقط از طریقِ اصلاحیه قابلِ‌تغییر است.")
+            raise ValueError("پس Post، هزینه‌های جانبی خرید فقط از طریق اصلاحیه قابل‌تغییر است.")
         session.delete(row)
         session.commit()
 
@@ -81,7 +81,7 @@ def delete_landed_cost_line(allocation_id: int, company_id: int) -> None:
 # ---------------------------------------------------------------------
 def create_rebate_agreement(supplier_detail_account_id: int, rebate_basis_code: str, valid_from: datetime.date, item_id: int | None = None, valid_to: datetime.date | None = None) -> int:
     if rebate_basis_code not in ("FLAT_PERCENT", "VOLUME_TIER"):
-        raise ValueError("مبنایِ ریبیت نامعتبر است.")
+        raise ValueError("مبنای تخفیف حجمی نامعتبر است.")
     with new_session() as session:
         row = VendorRebateAgreement(supplier_detail_account_id=supplier_detail_account_id, item_id=item_id, rebate_basis_code=rebate_basis_code, valid_from=valid_from, valid_to=valid_to)
         session.add(row)
@@ -91,13 +91,13 @@ def create_rebate_agreement(supplier_detail_account_id: int, rebate_basis_code: 
 
 def update_rebate_agreement(agreement_id: int, rebate_basis_code: str, valid_from: datetime.date, item_id: int | None = None,
                             valid_to: datetime.date | None = None) -> None:
-    """R276: ویرایشِ قراردادِ ریبیت (تامین‌کننده ثابت می‌ماند)."""
+    """R276: ویرایش قرارداد تخفیف حجمی (تامین‌کننده ثابت می‌ماند)."""
     if rebate_basis_code not in ("FLAT_PERCENT", "VOLUME_TIER"):
-        raise ValueError("مبنایِ ریبیت نامعتبر است.")
+        raise ValueError("مبنای تخفیف حجمی نامعتبر است.")
     with new_session() as session:
         row = session.get(VendorRebateAgreement, agreement_id)
         if row is None:
-            raise ValueError("قراردادِ ریبیت نامعتبر است.")
+            raise ValueError("قرارداد تخفیف حجمی نامعتبر است.")
         row.rebate_basis_code, row.valid_from, row.item_id, row.valid_to = rebate_basis_code, valid_from, item_id, valid_to
         session.commit()
 
@@ -122,7 +122,7 @@ def add_rebate_tier(agreement_id: int, min_purchase_amount: decimal.Decimal, reb
     with new_session() as session:
         agreement = session.get(VendorRebateAgreement, agreement_id)
         if agreement is None:
-            raise ValueError("قراردادِ ریبیت نامعتبر است.")
+            raise ValueError("قرارداد تخفیف حجمی نامعتبر است.")
         row = VendorRebateTier(agreement_id=agreement_id, min_purchase_amount=min_purchase_amount, rebate_percent=rebate_percent)
         session.add(row)
         session.commit()
@@ -130,12 +130,12 @@ def add_rebate_tier(agreement_id: int, min_purchase_amount: decimal.Decimal, reb
 
 
 def accrue_rebate_for_invoice(purchase_invoice_document_id: int, company_id: int, period_from: datetime.date, period_to: datetime.date) -> None:
-    """پسِ Postِ فاکتورِ خرید فراخوانی شود؛ فقط تخمین می‌سازد/به‌روزرسانی
-    می‌کند — هرگز رویِ حساب‌ها اثر نمی‌گذارد (مرحلهٔ ۴، بخشِ ۴)."""
+    """پس Post فاکتور خرید فراخوانی شود؛ فقط تخمین می‌سازد/به‌روزرسانی
+    می‌کند — هرگز روی حساب‌ها اثر نمی‌گذارد (مرحلهٔ ۴، بخش ۴)."""
     with new_session() as session:
         doc = session.get(CommercialDocument, purchase_invoice_document_id)
         if doc is None or doc.status_code != "POSTED":
-            raise ValueError("فقط فاکتورِ Postشده قابلِ‌محاسبهٔ ریبیت است.")
+            raise ValueError("فقط فاکتور Postشده قابل‌محاسبهٔ تخفیف حجمی است.")
         agreements = session.scalars(
             select(VendorRebateAgreement).where(
                 VendorRebateAgreement.supplier_detail_account_id == doc.counterparty_detail_account_id,
@@ -174,14 +174,14 @@ def settle_rebate_accrual(accrual_id: int, company_id: int, posted_by_user_id: i
     with new_session() as session:
         accrual = session.get(VendorRebateAccrual, accrual_id)
         if accrual is None or accrual.status_code != "ACCRUING":
-            raise ValueError("فقط تعهدِ درحالِ‌تجمیع قابلِ‌تسویه است.")
+            raise ValueError("فقط تعهد درحال‌تجمیع قابل‌تسویه است.")
         amount = accrual.accrued_amount
 
     result = je_service.create_journal_entry(
-        company_id, posted_by_user_id, datetime.date.today(), "تسویهٔ ریبیتِ تامین‌کننده",
+        company_id, posted_by_user_id, datetime.date.today(), "تسویهٔ تخفیف حجمی تامین‌کننده",
         [
-            je_service.LineInput(account_id=rebate_receivable_account_id, description="تسویهٔ ریبیتِ تامین‌کننده", debit=amount, credit=_ZERO),
-            je_service.LineInput(account_id=purchase_discount_account_id, description="تسویهٔ ریبیتِ تامین‌کننده", debit=_ZERO, credit=amount),
+            je_service.LineInput(account_id=rebate_receivable_account_id, description="تسویهٔ تخفیف حجمی تامین‌کننده", debit=amount, credit=_ZERO),
+            je_service.LineInput(account_id=purchase_discount_account_id, description="تسویهٔ تخفیف حجمی تامین‌کننده", debit=_ZERO, credit=amount),
         ],
         entry_type_code="COMMERCIAL",
     )

@@ -1,7 +1,7 @@
-"""مدیریتِ بازاریابیِ فروشگاهِ اینترنتی -- طبقِ بازخوردِ صریحِ کاربر
-(«امکاناتِ حیاتیِ PeechaSync -- مدیریتِ بازاریابی»): فهرستِ کالاهایِ
-منتشرشده در فروشگاه با فروشِ واقعی/موجودی/پیشنهادِ اقدام، به‌علاوهٔ
-یادآوریِ تقویمِ مناسبتی."""
+"""مدیریت بازاریابی فروشگاه اینترنتی — طبق بازخورد صریح کاربر
+(«امکانات حیاتی PeechaSync — مدیریت بازاریابی»): فهرست کالاهای
+منتشرشده در فروشگاه با فروش واقعی/موجودی/پیشنهاد اقدام، به‌علاوهٔ
+یادآوری تقویم مناسبتی."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class OnlineMarketingScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("مدیریتِ بازاریابیِ فروشگاهِ اینترنتی")
+        title = QLabel("مدیریت بازاریابی فروشگاه اینترنتی")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
@@ -53,14 +53,14 @@ class OnlineMarketingScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addLayout(filter_row)
 
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["کالا", "موجودی", "تعدادِ فروخته‌شده", "فروشِ خالص", "پیشنهادِ اقدام"])
+        self.table.setHorizontalHeaderLabels(["کالا", "موجودی", "تعداد فروخته‌شده", "فروش خالص", "پیشنهاد اقدام"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
 
-        occasions_title = QLabel("یادآوریِ تقویمِ مناسبتیِ فروشگاهی")
+        occasions_title = QLabel("یادآوری تقویم مناسبتی فروشگاهی")
         occasions_title.setStyleSheet("font-weight: bold;")
         outer.addWidget(occasions_title)
         self.occasions_list = QListWidget()
@@ -68,8 +68,8 @@ class OnlineMarketingScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(self.occasions_list)
 
         self.set_field_help([
-            (self.date_from_field, "ابتدایِ بازه‌یِ محاسبهٔ فروش/موجودی."),
-            (self.date_to_field, "انتهایِ بازه‌یِ محاسبهٔ فروش/موجودی."),
+            (self.date_from_field, "ابتدای بازهٔ محاسبهٔ فروش/موجودی."),
+            (self.date_to_field, "انتهای بازهٔ محاسبهٔ فروش/موجودی."),
         ])
 
     def _company_id(self) -> int | None:
@@ -96,6 +96,6 @@ class OnlineMarketingScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.occasions_list.clear()
         for occasion in marketing_service.upcoming_occasions():
-            when = "همین ماه" if occasion.months_away == 0 else f"{numerals.to_persian_digits(str(occasion.months_away))} ماهِ دیگر"
+            when = "همین ماه" if occasion.months_away == 0 else f"{numerals.to_persian_digits(str(occasion.months_away))} ماه دیگر"
             item = QListWidgetItem(f"🎉 {occasion.name} ({when}) -- {occasion.note}")
             self.occasions_list.addItem(item)

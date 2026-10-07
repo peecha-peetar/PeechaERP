@@ -1,10 +1,10 @@
-"""تیمِ خودرو (فازِ ۲ از پخشِ گرم) -- طبقِ درخواستِ صریحِ کاربر: هر خودرو
-(inv.warehouses با warehouse_type_code='VEHICLE') تا سه نقشِ مستقل دارد
--- راننده (مسئولِ کلی/تحویلِ کلی/برگشتِ کالا)، ویزیتور (ثبتِ سفارش/
-فاکتور + تسویه‌حساب)، موزع (تحویلِ فیزیکیِ کالا بر اساسِ فاکتورِ صادره +
-تسویه‌حساب). ممکن است هر سه نقش رویِ یک نفر باشد -- طراحیِ این جدول
+"""تیم خودرو (فاز ۲ از پخش گرم) — طبق درخواست صریح کاربر: هر خودرو
+(inv.warehouses با warehouse_type_code='VEHICLE') تا سه نقش مستقل دارد
+-- راننده (مسئول کلی/تحویل کلی/برگشت کالا)، ویزیتور (ثبت سفارش/
+فاکتور + تسویه‌حساب)، موزع (تحویل فیزیکی کالا بر اساس فاکتور صادره +
+تسویه‌حساب). ممکن است هر سه نقش روی یک نفر باشد — طراحی این جدول
 عمداً هر سه را مستقل نگه می‌دارد تا کسب‌وکاری که بعداً خواست این نقش‌ها
-را از هم جدا کند نیازی به تغییرِ ساختارِ داده نداشته باشد."""
+را از هم جدا کند نیازی به تغییر ساختار داده نداشته باشد."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def set_team_member(vehicle_warehouse_id: int, company_id: int, role_code: str, 
         if vehicle is None or vehicle.company_id != company_id:
             raise ValueError("خودرو نامعتبر است.")
         if vehicle.warehouse_type_code != "VEHICLE":
-            raise ValueError("فقط انبارِ نوعِ «خودرو» می‌تواند تیمِ خودرو داشته باشد.")
+            raise ValueError("فقط انبار نوع «خودرو» می‌تواند تیم خودرو داشته باشد.")
         existing = session.get(VehicleTeamAssignment, (vehicle_warehouse_id, role_code))
         if user_id is None:
             if existing is not None:
@@ -79,10 +79,10 @@ def set_team_member(vehicle_warehouse_id: int, company_id: int, role_code: str, 
 
 
 def get_assigned_vehicle_warehouse_id(user_id: int, company_id: int, role_code: str) -> int | None:
-    """طبقِ نیازِ اپِ موبایل: این کاربر به‌عنوانِ role_code به کدام خودرو
-    وصل است -- برایِ پخشِ گرم، به‌جایِ انبارِ پیش‌فرضِ شرکت، فروش باید
-    از رویِ موجودیِ همین انبار انجام شود. اگر کاربر به چند خودرو با این
-    نقش وصل باشد (حالتِ نامتعارف)، اولین مورد برمی‌گردد."""
+    """طبق نیاز برنامهٔ موبایل: این کاربر به‌عنوان role_code به کدام خودرو
+    وصل است — برای پخش گرم، به‌جای انبار پیش‌فرض شرکت، فروش باید
+    از روی موجودی همین انبار انجام شود. اگر کاربر به چند خودرو با این
+    نقش وصل باشد (حالت نامتعارف)، اولین مورد برمی‌گردد."""
     if role_code not in ROLE_CODES:
         raise ValueError("نقش نامعتبر است.")
     with new_session() as session:

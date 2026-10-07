@@ -51,12 +51,12 @@ export function ThemeProvider({ children, initialMode }: ThemeProviderProps) {
 
 export function useTheme(): Theme {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme باید داخلِ ThemeProvider استفاده شود.");
+  if (!ctx) throw new Error("useTheme باید داخل ThemeProvider استفاده شود.");
   return ctx.theme;
 }
 
 export function useThemeControls(): Pick<ThemeContextValue, "setMode" | "toggleMode"> {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useThemeControls باید داخلِ ThemeProvider استفاده شود.");
+  if (!ctx) throw new Error("useThemeControls باید داخل ThemeProvider استفاده شود.");
   return { setMode: ctx.setMode, toggleMode: ctx.toggleMode };
 }

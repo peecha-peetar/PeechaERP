@@ -1,8 +1,8 @@
-"""تنظیماتِ اتصالِ سانترال/وویپ (AMIِ آستریسک/ایزابل) -- طبقِ درخواستِ
-صریحِ کاربر: «وصل بشه به سیستمِ سانترال یا وویپ». هم‌الگو با
-commercial_pricing.get_pricing_policy/set_pricing_policy -- یک ردیفِ
-یکتا به‌ازایِ هر شرکت. اعتبارنامه (نامِ‌کاربری/رمزِ AMI) با همان
-کلیدِ Fernدِ موجود در ecommerce_credentials.py رمزنگاری می‌شود، دقیقاً
+"""تنظیمات اتصال سانترال/وویپ (AMI آستریسک/ایزابل) — طبق درخواست
+صریح کاربر: «وصل بشه به سیستم سانترال یا وویپ». هم‌الگو با
+commercial_pricing.get_pricing_policy/set_pricing_policy — یک ردیف
+یکتا به‌ازای هر شرکت. اعتبارنامه (نام‌کاربری/رمز AMI) با همان
+کلید Fernد موجود در ecommerce_credentials.py رمزنگاری می‌شود، دقیقاً
 هم‌الگو با bot_token_encrypted در commercial_social.py."""
 
 from __future__ import annotations
@@ -64,9 +64,9 @@ def set_voip_connection(
 
 
 def record_connection_result(company_id: int, success: bool, error_message: str | None = None) -> None:
-    """طبقِ الگویِ «نگهبانِ اتصال» (هم‌الگو با MarketplaceConnection/SocialConnection):
-    هر تلاشِ Originate (موفق یا ناموفق) این‌جا ثبت می‌شود -- شکستِ متوالی
-    بعداً می‌تواند در پنلِ سلامتِ اتصالات نمایش داده شود."""
+    """طبق الگوی «نگهبان اتصال» (هم‌الگو با MarketplaceConnection/SocialConnection):
+    هر تلاش Originate (موفق یا ناموفق) این‌جا ثبت می‌شود — شکست متوالی
+    بعداً می‌تواند در پنل سلامت اتصالات نمایش داده شود."""
     from datetime import datetime
 
     with new_session() as session:

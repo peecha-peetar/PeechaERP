@@ -1,9 +1,9 @@
-"""فرمِ واحدِ دریافت/پرداختِ چندروشی — یک طرف‌حساب + چند ردیفِ روش (نقد/
-بانک/چک/تخفیف/کالابرگ/بن)، هرکدام طبقِ نگاشتِ تنظیماتِ خزانه‌داری به
-حسابِ خودش می‌رود و همه در یک سندِ حسابداریِ واحد ثبت می‌شوند
-(services/treasury.create_treasury_voucher). طبقِ درخواستِ صریح: «دریافت
-از آقایِ ایکس مبلغِ ۲۰۰۰ که در فرم مشخص بشه نقدی یا بانک یا چک یا در
-قالبِ تخفیف»."""
+"""فرم واحد دریافت/پرداخت چندروشی — یک طرف‌حساب + چند ردیف روش (نقد/
+بانک/چک/تخفیف/کالابرگ/بن)، هرکدام طبق نگاشت تنظیمات خزانه‌داری به
+حساب خودش می‌رود و همه در یک سند حسابداری واحد ثبت می‌شوند
+(services/treasury.create_treasury_voucher). طبق درخواست صریح: «دریافت
+از آقای ایکس مبلغ ۲۰۰۰ که در فرم مشخص بشه نقدی یا بانک یا چک یا در
+قالب تخفیف»."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ _METHOD_LABELS = {
     "GOODS_COUPON": "کالابرگ",
     "VOUCHER": "بن",
     "NETTING": "تهاتر",
-    "CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
+    "CHECK_DISBURSEMENT": "پرداخت با چک دریافتی (خرج چک)",
     "INSTALLMENT": "اقساط",
 }
 _RECEIPT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING", "INSTALLMENT"]
@@ -76,18 +76,18 @@ _PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMEN
 # فاکتورهایِ تسویه‌نشده لینک باشد»): مسیرِ معکوسِ همان چیزی که در
 # commercial_settlement.py ساخته شد.
 _INVOICE_TYPE_BY_DIRECTION = {"RECEIPT": "SALES_INVOICE", "PAYMENT": "PURCHASE_INVOICE"}
-_LINK_INVOICE_COLUMNS = ["نوع", "شماره", "موعدِ تسویه", "جمعِ کل", "مانده", "مبلغِ تسویه"]
+_LINK_INVOICE_COLUMNS = ["نوع", "شماره", "موعد تسویه", "جمع کل", "مانده", "مبلغ تسویه"]
 
 
 def _describe_invoice_settlement(direction: str, entries_info: list[tuple], counterparty_label: str) -> str:
-    """طبقِ درخواستِ صریح («وقتی مقدارِ تسویه برایِ یک فاکتورِ خاص وارد
-    می‌شود، شرحِ پیش‌فرضِ هدر را سیستم ایجاد کند -- مثلاً "پرداخت بابتِ
-    تسویه‌یِ قسمتی از فاکتورِ شماره‌یِ .... «نامِ طرفِ‌حساب»"»).
+    """طبق درخواست صریح («وقتی مقدار تسویه برای یک فاکتور خاص وارد
+    می‌شود، شرح پیش‌فرض هدر را سیستم ایجاد کند — مثلاً "پرداخت بابت
+    تسویهٔ قسمتی از فاکتور شمارهٔ .... «نام طرف‌حساب»"»).
     entries_info: فهرستی از (document_no, remaining_amount, entered_amount)."""
     noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
     is_partial = any(entered < remaining for _no, remaining, entered in entries_info)
     numbers = "، ".join(f"#{numerals.to_persian_digits(str(no))}" for no, _r, _e in entries_info)
-    body = f"فاکتورِ شماره‌یِ {numbers}" if len(entries_info) == 1 else f"فاکتورهایِ شماره‌یِ {numbers}"
+    body = f"فاکتور شمارهٔ {numbers}" if len(entries_info) == 1 else f"فاکتورهای شمارهٔ {numbers}"
     extent = "قسمتی از " if is_partial else ""
     # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: گزینه‌هایِ کمبویِ طرفِ‌حساب
     # همیشه به‌شکلِ «کد — نام» ساخته می‌شوند؛ بدونِ این جداکردن، شرحِ
@@ -95,7 +95,7 @@ def _describe_invoice_settlement(direction: str, entries_info: list[tuple], coun
     # می‌شد.
     name_only = counterparty_label.rsplit(" — ", 1)[-1].strip() if counterparty_label else ""
     suffix = f" — {name_only}" if name_only else ""
-    return f"{noun} بابتِ تسویه‌یِ {extent}{body}{suffix}"
+    return f"{noun} بابت تسویهٔ {extent}{body}{suffix}"
 # طبقِ درخواستِ صریح: تهاتر هم مثلِ نقد/بانک/تخفیف/کالابرگ/بن، تفصیلیِ
 # احتمالیِ خودش را (از رویِ نگاشتِ تنظیمات) نشان می‌دهد — پس دیگر همیشه از
 # دیالوگِ جزئیات معاف نیست؛ اگر برایِ آن معینی تفصیلی/بُعدِ الزامی نداشت،
@@ -111,9 +111,9 @@ _MAPPING_ONLY_DETAIL_METHODS = ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOU
 
 
 def _is_mapping_only_method(method: str | None) -> bool:
-    """طبقِ آیتمِ ۷: روش‌هایِ سفارشی (کدشان با CUSTOM_ شروع می‌شود) دقیقاً
-    مثلِ نقد/بانک/تخفیف/کالابرگ/بن/تهاتر رفتار می‌کنند — فقط مبلغ +
-    تفصیلیِ اختیاری."""
+    """طبق آیتم ۷: روش‌های سفارشی (کدشان با CUSTOM_ شروع می‌شود) دقیقاً
+    مثل نقد/بانک/تخفیف/کالابرگ/بن/تهاتر رفتار می‌کنند — فقط مبلغ +
+    تفصیلی اختیاری."""
     return method in _MAPPING_ONLY_DETAIL_METHODS or (method is not None and method.startswith("CUSTOM_"))
 # نوع‌بُعدهایی که تفصیلیِ نقد/بانک معمولاً از رویِ آن‌ها ساخته می‌شوند —
 # فقط برایِ برچسبِ فیلد؛ خودِ فهرستِ گزینه‌ها همیشه از رویِ بُعدِ الزامیِ
@@ -121,16 +121,16 @@ def _is_mapping_only_method(method: str | None) -> bool:
 
 
 class _EnterComboBox(QComboBox):
-    """کمبویِ غیرِقابلِ‌ویرایشِ روش — Enter به‌جایِ بازکردنِ popup، سیگنالِ
-    enterPressed می‌فرستد تا زنجیره‌یِ ناوبریِ کیبوردیِ ردیف را کنترل کند.
+    """فهرست غیرقابل‌ویرایش روش — Enter به‌جای بازکردن popup، سیگنال
+    enterPressed می‌فرستد تا زنجیرهٔ ناوبری کیبوردی ردیف را کنترل کند.
 
-    باگِ ریشه‌ای که باعثِ رفتارِ «بعضی‌وقت‌ها کار می‌کند بعضی‌وقت‌ها نه» می‌شد:
-    وقتی popupِ کمبو باز است (مثلاً با کلیک یا فلش‌رو‌به‌پایین)، Enter برایِ
-    انتخابِ گزینه‌یِ highlight‌شده و بستنِ خودِ popup به view/popup داخلیِ Qt
-    می‌رود، نه به keyPressEventِ همین ویجت — پس enterPressed اصلاً امیت
-    نمی‌شد و _open_details هیچ‌وقت اجرا نمی‌شد. حالا با یک eventFilter رویِ
-    self.view()، همان Enterِ داخلِ popup هم گرفته و enterPressed امیت
-    می‌شود (با singleShot تا بعد از commit‌شدنِ انتخابِ Qt، currentData
+    باگ ریشه‌ای که باعث رفتار «بعضی‌وقت‌ها کار می‌کند بعضی‌وقت‌ها نه» می‌شد:
+    وقتی popup فهرست باز است (مثلاً با کلیک یا فلش‌رو‌به‌پایین)، Enter برای
+    انتخاب گزینهٔ highlight‌شده و بستن خود popup به view/popup داخلی Qt
+    می‌رود، نه به keyPressEvent همین ویجت — پس enterPressed اصلاً امیت
+    نمی‌شد و _open_details هیچ‌وقت اجرا نمی‌شد. حالا با یک eventFilter روی
+    self.view()، همان Enter داخل popup هم گرفته و enterPressed امیت
+    می‌شود (با singleShot تا بعد از commit‌شدن انتخاب Qt، currentData
     درست خوانده شود)."""
 
     enterPressed = Signal()
@@ -165,9 +165,9 @@ _HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimension
 
 
 def _detail_option_label(row) -> str:
-    """طبقِ گزارشِ صریح: هرجا فهرستِ تفصیلی فیلتر/جست‌وجو می‌شود، هم کد هم
-    نام نشان داده شود (نه فقط نام) — تا تفصیلی‌هایِ هم‌نام یا نزدیک‌به‌هم
-    قابلِ‌تشخیص باشند، دقیقاً هم‌الگو با فرمتِ کدِ حساب‌ها در بقیه‌یِ برنامه."""
+    """طبق گزارش صریح: هرجا فهرست تفصیلی فیلتر/جست‌وجو می‌شود، هم کد هم
+    نام نشان داده شود (نه فقط نام) — تا تفصیلی‌های هم‌نام یا نزدیک‌به‌هم
+    قابل‌تشخیص باشند، دقیقاً هم‌الگو با قالب کد حساب‌ها در بقیهٔ برنامه."""
     full_code = getattr(row, "full_code", "") or getattr(row, "code", "")
     name = getattr(row, "name", None)
     if name and full_code:
@@ -176,16 +176,16 @@ def _detail_option_label(row) -> str:
 
 
 def _detail_name_only(row) -> str:
-    """طبقِ گزارشِ صریح: در شرحِ خودکارِ سند فقط نامِ تفصیلی لازم است، نه
-    کدش — کد فقط برایِ تشخیصِ گزینه‌ها در فهرست‌هایِ جست‌وجو لازم است
-    (_detail_option_label بالا)، نه در متنِ نهاییِ شرحِ سند."""
+    """طبق گزارش صریح: در شرح خودکار سند فقط نام تفصیلی لازم است، نه
+    کدش — کد فقط برای تشخیص گزینه‌ها در فهرست‌های جست‌وجو لازم است
+    (_detail_option_label بالا)، نه در متن نهایی شرح سند."""
     return getattr(row, "name", None) or getattr(row, "full_code", "") or getattr(row, "code", "")
 
 
 def _leaf_detail_accounts_excluding_cost_center_project(company_id: int) -> list:
-    """طبقِ آیتمِ ۸: تفصیلی‌هایِ برگِ شرکت به‌جز مرکزِ هزینه/پروژه — این دو
-    بُعد از قبل جداگانه در هدرِ فرم پوشش داده می‌شوند (آیتمِ ۱)، پس نباید
-    دوباره در جست‌وجویِ آزادِ روش‌هایِ تخفیف/کالابرگ/بن/تهاتر ظاهر شوند."""
+    """طبق آیتم ۸: تفصیلی‌های برگ شرکت به‌جز مرکز هزینه/پروژه — این دو
+    بُعد از قبل جداگانه در هدر فرم پوشش داده می‌شوند (آیتم ۱)، پس نباید
+    دوباره در جست‌وجوی آزاد روش‌های تخفیف/کالابرگ/بن/تهاتر ظاهر شوند."""
     excluded_type_ids = {
         dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE),
         dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE),
@@ -203,35 +203,35 @@ def _resolve_row_detail_source(
     covered_dimension_type_ids: set[int] | None = None,
     header_person_group_id: int | None = None,
 ) -> tuple[int | None, tuple[int, str] | None, str, list]:
-    """منبعِ تفصیلیِ یک ردیف (نقد/بانک/تخفیف/کالابرگ/بن/تهاتر) را مشخص
-    می‌کند — به‌ترتیبِ اولویت:
+    """منبع تفصیلی یک ردیف (نقد/بانک/تخفیف/کالابرگ/بن/تهاتر) را مشخص
+    می‌کند — به‌ترتیب اولویت:
 
-    ۱) تفصیلیِ اختصاصیِ از‌پیش‌تخصیص‌یافته در تنظیماتِ خزانه‌داری (طبقِ
-       درخواستِ صریح: «در هر ردیف از نوع سند غیر از کد معین بتوان کد
+    ۱) تفصیلی اختصاصی از‌پیش‌تخصیص‌یافته در تنظیمات خزانه‌داری (طبق
+       درخواست صریح: «در هر ردیف از نوع سند غیر از کد معین بتوان کد
        تفصیلی خاص هم تخصیص داد») — اگر باشد، دیگر از کاربر پرسیده نمی‌شود.
-    ۲) بُعدِ(هایِ) الزامیِ واقعیِ همان معینِ نگاشته‌شده — هم گروهِ شخصیِ
+    ۲) بُعد(های) الزامی واقعی همان معین نگاشته‌شده — هم گروه شخصی
        الزامی (get_required_person_groups_for_account، مثلاً «فقط
-       مشتری») هم نوع‌بُعدهایِ الزامیِ دیگر (get_required_dimensions_for_account)،
-       دقیقاً همان منطقِ صفحه‌ی صدورِ سند: اگر گروهِ شخصی الزامی باشد،
-       فقط اشخاصِ همان گروه؛ به‌علاوه‌یِ هر نوع‌بُعدِ دیگری که الزامی
-       باشد (مرکزِ هزینه/پروژه فقط وقتی حذف می‌شوند که هدرِ فرم واقعاً
+       مشتری») هم نوع‌بُعدهای الزامی دیگر (get_required_dimensions_for_account)،
+       دقیقاً همان منطق صفحهٔ صدور سند: اگر گروه شخصی الزامی باشد،
+       فقط اشخاص همان گروه؛ به‌علاوهٔ هر نوع‌بُعد دیگری که الزامی
+       باشد (مرکز هزینه/پروژه فقط وقتی حذف می‌شوند که هدر فرم واقعاً
        پوشششان داده باشد). قبلاً این تابع فقط نوع‌بُعدها را می‌خواند، نه
-       گروهِ شخص را — نتیجه این بود که وقتی مثلاً معینِ تخفیف به گروهِ
-       «مشتری» محدود شده بود، این محدودیت نادیده گرفته می‌شد و به‌جایِ آن
-       فهرستِ آزادِ همه‌یِ تفصیلی‌های شرکت (بندِ ۳) پیشنهاد می‌شد.
-       طبقِ گزارشِ صریحِ بعدی: حتی اگر طرفِ‌حسابِ هدر خودش عضوِ همان
-       گروهِ الزامی باشد، باز هم این فیلد نمایش داده می‌شود — قبلاً در
-       این حالت دیگر چیزی پرسیده نمی‌شد (خودکار همان انتخابِ هدر اعمال
-       می‌شد)، ولی نتیجه‌اش این بود که کاربر نمی‌دانست کِی برایِ تخفیف/
-       نقد/بانک/… از او تفصیلی پرسیده می‌شود و کِی نه («بعضی‌وقتا
+       گروه شخص را — نتیجه این بود که وقتی مثلاً معین تخفیف به گروه
+       «مشتری» محدود شده بود، این محدودیت نادیده گرفته می‌شد و به‌جای آن
+       فهرست آزاد همهٔ تفصیلی‌های شرکت (بند ۳) پیشنهاد می‌شد.
+       طبق گزارش صریح بعدی: حتی اگر طرف‌حساب هدر خودش عضو همان
+       گروه الزامی باشد، باز هم این فیلد نمایش داده می‌شود — قبلاً در
+       این حالت دیگر چیزی پرسیده نمی‌شد (خودکار همان انتخاب هدر اعمال
+       می‌شد)، ولی نتیجه‌اش این بود که کاربر نمی‌دانست کی برای تخفیف/
+       نقد/بانک/… از او تفصیلی پرسیده می‌شود و کی نه («بعضی‌وقتا
        می‌پرسه، بعضی‌وقتا نه، نمی‌دونم چرا»). حالا همیشه پرسیده می‌شود،
-       حتی اگر فقط یک گزینه (همان طرفِ‌حسابِ هدر) در فهرست باشد.
-    ۳) اگر معین نه گروهِ شخصیِ الزامی داشته باشد نه هیچ نوع‌بُعدِ دیگری
-       (مثلاً تخفیف که هنوز چیزی رویش تنظیم نشده) — به‌جایِ این‌که هیچ‌جا
-       نتوان تفصیلی وارد کرد، جستجویِ آزاد رویِ همه‌یِ تفصیلی‌هایِ برگِ
+       حتی اگر فقط یک گزینه (همان طرف‌حساب هدر) در فهرست باشد.
+    ۳) اگر معین نه گروه شخصی الزامی داشته باشد نه هیچ نوع‌بُعد دیگری
+       (مثلاً تخفیف که هنوز چیزی رویش تنظیم نشده) — به‌جای این‌که هیچ‌جا
+       نتوان تفصیلی وارد کرد، جستجوی آزاد روی همهٔ تفصیلی‌های برگ
        شرکت پیشنهاد می‌شود («اگر تفصیلی تخصیص ندهیم از سند انتخاب کنیم»).
 
-    خروجی: (account_id, پیش‌تخصیص (id, برچسب) یا None، برچسبِ فیلد، فهرستِ گزینه‌ها)."""
+    خروجی: (account_id, پیش‌تخصیص (id, برچسب) یا None، برچسب فیلد، فهرست گزینه‌ها)."""
     account_id, preset_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
     if account_id is None:
         return None, None, "", []
@@ -248,10 +248,10 @@ def _resolve_account_detail_options(
     covered_dimension_type_ids: set[int] | None,
     header_person_group_id: int | None,
 ) -> tuple[tuple[int, str] | None, str, list]:
-    """هسته‌یِ resolveِ تفصیلیِ یک معینِ مشخص — بدونِ خواندنِ مستقیمِ
-    account_mappings — تا هم توسطِ _resolve_row_detail_source (حالتِ
-    تک‌معینی) و هم _resolve_row_detail_sources (آیتمِ ۹، حالتِ چندمعینی)
-    قابلِ‌فراخوانی باشد."""
+    """هستهٔ resolve تفصیلی یک معین مشخص — بدون خواندن مستقیم
+    account_mappings — تا هم توسط _resolve_row_detail_source (حالت
+    تک‌معینی) و هم _resolve_row_detail_sources (آیتم ۹، حالت چندمعینی)
+    قابل‌فراخوانی باشد."""
     if preset_detail_id is not None:
         # طبقِ آیتمِ ۸: حذفِ مرکزِ هزینه/پروژه فقط مالِ جستجویِ آزادِ
         # پایین‌تر (بندِ ۳) است — یک پیش‌تخصیصِ صریحاً تنظیم‌شده در تنظیمات
@@ -311,7 +311,7 @@ def _resolve_account_detail_options(
     options = []
     labels = []
     if person_group_ids:
-        labels.append("تفصیلیِ اشخاص")
+        labels.append("تفصیلی اشخاص")
         options.extend(
             p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in person_group_ids
         )
@@ -327,13 +327,13 @@ def _resolve_row_detail_sources(
     covered_dimension_type_ids: set[int] | None = None,
     header_person_group_id: int | None = None,
 ) -> tuple[int | None, tuple[int, str] | None, str, list, dict[int, int]]:
-    """طبقِ آیتمِ ۹: نسخه‌یِ چندمعینیِ _resolve_row_detail_source — اگر فقط
-    یک معین برایِ این mapping_key تنظیم شده باشد، دقیقاً همان رفتار
-    (شاملِ پیش‌تخصیص) بدونِ تغییر اجرا می‌شود. اگر بیش از یک معین تنظیم
-    شده باشد، پیش‌تخصیص نادیده گرفته می‌شود و گزینه‌هایِ هرکدام (طبقِ
-    همان منطقِ تک‌معینی) با هم union می‌شوند؛ خروجیِ پنجم یک نگاشتِ
+    """طبق آیتم ۹: نسخهٔ چندمعینی _resolve_row_detail_source — اگر فقط
+    یک معین برای این mapping_key تنظیم شده باشد، دقیقاً همان رفتار
+    (شامل پیش‌تخصیص) بدون تغییر اجرا می‌شود. اگر بیش از یک معین تنظیم
+    شده باشد، پیش‌تخصیص نادیده گرفته می‌شود و گزینه‌های هرکدام (طبق
+    همان منطق تک‌معینی) با هم union می‌شوند؛ خروجی پنجم یک نگاشت
     {detail_account_id: account_id} است تا وقتی کاربر یک تفصیلی از
-    فهرستِ ترکیبی انتخاب می‌کند، معینِ متناظرش هم معلوم باشد
+    فهرست ترکیبی انتخاب می‌کند، معین متناظرش هم معلوم باشد
     (MethodLine.account_id_override)."""
     mapped_accounts = treasury_service.list_mapped_accounts_for_key(company_id, mapping_key)
     if len(mapped_accounts) <= 1:
@@ -362,28 +362,28 @@ def _resolve_supplementary_person_detail(
     header_person_group_id: int | None = None,
     header_detail_account_id: int | None = None,
 ) -> tuple[tuple[int, str] | None, str, list]:
-    """طبقِ گزارشِ صریح: روشِ چک (دریافت/پرداخت) و خرجِ چک، برخلافِ نقد/بانک/
-    تخفیف/کالابرگ/بن/تهاتر، فیلدِ تخصصیِ خودشان را دارند (چندچکیِ دریافتی،
-    حسابِ بانکیِ صادرکننده، چکِ دریافتیِ خرج‌شونده) و از _resolve_row_detail_source
-    استفاده نمی‌کنند — نتیجه این بود که اگر معینِ نگاشته‌شده‌یِ همان روش به
-    یک گروهِ شخص محدود شده بود (مثلاً «اسناد دریافتنی نزدِ صندوق» که فقط
-    مشتری/تامین‌کننده مجازند)، این محدودیت هیچ‌جا خوانده نمی‌شد و ثبتِ سند
-    با خطایِ «انتخابِ یک تفصیلیِ اشخاص از گروهِ مجاز الزامی است» رد می‌شد.
-    این تابع، مستقل از فیلدهایِ تخصصیِ همان دیالوگ‌ها، فقط همین محدودیتِ
-    گروهِ شخص را (اگر باشد) به‌عنوانِ یک فیلدِ *تکمیلی* برمی‌گرداند — برخلافِ
-    _resolve_row_detail_source، اگر هیچ گروهِ شخصی الزامی نباشد چیزی
-    پیشنهاد نمی‌دهد (فهرستِ آزاد این‌جا معنا ندارد، چون این فیلدِ اصلیِ
+    """طبق گزارش صریح: روش چک (دریافت/پرداخت) و خرج چک، برخلاف نقد/بانک/
+    تخفیف/کالابرگ/بن/تهاتر، فیلد تخصصی خودشان را دارند (چندچکی دریافتی،
+    حساب بانکی صادرکننده، چک دریافتی خرج‌شونده) و از _resolve_row_detail_source
+    استفاده نمی‌کنند — نتیجه این بود که اگر معین نگاشته‌شدهٔ همان روش به
+    یک گروه شخص محدود شده بود (مثلاً «اسناد دریافتنی نزد صندوق» که فقط
+    مشتری/تامین‌کننده مجازند)، این محدودیت هیچ‌جا خوانده نمی‌شد و ثبت سند
+    با خطای «انتخاب یک تفصیلی اشخاص از گروه مجاز الزامی است» رد می‌شد.
+    این تابع، مستقل از فیلدهای تخصصی همان دیالوگ‌ها، فقط همین محدودیت
+    گروه شخص را (اگر باشد) به‌عنوان یک فیلد *تکمیلی* برمی‌گرداند — برخلاف
+    _resolve_row_detail_source، اگر هیچ گروه شخصی الزامی نباشد چیزی
+    پیشنهاد نمی‌دهد (فهرست آزاد این‌جا معنا ندارد، چون این فیلد اصلی
     ردیف نیست).
 
-    طبقِ گزارشِ صریحِ تازه‌ی «قسمتِ دریافتِ چک»: اگر فراخوان بدونِ
-    header_detail_account_id تماس بگیرد (بقیه‌ی مصرف‌کننده‌ها، مثلِ
-    خرجِ چک)، رفتار همان قبلی می‌ماند — همیشه فهرستِ انتخاب نمایش داده
-    می‌شود، حتی اگر طرفِ‌حسابِ هدر عضوِ همان گروه باشد. اما وقتی فراخوان
-    (فقط _CheckEntryDialog) این آرگومان را می‌دهد: اگر طرفِ‌حسابِ هدر
-    خودش عضوِ همان گروهِ الزامی باشد، همان طرفِ‌حساب به‌عنوانِ پیش‌فرضِ
-    قطعی برگردانده می‌شود (دیگر دوباره پرسیده نمی‌شود)؛ فقط وقتی گروهِ
-    الزامیِ این معین با گروهِ طرفِ‌حسابِ هدر فرق داشته باشد، فهرستِ آزادِ
-    انتخاب (از همان گروهِ الزامی) نمایش داده می‌شود."""
+    طبق گزارش صریح تازهٔ «قسمت دریافت چک»: اگر فراخوان بدون
+    header_detail_account_id تماس بگیرد (بقیهٔ مصرف‌کننده‌ها، مثل
+    خرج چک)، رفتار همان قبلی می‌ماند — همیشه فهرست انتخاب نمایش داده
+    می‌شود، حتی اگر طرف‌حساب هدر عضو همان گروه باشد. اما وقتی فراخوان
+    (فقط _CheckEntryDialog) این آرگومان را می‌دهد: اگر طرف‌حساب هدر
+    خودش عضو همان گروه الزامی باشد، همان طرف‌حساب به‌عنوان پیش‌فرض
+    قطعی برگردانده می‌شود (دیگر دوباره پرسیده نمی‌شود)؛ فقط وقتی گروه
+    الزامی این معین با گروه طرف‌حساب هدر فرق داشته باشد، فهرست آزاد
+    انتخاب (از همان گروه الزامی) نمایش داده می‌شود."""
     account_id, preset_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
     if account_id is None:
         return None, "", []
@@ -413,14 +413,14 @@ def _resolve_supplementary_person_detail(
         header_label = _detail_name_only(header_row) if header_row is not None else ""
         return (header_detail_account_id, header_label), "", []
     persons = [p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in person_group_ids]
-    return None, "تفصیلیِ اشخاص", persons
+    return None, "تفصیلی اشخاص", persons
 
 
 class _MethodDetailsDialog(QDialog):
-    """جزئیاتِ مخصوصِ روشِ انتخاب‌شده‌یِ یک ردیف — نقد/بانک/تخفیف/کالابرگ:
-    تفصیلیِ سطحِ آخرِ حسابِ معینِ نگاشته‌شده؛ خرجِ چک: کدام چکِ دریافتی؛
-    بن: سریال+مشخصات. چک (هم دریافت هم پرداخت) دیگر این‌جا نیست — دیالوگِ
-    چندچکیِ _CheckEntryDialog هردو جهت را پوشش می‌دهد."""
+    """جزئیات مخصوص روش انتخاب‌شدهٔ یک ردیف — نقد/بانک/تخفیف/کالابرگ:
+    تفصیلی سطح آخر حساب معین نگاشته‌شده؛ خرج چک: کدام چک دریافتی؛
+    بن: سریال+مشخصات. چک (هم دریافت هم پرداخت) دیگر این‌جا نیست — دیالوگ
+    چندچکی _CheckEntryDialog هردو جهت را پوشش می‌دهد."""
 
     def __init__(
         self,
@@ -435,7 +435,7 @@ class _MethodDetailsDialog(QDialog):
         counterparty_detail_account_id: int | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"جزئیاتِ ردیفِ {_METHOD_LABELS.get(method, method)}")
+        self.setWindowTitle(f"جزئیات ردیف {_METHOD_LABELS.get(method, method)}")
         layout = QFormLayout(self)
         self._decimal_places = decimal_places
 
@@ -487,7 +487,7 @@ class _MethodDetailsDialog(QDialog):
             # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): گزینه‌یِ اول
             # همیشه «بدونِ فاکتور» است -- یعنی مبلغِ همین ردیف (آزاد، بدونِ
             # اتصال به هیچ فاکتوری) طیِ چند قسط دریافت/پرداخت می‌شود.
-            options = [(None, "(بدونِ فاکتور -- مبلغِ آزادِ همین ردیف)")]
+            options = [(None, "(بدون فاکتور — مبلغ آزاد همین ردیف)")]
             for status in unsettled:
                 try:
                     doc, _lines = documents_service.get_document(status.document_id, company_id)
@@ -495,25 +495,25 @@ class _MethodDetailsDialog(QDialog):
                     continue
                 if counterparty_detail_account_id is not None and doc.counterparty_detail_account_id != counterparty_detail_account_id:
                     continue
-                label = f"فاکتورِ #{numerals.to_persian_digits(str(doc.document_no))} — مانده: {numerals.format_money(status.remaining_amount, decimal_places)}"
+                label = f"فاکتور #{numerals.to_persian_digits(str(doc.document_no))} — مانده: {numerals.format_money(status.remaining_amount, decimal_places)}"
                 options.append((status.document_id, label))
             self.installment_document_combo = _make_searchable_combo(options)
             if current.get("installment_document_id") is not None:
                 index = self.installment_document_combo.findData(current["installment_document_id"])
                 if index >= 0:
                     self.installment_document_combo.setCurrentIndex(index)
-            layout.addRow("فاکتورِ موردِنظر", self.installment_document_combo)
+            layout.addRow("فاکتور مورد نظر", self.installment_document_combo)
 
             self.installment_count_field = _AmountField()
             self.installment_count_field.setDecimals(0)
             self.installment_count_field.setValue(current.get("installment_count") or 3)
-            layout.addRow("تعدادِ اقساط", self.installment_count_field)
+            layout.addRow("تعداد اقساط", self.installment_count_field)
 
             self.installment_first_due_field = JalaliDateEdit()
             self.installment_first_due_field.setDate(
                 current.get("installment_first_due_date") or (datetime.date.today() + datetime.timedelta(days=30))
             )
-            layout.addRow("سررسیدِ اولین قسط", self.installment_first_due_field)
+            layout.addRow("سررسید اولین قسط", self.installment_first_due_field)
 
             # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط، هزینه‌هایِ متفرقه، و فاصله‌یِ
             # سررسیدِ آزاد»): پیش‌فرض‌ها دقیقاً معادلِ رفتارِ قبلی‌اند (بدونِ
@@ -521,7 +521,7 @@ class _MethodDetailsDialog(QDialog):
             self.installment_interest_rate_field = _AmountField()
             self.installment_interest_rate_field.setDecimals(3)
             self.installment_interest_rate_field.setValue(float(current.get("installment_interest_rate_percent") or 0))
-            layout.addRow("درصدِ بهره (٪)", self.installment_interest_rate_field)
+            layout.addRow("درصد بهره (٪)", self.installment_interest_rate_field)
 
             self.installment_misc_fee_field = _AmountField()
             self.installment_misc_fee_field.setDecimals(self._decimal_places)
@@ -544,9 +544,9 @@ class _MethodDetailsDialog(QDialog):
             self.installment_due_interval_field.returnPressed.connect(self.accept)
         if method == "VOUCHER":
             self.voucher_serial_field = PersianDigitLineEdit(current.get("voucher_serial") or "")
-            layout.addRow("سریالِ بن", self.voucher_serial_field)
+            layout.addRow("سریال بن", self.voucher_serial_field)
             self.voucher_detail_field = QLineEdit(current.get("voucher_detail") or "")
-            layout.addRow("مشخصاتِ بن", self.voucher_detail_field)
+            layout.addRow("مشخصات بن", self.voucher_detail_field)
             if self.detail_combo is not None:
                 self.detail_combo.lineEdit().returnPressed.connect(self.voucher_serial_field.setFocus)
             self.voucher_serial_field.returnPressed.connect(self.voucher_detail_field.setFocus)
@@ -568,9 +568,9 @@ class _MethodDetailsDialog(QDialog):
 
             filter_row = QHBoxLayout()
             self.check_search_field = QLineEdit()
-            self.check_search_field.setPlaceholderText("جست‌وجو در شماره‌یِ چک/بانک/صادرکننده…")
+            self.check_search_field.setPlaceholderText("جست‌وجو در شمارهٔ چک/بانک/صادرکننده…")
             filter_row.addWidget(self.check_search_field, stretch=1)
-            self.check_due_filter_enabled = QCheckBox("فیلترِ بازه‌یِ سررسید")
+            self.check_due_filter_enabled = QCheckBox("فیلتر بازهٔ سررسید")
             filter_row.addWidget(self.check_due_filter_enabled)
             filter_row.addWidget(QLabel("از"))
             self.check_due_from_field = JalaliDateEdit()
@@ -584,7 +584,7 @@ class _MethodDetailsDialog(QDialog):
 
             self.received_check_table = QTableWidget(0, 6)
             self.received_check_table.setHorizontalHeaderLabels(
-                ["", "شماره‌یِ چک", "بانک", "صادرکننده", "مبلغ", "سررسید"]
+                ["", "شمارهٔ چک", "بانک", "صادرکننده", "مبلغ", "سررسید"]
             )
             self.received_check_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             self.received_check_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -635,7 +635,7 @@ class _MethodDetailsDialog(QDialog):
             self.check_due_from_field.editingFinished.connect(self._apply_check_disbursement_filter)
             self.check_due_to_field.editingFinished.connect(self._apply_check_disbursement_filter)
 
-            layout.addRow("چک‌هایِ دریافتیِ خرج‌شونده", check_container)
+            layout.addRow("چک‌های دریافتی خرج‌شونده", check_container)
 
         if method == "CHECK_DISBURSEMENT":
             # طبقِ گزارشِ صریح: خرجِ چک فیلدِ تخصصیِ خودش را دارد (چکِ
@@ -659,7 +659,7 @@ class _MethodDetailsDialog(QDialog):
                     index = self.person_detail_combo.findData(current["person_detail_account_id"])
                     if index >= 0:
                         self.person_detail_combo.setCurrentIndex(index)
-                layout.addRow(person_label or "تفصیلیِ اشخاص", self.person_detail_combo)
+                layout.addRow(person_label or "تفصیلی اشخاص", self.person_detail_combo)
 
         if method == "CHECK_DISBURSEMENT":
             self.resize(680, 440)
@@ -691,9 +691,9 @@ class _MethodDetailsDialog(QDialog):
         super().keyPressEvent(event)
 
     def _apply_check_disbursement_filter(self) -> None:
-        """طبقِ درخواستِ صریح: جست‌وجویِ زنده در شماره‌یِ چک/بانک/صادرکننده +
-        فیلترِ اختیاریِ بازه‌یِ سررسید — فقط ردیف‌هایِ منطبق دیده می‌شوند؛
-        وضعیتِ تیک‌خورده‌بودنِ ردیف‌هایِ پنهان‌شده هم دست‌نخورده می‌ماند."""
+        """طبق درخواست صریح: جست‌وجوی زنده در شمارهٔ چک/بانک/صادرکننده +
+        فیلتر اختیاری بازهٔ سررسید — فقط ردیف‌های منطبق دیده می‌شوند؛
+        وضعیت تیک‌خورده‌بودن ردیف‌های پنهان‌شده هم دست‌نخورده می‌ماند."""
         if self.received_check_table is None:
             return
         query = self.check_search_field.text().strip().lower()
@@ -766,16 +766,16 @@ class _MethodDetailsDialog(QDialog):
         return data
 
 
-_CHECK_ENTRY_COLUMNS = ["شماره‌یِ چک", "بانک", "مبلغ", "صاحبِ حساب"]
+_CHECK_ENTRY_COLUMNS = ["شمارهٔ چک", "بانک", "مبلغ", "صاحب حساب"]
 
 
 class _CheckEntryDialog(LayoutEditMixin, QDialog):
-    """واردکردنِ چند چک در یک ردیف — با «تایید» جمعِ مبلغِ همه‌یِ چک‌ها به
-    ردیف منتقل می‌شود. برایِ دریافت: سریال/شماره/شبا/بانک/شماره‌حساب/مبلغ/
-    نامِ صاحبِ‌حساب/کدِملی/تلفن. طبقِ درخواستِ صریح، برایِ پرداخت فقط
-    سریال/شماره‌چک/شماره‌یِ صیادی/مبلغ/سررسید پرسیده می‌شود — حسابِ بانکیِ
-    صادرکننده یک‌بار برایِ کلِ ردیف انتخاب می‌شود و اطلاعاتِ گیرنده خودکار
-    از طرفِ‌حسابِ بالایِ فرم می‌آید."""
+    """واردکردن چند چک در یک ردیف — با «تایید» جمع مبلغ همهٔ چک‌ها به
+    ردیف منتقل می‌شود. برای دریافت: سریال/شماره/شبا/بانک/شماره‌حساب/مبلغ/
+    نام صاحب‌حساب/کد ملی/تلفن. طبق درخواست صریح، برای پرداخت فقط
+    سریال/شماره‌چک/شمارهٔ صیادی/مبلغ/سررسید پرسیده می‌شود — حساب بانکی
+    صادرکننده یک‌بار برای کل ردیف انتخاب می‌شود و اطلاعات گیرنده خودکار
+    از طرف‌حساب بالای فرم می‌آید."""
 
     def __init__(
         self,
@@ -795,7 +795,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         super().__init__(parent)
         self._direction = direction
         self._decimal_places = decimal_places
-        self.setWindowTitle("چک‌هایِ دریافتی" if direction == "RECEIPT" else "چک‌هایِ پرداختی")
+        self.setWindowTitle("چک‌های دریافتی" if direction == "RECEIPT" else "چک‌های پرداختی")
         self.setMinimumWidth(620)
         # طبقِ درخواستِ صریح («فضایِ بیشتر برایِ فهرستِ چک‌ها»): ارتفاعِ
         # پیش‌فرضِ دیالوگ بزرگ‌تر تا stretchِ جدول (پایین‌تر) واقعاً فضا
@@ -830,12 +830,12 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
                 self.fund_combo = _make_searchable_combo(
                     [(option.detail_account_id, option.name or option.code) for option in fund_options]
                 )
-                fund_form.addRow("صندوقِ محلِ دریافت", self.fund_combo)
+                fund_form.addRow("صندوق محل دریافت", self.fund_combo)
                 outer.addLayout(fund_form)
                 pre_grid_focus_chain.append(self.fund_combo)
         if direction == "PAYMENT":
             issuing_form = QFormLayout()
-            checkbook_options: list[tuple[int | None, str]] = [(None, "(بدونِ دسته‌چک — شماره‌یِ دستی)")]
+            checkbook_options: list[tuple[int | None, str]] = [(None, "(بدون دسته‌چک — شمارهٔ دستی)")]
             checkbook_options.extend(
                 (
                     checkbook.checkbook_id,
@@ -866,7 +866,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
                 index = self.issuing_bank_combo.findData(current_bank_account_detail_id)
                 if index >= 0:
                     self.issuing_bank_combo.setCurrentIndex(index)
-            issuing_form.addRow("حسابِ بانکیِ صادرکننده", self.issuing_bank_combo)
+            issuing_form.addRow("حساب بانکی صادرکننده", self.issuing_bank_combo)
             outer.addLayout(issuing_form)
             pre_grid_focus_chain.append(self.issuing_bank_combo)
 
@@ -875,7 +875,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
             # فرمِ سند هستند و خودکار همین‌جا (فقط نمایشی) آورده می‌شوند.
             payee_name, payee_national_id, payee_phone = header_payee_info or ("", "", "")
             payee_info_label = QLabel(
-                f"گیرنده: {payee_name or '—'}    —    کدِ ملی: {payee_national_id or '—'}    —    تلفن: {payee_phone or '—'}"
+                f"گیرنده: {payee_name or '—'}    —    کد ملی: {payee_national_id or '—'}    —    تلفن: {payee_phone or '—'}"
             )
             payee_info_label.setObjectName("sectionHint")
             outer.addWidget(payee_info_label)
@@ -909,7 +909,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
                 index = self.person_detail_combo.findData(current_person_detail_id)
                 if index >= 0:
                     self.person_detail_combo.setCurrentIndex(index)
-            person_form.addRow(person_label or "تفصیلیِ اشخاص", self.person_detail_combo)
+            person_form.addRow(person_label or "تفصیلی اشخاص", self.person_detail_combo)
             outer.addLayout(person_form)
             pre_grid_focus_chain.append(self.person_detail_combo)
 
@@ -937,32 +937,32 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
             self.national_id_field.setText(payee_national_id)
             self.phone_field.setText(payee_phone)
 
-        person_word = "صاحبِ حساب" if direction == "RECEIPT" else "گیرنده"
-        no_field_label = "شماره‌یِ چک" if direction == "RECEIPT" else "شماره‌یِ چک (خالی = خودکار از دسته‌چک)"
+        person_word = "صاحب حساب" if direction == "RECEIPT" else "گیرنده"
+        no_field_label = "شمارهٔ چک" if direction == "RECEIPT" else "شمارهٔ چک (خالی = خودکار از دسته‌چک)"
         if direction == "PAYMENT":
             # طبقِ درخواستِ صریحِ آیتمِ ۳: فرمِ چکِ پرداختی فقط همین پنج
             # فیلد را می‌پرسد — شبا/بانکِ گیرنده/شماره‌حسابِ گیرنده معنی
             # ندارند (خودمان صادرکننده‌ایم)، و نام/کدِملی/تلفنِ گیرنده هم
             # بالاتر خودکار از طرفِ‌حسابِ سند آمد (غیرِقابلِ‌ویرایش این‌جا).
             rows = [
-                ("سریالِ چک", self.serial_field),
+                ("سریال چک", self.serial_field),
                 (no_field_label, self.no_field),
-                ("شماره‌یِ صیادی", self.sayad_field),
+                ("شمارهٔ صیادی", self.sayad_field),
                 ("مبلغ", self.amount_field),
                 ("سررسید", self.due_field),
             ]
         else:
             rows = [
-                ("سریالِ چک", self.serial_field),
+                ("سریال چک", self.serial_field),
                 (no_field_label, self.no_field),
-                ("شماره‌یِ شبا", self.iban_field),
+                ("شمارهٔ شبا", self.iban_field),
                 ("بانک", self.bank_combo),
-                ("شماره‌یِ حساب", self.account_no_field),
+                ("شمارهٔ حساب", self.account_no_field),
                 ("مبلغ", self.amount_field),
                 ("سررسید", self.due_field),
-                (f"نامِ {person_word}", self.owner_field),
-                (f"کدِ ملیِ {person_word}", self.national_id_field),
-                (f"تلفنِ {person_word}", self.phone_field),
+                (f"نام {person_word}", self.owner_field),
+                (f"کد ملی {person_word}", self.national_id_field),
+                (f"تلفن {person_word}", self.phone_field),
             ]
 
         # طبقِ اصلاحِ آیتمِ ۳: کمبوهایِ پیش‌از-جدول (صندوق/دسته‌چک/حسابِ
@@ -1000,7 +1000,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         self.add_button = QPushButton("➕")
         self.add_button.setObjectName("iconButton")
         self.add_button.setFixedWidth(48)
-        self.add_button.setToolTip("افزودنِ این چک به فهرست")
+        self.add_button.setToolTip("افزودن این چک به فهرست")
         self.add_button.clicked.connect(self._add_current)
         outer.addWidget(self.add_button)
 
@@ -1008,7 +1008,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         # بانکیِ صادرکننده یک‌بار برایِ کلِ ردیف انتخاب می‌شود)، آن ستون
         # برایِ پرداخت بجایش «شماره‌یِ صیادی» را نشان می‌دهد.
         columns = (
-            ["شماره‌یِ چک", "شماره‌یِ صیادی", "مبلغ", "گیرنده"]
+            ["شمارهٔ چک", "شمارهٔ صیادی", "مبلغ", "گیرنده"]
             if direction == "PAYMENT"
             else _CHECK_ENTRY_COLUMNS
         )
@@ -1028,7 +1028,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(48)
-        delete_button.setToolTip("حذفِ چکِ انتخاب‌شده")
+        delete_button.setToolTip("حذف چک انتخاب‌شده")
         delete_button.clicked.connect(self._delete_selected_row)
         table_buttons.addWidget(delete_button)
         outer.addLayout(table_buttons)
@@ -1138,8 +1138,8 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
             self.phone_field.clear()
 
     def _increment_check_no(self) -> None:
-        """طبقِ آیتمِ ۴: شماره‌یِ چکِ بعدی یک رقم بیشتر از قبلی — فقط اگر
-        شماره‌یِ فعلی عددیِ خالص باشد (وگرنه دست‌نخورده می‌ماند، چون معلوم
+        """طبق آیتم ۴: شمارهٔ چک بعدی یک رقم بیشتر از قبلی — فقط اگر
+        شمارهٔ فعلی عددی خالص باشد (وگرنه دست‌نخورده می‌ماند، چون معلوم
         نیست کاربر چه الگویی در نظر داشته)."""
         current = numerals.to_ascii_digits(self.no_field.text().strip())
         if not current.isdigit():
@@ -1147,8 +1147,8 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         self.no_field.setText(str(int(current) + 1).zfill(len(current)))
 
     def _edit_row(self, row: int, _column: int) -> None:
-        """طبقِ درخواستِ صریح: دابل‌کلیک رویِ یک چکِ واردشده آن را برایِ
-        ویرایش به فیلدهایِ بالا برمی‌گرداند — به‌جایِ حذفِ فوری."""
+        """طبق درخواست صریح: دابل‌کلیک روی یک چک واردشده آن را برای
+        ویرایش به فیلدهای بالا برمی‌گرداند — به‌جای حذف فوری."""
         entry = self._checks[row]
         self.serial_field.setText(entry.get("check_serial") or "")
         self.no_field.setText(entry.get("check_no") or "")
@@ -1168,7 +1168,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         self.phone_field.setText(phone or "")
         self.sayad_field.setText(entry.get("sayad_no") or "")
         self._editing_index = row
-        self.add_button.setToolTip("به‌روزرسانیِ این چک")
+        self.add_button.setToolTip("به‌روزرسانی این چک")
         self.serial_field.setFocus()
 
     def _delete_selected_row(self) -> None:
@@ -1179,7 +1179,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         self._checks.pop(row)
         if self._editing_index == row:
             self._editing_index = None
-            self.add_button.setToolTip("افزودنِ این چک به فهرست")
+            self.add_button.setToolTip("افزودن این چک به فهرست")
             self._clear_fields(after_edit=True)
         elif self._editing_index is not None and self._editing_index > row:
             self._editing_index -= 1
@@ -1194,7 +1194,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
             self._checks[self._editing_index] = entry
             self._refresh_table()
             self._editing_index = None
-            self.add_button.setToolTip("افزودنِ این چک به فهرست")
+            self.add_button.setToolTip("افزودن این چک به فهرست")
         else:
             self._checks.append(entry)
             self._append_table_row(entry)
@@ -1209,7 +1209,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
     def _update_total(self) -> None:
         total = sum((c["amount"] for c in self._checks), decimal.Decimal(0))
         text = (
-            f"جمعِ مبلغِ چک‌ها: {numerals.format_money(total, self._decimal_places)} "
+            f"جمع مبلغ چک‌ها: {numerals.format_money(total, self._decimal_places)} "
             f"({numerals.to_persian_digits(str(len(self._checks)))} چک)"
         )
         # طبقِ آیتمِ ۶: «راسِ» همینِ چک‌هایِ واردشده — تاریخِ میانگینِ وزنی.
@@ -1226,7 +1226,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         # «+ افزودن»/«به‌روزرسانی» را جداگانه بزند.
         self._commit_current_entry()
         if not self._checks:
-            QMessageBox.warning(self, "چکِ دریافتی", "حداقل یک چک وارد کنید.")
+            QMessageBox.warning(self, "چک دریافتی", "حداقل یک چک وارد کنید.")
             return
         self.accept()
 
@@ -1262,8 +1262,8 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
 
 
 class _RowAmountField(_AmountField):
-    """طبقِ آیتمِ ۶: فشردنِ Space در این فیلد، باقیمانده‌یِ محاسبه‌شده توسطِ
-    `remaining_getter` را در خودش کپی می‌کند — هم در فرمِ دریافت هم پرداخت."""
+    """طبق آیتم ۶: فشردن Space در این فیلد، باقیماندهٔ محاسبه‌شده توسط
+    `remaining_getter` را در خودش کپی می‌کند — هم در فرم دریافت هم پرداخت."""
 
     def __init__(self, remaining_getter=None) -> None:
         super().__init__()
@@ -1280,11 +1280,11 @@ class _RowAmountField(_AmountField):
 
 
 class _HeaderAmountField(_AmountField):
-    """طبقِ گزارشِ صریح: اگر مبلغِ بالای فرمِ دریافت/پرداخت هنوز خالی/صفر
-    است، فشردنِ Space جمعِ مبلغِ ردیف‌هایِ واردشده را در آن قرار می‌دهد —
-    عکسِ آیتمِ ۶ (که باقیماندهِ هدر را در ردیف کپی می‌کند). اگر خودِ فیلد از
-    قبل مقداری داشته باشد، Space کارِ معمولِ خودش (تایپِ فاصله) را
-    می‌کند — این فیلد فقط برایِ حالتِ خالی‌بودن است."""
+    """طبق گزارش صریح: اگر مبلغ بالای فرم دریافت/پرداخت هنوز خالی/صفر
+    است، فشردن Space جمع مبلغ ردیف‌های واردشده را در آن قرار می‌دهد —
+    عکس آیتم ۶ (که باقیماندهٔ هدر را در ردیف کپی می‌کند). اگر خود فیلد از
+    قبل مقداری داشته باشد، Space کار معمول خودش (تایپ فاصله) را
+    می‌کند — این فیلد فقط برای حالت خالی‌بودن است."""
 
     def __init__(self, rows_total_getter=None) -> None:
         super().__init__()
@@ -1332,7 +1332,7 @@ class _MethodRow:
         self.discount_percent_field = _AmountField()
         self.discount_percent_field.setDecimals(2)
         self.discount_percent_field.setMaximumWidth(56)
-        self.discount_percent_field.setToolTip("درصدِ تخفیف — بر اساسِ جمعِ مبلغِ هدر، مبلغِ این ردیف را خودکار پر می‌کند.")
+        self.discount_percent_field.setToolTip("درصد تخفیف — بر اساس جمع مبلغ هدر، مبلغ این ردیف را خودکار پر می‌کند.")
         self.discount_percent_field.setVisible(False)
         self.discount_percent_field.valueChanged.connect(self._on_discount_percent_changed)
         self.discount_percent_label = QLabel("٪")
@@ -1356,7 +1356,7 @@ class _MethodRow:
         self.details_button = QPushButton("📋")
         self.details_button.setObjectName("iconButton")
         self.details_button.setFixedWidth(44)
-        self.details_button.setToolTip("جزئیاتِ این ردیف")
+        self.details_button.setToolTip("جزئیات این ردیف")
         self.details_button.clicked.connect(self._open_details)
 
         # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): وصولِ یک قسطِ
@@ -1366,7 +1366,7 @@ class _MethodRow:
         self.installment_link_button = QPushButton("🔗")
         self.installment_link_button.setObjectName("iconButton")
         self.installment_link_button.setFixedWidth(44)
-        self.installment_link_button.setToolTip("اتصال به یک قسطِ درانتظار (این ردیف وصولِ کدام قسط است؟)")
+        self.installment_link_button.setToolTip("اتصال به یک قسط درانتظار (این ردیف وصول کدام قسط است؟)")
         self.installment_link_button.clicked.connect(self._open_installment_link)
 
         self.remove_button = QPushButton("✕")
@@ -1375,23 +1375,23 @@ class _MethodRow:
         # زمینه/لبه‌یِ قرمزِ کم‌رنگ دارد.
         self.remove_button.setObjectName("dangerIconButton")
         self.remove_button.setFixedWidth(44)
-        self.remove_button.setToolTip("حذفِ این ردیف")
+        self.remove_button.setToolTip("حذف این ردیف")
         self.remove_button.clicked.connect(lambda: screen._remove_row(self))
 
         self._update_discount_percent_visibility()
 
     def _update_discount_percent_visibility(self) -> None:
-        """طبقِ آیتمِ ۱۰: فیلدِ درصدِ تخفیف فقط برایِ روشِ تخفیف نمایش
+        """طبق آیتم ۱۰: فیلد درصد تخفیف فقط برای روش تخفیف نمایش
         داده می‌شود."""
         is_discount = self.method_combo.currentData() == "DISCOUNT"
         self.discount_percent_field.setVisible(is_discount)
         self.discount_percent_label.setVisible(is_discount)
 
     def _on_discount_percent_changed(self, value: float) -> None:
-        """طبقِ آیتمِ ۱۰: با واردکردنِ درصد، مبلغِ ردیف خودکار از رویِ
-        همان درصد ضربدرِ جمعِ مبلغِ هدر (کلِ مبلغِ دریافتی/پرداختی)
-        محاسبه و در فیلدِ مبلغ گذاشته می‌شود — کاربر می‌تواند بعداً هم
-        خودِ مبلغ را دستی اصلاح کند."""
+        """طبق آیتم ۱۰: با واردکردن درصد، مبلغ ردیف خودکار از روی
+        همان درصد ضربدر جمع مبلغ هدر (کل مبلغ دریافتی/پرداختی)
+        محاسبه و در فیلد مبلغ گذاشته می‌شود — کاربر می‌تواند بعداً هم
+        خود مبلغ را دستی اصلاح کند."""
         if value <= 0:
             return
         header_total = float(self._screen.total_amount_field.value())
@@ -1481,9 +1481,9 @@ class _MethodRow:
                 if required_label:
                     theme.set_status_label(
                         self._screen.status_label,
-                        f"معینِ نگاشته‌شده برایِ «{_METHOD_LABELS.get(method, method)}» به «{required_label}» "
-                        "نیاز دارد، ولی هیچ تفصیلیِ فعالی در آن گروه تعریف نشده — "
-                        "ابتدا از صفحه‌یِ «تفصیلی‌ها» یک حساب در آن گروه بسازید.",
+                        f"معین نگاشته‌شده برای «{_METHOD_LABELS.get(method, method)}» به «{required_label}» "
+                        "نیاز دارد، ولی هیچ تفصیلی فعالی در آن گروه تعریف نشده — "
+                        "ابتدا از صفحهٔ «تفصیلی‌ها» یک حساب در آن گروه بسازید.",
                         ok=False,
                     )
                 self._regenerate_description()
@@ -1511,30 +1511,30 @@ class _MethodRow:
                 self.amount_field.setFocus()
 
     def _open_installment_link(self) -> None:
-        """طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): این ردیف را
-        به یکی از اقساطِ درانتظارِ همان طرفِ‌حسابِ سند وصل می‌کند -- با
-        تاییدِ سند، آن قسط PAID می‌شود و خودکار به‌عنوانِ یک تسویه رویِ
-        فاکتورِ اصلیِ همان طرح هم ثبت می‌شود."""
+        """طبق درخواست صریح («روش دریافت/پرداخت اقساطی»): این ردیف را
+        به یکی از اقساط درانتظار همان طرف‌حساب سند وصل می‌کند — با
+        تایید سند، آن قسط PAID می‌شود و خودکار به‌عنوان یک تسویه روی
+        فاکتور اصلی همان طرح هم ثبت می‌شود."""
         company_id = self._screen.company_id
         counterparty_id = self._screen.account_combo.currentData()
         if company_id is None or counterparty_id is None:
-            theme.set_status_label(self._screen.status_label, "ابتدا طرفِ‌حساب را انتخاب کنید.", ok=False)
+            theme.set_status_label(self._screen.status_label, "ابتدا طرف‌حساب را انتخاب کنید.", ok=False)
             return
         pending = installments_service.list_installments(
             company_id, status_codes=["PENDING", "OVERDUE"], counterparty_detail_account_id=counterparty_id,
         )
         if not pending:
-            theme.set_status_label(self._screen.status_label, "قسطِ درانتظاری برایِ این طرفِ‌حساب یافت نشد.", ok=False)
+            theme.set_status_label(self._screen.status_label, "قسط درانتظاری برای این طرف‌حساب یافت نشد.", ok=False)
             return
         dialog = QDialog(self._screen)
         dialog.setWindowTitle("اتصال به قسط")
         form = QFormLayout(dialog)
         combo = _make_searchable_combo(
-            [(None, "(بدونِ اتصال)")]
+            [(None, "(بدون اتصال)")]
             + [
                 (
                     line.line_id,
-                    f"فاکتور #{numerals.to_persian_digits(str(line.document_id))} — قسطِ #{numerals.to_persian_digits(str(line.installment_no))} — "
+                    f"فاکتور #{numerals.to_persian_digits(str(line.document_id))} — قسط #{numerals.to_persian_digits(str(line.installment_no))} — "
                     f"{numerals.format_money(line.amount, self._screen.currency_decimal_places)} — سررسید {numerals.format_jalali_date(line.due_date)}",
                 )
                 for line in pending
@@ -1562,8 +1562,8 @@ class _MethodRow:
                 self.installment_link_button.setStyleSheet("")
 
     def _regenerate_description(self) -> None:
-        """طبقِ درخواستِ صریح: شرحِ هر ردیف خودکار از رویِ قالبِ همان روش
-        (قابلِ‌ویرایش در تنظیمات) ساخته و نمایش داده می‌شود — کاربر بعداً
+        """طبق درخواست صریح: شرح هر ردیف خودکار از روی قالب همان روش
+        (قابل‌ویرایش در تنظیمات) ساخته و نمایش داده می‌شود — کاربر بعداً
         هم می‌تواند دستی ویرایشش کند."""
         if self._screen.company_id is None:
             return
@@ -1662,22 +1662,22 @@ class _MethodRow:
 
 
 class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
-    """طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که به
-    فاکتورهایِ تسویه‌نشده لینک باشد و بتوان مبلغِ تسویه را برایِ
-    فاکتورهایِ همان شخص وارد کرد»): مسیرِ معکوسِ همان چیزی که در
-    commercial_settlement.py ساخته شد — این‌جا خودِ فرمِ دریافت/پرداخت
-    فهرستِ فاکتورهایِ بازِ طرفِ‌حسابِ انتخاب‌شده را نشان می‌دهد."""
+    """طبق درخواست صریح («در فرم دریافت/پرداخت هم دکمه‌ای باشد که به
+    فاکتورهای تسویه‌نشده لینک باشد و بتوان مبلغ تسویه را برای
+    فاکتورهای همان شخص وارد کرد»): مسیر معکوس همان چیزی که در
+    commercial_settlement.py ساخته شد — این‌جا خود فرم دریافت/پرداخت
+    فهرست فاکتورهای باز طرف‌حساب انتخاب‌شده را نشان می‌دهد."""
 
     def __init__(self, parent: QWidget, statuses: list, docs_by_id: dict, direction: str) -> None:
         super().__init__(parent)
-        self.setWindowTitle("لینک به فاکتورهایِ بازِ این طرفِ‌حساب")
+        self.setWindowTitle("لینک به فاکتورهای باز این طرف‌حساب")
         self.setMinimumWidth(560)
         self._statuses = statuses
         self._qty_fields: dict[int, _AmountField] = {}
-        invoice_title = "فاکتورِ فروش" if direction == "RECEIPT" else "فاکتورِ خرید"
+        invoice_title = "فاکتور فروش" if direction == "RECEIPT" else "فاکتور خرید"
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("مبلغِ تسویه‌یِ هرکدام از فاکتورهایِ بازِ این طرفِ‌حساب را مشخص کنید (پیش‌فرض: صفر)."))
+        layout.addWidget(QLabel("مبلغ تسویهٔ هرکدام از فاکتورهای باز این طرف‌حساب را مشخص کنید (پیش‌فرض: صفر)."))
 
         table = QTableWidget(len(statuses), len(_LINK_INVOICE_COLUMNS))
         table.setHorizontalHeaderLabels(_LINK_INVOICE_COLUMNS)
@@ -1726,12 +1726,12 @@ class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
     def _on_accept(self) -> None:
         entries = {doc_id: decimal.Decimal(str(field.value())) for doc_id, field in self._qty_fields.items() if field.value() > 0}
         if not entries:
-            self.status_label.setText("حداقل برایِ یک فاکتور مبلغی وارد کنید.")
+            self.status_label.setText("حداقل برای یک فاکتور مبلغی وارد کنید.")
             return
         for status in self._statuses:
             amount = entries.get(status.document_id)
             if amount is not None and amount > status.remaining_amount:
-                self.status_label.setText("مبلغِ واردشده برایِ یک فاکتور از مانده‌اش بیشتر است.")
+                self.status_label.setText("مبلغ واردشده برای یک فاکتور از مانده‌اش بیشتر است.")
                 return
         self.accept()
 
@@ -1791,7 +1791,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
 
         noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
         row_methods_hint = (
-            "نقد/بانک/چک/تخفیف/کالابرگ/بن/تهاتر" if direction == "RECEIPT" else "نقد/بانک/چک/تخفیف/خرجِ چک/تهاتر"
+            "نقد/بانک/چک/تخفیف/کالابرگ/بن/تهاتر" if direction == "RECEIPT" else "نقد/بانک/چک/تخفیف/خرج چک/تهاتر"
         )
 
         # هم‌الگو با هدرِ فرمِ سندِ حسابداری (journal_entry.py): کارتِ هدر با
@@ -1813,12 +1813,12 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # واقعی نیست، پس زنجیره‌یِ کیبورد/اعتبارسنجیِ پایین دست‌نخورده
         # می‌ماند) + نوارِ کارت‌هایِ رنگیِ خلاصه (جمعِ هدر/جمعِ ردیف‌ها/اختلاف)
         # بالایِ فرم.
-        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        self.step_stepper = SectionStepper(["اطلاعات سند", "ردیف‌ها"])
         layout.addWidget(self.step_stepper)
 
         self.summary_cards = SummaryCardBar({
-            "total": SummaryCard(f"جمعِ مبلغِ {noun}", role="info"),
-            "rows_total": SummaryCard("جمعِ ردیف‌ها", role="neutral"),
+            "total": SummaryCard(f"جمع مبلغ {noun}", role="info"),
+            "rows_total": SummaryCard("جمع ردیف‌ها", role="neutral"),
             "diff": SummaryCard("اختلاف", role="success"),
         })
         layout.addWidget(self.summary_cards)
@@ -1829,11 +1829,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         header_layout.setContentsMargins(10, 6, 10, 4)
         header_layout.setSpacing(3)
 
-        self.title_label = QLabel(f"سندِ {noun}")
+        self.title_label = QLabel(f"سند {noun}")
         self.title_label.setObjectName("pageTitle")
         header_layout.addWidget(self.title_label, 0, 0, 1, 5)
 
-        header_layout.addWidget(QLabel("طرفِ حساب (تفصیلی)"), 1, 0)
+        header_layout.addWidget(QLabel("طرف حساب (تفصیلی)"), 1, 0)
         # طبقِ آیتم‌هایِ ۹/۱۱: کنارِ خودِ کمبویِ طرفِ‌حساب، دو دکمه‌یِ میان‌بر —
         # افزودنِ سریعِ طرفِ‌حسابِ تازه (بدونِ خروج از فرم) و بازکردنِ
         # گزارشِ معینِ همین طرفِ‌حساب.
@@ -1847,13 +1847,13 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ گزارشِ صریح: این دکمه‌یِ آیکونی با flatButtonِ همیشه‌شفاف
         # به‌سختی دیده می‌شد — iconButton همیشه یک زمینه/لبه‌یِ ملایم دارد.
         self.quick_add_button.setObjectName("iconButton")
-        self.quick_add_button.setToolTip("بازکردنِ فرمِ تعریفِ تفصیلی (برایِ ساختنِ طرفِ‌حسابِ تازه)")
+        self.quick_add_button.setToolTip("بازکردن فرم تعریف تفصیلی (برای ساختن طرف‌حساب تازه)")
         self.quick_add_button.setMaximumWidth(28)
         self.quick_add_button.clicked.connect(self._quick_add_counterparty)
         account_row.addWidget(self.quick_add_button)
         self.ledger_button = QPushButton("📒")
         self.ledger_button.setObjectName("iconButton")
-        self.ledger_button.setToolTip("گزارشِ معینِ طرفِ‌حساب")
+        self.ledger_button.setToolTip("گزارش معین طرف‌حساب")
         self.ledger_button.setMaximumWidth(28)
         self.ledger_button.clicked.connect(self._open_counterparty_ledger)
         account_row.addWidget(self.ledger_button)
@@ -1862,7 +1862,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # فاکتورهایِ همان شخص وارد کرد»).
         self.link_invoices_button = QPushButton("🔗")
         self.link_invoices_button.setObjectName("iconButton")
-        self.link_invoices_button.setToolTip("لینک به فاکتورهایِ بازِ این طرفِ‌حساب — واردکردنِ مبلغِ تسویه برایِ هرکدام")
+        self.link_invoices_button.setToolTip("لینک به فاکتورهای باز این طرف‌حساب — واردکردن مبلغ تسویه برای هرکدام")
         self.link_invoices_button.setMaximumWidth(28)
         self.link_invoices_button.clicked.connect(self._open_link_invoices_dialog)
         account_row.addWidget(self.link_invoices_button)
@@ -1877,7 +1877,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         header_layout.addLayout(self.detail_container, 1, 2)
 
         header_layout.addWidget(QLabel("تاریخ"), 1, 3)
-        self.date_field = JalaliDateEdit("تاریخِ سند")
+        self.date_field = JalaliDateEdit("تاریخ سند")
         header_layout.addWidget(self.date_field, 1, 4)
 
         # طبقِ آیتمِ ۸: ماندهٔ فعلی + ماهیتِ همین طرفِ‌حساب، بلافاصله زیرِ
@@ -1893,7 +1893,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ درخواستِ صریح: جمعِ مبلغِ هدر + جمعِ زنده‌یِ ردیف‌ها/اختلاف
         # (و رفتارِ Spaceِ متناظر) دیگر مخصوصِ دریافت نیست — پرداخت هم
         # عیناً همین رفتار را دارد.
-        total_label_text = "جمعِ مبلغِ دریافتی" if direction == "RECEIPT" else "جمعِ مبلغِ پرداختی"
+        total_label_text = "جمع مبلغ دریافتی" if direction == "RECEIPT" else "جمع مبلغ پرداختی"
         header_layout.addWidget(QLabel(total_label_text), 3, 3)
         self.total_amount_field: _AmountField = _HeaderAmountField(self._rows_total)
         self.total_amount_field.setMaximumWidth(160)
@@ -1919,11 +1919,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # باشیم و نرخ را از تنظیمات/آخرین نرخِ ارز بخواند» — هم‌الگو با
         # کمبویِ ارزِ سند در journal_entry.py؛ اگر ارزِ پایه انتخاب شود
         # فیلدِ نرخ لازم نیست (نرخ همیشه ۱ است).
-        header_layout.addWidget(QLabel(f"ارزِ سندِ {noun}"), 6, 0)
+        header_layout.addWidget(QLabel(f"ارز سند {noun}"), 6, 0)
         self.currency_combo = QComboBox()
         self.currency_combo.currentIndexChanged.connect(self._on_currency_changed)
         header_layout.addWidget(self.currency_combo, 6, 1)
-        self.rate_label = QLabel("نرخ به ارزِ پایه")
+        self.rate_label = QLabel("نرخ به ارز پایه")
         header_layout.addWidget(self.rate_label, 6, 2)
         rate_row = QHBoxLayout()
         rate_row.setContentsMargins(0, 0, 0, 0)
@@ -1933,7 +1933,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.rate_fetch_button = QPushButton("🌐")
         self.rate_fetch_button.setObjectName("iconButton")
         self.rate_fetch_button.setFixedWidth(44)
-        self.rate_fetch_button.setToolTip("دریافتِ خودکارِ نرخِ ارز")
+        self.rate_fetch_button.setToolTip("دریافت خودکار نرخ ارز")
         self.rate_fetch_button.clicked.connect(self._on_fetch_rate)
         rate_row.addWidget(self.rate_fetch_button)
         header_layout.addLayout(rate_row, 6, 3, 1, 2)
@@ -1966,14 +1966,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         table_card_layout.setSpacing(6)
 
         rows_header = QHBoxLayout()
-        rows_title = QLabel(f"ردیف‌هایِ روش ({row_methods_hint})")
+        rows_title = QLabel(f"ردیف‌های روش ({row_methods_hint})")
         rows_title.setObjectName("sectionHint")
         rows_header.addWidget(rows_title)
         rows_header.addStretch(1)
         add_row_button = QPushButton("➕")
         add_row_button.setObjectName("iconButton")
         add_row_button.setFixedWidth(36)
-        add_row_button.setToolTip("افزودنِ ردیفِ روشِ تازه")
+        add_row_button.setToolTip("افزودن ردیف روش تازه")
         add_row_button.clicked.connect(self._add_row)
         rows_header.addWidget(add_row_button)
         table_card_layout.addLayout(rows_header)
@@ -2008,7 +2008,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         save_button = QPushButton("✔️")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(56)
-        save_button.setToolTip(f"ثبتِ سندِ {noun}")
+        save_button.setToolTip(f"ثبت سند {noun}")
         save_button.clicked.connect(self._save)
         self.footer_layout.addWidget(save_button)
         self.footer_layout.addStretch(1)
@@ -2020,29 +2020,29 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             (
                 self.account_combo,
                 (
-                    f"تفصیلیِ طرفِ حساب (مثلاً یک {'مشتریِ' if direction == 'RECEIPT' else 'تامین‌کننده‌یِ'} خاص) — "
-                    f"فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ {noun}» (تنظیماتِ سیستم/تبِ خزانه‌داری) نگاشته شده‌اند "
-                    "نشان داده می‌شوند؛ معین خودکار از رویِ همان نگاشت تعیین می‌شود. با Enter به فیلدِ بعدی می‌روید."
+                    f"تفصیلی طرف حساب (مثلاً یک {'مشتری' if direction == 'RECEIPT' else 'تامین‌کنندهٔ'} خاص) — "
+                    f"فقط تفصیلی‌های گروه‌هایی که در «انواع سند {noun}» (تنظیمات سیستم/تب خزانه‌داری) نگاشته شده‌اند "
+                    "نشان داده می‌شوند؛ معین خودکار از روی همان نگاشت تعیین می‌شود. با Enter به فیلد بعدی می‌روید."
                 ),
             ),
             (
                 self.table,
-                f"هر ردیف یک روشِ تسویه است ({row_methods_hint}) — می‌توانید یک {noun} را بینِ چند روش تقسیم کنید. "
-                "با انتخابِ روش و Enter، فرمِ جزئیاتِ همان روش باز می‌شود؛ بعدِ تاییدِ جزئیات، به مبلغ/شرح و بعد ردیفِ بعدی می‌روید. "
-                "شرحِ هر ردیف خودکار (از رویِ قالبِ قابلِ‌ویرایشِ همان روش در تنظیمات) پیشنهاد می‌شود — قابلِ‌ویرایشِ دستی هم هست.",
+                f"هر ردیف یک روش تسویه است ({row_methods_hint}) — می‌توانید یک {noun} را بین چند روش تقسیم کنید. "
+                "با انتخاب روش و Enter، فرم جزئیات همان روش باز می‌شود؛ بعد تایید جزئیات، به مبلغ/شرح و بعد ردیف بعدی می‌روید. "
+                "شرح هر ردیف خودکار (از روی قالب قابل‌ویرایش همان روش در تنظیمات) پیشنهاد می‌شود — قابل‌ویرایش دستی هم هست.",
             ),
-            (self.description_field, "شرحِ کلیِ سند -- در سندِ حسابداریِ نهایی هم به‌کار می‌رود."),
+            (self.description_field, "شرح کلی سند — در سند حسابداری نهایی هم به‌کار می‌رود."),
             (
                 self.currency_combo,
-                "ارزِ این سند -- اگر ارزِ پایه‌یِ شرکت انتخاب شود، فیلدِ نرخ لازم نیست (نرخ همیشه ۱ می‌ماند).",
+                "ارز این سند — اگر ارز پایهٔ شرکت انتخاب شود، فیلد نرخ لازم نیست (نرخ همیشه ۱ می‌ماند).",
             ),
-            (self.rate_field, "نرخِ تبدیلِ ارزِ سند به ارزِ پایه -- با دکمهٔ کنارش هم می‌توان آخرین نرخ را خودکار گرفت."),
+            (self.rate_field, "نرخ تبدیل ارز سند به ارز پایه — با دکمهٔ کنارش هم می‌توان آخرین نرخ را خودکار گرفت."),
         ]
         help_fields.insert(
             1,
             (
                 self.total_amount_field,
-                f"جمعِ مبلغی که {noun} شده — جمعِ ردیف‌هایِ پایین باید دقیقاً با همین مبلغ برابر باشد تا سند ثبت شود.",
+                f"جمع مبلغی که {noun} شده — جمع ردیف‌های پایین باید دقیقاً با همین مبلغ برابر باشد تا سند ثبت شود.",
             ),
         )
         self.set_field_help(help_fields)
@@ -2101,11 +2101,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.account_combo.lineEdit().selectAll()
 
     def _on_currency_changed(self) -> None:
-        """طبقِ درخواستِ صریح: انتخابِ ارزِ سند از بالایِ فرم — همه‌یِ
-        ردیف‌ها (طرفِ‌حساب + روش‌ها) با همین یک ارز/نرخ ثبت می‌شوند.
-        اگر ارزِ پایه انتخاب شود، نیازی به نرخ نیست (نرخ همیشه ۱ است)؛
-        وگرنه آخرین نرخِ ثبت‌شده در تنظیمات (اگر باشد) خودکار پیشنهاد
-        می‌شود، یا کاربر خودش دستی/با دکمه‌یِ «خودکار» وارد می‌کند."""
+        """طبق درخواست صریح: انتخاب ارز سند از بالای فرم — همهٔ
+        ردیف‌ها (طرف‌حساب + روش‌ها) با همین یک ارز/نرخ ثبت می‌شوند.
+        اگر ارز پایه انتخاب شود، نیازی به نرخ نیست (نرخ همیشه ۱ است)؛
+        وگرنه آخرین نرخ ثبت‌شده در تنظیمات (اگر باشد) خودکار پیشنهاد
+        می‌شود، یا کاربر خودش دستی/با دکمهٔ «خودکار» وارد می‌کند."""
         selected_id = self.currency_combo.currentData()
         if selected_id is None:
             return
@@ -2158,10 +2158,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         return next((label for oid, label in self.account_options if oid == detail_account_id), "")
 
     def _counterparty_person_group_id(self) -> int | None:
-        """طبقِ گزارشِ صریح: طرفِ‌حسابِ هدر (که همیشه یک تفصیلیِ اشخاص است)
-        اگر خودش عضوِ همان گروهی باشد که معینِ یک ردیف الزامی‌اش کرده،
-        دیگر نباید دوباره از کاربر پرسیده شود — این تابع همان گروهِ
-        طرفِ‌حسابِ فعلی را برمی‌گرداند تا در _resolve_row_detail_source /
+        """طبق گزارش صریح: طرف‌حساب هدر (که همیشه یک تفصیلی اشخاص است)
+        اگر خودش عضو همان گروهی باشد که معین یک ردیف الزامی‌اش کرده،
+        دیگر نباید دوباره از کاربر پرسیده شود — این تابع همان گروه
+        طرف‌حساب فعلی را برمی‌گرداند تا در _resolve_row_detail_source /
         _resolve_supplementary_person_detail بررسی شود."""
         if self.company_id is None:
             return None
@@ -2175,16 +2175,16 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         return person.person_group_id if person is not None else None
 
     def _counterparty_payee_info(self) -> tuple[str, str, str]:
-        """طبقِ درخواستِ صریحِ آیتمِ ۳: برایِ فرمِ چکِ پرداختی، نام/کدِملی/
-        تلفنِ گیرنده دیگر دستی پرسیده نمی‌شود — از همین طرفِ‌حسابِ بالایِ
-        فرم (که یک تفصیلیِ اشخاص است) خوانده می‌شود."""
+        """طبق درخواست صریح آیتم ۳: برای فرم چک پرداختی، نام/کد ملی/
+        تلفن گیرنده دیگر دستی پرسیده نمی‌شود — از همین طرف‌حساب بالای
+        فرم (که یک تفصیلی اشخاص است) خوانده می‌شود."""
         detail_account_id = self.account_combo.currentData()
         if self.company_id is None or detail_account_id is None:
             return "", "", ""
         return dimensions_service.get_person_contact_info(self.company_id, detail_account_id)
 
     def _update_balance_label(self) -> None:
-        """طبقِ آیتمِ ۸: بعدِ هر تغییرِ طرفِ‌حساب، ماندهٔ فعلی‌اش (+ ماهیت)
+        """طبق آیتم ۸: بعد هر تغییر طرف‌حساب، ماندهٔ فعلی‌اش (+ ماهیت)
         همین‌جا نمایش داده می‌شود."""
         detail_account_id = self.account_combo.currentData()
         if self.company_id is None or detail_account_id is None:
@@ -2192,11 +2192,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             return
         balance, nature = treasury_service.get_counterparty_balance(self.company_id, detail_account_id)
         self.balance_label.setText(
-            f"ماندهٔ طرفِ‌حساب: {numerals.format_money(balance, self.currency_decimal_places)} ({nature})"
+            f"ماندهٔ طرف‌حساب: {numerals.format_money(balance, self.currency_decimal_places)} ({nature})"
         )
 
     def _open_counterparty_ledger(self) -> None:
-        """طبقِ آیتمِ ۹: بازکردنِ مستقیمِ گزارشِ معینِ همین طرفِ‌حساب."""
+        """طبق آیتم ۹: بازکردن مستقیم گزارش معین همین طرف‌حساب."""
         detail_account_id = self.account_combo.currentData()
         if self._main_window is None or self.company_id is None or detail_account_id is None:
             return
@@ -2207,15 +2207,15 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         )
 
     def _open_link_invoices_dialog(self) -> None:
-        """طبقِ درخواستِ صریح: فهرستِ فاکتورهایِ بازِ همین طرفِ‌حساب (بر
-        اساسِ جهتِ سند -- دریافت یعنی فاکتورِ فروش، پرداخت یعنی فاکتورِ
-        خرید) را نشان می‌دهد؛ بعدِ تاییدِ کاربر، مبلغ‌هایِ واردشده در
+        """طبق درخواست صریح: فهرست فاکتورهای باز همین طرف‌حساب (بر
+        اساس جهت سند — دریافت یعنی فاکتور فروش، پرداخت یعنی فاکتور
+        خرید) را نشان می‌دهد؛ بعد تایید کاربر، مبلغ‌های واردشده در
         self._settle_invoices نگه داشته می‌شوند تا _save() خودکار آن‌ها
-        را تسویه کند -- دقیقاً همان مکانیزمِ prefill_for_invoice، فقط از
-        همین‌جا (نه از فرمِ تسویه) شروع می‌شود."""
+        را تسویه کند — دقیقاً همان مکانیزم prefill_for_invoice، فقط از
+        همین‌جا (نه از فرم تسویه) شروع می‌شود."""
         detail_account_id = self.account_combo.currentData()
         if self.company_id is None or detail_account_id is None:
-            theme.set_status_label(self.status_label, "ابتدا طرفِ‌حساب را انتخاب کنید.", ok=False)
+            theme.set_status_label(self.status_label, "ابتدا طرف‌حساب را انتخاب کنید.", ok=False)
             return
         invoice_type = _INVOICE_TYPE_BY_DIRECTION[self.direction]
         statuses = settlements_service.list_unsettled_invoices(self.company_id, invoice_type)
@@ -2230,7 +2230,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
                 docs_by_id[status.document_id] = doc
                 matching.append(status)
         if not matching:
-            QMessageBox.information(self, "فاکتورهایِ باز", "این طرفِ‌حساب فاکتورِ بازِ تسویه‌نشده‌ای ندارد.")
+            QMessageBox.information(self, "فاکتورهای باز", "این طرف‌حساب فاکتور باز تسویه‌نشده‌ای ندارد.")
             return
         dialog = _LinkInvoicesDialog(self, matching, docs_by_id, self.direction)
         if dialog.exec() != QDialog.Accepted:
@@ -2252,16 +2252,16 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._update_rows_summary()
         theme.set_status_label(
             self.status_label,
-            f"{numerals.to_persian_digits(str(len(entries)))} فاکتور لینک شد — جمعِ مبلغ "
-            f"({numerals.format_money(total, self.currency_decimal_places)}) در بالایِ فرم پر شد.",
+            f"{numerals.to_persian_digits(str(len(entries)))} فاکتور لینک شد — جمع مبلغ "
+            f"({numerals.format_money(total, self.currency_decimal_places)}) در بالای فرم پر شد.",
             ok=True,
         )
 
     def _quick_add_counterparty(self) -> None:
-        """طبقِ توضیحِ کاربر: منظور از این دکمه‌یِ میان‌بر، بازکردنِ خودِ
-        فرمِ «تعریفِ تفصیلی» (GL_DIM) بود — نه یک دیالوگِ سبکِ جداگانه.
-        وقتی کاربر از آن‌جا به این فرم برگردد، refresh() (که خودِ ناوبری
-        صدا می‌زند) کمبویِ طرفِ‌حساب را از نو می‌سازد و تفصیلیِ تازه‌ساخته
+        """طبق توضیح کاربر: منظور از این دکمهٔ میان‌بر، بازکردن خود
+        فرم «تعریف تفصیلی» (GL_DIM) بود — نه یک دیالوگ سبک جداگانه.
+        وقتی کاربر از آن‌جا به این فرم برگردد، refresh() (که خود ناوبری
+        صدا می‌زند) فهرست طرف‌حساب را از نو می‌سازد و تفصیلی تازه‌ساخته
         خودکار در آن ظاهر می‌شود."""
         if self.company_id is None:
             theme.set_status_label(self.status_label, "ابتدا یک شرکت را انتخاب کنید.", ok=False)
@@ -2271,10 +2271,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._main_window.open_screen("GL_DIM")
 
     def _build_counterparty_options(self) -> list[tuple[int, str]]:
-        """طبقِ درخواستِ صریح: فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ
-        دریافت/پرداخت» (تنظیماتِ سیستم/تبِ خزانه‌داری) نگاشته شده‌اند این‌جا
-        پیشنهاد می‌شوند — نه معین، نه بقیه‌یِ تفصیلی‌ها؛ و فقط تفصیلی‌هایِ
-        سطحِ آخر (برگ‌هایِ سلسله‌مراتب)، نه گروه‌هایِ والد."""
+        """طبق درخواست صریح: فقط تفصیلی‌های گروه‌هایی که در «انواع سند
+        دریافت/پرداخت» (تنظیمات سیستم/تب خزانه‌داری) نگاشته شده‌اند این‌جا
+        پیشنهاد می‌شوند — نه معین، نه بقیهٔ تفصیلی‌ها؛ و فقط تفصیلی‌های
+        سطح آخر (برگ‌های سلسله‌مراتب)، نه گروه‌های والد."""
         self._counterparty_index = {}
         mappings = treasury_service.list_counterparty_mappings(self.company_id, self.direction)
         person_mapping_by_group = {m.person_group_id: m.account_id for m in mappings if m.person_group_id is not None}
@@ -2345,7 +2345,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
                 continue  # این بُعد از طریقِ تفصیلیِ طرفِ‌حسابِ انتخاب‌شده حل شده
             if required_dim.code in _HEADER_SHARED_DIMENSION_CODES:
                 continue  # مرکزِ هزینه/پروژه از قبل بالا ساخته شدند
-            label = "تفصیلیِ اشخاص" if required_dim.code == dimensions_service.PERSON_DIMENSION_CODE else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(required_dim.code, required_dim.code)
+            label = "تفصیلی اشخاص" if required_dim.code == dimensions_service.PERSON_DIMENSION_CODE else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(required_dim.code, required_dim.code)
             self.detail_container.addWidget(QLabel(label))
             combo = _make_searchable_combo([(d.detail_account_id, _detail_option_label(d)) for d in required_dim.detail_accounts])
             combo.setMaximumWidth(160)
@@ -2368,11 +2368,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             row._regenerate_description()
 
     def _covered_dimension_type_ids(self) -> set[int]:
-        """طبقِ اصلاحِ آیتمِ ۱: چون مرکزِ هزینه/پروژه حالا همیشه در
-        _detail_combos هستند (حتی وقتی غیرفعال/نامرتبط)، فقط بُعدهایِ
-        *واقعاً فعال* «پوشش‌یافته» حساب می‌شوند — وگرنه یک ترکیبِ
-        غیرفعال به‌اشتباه مانعِ پرسیدنِ همان بُعد در دیالوگِ جزئیاتِ یک
-        ردیفِ دیگر می‌شود."""
+        """طبق اصلاح آیتم ۱: چون مرکز هزینه/پروژه حالا همیشه در
+        _detail_combos هستند (حتی وقتی غیرفعال/نامرتبط)، فقط بُعدهای
+        *واقعاً فعال* «پوشش‌یافته» حساب می‌شوند — وگرنه یک ترکیب
+        غیرفعال به‌اشتباه مانع پرسیدن همان بُعد در دیالوگ جزئیات یک
+        ردیف دیگر می‌شود."""
         return {type_id for type_id, combo in self._detail_combos.items() if combo.isEnabled()}
 
     def _on_account_return(self) -> None:
@@ -2410,29 +2410,29 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._update_rows_summary()
 
     def _rows_total(self) -> decimal.Decimal:
-        """جمعِ سادهِ مبلغِ همه‌یِ ردیف‌هایِ فعلی — هم توسطِ _remaining_amount
-        و هم توسطِ Spaceِ فیلدِ مبلغِ هدر (وقتی خالی است) استفاده می‌شود."""
+        """جمع سادهٔ مبلغ همهٔ ردیف‌های فعلی — هم توسط _remaining_amount
+        و هم توسط Space فیلد مبلغ هدر (وقتی خالی است) استفاده می‌شود."""
         return sum(
             (decimal.Decimal(str(row.amount_field.value())) for row in self._method_rows), decimal.Decimal(0)
         )
 
     def _remaining_amount(self) -> decimal.Decimal:
-        """اختلافِ جمعِ مبلغِ هدر (دریافتی/پرداختی) با جمعِ ردیف‌هایِ فعلی
-        — یعنی «چقدر هنوز تخصیص‌نیافته باقی مانده». طبقِ آیتمِ ۶: با
-        Spaceِ فیلدِ مبلغِ یک ردیف کپی می‌شود."""
+        """اختلاف جمع مبلغ هدر (دریافتی/پرداختی) با جمع ردیف‌های فعلی
+        — یعنی «چقدر هنوز تخصیص‌نیافته باقی مانده». طبق آیتم ۶: با
+        Space فیلد مبلغ یک ردیف کپی می‌شود."""
         header_total = decimal.Decimal(str(self.total_amount_field.value()))
         return header_total - self._rows_total()
 
     def _update_rows_summary(self) -> None:
-        """طبقِ درخواستِ صریح: جمعِ زنده‌یِ ردیف‌ها و اختلافش با جمعِ مبلغِ
-        هدر، همان‌جایِ هدر نمایش داده شود — هم برایِ دریافت هم پرداخت."""
+        """طبق درخواست صریح: جمع زندهٔ ردیف‌ها و اختلافش با جمع مبلغ
+        هدر، همان‌جای هدر نمایش داده شود — هم برای دریافت هم پرداخت."""
         rows_total = self._rows_total()
         diff = self._remaining_amount()
         total_word = "دریافتی" if self.direction == "RECEIPT" else "پرداختی"
         theme.set_status_label(
             self.rows_summary_label,
-            f"جمعِ ردیف‌ها: {numerals.format_money(rows_total, self.currency_decimal_places)}    —    "
-            f"اختلاف با جمعِ {total_word}: {numerals.format_money(diff, self.currency_decimal_places)}",
+            f"جمع ردیف‌ها: {numerals.format_money(rows_total, self.currency_decimal_places)}    —    "
+            f"اختلاف با جمع {total_word}: {numerals.format_money(diff, self.currency_decimal_places)}",
             ok=(diff == 0),
         )
         header_total = decimal.Decimal(str(self.total_amount_field.value()))
@@ -2443,10 +2443,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._update_ras_label()
 
     def _update_ras_label(self) -> None:
-        """طبقِ آیتمِ ۶ (و بسطِ آن طبقِ درخواستِ صریحِ بعدی: «راسِ چک را با
-        مبالغِ دریافتی با هم محاسبه کند»): راسِ وزنیِ همه‌یِ چک‌هایِ واردشده
-        (بر اساسِ سررسیدِ واقعیِ هرکدام) به‌همراهِ مبلغِ ردیف‌هایِ نقدی
-        (که سررسیدشان همین امروز است) — با هم، یک راسِ واحد."""
+        """طبق آیتم ۶ (و بسط آن طبق درخواست صریح بعدی: «راس چک را با
+        مبالغ دریافتی با هم محاسبه کند»): راس وزنی همهٔ چک‌های واردشده
+        (بر اساس سررسید واقعی هرکدام) به‌همراه مبلغ ردیف‌های نقدی
+        (که سررسیدشان همین امروز است) — با هم، یک راس واحد."""
         today = datetime.date.today()
         entries: list[tuple[decimal.Decimal, datetime.date]] = []
         for row in self._method_rows:
@@ -2465,8 +2465,8 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             return
         ras_date, total = treasury_service.compute_check_ras(entries, base_date=today)
         self.ras_label.setText(
-            f"راسِ چک+نقد: {numerals.format_jalali_date(ras_date)}    —    "
-            f"جمعِ مبلغ: {numerals.format_money(total, self.currency_decimal_places)}"
+            f"راس چک+نقد: {numerals.format_jalali_date(ras_date)}    —    "
+            f"جمع مبلغ: {numerals.format_money(total, self.currency_decimal_places)}"
         )
 
     def _focus_first_row_method(self) -> None:
@@ -2476,10 +2476,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._method_rows[0].method_combo.setFocus()
 
     def _focus_next_row_after(self, row: _MethodRow) -> None:
-        """زنجیره‌ی Enter: شرح -> ردیفِ بعدی (اگر نبود، تازه ساخته می‌شود)
-        -> روشِ همان ردیف — هم‌الگو با focus_next_row_afterِ
-        journal_entry.py. اگر ردیفِ فعلی هنوز ناقص است (مبلغ صفر)، Enterِ
-        تصادفی ردیفِ تازه‌ای نمی‌سازد."""
+        """زنجیره‌ی Enter: شرح -> ردیف بعدی (اگر نبود، تازه ساخته می‌شود)
+        -> روش همان ردیف — هم‌الگو با focus_next_row_after
+        journal_entry.py. اگر ردیف فعلی هنوز ناقص است (مبلغ صفر)، Enter
+        تصادفی ردیف تازه‌ای نمی‌سازد."""
         if row.to_method_line() is None:
             return
         if row is self._method_rows[-1]:
@@ -2510,29 +2510,29 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         currency_id: int | None = None, exchange_rate: decimal.Decimal | None = None,
         method_lines: list[tuple[str, decimal.Decimal, str | None]] | None = None,
     ) -> None:
-        """طبقِ درخواستِ صریح: بعدِ ثبتِ نهاییِ فاکتورِ فروش/خرید، همین فرم
-        (دریافت/پرداخت) با طرفِ‌حساب و مبلغِ همان فاکتور باز شود — کاربر
-        فقط روشِ پرداخت (نقد/بانک/چک) را انتخاب و مبلغ را تایید می‌کند
-        (یا با اسپیس در فیلدِ ردیف، مبلغِ بالای فرم را کپی می‌کند).
+        """طبق درخواست صریح: بعد ثبت نهایی فاکتور فروش/خرید، همین فرم
+        (دریافت/پرداخت) با طرف‌حساب و مبلغ همان فاکتور باز شود — کاربر
+        فقط روش پرداخت (نقد/بانک/چک) را انتخاب و مبلغ را تایید می‌کند
+        (یا با اسپیس در فیلد ردیف، مبلغ بالای فرم را کپی می‌کند).
 
-        اگر settle_invoices داده شود (طبقِ درخواستِ صریح: بازکردنِ همین فرم
-        مستقیماً از «مدیریتِ تسویه‌یِ فاکتورها» -- حتی برایِ چند فاکتورِ
-        هم‌زمانِ یک طرفِ‌حساب)، بعدِ ثبتِ موفقِ همین سند، خودکار به‌عنوانِ
-        تسویه‌یِ همه‌یِ آن فاکتورها (هرکدام با مبلغِ خودش از همین فهرست،
-        نه لزوماً amountِ سرِ فرم) هم ثبت می‌شود -- دیگر نیازی به دوباره
-        رفتن به فرمِ تسویه و انتخابِ دستیِ آن‌ها نیست.
+        اگر settle_invoices داده شود (طبق درخواست صریح: بازکردن همین فرم
+        مستقیماً از «مدیریت تسویهٔ فاکتورها» — حتی برای چند فاکتور
+        هم‌زمان یک طرف‌حساب)، بعد ثبت موفق همین سند، خودکار به‌عنوان
+        تسویهٔ همهٔ آن فاکتورها (هرکدام با مبلغ خودش از همین فهرست،
+        نه لزوماً amount سر فرم) هم ثبت می‌شود — دیگر نیازی به دوباره
+        رفتن به فرم تسویه و انتخاب دستی آن‌ها نیست.
 
-        currency_id/exchange_rate: طبقِ درخواستِ صریح («مدیریتِ سفارشات» --
-        پرداخت‌هایِ ارزی)؛ اگر currency_id همان ارزِ پایه نباشد، ارزِ سند و
-        نرخِ روزِ داده‌شده از پیش ست می‌شوند (کاربر فقط روشِ پرداخت را
-        انتخاب می‌کند، دیگر نیازی به بازتنظیمِ ارز/نرخ نیست).
+        currency_id/exchange_rate: طبق درخواست صریح («مدیریت سفارشات» --
+        پرداخت‌های ارزی)؛ اگر currency_id همان ارز پایه نباشد، ارز سند و
+        نرخ روز داده‌شده از پیش ست می‌شوند (کاربر فقط روش پرداخت را
+        انتخاب می‌کند، دیگر نیازی به بازتنظیم ارز/نرخ نیست).
 
-        method_lines: طبقِ درخواستِ صریح («دکمه‌یِ نحوهٔ تسویه در فرمِ
-        فاکتور» -- ترکیبِ نقد/بانک/بن/کالابرگ/تخفیفِ ازپیش‌تاییدشده): اگر
-        داده شود، به‌جایِ یک ردیفِ خالی، دقیقاً همان ردیف‌هایِ روش (با
-        مبلغِ خودشان) از پیش ساخته می‌شوند -- کاربر/مدیر فقط بازبینی و
-        ثبت می‌کند، دیگر نیازی به واردکردنِ دوباره‌یِ چیزی که پیش‌تر در
-        فرمِ فاکتور تعیین و تاییدشده نیست."""
+        method_lines: طبق درخواست صریح («دکمهٔ نحوهٔ تسویه در فرم
+        فاکتور» — ترکیب نقد/بانک/بن/کالابرگ/تخفیف ازپیش‌تاییدشده): اگر
+        داده شود، به‌جای یک ردیف خالی، دقیقاً همان ردیف‌های روش (با
+        مبلغ خودشان) از پیش ساخته می‌شوند — کاربر/مدیر فقط بازبینی و
+        ثبت می‌کند، دیگر نیازی به واردکردن دوبارهٔ چیزی که پیش‌تر در
+        فرم فاکتور تعیین و تاییدشده نیست."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
@@ -2562,25 +2562,25 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
     def prefill_for_installment_collection(
         self, line_id: int, counterparty_id: int | None, amount: decimal.Decimal, description: str,
     ) -> None:
-        """طبقِ درخواستِ صریح («وصولِ اقساط بتونه مستقل هم کار بکنه»):
-        بازکردنِ همین فرم مستقیماً از دکمه‌یِ «وصول» در صفحه‌یِ مدیریتِ
-        اقساط -- بدونِ نیازِ به بازکردنِ دستیِ فرم و جستجویِ قسط از
-        دکمه‌یِ 🔗 (که خودش هم‌چنان برایِ حالتِ عمومی/مستقل کار می‌کند).
-        قسط از پیش روی همان ردیفِ اول متصل می‌شود و مبلغ (که می‌تواند
-        کمتر از ماندهٔ کلِ قسط -- یعنی یک وصولِ جزئی -- باشد) هم از پیش
-        پر می‌شود؛ کاربر فقط باید روشِ واقعیِ دریافت/پرداخت (نقد/بانک/
+        """طبق درخواست صریح («وصول اقساط بتونه مستقل هم کار بکنه»):
+        بازکردن همین فرم مستقیماً از دکمهٔ «وصول» در صفحهٔ مدیریت
+        اقساط — بدون نیاز به بازکردن دستی فرم و جستجوی قسط از
+        دکمهٔ 🔗 (که خودش هم‌چنان برای حالت عمومی/مستقل کار می‌کند).
+        قسط از پیش روی همان ردیف اول متصل می‌شود و مبلغ (که می‌تواند
+        کمتر از ماندهٔ کل قسط — یعنی یک وصول جزئی — باشد) هم از پیش
+        پر می‌شود؛ کاربر فقط باید روش واقعی دریافت/پرداخت (نقد/بانک/
         چک/...) را انتخاب کند."""
         self.prefill_for_installment_collections([(line_id, amount)], counterparty_id, description)
 
     def prefill_for_installment_collections(
         self, lines: list[tuple[int, decimal.Decimal]], counterparty_id: int | None, description: str,
     ) -> None:
-        """طبقِ درخواستِ صریح («هم‌زمان جمعِ دو یا چند قسط هم دریافت
-        بشه»): نسخهٔ عمومی‌ترِ بالا -- هر تاپلِ (line_id, amount) یک
-        ردیفِ روشِ مجزا می‌سازد (همه از پیش به همان قسطِ خودشان متصل)،
-        همه زیرِ یک سندِ واحد؛ مبلغِ سرِ فرم هم مجموعِ همه‌شان می‌شود.
-        کاربر فقط روشِ واقعیِ هر ردیف را انتخاب می‌کند (لزوماً یکسان
-        نیست -- مثلاً یکی نقد و دیگری بانک)."""
+        """طبق درخواست صریح («هم‌زمان جمع دو یا چند قسط هم دریافت
+        بشه»): نسخهٔ عمومی‌تر بالا — هر تاپل (line_id, amount) یک
+        ردیف روش مجزا می‌سازد (همه از پیش به همان قسط خودشان متصل)،
+        همه زیر یک سند واحد؛ مبلغ سر فرم هم مجموع همه‌شان می‌شود.
+        کاربر فقط روش واقعی هر ردیف را انتخاب می‌کند (لزوماً یکسان
+        نیست — مثلاً یکی نقد و دیگری بانک)."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
@@ -2597,9 +2597,9 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._update_rows_summary()
 
     def _compose_description(self) -> str:
-        """طبقِ درخواستِ صریح: شرحِ سمتِ بستانکارِ سندِ دریافت خودکار
-        بشود: «دریافت از {طرفِ‌حساب} - {روش‌هایِ استفاده‌شده} - {شرحِ
-        دستیِ کاربر}» — فقط برایِ دریافت (طبقِ چارچوبِ همین درخواست)."""
+        """طبق درخواست صریح: شرح سمت بستانکار سند دریافت خودکار
+        بشود: «دریافت از {طرف‌حساب} - {روش‌های استفاده‌شده} - {شرح
+        دستی کاربر}» — فقط برای دریافت (طبق چارچوب همین درخواست)."""
         manual = self.description_field.text().strip()
         if self.direction != "RECEIPT":
             return manual
@@ -2627,7 +2627,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             return
         detail_account_id = self.account_combo.currentData()
         if detail_account_id is None or detail_account_id not in self._counterparty_index:
-            theme.set_status_label(self.status_label, "طرفِ حساب (تفصیلی) را انتخاب کنید.", ok=False)
+            theme.set_status_label(self.status_label, "طرف حساب (تفصیلی) را انتخاب کنید.", ok=False)
             return
         account_id, resolved_dimension_type_id = self._counterparty_index[detail_account_id]
         counterparty_details = {resolved_dimension_type_id: detail_account_id}
@@ -2640,20 +2640,20 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         )
         method_lines = [ln for row in self._method_rows if (ln := row.to_method_line()) is not None]
         if not method_lines:
-            theme.set_status_label(self.status_label, "حداقل یک ردیفِ روش (با مبلغِ مثبت) لازم است.", ok=False)
+            theme.set_status_label(self.status_label, "حداقل یک ردیف روش (با مبلغ مثبت) لازم است.", ok=False)
             return
 
         total_word = "دریافتی" if self.direction == "RECEIPT" else "پرداختی"
         header_total = decimal.Decimal(str(self.total_amount_field.value()))
         if header_total <= 0:
-            theme.set_status_label(self.status_label, f"جمعِ مبلغِ {total_word} را در هدر وارد کنید.", ok=False)
+            theme.set_status_label(self.status_label, f"جمع مبلغ {total_word} را در هدر وارد کنید.", ok=False)
             return
         rows_total = sum((ln.amount for ln in method_lines), decimal.Decimal(0))
         if rows_total != header_total:
             theme.set_status_label(
                 self.status_label,
-                f"جمعِ ردیف‌ها ({numerals.format_money(rows_total, self.currency_decimal_places)}) "
-                f"با مبلغِ {total_word}ِ هدر "
+                f"جمع ردیف‌ها ({numerals.format_money(rows_total, self.currency_decimal_places)}) "
+                f"با مبلغ {total_word} هدر "
                 f"({numerals.format_money(header_total, self.currency_decimal_places)}) برابر نیست.",
                 ok=False,
             )
@@ -2665,7 +2665,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         if self.header_currency_id is not None and (
             self.header_exchange_rate is None or self.header_exchange_rate <= 0
         ):
-            theme.set_status_label(self.status_label, "نرخِ ارز را وارد کنید.", ok=False)
+            theme.set_status_label(self.status_label, "نرخ ارز را وارد کنید.", ok=False)
             return
 
         try:
@@ -2714,12 +2714,12 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
                 settlement_errors.append(f"#{invoice_document_id}: {exc}")
 
         self._reset_form()
-        success_message = f"سند با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
+        success_message = f"سند با شمارهٔ موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
         if settle_invoices:
             if not settlement_errors:
                 success_message += (
-                    " تسویه‌یِ فاکتورِ مربوطه هم ثبت شد." if len(settle_invoices) == 1
-                    else f" تسویه‌یِ هر {len(settle_invoices)} فاکتور هم ثبت شد."
+                    " تسویهٔ فاکتور مربوطه هم ثبت شد." if len(settle_invoices) == 1
+                    else f" تسویهٔ هر {len(settle_invoices)} فاکتور هم ثبت شد."
                 )
             else:
                 success_message += f" (هشدار: سند ثبت شد، اما این تسویه‌ها وصل نشدند -- {'؛ '.join(settlement_errors)})"
@@ -2784,7 +2784,7 @@ def _build_receipt_html(
         if manual_description
         else ""
     )
-    signature_cols = ["تنظیم‌کننده", "مدیرِ مالی", "مدیرِعامل", signer_label]
+    signature_cols = ["تنظیم‌کننده", "مدیر مالی", "مدیر عامل", signer_label]
     signature_cells = "".join(
         f"<td style='width:25%; text-align:center; padding-top:50px; "
         f"border-top:1px solid #888;'>{esc(col)}</td>"
@@ -2795,18 +2795,18 @@ def _build_receipt_html(
     <body style="font-family:'{font_family}', Tahoma, sans-serif; font-size:11pt;">
       {report_export.logo_header_html(f'<div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>')}
       <div style="text-align:center; font-size:12pt; font-weight:bold; margin:6px 0 16px 0;">
-        رسیدِ {noun}
+        رسید {noun}
       </div>
       <table width="100%" style="margin-bottom:16px;">
         <tr>
           <td style="text-align:left;">ساعت: {esc(time_text)}</td>
           <td style="text-align:center;">تاریخ: {esc(date_text)}</td>
-          <td style="text-align:right;">شماره‌یِ سند: {numerals.to_persian_digits(str(temporary_no))}</td>
+          <td style="text-align:right;">شمارهٔ سند: {numerals.to_persian_digits(str(temporary_no))}</td>
         </tr>
       </table>
       <div style="margin-bottom:10px;">
-        مبلغ: <b>{total_text}</b> ریال {preposition} حساب/صورتحسابِ
-        <b>{esc(counterparty_label)}</b> بشرحِ زیر {verb}:
+        مبلغ: <b>{total_text}</b> ریال {preposition} حساب/صورتحساب
+        <b>{esc(counterparty_label)}</b> بشرح زیر {verb}:
       </div>
       {rows_html}
       {manual_html}
@@ -2837,7 +2837,7 @@ def _print_receipt_document(parent: QWidget, html: str, printer_name: str | None
 
 
 def _export_receipt_pdf_document(parent: QWidget, html: str, default_filename: str) -> None:
-    path, _filter = QFileDialog.getSaveFileName(parent, "ذخیره‌یِ PDF", default_filename, "PDF (*.pdf)")
+    path, _filter = QFileDialog.getSaveFileName(parent, "ذخیرهٔ PDF", default_filename, "PDF (*.pdf)")
     if not path:
         return
     if not path.lower().endswith(".pdf"):
@@ -2850,7 +2850,7 @@ def _export_receipt_pdf_document(parent: QWidget, html: str, default_filename: s
     report_export.attach_logo(doc)
     doc.setHtml(html)
     doc.print_(printer)
-    QMessageBox.information(parent, "خروجیِ PDF", "فایلِ PDF با موفقیت ساخته شد.")
+    QMessageBox.information(parent, "خروجی PDF", "فایل PDF با موفقیت ساخته شد.")
 
 
 def _prompt_and_print_receipt(
@@ -2865,8 +2865,8 @@ def _prompt_and_print_receipt(
     row_lines: list[str],
     manual_description: str,
 ) -> None:
-    """طبقِ آیتمِ ۵: بعدِ ثبتِ موفقِ سند، رسیدِ دریافت/پرداخت (برگه‌یِ
-    روایی، نه گزارشِ جدولی) پیشنهاد می‌شود؛ کاربر بینِ چاپ، PDF، یا
+    """طبق آیتم ۵: بعد ثبت موفق سند، رسید دریافت/پرداخت (برگهٔ
+    روایی، نه گزارش جدولی) پیشنهاد می‌شود؛ کاربر بین چاپ، PDF، یا
     انصراف انتخاب می‌کند."""
     company_name = session.current_company.display_name if session.current_company else ""
     time_text = numerals.to_persian_digits(datetime.datetime.now().strftime("%H:%M"))
@@ -2884,8 +2884,8 @@ def _prompt_and_print_receipt(
         font_family=_receipt_font_family(),
     )
     box = QMessageBox(parent)
-    box.setWindowTitle("رسیدِ سند")
-    box.setText("سند ثبت شد. رسیدِ آن چاپ یا به PDF ذخیره شود؟")
+    box.setWindowTitle("رسید سند")
+    box.setText("سند ثبت شد. رسید آن چاپ یا به PDF ذخیره شود؟")
     print_button = box.addButton("چاپ", QMessageBox.ActionRole)
     pdf_button = box.addButton("PDF", QMessageBox.ActionRole)
     box.addButton("انصراف", QMessageBox.RejectRole)

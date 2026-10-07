@@ -38,7 +38,7 @@ export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, h
       const data = await apiClient.getTodaySummary(salesMode);
       setSummary(data);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ اطلاعاتِ امروز ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت اطلاعات امروز ناموفق بود.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -92,9 +92,9 @@ export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, h
                   />
                 ) : null}
 
-                <Text style={[typography.captionBold, { color: colors.textSecondary }]}>برنامه‌یِ امروز</Text>
+                <Text style={[typography.captionBold, { color: colors.textSecondary }]}>برنامهٔ امروز</Text>
                 {summary.today_route.length === 0 ? (
-                  <EmptyState title="برنامه‌ای برایِ امروز نیست" />
+                  <EmptyState title="برنامه‌ای برای امروز نیست" />
                 ) : (
                   <View style={{ gap: spacing.sm }}>
                     {summary.today_route.map((entry) => (
@@ -149,11 +149,11 @@ function NextVisitCard({ customerName, onPress }: { customerName: string; onPres
   const { colors, spacing, typography } = useTheme();
   return (
     <View>
-      <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>ویزیتِ بعدی</Text>
+      <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>ویزیت بعدی</Text>
       <Card onPress={onPress} style={{ backgroundColor: colors.primary, borderColor: colors.primary }}>
         <Text style={[typography.h3, { color: colors.textInverse }]}>{customerName}</Text>
         <Text style={[typography.button, { color: colors.textInverse, marginTop: spacing.md }]}>
-          شروعِ ویزیت
+          شروع ویزیت
         </Text>
       </Card>
     </View>

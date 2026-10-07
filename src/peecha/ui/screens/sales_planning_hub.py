@@ -1,9 +1,9 @@
-"""برنامه‌ریزیِ فروش -- طبقِ درخواستِ صریحِ کاربر («وقتی منویِ پخشِ گرم
-اجرا می‌شود فقط تب‌هایِ مربوط به پخشِ گرم باز شود و بقیهٔ تب‌ها در
-منویِ مربوط به خودشون ایجاد بشه»): این تب‌ها نه مخصوصِ پخشِ گرم‌اند
-نه پخشِ سرد -- هردو کانال از همین برنامهٔ مراجعه/ویزیت/پروموشن/
-داشبورد/بازاریابیِ مشترک استفاده می‌کنند، پس زیرِ آیتمِ ناوبریِ
-مستقلِ خودشان جمع شدند (تا منوهای گرم/سرد شلوغ نشوند)."""
+"""برنامه‌ریزی فروش — طبق درخواست صریح کاربر («وقتی منوی پخش گرم
+اجرا می‌شود فقط تب‌های مربوط به پخش گرم باز شود و بقیهٔ تب‌ها در
+منوی مربوط به خودشون ایجاد بشه»): این تب‌ها نه مخصوص پخش گرم‌اند
+نه پخش سرد — هردو کانال از همین برنامهٔ مراجعه/ویزیت/پروموشن/
+داشبورد/بازاریابی مشترک استفاده می‌کنند، پس زیر آیتم ناوبری
+مستقل خودشان جمع شدند (تا منوهای گرم/سرد شلوغ نشوند)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class SalesPlanningHubScreen(QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("برنامه‌ریزیِ فروش")
+        title = QLabel("برنامه‌ریزی فروش")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
@@ -35,7 +35,7 @@ class SalesPlanningHubScreen(QWidget):
         self.promotion_rules_tab = PromotionRulesScreen()
         self.tabs.addTab(self.promotion_rules_tab, "پروموشن‌ها")
         self.dashboard_tab = FieldSalesDashboardScreen()
-        self.tabs.addTab(self.dashboard_tab, "داشبوردِ سرپرست")
+        self.tabs.addTab(self.dashboard_tab, "داشبورد سرپرست")
         self.marketing_tab = SmsMarketingScreen()
         self.tabs.addTab(self.marketing_tab, "بازاریابی")
         self.tabs.currentChanged.connect(self._refresh_tab_at)

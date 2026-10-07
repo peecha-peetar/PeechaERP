@@ -53,19 +53,19 @@ from peecha.services import commercial_pos as pos_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k1 = coa_service.create_account(company_id, "11", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "101", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k1 = coa_service.create_account(company_id, "11", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "101", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 g4 = coa_service.create_account(company_id, "2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, lang_id)
-k6 = coa_service.create_account(company_id, "21", "سایرِ بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, lang_id, parent_account_id=g4.account_id)
-ap_gl = coa_service.create_account(company_id, "211", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, lang_id, parent_account_id=k6.account_id)
+k6 = coa_service.create_account(company_id, "21", "سایر بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, lang_id, parent_account_id=g4.account_id)
+ap_gl = coa_service.create_account(company_id, "211", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, lang_id, parent_account_id=k6.account_id)
 
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
@@ -76,16 +76,16 @@ csettings_service.set_account_mapping(company_id, "SALES_REVENUE", revenue_gl.ac
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 # انبارِ فروشگاه با «امکانِ فروشِ منفی» صراحتاً فعال است.
 neg_warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-NEG", "انبارِ فروشگاهِ منفی‌پذیر",
+    company_id, "WH-NEG", "انبار فروشگاه منفی‌پذیر",
     locations_service.WarehouseFields(allow_negative_stock=True),
 )
 # انبارِ عادی (بدونِ اجازهٔ منفی) برایِ مقایسه.
-strict_warehouse_id = locations_service.create_warehouse(company_id, "WH-STRICT", "انبارِ عادی", locations_service.WarehouseFields())
-customer_id = dimensions_service.create_customer(company_id, "1", "مشتریِ آزمایشی")
+strict_warehouse_id = locations_service.create_warehouse(company_id, "WH-STRICT", "انبار عادی", locations_service.WarehouseFields())
+customer_id = dimensions_service.create_customer(company_id, "1", "مشتری آزمایشی")
 supplier_id = dimensions_service.create_supplier(company_id, "9", "تامین‌کننده")
 
 item_id = catalog_service.create_item(
-    company_id, "3001", "کالایِ آزمایشی", catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
+    company_id, "3001", "کالای آزمایشی", catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 
 # فقط ۲ عدد در هرکدام از دو انبار موجود است.
@@ -100,7 +100,7 @@ for wh_id in (neg_warehouse_id, strict_warehouse_id):
     inv_documents_service.confirm_stock_document(receipt_id, company_id)
     inv_documents_service.post_stock_document(receipt_id, company_id, user.user_id)
 
-terminal_id = pos_service.create_terminal(company_id, neg_warehouse_id, "T1", "صندوقِ منفی‌پذیر")
+terminal_id = pos_service.create_terminal(company_id, neg_warehouse_id, "T1", "صندوق منفی‌پذیر")
 session_id = pos_service.open_session(terminal_id, user.user_id, decimal.Decimal(500000))
 
 # =========================================================================
@@ -179,7 +179,7 @@ app.processEvents()
 
 ui_doc_final, _ = documents_service.get_document(ui_doc_id, company_id)
 check(ui_doc_final.status_code == "POSTED", f"the UI posts the negative-stock-allowed invoice in one click (got {ui_doc_final.status_code})")
-check("سندِ انتقالِ انبار" not in screen.status_label.text(), f"no unnecessary transfer message is shown (got: {screen.status_label.text()!r})")
+check("سند انتقال انبار" not in screen.status_label.text(), f"no unnecessary transfer message is shown (got: {screen.status_label.text()!r})")
 
 print("RESULT:", "FAIL" if FAIL else "ALL PASS")
 os._exit(1 if FAIL else 0)

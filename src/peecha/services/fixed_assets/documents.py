@@ -1,7 +1,7 @@
-"""مدارکِ دارایی (فاکتور، گارانتی، قرارداد، دفترچه، گواهی، تصویر، مدرکِ فنی) -- R265.
+"""مدارک دارایی (فاکتور، گارانتی، قرارداد، دفترچه، گواهی، تصویر، مدرک فنی) — R265.
 
-از همان سیستمِ پیوستِ موجود (doc.attachments) با فرمِ «fa_assets» و source_record_id = شناسهٔ دارایی؛ فایل‌ها کنارِ
-مرکزِ رسانه ذخیره می‌شوند (بدونِ جدولِ تازه).
+از همان سیستم پیوست موجود (doc.attachments) با فرم «fa_assets» و source_record_id = شناسهٔ دارایی؛ فایل‌ها کنار
+مرکز رسانه ذخیره می‌شوند (بدون جدول تازه).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from peecha.services import roles as roles_service
 from peecha.services.fixed_assets import assets as fa
 
 DOCUMENT_TYPES = {"INVOICE": "فاکتور", "WARRANTY": "گارانتی", "CONTRACT": "قرارداد", "MANUAL": "دفترچهٔ راهنما",
-                  "CERTIFICATE": "گواهی", "IMAGE": "تصویر", "TECHNICAL": "مدرکِ فنی", "OTHER": "سایر"}
+                  "CERTIFICATE": "گواهی", "IMAGE": "تصویر", "TECHNICAL": "مدرک فنی", "OTHER": "سایر"}
 _FORM_CODE = "fa_assets"
 _DIR = SETTINGS_DIR / "fixed_assets"
 
@@ -31,13 +31,13 @@ def _form_id(session) -> int:
     roles_service.ensure_catalog()
     form_id = session.scalar(select(Form.form_id).where(Form.code == _FORM_CODE))
     if form_id is None:
-        raise ValueError("فرمِ «دارایی‌ها» در فهرستِ فرم‌ها ثبت نشده است.")
+        raise ValueError("فرم «دارایی‌ها» در فهرست فرم‌ها ثبت نشده است.")
     return form_id
 
 
 def add_document(company_id: int, user_id: int, asset_id: int, file_path: str, document_type_code: str = "OTHER") -> int:
     if document_type_code not in DOCUMENT_TYPES:
-        raise ValueError("نوعِ مدرک نامعتبر است.")
+        raise ValueError("نوع مدرک نامعتبر است.")
     fa.get_asset(company_id, asset_id)
     source = Path(file_path)
     if not source.is_file():

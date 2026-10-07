@@ -1,10 +1,10 @@
-"""فروشِ حضوری (POS، مرحلهٔ ۷) — سبدِ خرید روی یک SALES_INVOICEِ معمولی
+"""فروش حضوری (POS، مرحلهٔ ۷) — سبد خرید روی یک SALES_INVOICE معمولی
 با channel نداشته و pos_session_id.
 
-طبقِ بازطراحیِ صریحِ کاربر: کاریر دیگر مستقیماً پرداخت/سندِ حسابداری
-ثبت نمی‌کند -- فقط فروش را تایید می‌کند (نقدی/نسیه، با/بدونِ پرینت) و
-نوعِ پرداختِ موردنظرش را یادداشت می‌کند؛ ثبتِ واقعیِ پرداخت/سندِ
-حسابداری با تاییدِ سرپرست، در صفحه‌یِ جداگانه‌ای انجام می‌شود."""
+طبق بازطراحی صریح کاربر: کاریر دیگر مستقیماً پرداخت/سند حسابداری
+ثبت نمی‌کند — فقط فروش را تایید می‌کند (نقدی/نسیه، با/بدون پرینت) و
+نوع پرداخت موردنظرش را یادداشت می‌کند؛ ثبت واقعی پرداخت/سند
+حسابداری با تایید سرپرست، در صفحهٔ جداگانه‌ای انجام می‌شود."""
 
 from __future__ import annotations
 
@@ -58,17 +58,17 @@ _POS_PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "
 
 
 class _PosVariantPickerDialog(QDialog):
-    """طبقِ رفعِ باگِ گزارش‌شده («وقتی کالایِ متغیردار انتخاب می‌شود،
-    متغیرها پیشنهاد داده نمی‌شوند و هنگامِ ثبتِ فاکتور چیزی برایِ ثبت
-    نیست»): تا پیش از این، افزودنِ یک کالایِ دارایِ متغیر به سبدِ فروشِ
-    حضوری فقط پیامِ خطایِ «این کالا دارایِ چند متغیر است» را نشان
-    می‌داد -- بدونِ هیچ راهی برایِ واقعاً انتخابِ یک متغیر. این دیالوگِ
-    سبک هم لیستِ مستقیمِ متغیرها (کلیک/دوبار‌کلیک) و هم اسکنِ بارکد/کدِ
-    خودِ متغیر را پشتیبانی می‌کند."""
+    """طبق رفع باگ گزارش‌شده («وقتی کالای متغیردار انتخاب می‌شود،
+    متغیرها پیشنهاد داده نمی‌شوند و هنگام ثبت فاکتور چیزی برای ثبت
+    نیست»): تا پیش از این، افزودن یک کالای دارای متغیر به سبد فروش
+    حضوری فقط پیام خطای «این کالا دارای چند متغیر است» را نشان
+    می‌داد — بدون هیچ راهی برای واقعاً انتخاب یک متغیر. این دیالوگ
+    سبک هم لیست مستقیم متغیرها (کلیک/دوبار‌کلیک) و هم اسکن بارکد/کد
+    خود متغیر را پشتیبانی می‌کند."""
 
     def __init__(self, parent, company_id: int, parent_item: "catalog_service.ItemRow") -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"انتخابِ متغیر — {parent_item.name or parent_item.code}")
+        self.setWindowTitle(f"انتخاب متغیر — {parent_item.name or parent_item.code}")
         self.setMinimumWidth(380)
         self.selected_item_id: int | None = None
         self._variants = variants_service.list_item_variants(company_id, parent_item.item_id)
@@ -76,9 +76,9 @@ class _PosVariantPickerDialog(QDialog):
         layout = QVBoxLayout(self)
 
         scan_row = QHBoxLayout()
-        scan_row.addWidget(QLabel("بارکد/کدِ متغیر:"))
+        scan_row.addWidget(QLabel("بارکد/کد متغیر:"))
         self.scan_field = QLineEdit()
-        self.scan_field.setPlaceholderText("بارکدِ متغیر را اسکن کنید یا کدش را تایپ کنید...")
+        self.scan_field.setPlaceholderText("بارکد متغیر را اسکن کنید یا کدش را تایپ کنید...")
         self.scan_field.returnPressed.connect(self._on_scan)
         scan_row.addWidget(self.scan_field, stretch=1)
         layout.addLayout(scan_row)
@@ -138,10 +138,10 @@ class _PosVariantPickerDialog(QDialog):
 
 
 class _QuickAccessButton(QPushButton):
-    """طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس در
-    همان‌جا»): این دکمه هم منبعِ درگ (کلیک+کشیدن) و هم مقصدِ دراپ است --
-    رهاکردنِ یک دکمه رویِ دکمهٔ دیگر، جایِ آن دو کالا را در ترتیبِ
-    ذخیره‌شده (به‌ازایِ همین کاربر) عوض می‌کند."""
+    """طبق درخواست صریح («جابه‌جایی دستی کلیدهای فوری با ماوس در
+    همان‌جا»): این دکمه هم منبع درگ (کلیک+کشیدن) و هم مقصد دراپ است --
+    رهاکردن یک دکمه روی دکمهٔ دیگر، جای آن دو کالا را در ترتیب
+    ذخیره‌شده (به‌ازای همین کاربر) عوض می‌کند."""
 
     def __init__(self, item_id: int, on_reorder) -> None:
         super().__init__()
@@ -242,7 +242,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(10)
 
-        title = QLabel("فروشِ حضوری (صندوق)")
+        title = QLabel("فروش حضوری (صندوق)")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
@@ -265,11 +265,11 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self.customer_combo = _make_searchable_combo([])
         self.customer_combo.currentIndexChanged.connect(self._update_customer_credit_indicator)
         header_row.addWidget(self.customer_combo, stretch=1)
-        header_row.addWidget(QLabel("فهرستِ قیمت"))
+        header_row.addWidget(QLabel("فهرست قیمت"))
         self.price_list_combo = QComboBox()
         header_row.addWidget(self.price_list_combo, stretch=1)
         # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»).
-        self.tax_exempt_checkbox = QCheckBox("معافیتِ مالیاتی")
+        self.tax_exempt_checkbox = QCheckBox("معافیت مالیاتی")
         self.tax_exempt_checkbox.toggled.connect(self._on_tax_exempt_toggled)
         header_row.addWidget(self.tax_exempt_checkbox)
         outer.addWidget(self.header_widget)
@@ -294,12 +294,12 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         new_sale_button = QPushButton("🆕")
         new_sale_button.setObjectName("iconButton")
         new_sale_button.setFixedWidth(44)
-        new_sale_button.setToolTip("فروشِ تازه")
+        new_sale_button.setToolTip("فروش تازه")
         new_sale_button.clicked.connect(self._reset_sale)
         scan_row.addWidget(new_sale_button)
         self.scan_field = QLineEdit()
         self.scan_field.setObjectName("posScanField")
-        self.scan_field.setPlaceholderText("🔍 بارکد را اسکن کنید یا کد/نامِ کالا را تایپ کنید و Enter بزنید")
+        self.scan_field.setPlaceholderText("🔍 بارکد را اسکن کنید یا کد/نام کالا را تایپ کنید و Enter بزنید")
         self.scan_field.setStyleSheet("font-size: 15pt; padding: 8px;")
         self.scan_field.returnPressed.connect(self._scan_or_search)
         # طبقِ درخواستِ صریح («جستجو پیشنهاد نمی‌دهد و برایِ چندتایی فقط
@@ -321,7 +321,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         # اصلاح فقط با کلیک روی خودِ ردیف»): دیگر کمبویِ دستیِ افزودن
         # نداریم -- ویرایش با دوبار-کلیک روی ردیف انجام می‌شود.
         self.lines_table = QTableWidget(0, 5)
-        self.lines_table.setHorizontalHeaderLabels(["کالا", "مقدار", "بهایِ واحد", "جمعِ ردیف", ""])
+        self.lines_table.setHorizontalHeaderLabels(["کالا", "مقدار", "بهای واحد", "جمع ردیف", ""])
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
@@ -335,7 +335,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         # بشه»): قبلاً فوتر فقط جمعِ‌کل را نشان می‌داد -- بدونِ اینکه
         # جمعِ تخفیف/مالیات اصلاً معلوم باشد.
         footer_row = QHBoxLayout()
-        self.subtotal_label = QLabel("جمعِ اقلام: ۰")
+        self.subtotal_label = QLabel("جمع اقلام: ۰")
         footer_row.addWidget(self.subtotal_label)
         self.discount_label = QLabel("تخفیف: ۰")
         footer_row.addWidget(self.discount_label)
@@ -344,7 +344,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         footer_row.addStretch(1)
         outer.addLayout(footer_row)
 
-        self.total_label = QLabel("جمعِ کل: ۰")
+        self.total_label = QLabel("جمع کل: ۰")
         self.total_label.setObjectName("sectionTitle")
         outer.addWidget(self.total_label)
 
@@ -366,9 +366,9 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         # (بدونِ 🖨️ی اضافه) برایِ هر دو حالتِ با/بدونِ‌پرینت -- تمایز با
         # رنگِ primary/عادی و tooltip، نه با دو ایموجیِ چسبیده به هم.
         _quick_key("💵", "نقدی + پرینت", "primaryIconButton", lambda: self._confirm_sale("CASH", print_receipt=True))
-        _quick_key("💵", "نقدی (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CASH", print_receipt=False))
+        _quick_key("💵", "نقدی (بدون پرینت)", "iconButton", lambda: self._confirm_sale("CASH", print_receipt=False))
         _quick_key("📒", "نسیه + پرینت", "primaryIconButton", lambda: self._confirm_sale("CREDIT", print_receipt=True))
-        _quick_key("📒", "نسیه (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CREDIT", print_receipt=False))
+        _quick_key("📒", "نسیه (بدون پرینت)", "iconButton", lambda: self._confirm_sale("CREDIT", print_receipt=False))
         # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/
         # کارتخوان/تخفیف/کالابرگ/بن یا ترکیبی از چند روش را نمی‌تونه ثبت
         # کنه»): همان دیالوگِ «نحوهٔ تسویه»یِ فرمِ فاکتور، این‌جا هم
@@ -376,13 +376,13 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         # جداگانه در صفحهٔ «تاییدِ سرپرست» انجام می‌شود) در دسترسِ
         # صندوق‌دار قرار می‌گیرد.
         _quick_key("🧾", "چندروشی/بانکی/تخفیف + پرینت", "primaryIconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=True))
-        _quick_key("🧾", "چندروشی/بانکی/تخفیف (بدونِ پرینت)", "iconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=False))
+        _quick_key("🧾", "چندروشی/بانکی/تخفیف (بدون پرینت)", "iconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=False))
         _quick_key(
-            "📌", "رزرو -- این فروش را نگه دار و سراغِ مشتریِ بعدی برو؛ بعداً از «نمایشِ رزروها» بازش کن.",
+            "📌", "رزرو — این فروش را نگه دار و سراغ مشتری بعدی برو؛ بعداً از «نمایش رزروها» بازش کن.",
             "iconButton", self._suspend_sale,
         )
-        _quick_key("👁️", "نمایشِ رزروها", "iconButton", self._show_suspended_dialog)
-        _quick_key("🛠️", "تعریف/اصلاحِ کالا", "iconButton", self._open_item_form)
+        _quick_key("👁️", "نمایش رزروها", "iconButton", self._show_suspended_dialog)
+        _quick_key("🛠️", "تعریف/اصلاح کالا", "iconButton", self._open_item_form)
         quick_keys_column.addStretch(1)
 
         self.status_label = QLabel("")
@@ -407,7 +407,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح («در قسمتِ سمتِ راست زیرِ تبِ کلیدِ فوری، ۱۰
         # فاکتور یا تعدادِ دلخواهِ تک‌فروشی را نمایش و از همان‌جا هم
         # بتوان اصلاح کرد»).
-        recent_title = QLabel("آخرین فاکتورهایِ تک‌فروشی")
+        recent_title = QLabel("آخرین فاکتورهای تک‌فروشی")
         recent_title.setObjectName("sectionTitle")
         quick_access_wrapper_layout.addWidget(recent_title)
         # طبقِ درخواستِ صریح («دکمه‌ها کلاً تویِ برنامه نوشته نداشته
@@ -428,14 +428,14 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         root.addWidget(wrap_scrollable(page))
 
         self.set_field_help([
-            (self.terminal_combo, "ترمینالِ صندوقی که این فروش رویش ثبت می‌شود -- انبارِ پیش‌فرضِ همین ترمینال، انبارِ خودِ فاکتور هم می‌شود."),
-            (self.customer_combo, "مشتریِ این فاکتور. برایِ فروشِ نقدیِ ناشناس هم مشتریِ عمومیِ پیش‌فرض را انتخاب کنید."),
-            (self.price_list_combo, "فهرستِ قیمتی که بهایِ پیشنهادیِ هر کالا از رویِ آن خوانده می‌شود -- خالی یعنی فهرستِ پیش‌فرضِ شرکت."),
+            (self.terminal_combo, "ترمینال صندوقی که این فروش رویش ثبت می‌شود — انبار پیش‌فرض همین ترمینال، انبار خود فاکتور هم می‌شود."),
+            (self.customer_combo, "مشتری این فاکتور. برای فروش نقدی ناشناس هم مشتری عمومی پیش‌فرض را انتخاب کنید."),
+            (self.price_list_combo, "فهرست قیمتی که بهای پیشنهادی هر کالا از روی آن خوانده می‌شود — خالی یعنی فهرست پیش‌فرض شرکت."),
             (
                 self.tax_exempt_checkbox,
-                "با روشن‌کردنش، مالیاتِ همه‌یِ ردیف‌هایِ همین فاکتور -- ازپیش‌ثبت‌شده و تازه -- بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیاتِ قبلی را برنمی‌گرداند.",
+                "با روشن‌کردنش، مالیات همهٔ ردیف‌های همین فاکتور — ازپیش‌ثبت‌شده و تازه — بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیات قبلی را برنمی‌گرداند.",
             ),
-            (self.scan_field, "بارکد را با دستگاه اسکن کنید یا کد/نامِ کالا را تایپ و Enter بزنید -- با یک اسکنِ دیگرِ همان کالا، فقط تعدادِ همان ردیف زیاد می‌شود."),
+            (self.scan_field, "بارکد را با دستگاه اسکن کنید یا کد/نام کالا را تایپ و Enter بزنید — با یک اسکن دیگر همان کالا، فقط تعداد همان ردیف زیاد می‌شود."),
         ])
 
     def _apply_quick_access_position(self, position: str) -> None:
@@ -548,7 +548,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
 
         current_price_list = self.price_list_combo.currentData()
         self.price_list_combo.clear()
-        self.price_list_combo.addItem("(بدونِ فهرستِ قیمت)", None)
+        self.price_list_combo.addItem("(بدون فهرست قیمت)", None)
         for pl in pricing_service.list_price_lists(company_id, "SALES"):
             self.price_list_combo.addItem(f"{pl.code} — {pl.name}", pl.price_list_id)
         preferred_price_list = self._cashier_settings.default_price_list_id if self._cashier_settings is not None and self._cashier_settings.default_price_list_id is not None else current_price_list
@@ -574,11 +574,11 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self.header_widget.setVisible(not has_defaults)
         self.summary_label.setVisible(has_defaults)
         if has_defaults:
-            warning = " | 🚨 بدهی از سقفِ اعتبار عبور کرده" if getattr(self, "_customer_over_credit_limit", False) else ""
+            warning = " | 🚨 بدهی از سقف اعتبار عبور کرده" if getattr(self, "_customer_over_credit_limit", False) else ""
             self.summary_label.setText(
                 f"ترمینال: {self.terminal_combo.currentText()} | "
                 f"مشتری: {self.customer_combo.currentText()} | "
-                f"فهرستِ قیمت: {self.price_list_combo.currentText()}{warning}"
+                f"فهرست قیمت: {self.price_list_combo.currentText()}{warning}"
             )
 
     def _update_customer_credit_indicator(self) -> None:
@@ -614,20 +614,20 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         session_id = self._current_open_session_id()
         if session_id is None:
             self.session_label.setText(
-                "این ترمینال شیفتِ بازی ندارد — ابتدا از «تنظیمات ‹ خزانه‌داری ‹ ترمینال‌ها، شیفت‌ها و "
-                "تنظیماتِ تک‌فروشی» یک شیفت باز کنید."
+                "این ترمینال شیفت بازی ندارد — ابتدا از «تنظیمات ‹ خزانه‌داری ‹ ترمینال‌ها، شیفت‌ها و "
+                "تنظیمات تک‌فروشی» یک شیفت باز کنید."
             )
             self.session_label.setObjectName("statusError")
             self.session_summary_label.setText("")
         else:
-            self.session_label.setText(f"شیفتِ باز — شناسه: {numerals.to_persian_digits(str(session_id))}")
+            self.session_label.setText(f"شیفت باز — شناسه: {numerals.to_persian_digits(str(session_id))}")
             self.session_label.setObjectName("")
             summary = pos_service.get_session_sales_summary(session_id)
             self.session_summary_label.setText(
-                f"جمعِ فروشِ این شیفت: {numerals.format_company_amount(summary.total_amount)} | "
+                f"جمع فروش این شیفت: {numerals.format_company_amount(summary.total_amount)} | "
                 f"تخفیف: {numerals.format_company_amount(summary.discount_amount)} | "
                 f"مالیات: {numerals.format_company_amount(summary.tax_amount)} | "
-                f"تعدادِ فاکتور: {numerals.to_persian_digits(str(summary.invoice_count))}"
+                f"تعداد فاکتور: {numerals.to_persian_digits(str(summary.invoice_count))}"
             )
         self.session_label.style().unpolish(self.session_label)
         self.session_label.style().polish(self.session_label)
@@ -744,9 +744,9 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
                 break
 
     def _on_button_reorder(self, source_item_id: int, target_item_id: int) -> None:
-        """طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس در
-        همان‌جا»): رهاکردنِ دکمهٔ source رویِ دکمهٔ target، آن را دقیقاً
-        جایِ target در ترتیبِ ذخیره‌شده می‌گذارد."""
+        """طبق درخواست صریح («جابه‌جایی دستی کلیدهای فوری با ماوس در
+        همان‌جا»): رهاکردن دکمهٔ source روی دکمهٔ target، آن را دقیقاً
+        جای target در ترتیب ذخیره‌شده می‌گذارد."""
         quick_items = [it for it in self._items if it.pos_button_color or it.pos_menu_group_id is not None]
         ordered_ids = [it.item_id for it in self._sort_by_user_order(quick_items)]
         if source_item_id not in ordered_ids or target_item_id not in ordered_ids:
@@ -806,9 +806,9 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         if document_id is None or company_id is None:
             return
         if status_code not in ("DRAFT", "CONFIRMED"):
-            self.status_label.setText("فقط فاکتورهایِ پیش‌از‌تاییدِ‌سرپرست (پیش‌نویس/تاییدشده) از این‌جا قابلِ‌حذف‌اند.")
+            self.status_label.setText("فقط فاکتورهای پیش‌از‌تایید‌سرپرست (پیش‌نویس/تاییدشده) از این‌جا قابل‌حذف‌اند.")
             return
-        confirm = QMessageBox.question(self, "حذفِ فروش", "این فروش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف فروش", "این فروش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -842,19 +842,19 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         return None
 
     def _try_add_weight_barcode(self, query: str) -> bool:
-        """طبقِ درخواستِ صریح («ترازوی آفلاین با بارکدِ وزنی برایِ فروشِ
-        حضوری»): اگر رشته‌یِ اسکن‌شده دقیقاً با فرمتِ پیکربندی‌شده
-        (پیشوند+کدِ کالا+وزن) مطابقت داشت، خودِ کالا از رویِ کدِ
-        رمزگشایی‌شده پیدا و با همان وزنِ رمزگشایی‌شده (نه ۱ عدد) به سبد
-        اضافه می‌شود؛ بازگشتِ True یعنی این اسکن به‌عنوانِ بارکدِ وزنی
-        مدیریت شد (چه موفق چه با خطا) -- ادامه‌یِ جستجویِ عادی لازم نیست."""
+        """طبق درخواست صریح («ترازوی آفلاین با بارکد وزنی برای فروش
+        حضوری»): اگر رشتهٔ اسکن‌شده دقیقاً با قالب پیکربندی‌شده
+        (پیشوند+کد کالا+وزن) مطابقت داشت، خود کالا از روی کد
+        رمزگشایی‌شده پیدا و با همان وزن رمزگشایی‌شده (نه ۱ عدد) به سبد
+        اضافه می‌شود؛ بازگشت True یعنی این اسکن به‌عنوان بارکد وزنی
+        مدیریت شد (چه موفق چه با خطا) — ادامهٔ جستجوی عادی لازم نیست."""
         parsed = scale_service.parse_weight_barcode(self._pos_settings, query)
         if parsed is None:
             return False
         needle = parsed.item_code.strip().lower()
         item = next((it for it in self._items if it.code.strip().lower() == needle), None)
         if item is None:
-            self.status_label.setText(f"کالایی با کدِ «{parsed.item_code}» (رمزگشایی‌شده از بارکدِ وزنی) یافت نشد.")
+            self.status_label.setText(f"کالایی با کد «{parsed.item_code}» (رمزگشایی‌شده از بارکد وزنی) یافت نشد.")
             return True
         self.scan_field.clear()
         self._add_item_to_cart(item, parsed.weight)
@@ -907,10 +907,10 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self.tax_exempt_checkbox.blockSignals(False)
         self.tax_exempt_checkbox.setEnabled(True)
         self._refresh_lines_table()
-        self.subtotal_label.setText("جمعِ اقلام: ۰")
+        self.subtotal_label.setText("جمع اقلام: ۰")
         self.discount_label.setText("تخفیف: ۰")
         self.tax_label.setText("مالیات: ۰")
-        self.total_label.setText("جمعِ کل: ۰")
+        self.total_label.setText("جمع کل: ۰")
 
     def _reset_sale(self) -> None:
         self._clear_cart_view()
@@ -919,10 +919,10 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
 
     def _suspend_sale(self) -> None:
         if self._document_id is None or not self._lines:
-            self.status_label.setText("سبدِ خالی رزرو نمی‌شود.")
+            self.status_label.setText("سبد خالی رزرو نمی‌شود.")
             return
         self._clear_cart_view()
-        self.status_label.setText("این فروش رزرو شد -- از «نمایشِ رزروها» می‌توانید بازش کنید.")
+        self.status_label.setText("این فروش رزرو شد — از «نمایش رزروها» می‌توانید بازش کنید.")
         self.scan_field.setFocus()
 
     def _show_suspended_dialog(self) -> None:
@@ -935,14 +935,14 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         company_id = self._company_id()
         session_id = self._current_open_session_id()
         if company_id is None or session_id is None:
-            self.status_label.setText("ابتدا یک شیفتِ باز انتخاب کنید.")
+            self.status_label.setText("ابتدا یک شیفت باز انتخاب کنید.")
             return
         pending = pos_service.list_pending_pos_documents(company_id, session_id)
         if not pending:
-            self.status_label.setText("در این شیفت فروشِ رزروشده/تاییدشده‌ای وجود ندارد.")
+            self.status_label.setText("در این شیفت فروش رزروشده/تاییدشده‌ای وجود ندارد.")
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("فروش‌هایِ رزروشده/تاییدشده‌یِ این شیفت (پیش از تاییدِ سرپرست)")
+        dialog.setWindowTitle("فروش‌های رزروشده/تاییدشدهٔ این شیفت (پیش از تایید سرپرست)")
         dialog.setMinimumWidth(420)
         layout = QVBoxLayout(dialog)
         list_widget = QListWidget()
@@ -951,7 +951,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         def _reload() -> None:
             list_widget.clear()
             for doc in pos_service.list_pending_pos_documents(company_id, session_id):
-                status_label = "تاییدشده (در انتظارِ سرپرست)" if doc.status_code == "CONFIRMED" else "رزروشده"
+                status_label = "تاییدشده (در انتظار سرپرست)" if doc.status_code == "CONFIRMED" else "رزروشده"
                 label = f"سند #{doc.document_id} — {status_label} — {numerals.format_company_amount(doc.total_amount)}"
                 item = QListWidgetItem(label)
                 item.setData(Qt.UserRole, doc.document_id)
@@ -980,7 +980,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
                 return
             document_id = current.data(Qt.UserRole)
             status_code = current.data(Qt.UserRole + 1)
-            confirm = QMessageBox.question(dialog, "حذفِ فروش", "این فروش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+            confirm = QMessageBox.question(dialog, "حذف فروش", "این فروش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
             if confirm != QMessageBox.Yes:
                 return
             try:
@@ -999,19 +999,19 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         list_widget.itemDoubleClicked.connect(lambda _item: _resume())
         resume_button = QPushButton("📂")
         resume_button.setObjectName("primaryIconButton")
-        resume_button.setToolTip("بازکردنِ این فروش")
+        resume_button.setToolTip("بازکردن این فروش")
         resume_button.clicked.connect(_resume)
         layout.addWidget(resume_button)
         delete_button = QPushButton("🗑")
         delete_button.setObjectName("dangerIconButton")
-        delete_button.setToolTip("حذفِ این فروش")
+        delete_button.setToolTip("حذف این فروش")
         delete_button.clicked.connect(_delete)
         layout.addWidget(delete_button)
         dialog.exec()
 
     def _settlement_summary_text(self, document_id: int, company_id: int, doc) -> str:
-        """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («وقتی فاکتور در حالتِ ویرایش باز
-        می‌شود، نحوهٔ تسویهٔ آن را از کجا بفهمیم؟»): پیش از پاک‌شدنِ نقشهٔ
+        """طبق رفع باگ واقعی گزارش‌شده («وقتی فاکتور در حالت ویرایش باز
+        می‌شود، نحوهٔ تسویهٔ آن را از کجا بفهمیم؟»): پیش از پاک‌شدن نقشهٔ
         تسویه (که reopen_confirmed_sale انجام می‌دهد)، این متن نحوهٔ
         تسویهٔ فعلی را نشان می‌دهد."""
         plan = settlements_service.get_settlement_plan(document_id, company_id)
@@ -1025,19 +1025,19 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         return _POS_PAYMENT_TYPE_LABELS.get(doc.pos_intended_payment_type, "ثبت‌نشده")
 
     def open_document_for_edit(self, document_id: int) -> None:
-        """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ تک‌فروشی جدا از اصلاحِ
-        فاکتور باشه... در همان فرمِ تک‌فروشی باز بشه و اصلاح بشه»):
-        نقطهٔ ورودِ عمومی -- از فهرستِ اسنادِ فروش صدا زده می‌شود --
-        هم‌الگو با _show_suspended_dialog._resume() (بازگشاییِ CONFIRMED
-        + بارگذاریِ سند در همینِ صفحه).
+        """طبق درخواست صریح («اصلاح فاکتور تک‌فروشی جدا از اصلاح
+        فاکتور باشه... در همان فرم تک‌فروشی باز بشه و اصلاح بشه»):
+        نقطهٔ ورود عمومی — از فهرست اسناد فروش صدا زده می‌شود --
+        هم‌الگو با _show_suspended_dialog._resume() (بازگشایی CONFIRMED
+        + بارگذاری سند در همین صفحه).
 
-        طبقِ رفعِ باگِ واقعیِ گزارش‌شده («بعد از انصراف از ویرایش، فاکتور
-        همچنان پیش‌نویس می‌ماند»): قبلاً بازگشاییِ CONFIRMED→DRAFT (که
-        نقشهٔ تسویه را هم پاک می‌کند) بلافاصله و بدونِ هیچ تاییدی انجام
-        می‌شد -- یعنی حتی «بازکردنِ صرفاً برایِ دیدن» هم فاکتور را برایِ
-        همیشه پیش‌نویس می‌کرد. حالا پیش از این کار، یک دیالوگِ تاییدِ
-        صریح (با نمایشِ نحوهٔ تسویهٔ فعلی) نشان داده می‌شود؛ اگر کاربر
-        «خیر» بزند، هیچ تغییری اعمال نمی‌شود -- فاکتور دقیقاً همان
+        طبق رفع باگ واقعی گزارش‌شده («بعد از انصراف از ویرایش، فاکتور
+        همچنان پیش‌نویس می‌ماند»): قبلاً بازگشایی CONFIRMED→DRAFT (که
+        نقشهٔ تسویه را هم پاک می‌کند) بلافاصله و بدون هیچ تاییدی انجام
+        می‌شد — یعنی حتی «بازکردن صرفاً برای دیدن» هم فاکتور را برای
+        همیشه پیش‌نویس می‌کرد. حالا پیش از این کار، یک دیالوگ تایید
+        صریح (با نمایش نحوهٔ تسویهٔ فعلی) نشان داده می‌شود؛ اگر کاربر
+        «خیر» بزند، هیچ تغییری اعمال نمی‌شود — فاکتور دقیقاً همان
         «تاییدشده» باقی می‌ماند."""
         self.refresh()
         company_id = self._company_id()
@@ -1047,12 +1047,12 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         if doc.status_code == "CONFIRMED":
             summary_text = self._settlement_summary_text(document_id, company_id, doc)
             confirm = QMessageBox.question(
-                self, "اصلاحِ فاکتورِ تاییدشده",
-                f"این فاکتور قبلاً توسط صندوق‌دار تایید شده و در انتظارِ تاییدِ سرپرست است.\n"
+                self, "اصلاح فاکتور تاییدشده",
+                f"این فاکتور قبلاً توسط صندوق‌دار تایید شده و در انتظار تایید سرپرست است.\n"
                 f"نحوهٔ تسویهٔ ثبت‌شده: {summary_text}\n\n"
                 "اگر ادامه دهید، این فاکتور به پیش‌نویس بازمی‌گردد و نحوهٔ تسویهٔ بالا پاک می‌شود -- "
                 "پس از اصلاح، باید دوباره تایید و نحوهٔ تسویه را ثبت کنید.\n"
-                "اگر «خیر» را بزنید، هیچ تغییری اعمال نمی‌شود -- فاکتور همچنان «تاییدشده» باقی می‌ماند.",
+                "اگر «خیر» را بزنید، هیچ تغییری اعمال نمی‌شود — فاکتور همچنان «تاییدشده» باقی می‌ماند.",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if confirm != QMessageBox.Yes:
@@ -1090,7 +1090,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         session_id = self._current_open_session_id()
         customer_id = self.customer_combo.currentData()
         if company_id is None or session_id is None or customer_id is None:
-            self.status_label.setText("ترمینال با شیفتِ باز و مشتری را انتخاب کنید.")
+            self.status_label.setText("ترمینال با شیفت باز و مشتری را انتخاب کنید.")
             return False
         terminal_id = self.terminal_combo.currentData()
         terminal = next((t for t in pos_service.list_terminals(company_id) if t.terminal_id == terminal_id), None)
@@ -1138,7 +1138,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
     ) -> bool:
         uom_id = uom_id or item.base_uom_id
         if self._is_confirmed:
-            self.status_label.setText("این فروش قبلاً تایید شده — برایِ فروشِ تازه، «فروشِ تازه» را بزنید.")
+            self.status_label.setText("این فروش قبلاً تایید شده — برای فروش تازه، «فروش تازه» را بزنید.")
             return False
         # طبقِ رفعِ باگِ گزارش‌شده («کالایِ متغیردار پیشنهاد داده
         # نمی‌شود، چیزی برایِ ثبت نیست»): پیش از حتی ساختنِ پیش‌نویسِ
@@ -1154,7 +1154,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
                 return False
             variant_item = next((it for it in self._items if it.item_id == picker.selected_item_id), None)
             if variant_item is None:
-                self.status_label.setText("متغیرِ انتخاب‌شده معتبر نیست.")
+                self.status_label.setText("متغیر انتخاب‌شده معتبر نیست.")
                 return False
             return self._add_item_to_cart(variant_item, quantity, unit_price)
         if not self._ensure_document():
@@ -1210,10 +1210,10 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self.tax_exempt_checkbox.blockSignals(False)
         self.tax_exempt_checkbox.setEnabled(not self._is_confirmed)
         self._refresh_lines_table()
-        self.subtotal_label.setText(f"جمعِ اقلام: {numerals.format_company_amount(doc.subtotal_amount)}")
+        self.subtotal_label.setText(f"جمع اقلام: {numerals.format_company_amount(doc.subtotal_amount)}")
         self.discount_label.setText(f"تخفیف: {numerals.format_company_amount(doc.discount_amount)}")
         self.tax_label.setText(f"مالیات: {numerals.format_company_amount(doc.tax_amount)}")
-        self.total_label.setText(f"جمعِ کل: {numerals.format_company_amount(doc.total_amount)}")
+        self.total_label.setText(f"جمع کل: {numerals.format_company_amount(doc.total_amount)}")
 
     def _refresh_lines_table(self) -> None:
         items_by_id = {it.item_id: it for it in self._items}
@@ -1246,7 +1246,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         if row < 0 or row >= len(self._lines):
             return
         if self._is_confirmed:
-            self.status_label.setText("این فروش قبلاً تایید شده — ردیف‌ها قابلِ‌ویرایش نیستند.")
+            self.status_label.setText("این فروش قبلاً تایید شده — ردیف‌ها قابل‌ویرایش نیستند.")
             return
         line = self._lines[row]
         company_id = self._company_id()
@@ -1277,7 +1277,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
 
     def _delete_line(self, line_id: int) -> None:
         if self._is_confirmed:
-            self.status_label.setText("این فروش قبلاً تایید شده — ردیف‌ها قابلِ‌حذف نیستند.")
+            self.status_label.setText("این فروش قبلاً تایید شده — ردیف‌ها قابل‌حذف نیستند.")
             return
         company_id = self._company_id()
         try:
@@ -1289,14 +1289,14 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self._load_document()
 
     def _open_settlement_plan_and_confirm(self, print_receipt: bool) -> None:
-        """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/
-        سایرِ روش‌ها را نمی‌تونه ثبت کنه»): همان فرمِ «نحوهٔ تسویه»یِ
-        فاکتور -- ترکیبِ نقد/بانک/تخفیف/کالابرگ/بن + مانده به‌عنوانِ
-        نسیه -- این‌جا بدونِ نیازِ به تاییدِ مدیر (require_manager_approval=
-        False) باز می‌شود؛ خودِ صندوق‌دار ذخیره می‌کند. تاییدِ سرپرست برایِ
-        POS از قبل جداگانه در صفحهٔ «تاییدِ سرپرست» (commercial_pos_
-        approval.py) انجام می‌شود که هنگامِ ثبتِ نهایی، همین نقشه را
-        می‌خواند و به‌ازایِ هر ردیف یک پرداخت/تسویهٔ واقعی ثبت می‌کند."""
+        """طبق درخواست صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/
+        سایر روش‌ها را نمی‌تونه ثبت کنه»): همان فرم «نحوهٔ تسویه»ی
+        فاکتور — ترکیب نقد/بانک/تخفیف/کالابرگ/بن + مانده به‌عنوان
+        نسیه — این‌جا بدون نیاز به تایید مدیر (require_manager_approval=
+        False) باز می‌شود؛ خود صندوق‌دار ذخیره می‌کند. تایید سرپرست برای
+        POS از قبل جداگانه در صفحهٔ «تایید سرپرست» (commercial_pos_
+        approval.py) انجام می‌شود که هنگام ثبت نهایی، همین نقشه را
+        می‌خواند و به‌ازای هر ردیف یک پرداخت/تسویهٔ واقعی ثبت می‌کند."""
         if self._document_id is None or not self._lines:
             self.status_label.setText("ابتدا حداقل یک کالا به سبد اضافه کنید.")
             return
@@ -1353,6 +1353,6 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
                 form_code="POS_RECEIPT", printer_names=printer_names or None,
                 fast=self._pos_settings is None or self._pos_settings.fast_receipt_printing,
             )
-        self.status_label.setText("فروش تایید شد و برایِ تاییدِ سرپرست به‌صفِ انتظار رفت.")
+        self.status_label.setText("فروش تایید شد و برای تایید سرپرست به‌صف انتظار رفت.")
         self._clear_cart_view()
         self.refresh()

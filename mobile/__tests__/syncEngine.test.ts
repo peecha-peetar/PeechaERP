@@ -25,7 +25,7 @@ async function buildEngine(fetcher: Fetcher) {
 }
 
 describe("SyncEngine", () => {
-  it("pull خروجیِ سرور را کامل جایگزینِ کشِ محلی می‌کند", async () => {
+  it("pull خروجی سرور را کامل جایگزین کش محلی می‌کند", async () => {
     const fetcher: Fetcher = jest.fn(async () =>
       jsonResponse(200, { visit_plans: [{ visit_plan_id: 1, customer_detail_account_id: 5, visit_day_of_week: 2, sequence_order: 0 }], customers: [], items: [] }),
     ) as unknown as Fetcher;
@@ -37,7 +37,7 @@ describe("SyncEngine", () => {
     expect(cached?.visit_plans).toHaveLength(1);
   });
 
-  it("pushQueue اقدام‌هایِ موفق را از صف حذف می‌کند", async () => {
+  it("pushQueue اقدام‌های موفق را از صف حذف می‌کند", async () => {
     const fetcher: Fetcher = jest.fn(async () => jsonResponse(204, undefined)) as unknown as Fetcher;
     const { engine, queue } = await buildEngine(fetcher);
     await queue.enqueue({ type: "COMPLETE_VISIT", payload: { customerVisitId: 1 } });
@@ -49,7 +49,7 @@ describe("SyncEngine", () => {
     expect(await queue.size()).toBe(0);
   });
 
-  it("با خطایِ شبکه، بقیه‌یِ صف برایِ تلاشِ بعدی نگه‌داشته می‌شود", async () => {
+  it("با خطای شبکه، بقیهٔ صف برای تلاش بعدی نگه‌داشته می‌شود", async () => {
     let call = 0;
     const fetcher: Fetcher = jest.fn(async () => {
       call += 1;
@@ -67,7 +67,7 @@ describe("SyncEngine", () => {
     expect(await queue.size()).toBe(2);
   });
 
-  it("با خطایِ ۴xx (مثلاً ویزیتِ قبلاً بسته‌شده)، اقدام از صف حذف و در failedButKept ثبت می‌شود", async () => {
+  it("با خطای ۴xx (مثلاً ویزیت قبلاً بسته‌شده)، اقدام از صف حذف و در failedButKept ثبت می‌شود", async () => {
     const fetcher: Fetcher = jest.fn(async () => jsonResponse(400, { detail: "این ویزیت قبلاً بسته شده است." })) as unknown as Fetcher;
     const { engine, queue } = await buildEngine(fetcher);
     await queue.enqueue({ type: "COMPLETE_VISIT", payload: { customerVisitId: 1 } });

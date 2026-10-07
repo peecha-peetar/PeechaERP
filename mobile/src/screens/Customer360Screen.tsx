@@ -14,18 +14,18 @@ interface Props {
 }
 
 const GUARANTEE_TYPE_LABELS: Record<string, string> = {
-  CHECK: "چکِ تضمینی", PROMISSORY_NOTE: "سفته", BANK_GUARANTEE: "ضمانت‌نامه", GUARANTOR: "ضامن", COLLATERAL: "وثیقه",
+  CHECK: "چک تضمینی", PROMISSORY_NOTE: "سفته", BANK_GUARANTEE: "ضمانت‌نامه", GUARANTOR: "ضامن", COLLATERAL: "وثیقه",
 };
 const GUARANTEE_STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال", RELEASED: "آزادشده", CALLED: "ضبط‌شده", EXPIRED: "منقضی",
 };
 const ACTIVITY_TYPE_OPTIONS: { code: "COMPLAINT" | "MEETING" | "OPPORTUNITY" | "TASK"; label: string }[] = [
   { code: "COMPLAINT", label: "شکایت" }, { code: "MEETING", label: "جلسه" },
-  { code: "OPPORTUNITY", label: "فرصتِ فروش" }, { code: "TASK", label: "وظیفه" },
+  { code: "OPPORTUNITY", label: "فرصت فروش" }, { code: "TASK", label: "وظیفه" },
 ];
 const ACTIVITY_TYPE_LABELS: Record<string, string> = Object.fromEntries(ACTIVITY_TYPE_OPTIONS.map((o) => [o.code, o.label]));
 const ACTIVITY_STATUS_LABELS: Record<string, string> = {
-  OPEN: "باز", IN_PROGRESS: "درحالِ انجام", RESOLVED: "حل‌شده", DONE: "انجام‌شده",
+  OPEN: "باز", IN_PROGRESS: "درحال انجام", RESOLVED: "حل‌شده", DONE: "انجام‌شده",
   WON: "موفق", LOST: "ناموفق", CANCELLED: "لغوشده",
 };
 /** طبقِ گردشِ کارِ سرور (partners_service._ACTIVITY_CLOSE_STATUSES): هر
@@ -44,8 +44,8 @@ const ADDRESS_TYPE_LABELS: Record<string, string> = {
   OFFICE: "دفتر", STORE: "فروشگاه", WAREHOUSE: "انبار", DELIVERY: "تحویل", BILLING: "صورتحساب", RETURN: "مرجوعی",
 };
 const SEGMENT_LABELS: Record<string, string> = {
-  NEW: "مشتریِ جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
-  AT_RISK: "در معرضِ ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
+  NEW: "مشتری جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
+  AT_RISK: "در معرض ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
 };
 
 function SectionHeader({ label, count }: { label: string; count: number }) {
@@ -109,7 +109,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
     try {
       setData(await apiClient.getCustomer360(detailAccountId));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ اطلاعاتِ کاملِ مشتری ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت اطلاعات کامل مشتری ناموفق بود.");
     } finally {
       setLoading(false);
     }
@@ -129,7 +129,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
 
   const saveActivity = async () => {
     if (!activitySubject.trim()) {
-      toast.show("موضوعِ فعالیت الزامی است.", "danger");
+      toast.show("موضوع فعالیت الزامی است.", "danger");
       return;
     }
     setSavingActivity(true);
@@ -144,7 +144,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
       resetActivityForm();
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "ثبتِ فعالیت ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "ثبت فعالیت ناموفق بود.", "danger");
     } finally {
       setSavingActivity(false);
     }
@@ -157,7 +157,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
       toast.show("فعالیت بسته شد.", "success");
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "بستنِ فعالیت ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "بستن فعالیت ناموفق بود.", "danger");
     } finally {
       setClosingActivityId(null);
     }
@@ -174,7 +174,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
     try {
       setStatement(await apiClient.getCustomerStatement(detailAccountId, fullHistory));
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "دریافتِ معینِ حساب ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "دریافت معین حساب ناموفق بود.", "danger");
       setShowStatement(false);
     } finally {
       setLoadingStatement(false);
@@ -212,21 +212,21 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
         </View>
 
         <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: spacing.md }}>
-          <StatTile label="فروشِ ماهِ جاری" value={formatAmount(segment.sales_this_month)} />
-          <StatTile label="فروشِ ۳ماهِ اخیر" value={formatAmount(segment.sales_last_3_months)} />
-          <StatTile label="تعدادِ سفارش (۱۲ماهِ اخیر)" value={String(segment.order_count_last_12_months)} />
+          <StatTile label="فروش ماه جاری" value={formatAmount(segment.sales_this_month)} />
+          <StatTile label="فروش ۳ماه اخیر" value={formatAmount(segment.sales_last_3_months)} />
+          <StatTile label="تعداد سفارش (۱۲ماه اخیر)" value={String(segment.order_count_last_12_months)} />
           <StatTile
-            label="سودِ برآوردیِ ۳ماهِ اخیر"
+            label="سود برآوردی ۳ماه اخیر"
             value={formatAmount(segment.estimated_profit_last_3_months)}
             tone={Number(segment.estimated_profit_last_3_months) >= 0 ? "success" : "danger"}
           />
         </View>
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-          سودِ برآوردی بر مبنایِ آخرین بهایِ شناخته‌شده است، نه حسابداریِ دقیق.
+          سود برآوردی بر مبنای آخرین بهای شناخته‌شده است، نه حسابداری دقیق.
         </Text>
 
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.md }}>
-          <Text style={[typography.caption, { color: colors.textSecondary }]}>مانده‌یِ حساب</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>ماندهٔ حساب</Text>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>{detail.balance_nature}</Text>
         </View>
         <Text style={[typography.numeric, { fontSize: 22, color: detail.balance_nature === "بدهکار" ? colors.danger : colors.success }]}>
@@ -234,15 +234,15 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
         </Text>
         {detail.credit_limit_amount ? (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-            سقفِ اعتبار: {formatAmount(detail.credit_limit_amount)}
+            سقف اعتبار: {formatAmount(detail.credit_limit_amount)}
           </Text>
         ) : null}
       </View>
 
-      <SectionHeader label="معینِ حساب" count={statement?.lines.length ?? 0} />
+      <SectionHeader label="معین حساب" count={statement?.lines.length ?? 0} />
       <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
         <Button
-          label={showStatement && !statementFullHistory ? "بستنِ معینِ حساب" : "معینِ حساب (۱۲ماهِ اخیر)"}
+          label={showStatement && !statementFullHistory ? "بستن معین حساب" : "معین حساب (۱۲ماه اخیر)"}
           size="md"
           fullWidth={false}
           variant="secondary"
@@ -250,7 +250,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
           onPress={() => toggleStatement(false)}
         />
         <Button
-          label={showStatement && statementFullHistory ? "بستنِ معینِ حساب" : "کلِ سابقه"}
+          label={showStatement && statementFullHistory ? "بستن معین حساب" : "کل سابقه"}
           size="md"
           fullWidth={false}
           variant="ghost"
@@ -331,10 +331,10 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
         ))
       )}
 
-      <SectionHeader label="فعالیت‌هایِ CRM" count={activities.length} />
+      <SectionHeader label="فعالیت‌های CRM" count={activities.length} />
       {openActivities.length > 0 ? (
         <Text style={[typography.caption, { color: colors.warning, marginBottom: spacing.sm }]}>
-          {openActivities.length} فعالیتِ باز نیاز به پیگیری دارد.
+          {openActivities.length} فعالیت باز نیاز به پیگیری دارد.
         </Text>
       ) : null}
       {activities.length === 0 ? (
@@ -372,7 +372,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
 
       {showActivityForm ? (
         <Card>
-          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>نوعِ فعالیت</Text>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>نوع فعالیت</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: spacing.sm }}>
             {ACTIVITY_TYPE_OPTIONS.map((o) => (
               <Button
@@ -389,13 +389,13 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
           <Input label="موضوع *" value={activitySubject} onChangeText={setActivitySubject} />
           <Input label="توضیح" value={activityDescription} onChangeText={setActivityDescription} multiline />
           {activityType === "OPPORTUNITY" ? (
-            <Input label="ارزشِ برآوردی" value={activityEstimatedValue} onChangeText={setActivityEstimatedValue} keyboardType="number-pad" />
+            <Input label="ارزش برآوردی" value={activityEstimatedValue} onChangeText={setActivityEstimatedValue} keyboardType="number-pad" />
           ) : null}
-          <Button label="ثبتِ فعالیت" onPress={saveActivity} loading={savingActivity} disabled={!activitySubject.trim()} />
+          <Button label="ثبت فعالیت" onPress={saveActivity} loading={savingActivity} disabled={!activitySubject.trim()} />
           <Button label="انصراف" variant="ghost" onPress={resetActivityForm} style={{ marginTop: spacing.sm }} />
         </Card>
       ) : (
-        <Button label="افزودنِ فعالیتِ CRM" variant="secondary" onPress={() => setShowActivityForm(true)} />
+        <Button label="افزودن فعالیت CRM" variant="secondary" onPress={() => setShowActivityForm(true)} />
       )}
 
       <SectionHeader label="آدرس‌ها" count={addresses.length} />
@@ -414,7 +414,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
 
       {merchandising ? (
         <>
-          <SectionHeader label="اطلاعاتِ فروشگاهی" count={1} />
+          <SectionHeader label="اطلاعات فروشگاهی" count={1} />
           <Card>
             {merchandising.store_area_sqm ? (
               <Text style={[typography.caption, { color: colors.textSecondary }]}>متراژ: {merchandising.store_area_sqm} مترمربع</Text>
@@ -429,7 +429,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
                 .join(" · ")}
             </Text>
             {merchandising.available_brands ? (
-              <Text style={[typography.caption, { color: colors.textSecondary }]}>برندهایِ موجود: {merchandising.available_brands}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>برندهای موجود: {merchandising.available_brands}</Text>
             ) : null}
             {merchandising.competitor_brands ? (
               <Text style={[typography.caption, { color: colors.textSecondary }]}>رقبا: {merchandising.competitor_brands}</Text>
@@ -438,7 +438,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
         </>
       ) : null}
 
-      <SectionHeader label="ویزیت‌هایِ اخیر" count={recentVisits.length} />
+      <SectionHeader label="ویزیت‌های اخیر" count={recentVisits.length} />
       {recentVisits.length === 0 ? (
         <Text style={[typography.caption, { color: colors.textSecondary }]}>ویزیتی ثبت نشده.</Text>
       ) : (
@@ -449,7 +449,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
               <StatusBadge statusCode={v.status_code} label={v.status_code} />
             </View>
             {v.is_outside_geofence ? (
-              <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.xs }]}>خارج از محدوده‌یِ مجاز</Text>
+              <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.xs }]}>خارج از محدودهٔ مجاز</Text>
             ) : null}
           </Card>
         ))

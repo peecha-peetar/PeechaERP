@@ -1,7 +1,7 @@
-"""صفحه‌هایِ ماژولِ بهایِ تمام‌شده (انبار ‹ بهایِ تمام‌شده) -- R259.
+"""صفحه‌های ماژول بهای تمام‌شده (انبار ‹ بهای تمام‌شده) — R259.
 
-داشبورد، تنظیمات (همان تبِ تنظیماتِ انبار)، بهایِ جایگزینی. گزارش‌ها همان صفحهٔ عمومیِ گزارش‌هایِ انبار هستند.
-دسترسی‌ها از سیستمِ نقش‌ها: هر صفحه یک فرم است (VIEW برایِ مشاهده، EDIT برایِ تغییر).
+داشبورد، تنظیمات (همان تب تنظیمات انبار)، بهای جایگزینی. گزارش‌ها همان صفحهٔ عمومی گزارش‌های انبار هستند.
+دسترسی‌ها از سیستم نقش‌ها: هر صفحه یک فرم است (VIEW برای مشاهده، EDIT برای تغییر).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ _KPI_STYLE = {"VALUE": ("💰", "ACCENT"), "COGS": ("📤", "CHART_ORANGE"), "AV
 
 
 def can(form_code: str, action: str) -> bool:
-    """دسترسیِ کاربرِ جاری به یک صفحهٔ بهایِ تمام‌شده (مدیرِ کل همیشه مجاز)."""
+    """دسترسی کاربر جاری به یک صفحهٔ بهای تمام‌شده (مدیر کل همیشه مجاز)."""
     user = app_session.current_user
     company = app_session.current_company
     if user is None or company is None:
@@ -40,7 +40,7 @@ def can(form_code: str, action: str) -> bool:
 
 
 class CostingDashboard(_ProcurementDashboardBase):
-    TITLE = "داشبوردِ بهایِ تمام‌شده"
+    TITLE = "داشبورد بهای تمام‌شده"
 
     def __init__(self, main_window=None) -> None:
         super().__init__(main_window)
@@ -102,13 +102,13 @@ class CostingDashboard(_ProcurementDashboardBase):
             card = self.cards[code]
             card._title_label.setText(kpi.title)
             card.set_value(format_kpi(kpi.value, kpi.kind, self._decimal_places))
-            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارشِ مبدا")
+            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارش مبدا")
         for key, data in chart_data.items():
             render_series_chart(self.chart_views[key], data["labels"], data["series"])
 
 
 class CostingSettingsScreen(QWidget):
-    """تنظیماتِ بهایِ تمام‌شده -- همان تبِ «تنظیماتِ قیمت‌گذاری» (یک منبعِ واحد)، با دسترسیِ EDIT."""
+    """تنظیمات بهای تمام‌شده — همان تب «تنظیمات قیمت‌گذاری» (یک منبع واحد)، با دسترسی EDIT."""
 
     scroll_in_mdi = True
 
@@ -129,12 +129,12 @@ class CostingSettingsScreen(QWidget):
         for w in self.tab.findChildren(QPushButton):
             w.setEnabled(allowed)
         if not allowed:
-            self.tab.status_label.setText("برایِ تغییرِ روش و سیاست‌ها دسترسیِ «ویرایش» لازم است.")
+            self.tab.status_label.setText("برای تغییر روش و سیاست‌ها دسترسی «ویرایش» لازم است.")
 
 
 @ms.styled
 class ReplacementCostScreen(QWidget):
-    """ثبت و فهرستِ بهایِ جایگزینیِ دستی (منبعِ MANUAL برایِ NIFO و گزارشِ مغایرت)."""
+    """ثبت و فهرست بهای جایگزینی دستی (منبع MANUAL برای NIFO و گزارش مغایرت)."""
 
     scroll_in_mdi = True
 
@@ -144,11 +144,11 @@ class ReplacementCostScreen(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
-        title = QLabel("بهایِ جایگزینی")
+        title = QLabel("بهای جایگزینی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        hint = QLabel("بهایِ جایگزینی (قیمتِ روزِ خرید) برایِ روشِ NIFO و گزارشِ «بهایِ جایگزینی». بها به ازایِ واحدِ "
-                      "انتخابی وارد و به واحدِ پایه تبدیل می‌شود؛ هر ثبت در Audit می‌ماند.")
+        hint = QLabel("بهای جایگزینی (قیمت روز خرید) برای روش NIFO و گزارش «بهای جایگزینی». بها به ازای واحد "
+                      "انتخابی وارد و به واحد پایه تبدیل می‌شود؛ هر ثبت در Audit می‌ماند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -170,7 +170,7 @@ class ReplacementCostScreen(QWidget):
                          ("بها", self.cost_field), ("از تاریخ", self.date_field), ("توضیح", self.note_field)):
             form.addWidget(QLabel(label))
             form.addWidget(w)
-        self.save_button = QPushButton("ثبتِ بهایِ جایگزینی")
+        self.save_button = QPushButton("ثبت بهای جایگزینی")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self.save)
         form.addWidget(self.save_button)
@@ -178,7 +178,7 @@ class ReplacementCostScreen(QWidget):
         self.status_label = QLabel("")
         layout.addWidget(self.status_label)
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["کالا", "انبار", "بهایِ واحدِ پایه", "از تاریخ", "منبع", "توضیح"])
+        self.table.setHorizontalHeaderLabels(["کالا", "انبار", "بهای واحد پایه", "از تاریخ", "منبع", "توضیح"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -239,7 +239,7 @@ class ReplacementCostScreen(QWidget):
         if company_id is None or item_id is None:
             return False
         if not can(self.FORM, "EDIT"):
-            QMessageBox.warning(self, "بهایِ جایگزینی", "دسترسیِ ثبتِ بهایِ جایگزینی ندارید.")
+            QMessageBox.warning(self, "بهای جایگزینی", "دسترسی ثبت بهای جایگزینی ندارید.")
             return False
         user = app_session.current_user
         try:
@@ -258,7 +258,7 @@ class ReplacementCostScreen(QWidget):
 
 @ms.styled
 class RecalculationScreen(QWidget):
-    """R260: بازمحاسبهٔ بهایِ تمام‌شده -- پیش‌نمایش، هشدار، اعمال با سندِ اصلاحی."""
+    """R260: بازمحاسبهٔ بهای تمام‌شده — پیش‌نمایش، هشدار، اعمال با سند اصلاحی."""
 
     scroll_in_mdi = True
 
@@ -268,12 +268,12 @@ class RecalculationScreen(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
-        title = QLabel("بازمحاسبهٔ بهایِ تمام‌شده")
+        title = QLabel("بازمحاسبهٔ بهای تمام‌شده")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        hint = QLabel("حرکت‌ها از «تاریخِ شروع» به ترتیبِ زمانی دوباره محاسبه می‌شوند (لازم پس از سندِ عقب‌دار یا "
-                      "خروجِ با بهایِ موقت). دفترِ انبار تغییر نمی‌کند؛ اختلاف با یک سندِ حسابداریِ اصلاحی در «تاریخِ ثبت» "
-                      "ثبت می‌شود. با انتخابِ یک انبار، همهٔ انبارهایِ همان کالا بازمحاسبه می‌شوند (به خاطرِ انتقال‌ها).")
+        hint = QLabel("حرکت‌ها از «تاریخ شروع» به ترتیب زمانی دوباره محاسبه می‌شوند (لازم پس از سند عقب‌دار یا "
+                      "خروج با بهای موقت). دفتر انبار تغییر نمی‌کند؛ اختلاف با یک سند حسابداری اصلاحی در «تاریخ ثبت» "
+                      "ثبت می‌شود. با انتخاب یک انبار، همهٔ انبارهای همان کالا بازمحاسبه می‌شوند (به خاطر انتقال‌ها).")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -286,14 +286,14 @@ class RecalculationScreen(QWidget):
         self.from_date = JalaliDateEdit()
         self.posting_date = JalaliDateEdit()
         self.reason_field = QLineEdit()
-        self.reason_field.setPlaceholderText("علتِ بازمحاسبه")
+        self.reason_field.setPlaceholderText("علت بازمحاسبه")
         for label, w in (("کالا", self.item_combo), ("انبار", self.warehouse_combo), ("از تاریخ", self.from_date),
-                         ("تاریخِ ثبت", self.posting_date), ("علت", self.reason_field)):
+                         ("تاریخ ثبت", self.posting_date), ("علت", self.reason_field)):
             form.addWidget(QLabel(label))
             form.addWidget(w)
         self.preview_button = QPushButton("پیش‌نمایش")
         self.preview_button.clicked.connect(self.preview)
-        self.apply_button = QPushButton("اجرایِ بازمحاسبه")
+        self.apply_button = QPushButton("اجرای بازمحاسبه")
         self.apply_button.setObjectName("primaryButton")
         self.apply_button.clicked.connect(self.apply)
         form.addWidget(self.preview_button)
@@ -303,7 +303,7 @@ class RecalculationScreen(QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
         self.table = QTableWidget(0, 8)
-        self.table.setHorizontalHeaderLabels(["کالا", "انبار", "سند", "تاریخ", "مقدار", "بهایِ قبلی", "بهایِ جدید", "اختلاف"])
+        self.table.setHorizontalHeaderLabels(["کالا", "انبار", "سند", "تاریخ", "مقدار", "بهای قبلی", "بهای جدید", "اختلاف"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -313,7 +313,7 @@ class RecalculationScreen(QWidget):
         self.skipped_label.setWordWrap(True)
         layout.addWidget(self.skipped_label)
         self.results = []
-        self.confirm = lambda text: QMessageBox.question(self, "بازمحاسبهٔ بهایِ تمام‌شده", text) == QMessageBox.Yes
+        self.confirm = lambda text: QMessageBox.question(self, "بازمحاسبهٔ بهای تمام‌شده", text) == QMessageBox.Yes
 
     def _company_id(self):
         return app_session.current_company.company_id if app_session.current_company else None
@@ -343,7 +343,7 @@ class RecalculationScreen(QWidget):
         self.apply_button.setEnabled(can(self.FORM, "EDIT"))
         flagged = recalculation.flagged_count(company_id)
         self.status_label.setText(numerals.to_persian_digits(
-            f"{flagged} خروج «نیازمندِ بازمحاسبه» است (سندِ عقب‌دار)." if flagged else "خروجِ نیازمندِ بازمحاسبه وجود ندارد."))
+            f"{flagged} خروج «نیازمند بازمحاسبه» است (سند عقب‌دار)." if flagged else "خروج نیازمند بازمحاسبه وجود ندارد."))
 
     def _filters(self) -> dict:
         return {"item_id": self.item_combo.currentData(), "warehouse_id": self.warehouse_combo.currentData(),
@@ -374,7 +374,7 @@ class RecalculationScreen(QWidget):
             f"«{self._items[r.item_id].code if r.item_id in self._items else r.item_id}»: {r.message}" for r in skipped))
         total = sum((ln.delta for ln in changed if ln.direction == "OUT"), decimal.Decimal(0))
         self.status_label.setText(numerals.to_persian_digits(
-            f"{len(changed)} ردیف تغییر می‌کند؛ اثر بر بهایِ تمام‌شده: {numerals.format_money(total, 0)}" if changed
+            f"{len(changed)} ردیف تغییر می‌کند؛ اثر بر بهای تمام‌شده: {numerals.format_money(total, 0)}" if changed
             else "اختلافی پیدا نشد."))
         return changed
 
@@ -385,11 +385,11 @@ class RecalculationScreen(QWidget):
         if company_id is None:
             return None
         if not can(self.FORM, "EDIT"):
-            QMessageBox.warning(self, "بازمحاسبه", "دسترسیِ اجرایِ بازمحاسبه ندارید.")
+            QMessageBox.warning(self, "بازمحاسبه", "دسترسی اجرای بازمحاسبه ندارید.")
             return None
         changed = self.preview()
-        warning = ("هشدار: بهایِ خروج‌ها، لایه‌ها و میانگینِ موجودی تغییر می‌کند و یک سندِ حسابداریِ اصلاحی "
-                   f"در تاریخِ {numerals.format_jalali_date(self.posting_date.date())} ثبت می‌شود. "
+        warning = ("هشدار: بهای خروج‌ها، لایه‌ها و میانگین موجودی تغییر می‌کند و یک سند حسابداری اصلاحی "
+                   f"در تاریخ {numerals.format_jalali_date(self.posting_date.date())} ثبت می‌شود. "
                    f"{numerals.to_persian_digits(str(len(changed)))} ردیف تغییر می‌کند. ادامه می‌دهید؟")
         if not self.confirm(warning):
             return None

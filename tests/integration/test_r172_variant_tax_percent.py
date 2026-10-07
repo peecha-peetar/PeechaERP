@@ -63,7 +63,7 @@ check(len(created_ids) == 2, f"دو متغیر ساخته شد (got {len(created
 
 for variant_id in created_ids:
     tax = catalog_service.resolve_default_tax_percent(company_id, variant_id)
-    check(tax == decimal.Decimal(9), f"مالیاتِ متغیرِ تازه‌ساخته‌شده = مالیاتِ کالایِ مادر (got {tax})")
+    check(tax == decimal.Decimal(9), f"مالیات متغیر تازه‌ساخته‌شده = مالیات کالای مادر (got {tax})")
 
 # ۳: تغییرِ بعدیِ درصدِ مالیات رویِ خودِ کالایِ مادر -- باید به متغیرهایِ
 #    ازپیش‌موجود هم سرایت کند (طبقِ سازوکارِ همگام‌سازیِ update_item).
@@ -81,7 +81,7 @@ catalog_service.update_item(parent_id, company_id, "4001", "پیراهن", True,
 
 for variant_id in created_ids:
     tax = catalog_service.resolve_default_tax_percent(company_id, variant_id)
-    check(tax == decimal.Decimal(5), f"ویرایشِ مالیاتِ کالایِ مادر به متغیرهایِ ازپیش‌موجود سرایت کرد (got {tax})")
+    check(tax == decimal.Decimal(5), f"ویرایش مالیات کالای مادر به متغیرهای ازپیش‌موجود سرایت کرد (got {tax})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

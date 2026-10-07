@@ -1,11 +1,11 @@
-"""پخشِ گرم (فروشِ خودرویی) -- طبقِ درخواستِ صریحِ کاربر («وقتی منویِ
-پخشِ گرم اجرا می‌شود فقط تب‌هایِ مربوط به پخشِ گرم باز شود و بقیهٔ
-تب‌ها در منویِ مربوط به خودشون ایجاد بشه»): این فرم دیگر زیرساختِ
-میدانیِ مشترک/نامرتبط را ندارد -- فقط چهار تبی که واقعاً مخصوصِ
-پخشِ گرم (خودرو/فروشِ خودرویی) هستند. فروشِ تلفنی به آیتمِ ناوبریِ
-مستقلِ خودش (commercial_telesales) رفت؛ برنامهٔ مراجعه/ویزیت‌ها/
-پروموشن‌ها/داشبوردِ سرپرست/بازاریابی -- که هیچ‌کدام مخصوصِ پخشِ گرم
-یا سرد نیستند -- به آیتمِ تازهٔ «برنامه‌ریزیِ فروش» (sales_planning_hub)
+"""پخش گرم (فروش خودرویی) — طبق درخواست صریح کاربر («وقتی منوی
+پخش گرم اجرا می‌شود فقط تب‌های مربوط به پخش گرم باز شود و بقیهٔ
+تب‌ها در منوی مربوط به خودشون ایجاد بشه»): این فرم دیگر زیرساخت
+میدانی مشترک/نامرتبط را ندارد — فقط چهار تبی که واقعاً مخصوص
+پخش گرم (خودرو/فروش خودرویی) هستند. فروش تلفنی به آیتم ناوبری
+مستقل خودش (commercial_telesales) رفت؛ برنامهٔ مراجعه/ویزیت‌ها/
+پروموشن‌ها/داشبورد سرپرست/بازاریابی — که هیچ‌کدام مخصوص پخش گرم
+یا سرد نیستند — به آیتم تازهٔ «برنامه‌ریزی فروش» (sales_planning_hub)
 منتقل شدند."""
 
 from __future__ import annotations
@@ -25,22 +25,22 @@ class CommercialDistributionHubScreen(QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("پخشِ گرم (فروشِ خودرویی)")
+        title = QLabel("پخش گرم (فروش خودرویی)")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         self.tabs = QTabWidget()
         self.van_sales_tab = CommercialDocumentsListScreen(
             main_window, type_filter_codes=("SALES_ORDER", "SALES_INVOICE"), channel_type_code="VAN_SALES",
-            title_override="اسنادِ پخشِ گرم (فروشِ خودرویی)",
+            title_override="اسناد پخش گرم (فروش خودرویی)",
         )
         self.tabs.addTab(self.van_sales_tab, "اسناد")
         self.vehicle_loading_tab = VehicleLoadingScreen()
-        self.tabs.addTab(self.vehicle_loading_tab, "بارگیریِ خودرو")
+        self.tabs.addTab(self.vehicle_loading_tab, "بارگیری خودرو")
         # طبقِ درخواستِ صریحِ کاربر (فازِ ۲ از پخشِ گرم): راننده/ویزیتور/
         # موزعِ هر خودرو.
         self.vehicle_team_tab = VehicleTeamScreen()
-        self.tabs.addTab(self.vehicle_team_tab, "تیمِ خودرو")
+        self.tabs.addTab(self.vehicle_team_tab, "تیم خودرو")
         # طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورت انتخابی به
         # یک نفر از ۳ نقش واگذار بشه و به تاییدِ انبار و حسابداری برسه»).
         self.vehicle_settlement_tab = VehicleSettlementScreen()

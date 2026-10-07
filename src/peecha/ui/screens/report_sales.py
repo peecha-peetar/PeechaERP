@@ -1,6 +1,6 @@
-"""گزارشِ فروش (کالا-محور) -- طبقِ ادامه‌یِ اولویت‌بندی: برخلافِ گزارشِ
-سودِ واقعیِ مشتریان (که مشتری-محور است)، این گزارش نشان می‌دهد کدام
-کالاها در بازه‌یِ داده‌شده بیشترین فروشِ خالص/تعداد را داشته‌اند."""
+"""گزارش فروش (کالا-محور) — طبق ادامهٔ اولویت‌بندی: برخلاف گزارش
+سود واقعی مشتریان (که مشتری-محور است)، این گزارش نشان می‌دهد کدام
+کالاها در بازهٔ داده‌شده بیشترین فروش خالص/تعداد را داشته‌اند."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ _ZERO = decimal.Decimal("0")
 
 class SalesReportScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("گزارشِ فروش")
+        super().__init__("گزارش فروش")
         self._currency_decimal_places = 0
         self.add_field_help([])
 
@@ -38,7 +38,7 @@ class SalesReportScreen(ReportScreenBase):
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         rows = documents_service.compute_sales_report_by_item(company_id, date_from, date_to)
 
-        headers = ["کالا", "تعدادِ فروخته‌شده (واحدِ پایه)", "مقدارِ تراکنش (به تفکیکِ واحد)", "تعدادِ فاکتور", "فروشِ خالص"]
+        headers = ["کالا", "تعداد فروخته‌شده (واحد پایه)", "مقدار تراکنش (به تفکیک واحد)", "تعداد فاکتور", "فروش خالص"]
         table_rows = [
             [
                 r.item_name,
@@ -54,7 +54,7 @@ class SalesReportScreen(ReportScreenBase):
         total_invoices = sum((r.invoice_count for r in rows), 0)
         total_revenue = sum((r.net_revenue for r in rows), _ZERO)
         footer = [
-            "جمعِ کل", numerals.format_money(total_quantity, 2), "",
+            "جمع کل", numerals.format_money(total_quantity, 2), "",
             numerals.to_persian_digits(str(total_invoices)), self._fmt(total_revenue),
         ]
         return headers, table_rows, footer

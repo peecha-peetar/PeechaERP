@@ -1,6 +1,6 @@
-"""اعتبار (مرحلهٔ ۲/۵): بدونِ دفترِ اعتبارِ موازی — مواجهه = مانده‌یِ زندهٔ
-AR (از موتورِ حسابداریِ ازپیش‌ساخته) + مبلغِ سفارش‌هایِ فروشِ
-CONFIRMED/APPROVEDِ هنوز فاکتورنشده."""
+"""اعتبار (مرحلهٔ ۲/۵): بدون دفتر اعتبار موازی — مواجهه = ماندهٔ زندهٔ
+AR (از موتور حسابداری ازپیش‌ساخته) + مبلغ سفارش‌های فروش
+CONFIRMED/APPROVED هنوز فاکتورنشده."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def get_credit_policy(company_id: int, party_type_code: str) -> CreditPolicy | N
 
 def set_credit_policy(company_id: int, party_type_code: str, default_credit_limit: decimal.Decimal, default_payment_term_days: int, overdue_grace_days: int) -> None:
     if party_type_code not in ("CUSTOMER", "SUPPLIER"):
-        raise ValueError("نوعِ طرفِ‌حساب نامعتبر است.")
+        raise ValueError("نوع طرف‌حساب نامعتبر است.")
     with new_session() as session:
         row = session.scalar(
             select(CreditPolicy).where(CreditPolicy.company_id == company_id, CreditPolicy.party_type_code == party_type_code)
@@ -61,8 +61,8 @@ def compute_customer_exposure(company_id: int, customer_detail_account_id: int) 
 
 
 def check_credit_exposure(company_id: int, customer_detail_account_id: int, additional_amount: decimal.Decimal) -> bool:
-    """True یعنی مواجهه (پسِ افزودنِ additional_amount) از سقفِ اعتبار
-    عبور می‌کند — سفارش باید به کارتابلِ اعتبار برود، نه Post شود."""
+    """True یعنی مواجهه (پس افزودن additional_amount) از سقف اعتبار
+    عبور می‌کند — سفارش باید به کارتابل اعتبار برود، نه Post شود."""
     from peecha.db.models.commercial import CustomerProfile
 
     with new_session() as session:
@@ -94,9 +94,9 @@ def release_credit_hold(hold_id: int, released_by_user_id: int) -> None:
     with new_session() as session:
         row = session.get(CreditHold, hold_id)
         if row is None:
-            raise ValueError("موردِ توقفِ اعتباری نامعتبر است.")
+            raise ValueError("مورد توقف اعتباری نامعتبر است.")
         if row.released_at is not None:
-            raise ValueError("این موردِ توقف قبلاً آزاد شده است.")
+            raise ValueError("این مورد توقف قبلاً آزاد شده است.")
         row.released_by_user_id = released_by_user_id
         row.released_at = datetime.datetime.now()
         session.commit()

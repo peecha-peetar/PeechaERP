@@ -12,8 +12,8 @@ import { buildLocationLabelHtml, printLocationLabels } from "../src/print/locati
 
 const label = { location_id: 5, code: "WH01-Z01-B07", title: "<قفسه>", qr_payload: "PEECHA-LOC:5:WH01-Z01-B07", qr_svg: "<svg id=\"qr\"></svg>", barcode_svg: "<svg id=\"bars\"></svg>" };
 
-describe("برچسب و شمارشِ بچ (R251)", () => {
-  it("HTMLِ برچسب: QR و بارکد و متنِ escape‌شده", () => {
+describe("برچسب و شمارش بچ (R251)", () => {
+  it("HTML برچسب: QR و بارکد و متن escape‌شده", () => {
     const html = buildLocationLabelHtml([label, { ...label, location_id: 6, code: "WH01-Z01-B08" }]);
     expect(html).toContain('<svg id="qr"></svg>');
     expect(html).toContain('<svg id="bars"></svg>');
@@ -27,7 +27,7 @@ describe("برچسب و شمارشِ بچ (R251)", () => {
     expect(Print.printAsync).toHaveBeenCalledWith({ html: expect.stringContaining("WH01-Z01-B07") });
   });
 
-  it("شمارشِ بچ‌دار شمارهٔ بچ را می‌فرستد", async () => {
+  it("شمارش بچ‌دار شمارهٔ بچ را می‌فرستد", async () => {
     const bodies: unknown[] = [];
     const fetcher = jest.fn(async (_u: string, init: RequestInit) => {
       bodies.push(JSON.parse(String(init.body)));

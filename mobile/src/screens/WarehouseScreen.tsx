@@ -28,13 +28,13 @@ type ScanTarget =
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال", INACTIVE: "غیرفعال", BLOCKED: "مسدود", FULL: "پر", RESERVED: "رزرو", QUARANTINE: "قرنطینه",
-  MAINTENANCE: "در حالِ تعمیر", OPEN: "باز", IN_PROGRESS: "در حالِ انجام",
+  MAINTENANCE: "در حال تعمیر", OPEN: "باز", IN_PROGRESS: "در حال انجام",
 };
 const TASK_FILTERS: { key: WmsTaskType | null; label: string }[] = [
   { key: null, label: "همه" },
   { key: "PUTAWAY", label: "جانمایی" },
   { key: "PICK", label: "برداشت" },
-  { key: "REPLENISH", label: "تأمین" },
+  { key: "REPLENISH", label: "تامین" },
 ];
 
 /** پیدا کردنِ محل از متنِ اسکن‌شده یا تایپ‌شده (QR، کدِ محل یا بارکدِ محل). */
@@ -115,7 +115,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       setTasks(await apiClient.listWmsTasks(taskFilter ?? undefined));
       setWaves(await apiClient.listWaves().catch(() => []));
     } catch (e) {
-      toast.show(errorText(e, "دریافتِ وظایف ناموفق بود."), "danger");
+      toast.show(errorText(e, "دریافت وظایف ناموفق بود."), "danger");
     } finally {
       setLoadingTasks(false);
     }
@@ -130,7 +130,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       apiClient.listWarehouses().then(setWarehouses).catch(() => setWarehouses([]));
     }
     if (tab === "COUNT") apiClient.listLocationCounts().then(setCounts).catch(() => setCounts([]));
-    if (tab === "KPI") apiClient.getWmsKpis().then(setKpis).catch((e) => toast.show(errorText(e, "دریافتِ شاخص‌ها ناموفق بود."), "danger"));
+    if (tab === "KPI") apiClient.getWmsKpis().then(setKpis).catch((e) => toast.show(errorText(e, "دریافت شاخص‌ها ناموفق بود."), "danger"));
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCount = async (sessionId: number) => {
@@ -140,7 +140,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     try {
       setCountLines(await apiClient.getLocationCountLines(sessionId));
     } catch (e) {
-      toast.show(errorText(e, "دریافتِ شمارش ناموفق بود."), "danger");
+      toast.show(errorText(e, "دریافت شمارش ناموفق بود."), "danger");
     }
   };
 
@@ -165,7 +165,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     try {
       setMapNodes(await apiClient.getWarehouseMap(warehouseId));
     } catch (e) {
-      toast.show(errorText(e, "دریافتِ نقشه ناموفق بود."), "danger");
+      toast.show(errorText(e, "دریافت نقشه ناموفق بود."), "danger");
     }
   };
 
@@ -174,9 +174,9 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       const { wave_id } = await apiClient.createWave(warehouseId);
       setActiveWave(wave_id);
       await loadTasks();
-      toast.show("موجِ برداشت ساخته شد.", "success");
+      toast.show("موج برداشت ساخته شد.", "success");
     } catch (e) {
-      toast.show(errorText(e, "ساختِ موج ناموفق بود."), "danger");
+      toast.show(errorText(e, "ساخت موج ناموفق بود."), "danger");
     }
   };
 
@@ -212,7 +212,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       await apiClient.startWmsTask(task.task_id);
       await loadTasks();
     } catch (e) {
-      toast.show(errorText(e, "شروعِ وظیفه ناموفق بود."), "danger");
+      toast.show(errorText(e, "شروع وظیفه ناموفق بود."), "danger");
     }
   };
 
@@ -222,14 +222,14 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     let ok = false;
     if (activeTask.task_type === "PUTAWAY") {
       if (!putawayTarget) {
-        toast.show("محلِ مقصد را انتخاب یا اسکن کنید.", "warning");
+        toast.show("محل مقصد را انتخاب یا اسکن کنید.", "warning");
         return;
       }
       ok = await submit({ type: "WMS_PUTAWAY", payload: { taskId: activeTask.task_id, toLocationId: putawayTarget.id } }, "جانمایی ثبت شد.");
     } else if (activeTask.task_type === "PICK") {
       ok = await submit({ type: "WMS_PICK", payload: { taskId: activeTask.task_id, quantity: qty } }, "برداشت ثبت شد.");
     } else {
-      ok = await submit({ type: "WMS_REPLENISH", payload: { taskId: activeTask.task_id, quantity: qty || null } }, "تأمینِ مجدد ثبت شد.");
+      ok = await submit({ type: "WMS_REPLENISH", payload: { taskId: activeTask.task_id, quantity: qty || null } }, "تامین مجدد ثبت شد.");
     }
     if (ok) {
       setActiveTask(null);
@@ -239,7 +239,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
 
   const submitTransfer = async () => {
     if (!transferItem || !transferFrom || !transferTo || !toAsciiDigits(transferQty)) {
-      toast.show("کالا، محلِ مبدا، محلِ مقصد و مقدار را کامل کنید.", "warning");
+      toast.show("کالا، محل مبدا، محل مقصد و مقدار را کامل کنید.", "warning");
       return;
     }
     const ok = await submit(
@@ -287,11 +287,11 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
           setCounts(await apiClient.listLocationCounts());
           await openCount(session_id);
           setCountLocation(picked);
-          toast.show(`شمارشِ «${loc.code}» شروع شد.`, "success");
+          toast.show(`شمارش «${loc.code}» شروع شد.`, "success");
         }
       }
     } catch (e) {
-      toast.show(errorText(e, "خواندنِ کد ناموفق بود."), "danger");
+      toast.show(errorText(e, "خواندن کد ناموفق بود."), "danger");
     }
   };
 
@@ -311,7 +311,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     try {
       setPutawaySources(await apiClient.listPutawaySources());
     } catch (e) {
-      toast.show(errorText(e, "دریافتِ رسیدها ناموفق بود."), "danger");
+      toast.show(errorText(e, "دریافت رسیدها ناموفق بود."), "danger");
     }
   };
 
@@ -322,17 +322,17 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       setPutawaySources(null);
       await loadTasks();
     } catch (e) {
-      toast.show(errorText(e, "ساختِ وظیفه ناموفق بود."), "danger");
+      toast.show(errorText(e, "ساخت وظیفه ناموفق بود."), "danger");
     }
   };
 
   const printChildLabels = async (locationId: number) => {
     try {
       const labels = await apiClient.getLocationLabels(locationId);
-      if (labels.length === 0) throw new ApiError(404, "محلی برایِ چاپ نیست.");
+      if (labels.length === 0) throw new ApiError(404, "محلی برای چاپ نیست.");
       await printLocationLabels(labels);
     } catch (e) {
-      toast.show(errorText(e, "چاپِ برچسب‌ها ناموفق بود."), "danger");
+      toast.show(errorText(e, "چاپ برچسب‌ها ناموفق بود."), "danger");
     }
   };
 
@@ -340,13 +340,13 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     try {
       await printLocationLabels([await apiClient.getLocationLabel(locationId)]);
     } catch (e) {
-      toast.show(errorText(e, "چاپِ برچسب ناموفق بود."), "danger");
+      toast.show(errorText(e, "چاپ برچسب ناموفق بود."), "danger");
     }
   };
 
   const renderKpis = () => (
     <View style={{ gap: spacing.sm }}>
-      {kpis === null ? <EmptyState title="در حالِ دریافت..." /> : null}
+      {kpis === null ? <EmptyState title="در حال دریافت..." /> : null}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
         {kpis?.kpis.map((k) => (
           <Card key={k.code} style={{ width: "47%" }}>
@@ -382,8 +382,8 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         <StatusBadge statusCode={loc.status} label={STATUS_LABELS[loc.status] ?? loc.status} />
       </View>
       <View style={{ flexDirection: "row", gap: spacing.xs }}>
-        <Button label="چاپِ برچسب" size="md" variant="ghost" fullWidth={false} onPress={() => printLabel(loc.location_id)} />
-        <Button label="برچسبِ همهٔ زیرمحل‌ها" size="md" variant="ghost" fullWidth={false} onPress={() => printChildLabels(loc.location_id)} />
+        <Button label="چاپ برچسب" size="md" variant="ghost" fullWidth={false} onPress={() => printLabel(loc.location_id)} />
+        <Button label="برچسب همهٔ زیرمحل‌ها" size="md" variant="ghost" fullWidth={false} onPress={() => printChildLabels(loc.location_id)} />
       </View>
       <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
         {loc.name ?? ""}
@@ -421,7 +421,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
 
   const renderSearch = () => (
     <View style={{ gap: spacing.md }}>
-      <SearchBar value={query} onChangeText={setQuery} placeholder="کد/بارکدِ کالا یا کد/QRِ محل" />
+      <SearchBar value={query} onChangeText={setQuery} placeholder="کد/بارکد کالا یا کد/QR محل" />
       <View style={{ flexDirection: "row", gap: spacing.sm }}>
         <Button label="جستجو" size="md" fullWidth={false} loading={searching} onPress={() => runSearch(query)} />
         <Button label="اسکن" size="md" variant="secondary" fullWidth={false} onPress={() => setScanTarget("SEARCH")} />
@@ -431,7 +431,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       ) : (
         <>
           <Text style={[typography.captionBold, { color: colors.textSecondary }]}>
-            {result.kind === "PRODUCT" ? `محل‌هایِ کالا (${result.locations.length})` : "محل"}
+            {result.kind === "PRODUCT" ? `محل‌های کالا (${result.locations.length})` : "محل"}
           </Text>
           {result.locations.map((loc) => renderLocation(loc, result.kind === "PRODUCT" ? result.item_ids : []))}
         </>
@@ -449,9 +449,9 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       </Text>
       {task.task_type === "PUTAWAY" ? (
         <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-          <Text style={[typography.captionBold, { color: colors.textSecondary }]}>محل‌هایِ پیشنهادی</Text>
+          <Text style={[typography.captionBold, { color: colors.textSecondary }]}>محل‌های پیشنهادی</Text>
           {suggestions.length === 0 ? (
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>پیشنهادی نیست؛ محلِ مقصد را اسکن کنید.</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>پیشنهادی نیست؛ محل مقصد را اسکن کنید.</Text>
           ) : (
             suggestions.map((s) => (
               <Card key={s.location_id} onPress={() => setPutawayTarget({ id: s.location_id, code: s.location_code })}>
@@ -460,14 +460,14 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
               </Card>
             ))
           )}
-          <Button label="اسکنِ محلِ مقصد" size="md" variant="secondary" onPress={() => setScanTarget("PUTAWAY_TARGET")} />
+          <Button label="اسکن محل مقصد" size="md" variant="secondary" onPress={() => setScanTarget("PUTAWAY_TARGET")} />
           {putawayTarget ? text(typography.body, `مقصد: ${putawayTarget.code}`) : null}
         </View>
       ) : (
-        <Input label="مقدارِ انجام‌شده" value={taskQty} onChangeText={setTaskQty} numeric keyboardType="decimal-pad" style={{ marginTop: spacing.md }} />
+        <Input label="مقدار انجام‌شده" value={taskQty} onChangeText={setTaskQty} numeric keyboardType="decimal-pad" style={{ marginTop: spacing.md }} />
       )}
       <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
-        <Button label="تأیید" size="md" fullWidth={false} loading={busy} onPress={completeTask} />
+        <Button label="تایید" size="md" fullWidth={false} loading={busy} onPress={completeTask} />
         <Button label="انصراف" size="md" variant="ghost" fullWidth={false} onPress={() => setActiveTask(null)} />
       </View>
     </Card>
@@ -480,7 +480,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
 
   const renderWaves = () => (
     <View style={{ gap: spacing.xs }}>
-      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>موج‌هایِ برداشت (ترتیبِ مسیر)</Text>
+      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>موج‌های برداشت (ترتیب مسیر)</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
         <Button label="همهٔ وظایف" size="md" fullWidth={false} variant={activeWave === null ? "primary" : "secondary"} onPress={() => setActiveWave(null)} />
         {waves.map((w) => (
@@ -494,7 +494,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
           />
         ))}
         {warehouses.map((wh) => (
-          <Button key={`new-${wh.warehouse_id}`} label={`موجِ تازه: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
+          <Button key={`new-${wh.warehouse_id}`} label={`موج تازه: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
         ))}
       </View>
     </View>
@@ -503,23 +503,23 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const renderCount = () => (
     <View style={{ gap: spacing.md }}>
       {countId === null ? (
-        <Button label="شروعِ شمارش: اسکنِ محل/قفسه/منطقه" size="md" onPress={() => setScanTarget("COUNT_START")} />
+        <Button label="شروع شمارش: اسکن محل/قفسه/منطقه" size="md" onPress={() => setScanTarget("COUNT_START")} />
       ) : null}
       {countId === null ? (
         counts.length === 0 ? (
-          <EmptyState title="شمارشِ بازی نیست" description="محلی را اسکن کنید تا شمارشِ آن شروع شود." />
+          <EmptyState title="شمارش بازی نیست" description="محلی را اسکن کنید تا شمارش آن شروع شود." />
         ) : (
           counts.map((c) => (
             <Card key={c.session_id} onPress={() => openCount(c.session_id)}>
               {text(typography.bodyBold, c.code)}
-              <Text style={[typography.caption, { color: colors.textSecondary }]}>{c.blind ? "شمارشِ کور" : "با نمایشِ مقدارِ دفتری"}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{c.blind ? "شمارش کور" : "با نمایش مقدار دفتری"}</Text>
             </Card>
           ))
         )
       ) : (
         <>
-          <Button label="بازگشت به فهرستِ شمارش‌ها" size="md" variant="ghost" fullWidth={false} onPress={() => setCountId(null)} />
-          <Button label="اسکنِ محل" size="md" variant="secondary" onPress={() => setScanTarget("COUNT_LOCATION")} />
+          <Button label="بازگشت به فهرست شمارش‌ها" size="md" variant="ghost" fullWidth={false} onPress={() => setCountId(null)} />
+          <Button label="اسکن محل" size="md" variant="secondary" onPress={() => setScanTarget("COUNT_LOCATION")} />
           {countLocation ? text(typography.bodyBold, `محل: ${countLocation.code}`) : (
             <Text style={[typography.caption, { color: colors.textSecondary }]}>محلی را اسکن یا از فهرست انتخاب کنید.</Text>
           )}
@@ -539,9 +539,9 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
                       {`اسکن‌شده (${(countSerials[countKey(ln)] ?? []).length}): ${(countSerials[countKey(ln)] ?? []).join("، ")}`}
                     </Text>
                     <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                      <Button label="اسکنِ سریال‌ها" size="md" variant="secondary" fullWidth={false}
+                      <Button label="اسکن سریال‌ها" size="md" variant="secondary" fullWidth={false}
                         onPress={() => { setSerialKey(countKey(ln)); setScanTarget("COUNT_SERIAL"); }} />
-                      <Button label="ثبتِ سریال‌ها" size="md" fullWidth={false} loading={busy} onPress={() => submitSerialCount(ln)} />
+                      <Button label="ثبت سریال‌ها" size="md" fullWidth={false} loading={busy} onPress={() => submitSerialCount(ln)} />
                     </View>
                   </View>
                 ) : null}
@@ -624,13 +624,13 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       </View>
       {activeTask ? renderTaskPanel(activeTask) : null}
       {renderWaves()}
-      <Button label="ساختِ وظیفهٔ جانمایی از رسیدِ تازه" size="md" variant="secondary" onPress={loadPutawaySources} />
-      {putawaySources !== null && putawaySources.length === 0 ? <EmptyState title="رسیدِ بی‌وظیفه‌ای نیست" /> : null}
+      <Button label="ساخت وظیفهٔ جانمایی از رسید تازه" size="md" variant="secondary" onPress={loadPutawaySources} />
+      {putawaySources !== null && putawaySources.length === 0 ? <EmptyState title="رسید بی‌وظیفه‌ای نیست" /> : null}
       {(putawaySources ?? []).map((src) => (
         <Card key={src.document_id} onPress={() => createPutaway(src.document_id)}>
-          {text(typography.bodyBold, `رسیدِ ${src.document_no}`)}
+          {text(typography.bodyBold, `رسید ${src.document_no}`)}
           <Text style={[typography.caption, { color: colors.textSecondary }]}>
-            {`${formatJalaliDate(src.document_date)}${src.open_lines !== null ? ` · ${src.open_lines} ردیفِ بی‌وظیفه` : ""}`}
+            {`${formatJalaliDate(src.document_date)}${src.open_lines !== null ? ` · ${src.open_lines} ردیف بی‌وظیفه` : ""}`}
           </Text>
         </Card>
       ))}
@@ -660,16 +660,16 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
 
   const renderTransfer = () => (
     <Card>
-      {text(typography.bodyBold, "انتقالِ کالا بینِ محل‌ها")}
+      {text(typography.bodyBold, "انتقال کالا بین محل‌ها")}
       <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
         {text(typography.body, `کالا: ${transferItem?.label ?? "—"}`)}
-        <Button label="اسکنِ کالا" size="md" variant="secondary" onPress={() => setScanTarget("TRANSFER_ITEM")} />
+        <Button label="اسکن کالا" size="md" variant="secondary" onPress={() => setScanTarget("TRANSFER_ITEM")} />
         {text(typography.body, `از محل: ${transferFrom?.code ?? "—"}`)}
-        <Button label="اسکنِ محلِ مبدا" size="md" variant="secondary" onPress={() => setScanTarget("TRANSFER_FROM")} />
+        <Button label="اسکن محل مبدا" size="md" variant="secondary" onPress={() => setScanTarget("TRANSFER_FROM")} />
         {text(typography.body, `به محل: ${transferTo?.code ?? "—"}`)}
-        <Button label="اسکنِ محلِ مقصد" size="md" variant="secondary" onPress={() => setScanTarget("TRANSFER_TO")} />
+        <Button label="اسکن محل مقصد" size="md" variant="secondary" onPress={() => setScanTarget("TRANSFER_TO")} />
         <Input label="مقدار" value={transferQty} onChangeText={setTransferQty} numeric keyboardType="decimal-pad" />
-        <Button label="ثبتِ انتقال" loading={busy} onPress={submitTransfer} />
+        <Button label="ثبت انتقال" loading={busy} onPress={submitTransfer} />
       </View>
     </Card>
   );

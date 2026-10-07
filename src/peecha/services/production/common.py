@@ -1,8 +1,8 @@
-"""هستهٔ مشترکِ تولید -- R266: تنظیمات، برچسب‌ها، نقش‌هایِ حساب، سندِ حسابداری و Audit.
+"""هستهٔ مشترک تولید — R266: تنظیمات، برچسب‌ها، نقش‌های حساب، سند حسابداری و Audit.
 
-قاعده: ثبتِ مالی فقط از موتورِ سندِ موجود (journal_entries.create_journal_entry) و حرکتِ موجودی فقط از موتورِ انبار
-(inventory_engine.post_stock_document)؛ هر دو در همان تراکنشِ عملیاتِ تولید (session) تا یا همه بنشینند یا هیچ‌کدام.
-حساب‌ها نقش‌محورند و در همان «نگاشتِ حسابِ انبار» (inv.account_mappings) تعریف می‌شوند.
+قاعده: ثبت مالی فقط از موتور سند موجود (journal_entries.create_journal_entry) و حرکت موجودی فقط از موتور انبار
+(inventory_engine.post_stock_document)؛ هر دو در همان تراکنش عملیات تولید (session) تا یا همه بنشینند یا هیچ‌کدام.
+حساب‌ها نقش‌محورند و در همان «نگاشت حساب انبار» (inv.account_mappings) تعریف می‌شوند.
 """
 
 from __future__ import annotations
@@ -31,23 +31,23 @@ OVERHEAD_APPLIED = "PRODUCTION_OVERHEAD_APPLIED"
 VARIANCE = "PRODUCTION_VARIANCE"
 SCRAP_LOSS = "PRODUCTION_SCRAP_LOSS"
 ROLE_LABELS = {
-    WIP: "کالایِ در جریانِ ساخت (WIP)",
-    LABOR_APPLIED: "دستمزدِ جذب‌شدهٔ تولید",
-    MACHINE_APPLIED: "هزینهٔ ماشینِ جذب‌شدهٔ تولید",
-    OVERHEAD_APPLIED: "سربارِ جذب‌شدهٔ تولید",
-    VARIANCE: "انحرافِ بهایِ تولید",
-    SCRAP_LOSS: "زیانِ ضایعاتِ غیرعادیِ تولید",
+    WIP: "کالای در جریان ساخت (WIP)",
+    LABOR_APPLIED: "دستمزد جذب‌شدهٔ تولید",
+    MACHINE_APPLIED: "هزینهٔ ماشین جذب‌شدهٔ تولید",
+    OVERHEAD_APPLIED: "سربار جذب‌شدهٔ تولید",
+    VARIANCE: "انحراف بهای تولید",
+    SCRAP_LOSS: "زیان ضایعات غیرعادی تولید",
 }
 
 COMPONENT_TYPES = {"MATERIAL": "مادهٔ اولیه", "PACKAGING": "بسته‌بندی", "PART": "قطعه", "SEMI_FINISHED": "نیمه‌ساخته",
                    "CONSUMABLE": "مصرفی"}
-OUTPUT_TYPES = {"MAIN": "محصولِ اصلی", "BY_PRODUCT": "محصولِ جانبی", "CO_PRODUCT": "محصولِ مشترک"}
-CENTER_TYPES = {"LINE": "خطِ تولید", "ASSEMBLY": "مونتاژ", "MACHINING": "ماشین‌کاری", "PAINT": "رنگ", "QC": "کنترلِ کیفیت",
+OUTPUT_TYPES = {"MAIN": "محصول اصلی", "BY_PRODUCT": "محصول جانبی", "CO_PRODUCT": "محصول مشترک"}
+CENTER_TYPES = {"LINE": "خط تولید", "ASSEMBLY": "مونتاژ", "MACHINING": "ماشین‌کاری", "PAINT": "رنگ", "QC": "کنترل کیفیت",
                 "PACKING": "بسته‌بندی", "OTHER": "سایر"}
-OVERHEAD_BASES = {"LABOR_HOURS": "ساعتِ کارِ مستقیم", "MACHINE_HOURS": "ساعتِ ماشین", "QUANTITY": "مقدارِ تولید",
-                  "MATERIAL_COST": "بهایِ مواد", "LABOR_COST": "هزینهٔ دستمزد", "PERCENTAGE": "درصد", "MANUAL": "دستی"}
-JOINT_METHODS = {"QUANTITY": "مقدار", "WEIGHT": "وزن", "SALES_VALUE": "ارزشِ فروش", "NRV": "خالصِ ارزشِ بازیافتنی",
-                 "PERCENTAGE": "درصدِ دستی", "MANUAL": "مبلغِ دستی"}
+OVERHEAD_BASES = {"LABOR_HOURS": "ساعت کار مستقیم", "MACHINE_HOURS": "ساعت ماشین", "QUANTITY": "مقدار تولید",
+                  "MATERIAL_COST": "بهای مواد", "LABOR_COST": "هزینهٔ دستمزد", "PERCENTAGE": "درصد", "MANUAL": "دستی"}
+JOINT_METHODS = {"QUANTITY": "مقدار", "WEIGHT": "وزن", "SALES_VALUE": "ارزش فروش", "NRV": "خالص ارزش بازیافتنی",
+                 "PERCENTAGE": "درصد دستی", "MANUAL": "مبلغ دستی"}
 BOM_STATUS = {"DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "ARCHIVED": "بایگانی"}
 
 SETTING_FIELDS = (
@@ -101,13 +101,13 @@ def update_settings(company_id: int, user_id: int | None = None, **fields) -> No
         changes = {}
         for key, value in fields.items():
             if key not in SETTING_FIELDS:
-                raise ValueError(f"تنظیمِ نامعتبر: {key}")
+                raise ValueError(f"تنظیم نامعتبر: {key}")
             if key == "shortage_policy" and value not in ("WARN", "BLOCK"):
-                raise ValueError("سیاستِ کمبودِ مواد نامعتبر است.")
+                raise ValueError("سیاست کمبود مواد نامعتبر است.")
             if key == "default_overhead_basis" and value not in OVERHEAD_BASES:
-                raise ValueError("مبنایِ سربارِ نامعتبر.")
+                raise ValueError("مبنای سربار نامعتبر.")
             if key == "default_joint_cost_method" and value not in JOINT_METHODS:
-                raise ValueError("روشِ تخصیصِ تولیدِ مشترکِ نامعتبر.")
+                raise ValueError("روش تخصیص تولید مشترک نامعتبر.")
             if getattr(row, key) != value:
                 changes[key] = [str(getattr(row, key)), str(value)]
                 setattr(row, key, value)
@@ -131,19 +131,19 @@ def missing_roles(company_id: int, roles: tuple[str, ...]) -> list[str]:
 def require_roles(session, company_id: int, roles: tuple[str, ...]) -> None:
     missing = [ROLE_LABELS.get(r, r) for r in roles if role_account(session, company_id, r) is None]
     if missing:
-        raise ValueError("نگاشتِ حسابِ تولید ناقص است (تنظیماتِ انبار ← نگاشتِ حساب‌ها): " + "، ".join(missing))
+        raise ValueError("نگاشت حساب تولید ناقص است (تنظیمات انبار ← نگاشت حساب‌ها): " + "، ".join(missing))
 
 
 def post_journal(session, company_id: int, user_id: int, date: datetime.date, description: str,
                  lines: list[tuple[str, decimal.Decimal, decimal.Decimal, tuple[int | None, ...]]]) -> int | None:
-    """سندِ حسابداریِ تولید در همان تراکنش. هر ردیف: (نقش، بدهکار، بستانکار، تفصیلی‌ها)؛ ردیف‌هایِ هم‌حساب تجمیع می‌شوند."""
+    """سند حسابداری تولید در همان تراکنش. هر ردیف: (نقش، بدهکار، بستانکار، تفصیلی‌ها)؛ ردیف‌های هم‌حساب تجمیع می‌شوند."""
     from peecha.services import journal_entries as je_service
 
     merged: dict[tuple, decimal.Decimal] = {}
     for role, debit, credit, details in lines:
         account_id = role_account(session, company_id, role)
         if account_id is None:
-            raise ValueError(f"حسابِ «{ROLE_LABELS.get(role, role)}» در نگاشتِ حساب‌هایِ انبار تعیین نشده است.")
+            raise ValueError(f"حساب «{ROLE_LABELS.get(role, role)}» در نگاشت حساب‌های انبار تعیین نشده است.")
         mapping = session.get(InventoryAccountMapping, (company_id, role))
         ids = {d for d in details if d}
         if mapping is not None and mapping.detail_account_id:
@@ -169,7 +169,7 @@ def post_journal(session, company_id: int, user_id: int, date: datetime.date, de
 # --- Audit / ابزار -------------------------------------------------------------------------
 def audit(session, company_id: int, user_id: int | None, entity_type: str, entity_id: int, operation: str,
           changes: dict) -> None:
-    """Audit با سرویسِ موجود؛ نامِ عملیاتِ تولید در changes.operation."""
+    """Audit با سرویس موجود؛ نام عملیات تولید در changes.operation."""
     from peecha.services import audit as audit_service
 
     action = operation if operation in ("CREATE", "DELETE") else "UPDATE"
@@ -204,7 +204,7 @@ def item_labels(session, item_ids) -> dict[int, str]:
 
 
 def factor(session, item_id: int, uom_id: int | None) -> decimal.Decimal:
-    """ضریبِ تبدیلِ واحد به واحدِ پایهٔ کالا -- از همان تعریفِ واحدهایِ کالا (inv.item_uom_conversions)."""
+    """ضریب تبدیل واحد به واحد پایهٔ کالا — از همان تعریف واحدهای کالا (inv.item_uom_conversions)."""
     from peecha.db.models.inventory import ItemUomConversion
 
     if uom_id is None:
@@ -215,5 +215,5 @@ def factor(session, item_id: int, uom_id: int | None) -> decimal.Decimal:
     row = session.scalar(select(ItemUomConversion).where(ItemUomConversion.item_id == item_id,
                                                          ItemUomConversion.uom_id == uom_id))
     if row is None:
-        raise ValueError("برایِ این واحد، تبدیل به واحدِ پایهٔ کالا در فرمِ کالا تعریف نشده است.")
+        raise ValueError("برای این واحد، تبدیل به واحد پایهٔ کالا در فرم کالا تعریف نشده است.")
     return decimal.Decimal(row.conversion_factor)

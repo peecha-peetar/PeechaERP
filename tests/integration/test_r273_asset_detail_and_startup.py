@@ -15,11 +15,11 @@ from peecha.services.fixed_assets import common as fac, assets as fa, depreciati
 check, raises = fx.check, fx.raises
 
 # --- حساب‌ها و طبقه -------------------------------------------------------------------------------------
-k9 = A("14", "دارایی‌هایِ ثابت", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k9 = A("14", "دارایی‌های ثابت", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 fa_gl = A("1401", "ماشین‌آلات", "DEBIT", "ASSET", "PERMANENT", True, k9.account_id)
-accum_gl = A("1409", "استهلاکِ انباشته", "CREDIT", "ASSET", "PERMANENT", True, k9.account_id)
+accum_gl = A("1409", "استهلاک انباشته", "CREDIT", "ASSET", "PERMANENT", True, k9.account_id)
 dep_gl = A("531", "هزینهٔ استهلاک", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
-gain_gl = A("532", "سود/زیانِ واگذاری", "CREDIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+gain_gl = A("532", "سود/زیان واگذاری", "CREDIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 k13 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 ar_gl = A("131", "دریافتنی", "DEBIT", "ASSET", "PERMANENT", True, k13.account_id)
 fac.ensure_default_categories(company_id)
@@ -51,10 +51,10 @@ def lines_with_asset_detail(je_id, detail_id):
 
 
 # ۱) دارایی تازه: تفصیلیِ «دارایی ثابت» با همان کد و نام
-F = lambda code, **kw: fa.AssetFields(asset_code=code, name=kw.pop("name", "دستگاهِ " + code), category_id=mach, **kw)
-cnc = fa.create_asset(company_id, uid, F("CNC-001", name="ماشینِ CNC"))
+F = lambda code, **kw: fa.AssetFields(asset_code=code, name=kw.pop("name", "دستگاه " + code), category_id=mach, **kw)
+cnc = fa.create_asset(company_id, uid, F("CNC-001", name="ماشین CNC"))
 did, det = detail_of(cnc)
-check(det is not None and det.dimension_type_id == fa_type and det.code == "CNC-001" and det.name == "ماشینِ CNC",
+check(det is not None and det.dimension_type_id == fa_type and det.code == "CNC-001" and det.name == "ماشین CNC",
       "new asset gets its own FIXED_ASSET detail account (same code/name)")
 
 # ۲) تحصیل، استهلاک، فروش: ردیف‌هایِ دارایی/انباشته/هزینه با تفصیلیِ دارایی
@@ -115,11 +115,11 @@ check(detail_of(old1)[0] is not None, "old asset gets a detail")
 check(fac.backfill_asset_details(company_id) == 0, "backfill is idempotent")
 
 # ۵) تغییرِ نام دارایی ← نامِ تفصیلی
-fa.update_asset(company_id, uid, cnc, F("CNC-001", name="ماشینِ CNC (بازسازی‌شده)"), reason="آزمون")
-check(detail_of(cnc)[1].name == "ماشینِ CNC (بازسازی‌شده)", "asset rename syncs detail name")
+fa.update_asset(company_id, uid, cnc, F("CNC-001", name="ماشین CNC (بازسازی‌شده)"), reason="آزمون")
+check(detail_of(cnc)[1].name == "ماشین CNC (بازسازی‌شده)", "asset rename syncs detail name")
 
 # ۶) کدِ دارایی که به‌عنوانِ کدِ تفصیلی جا نمی‌شود (بیش از ۳۰ نویسه) ← کدِ عددیِ بعدی
-x = fa.create_asset(company_id, uid, F("LONG-ASSET-CODE-0123456789-ABCDEFG", name="کدِ بلند"))
+x = fa.create_asset(company_id, uid, F("LONG-ASSET-CODE-0123456789-ABCDEFG", name="کد بلند"))
 code = detail_of(x)[1].code
 check(code.isdigit(), f"incompatible asset code -> generated numeric detail code {code}")
 

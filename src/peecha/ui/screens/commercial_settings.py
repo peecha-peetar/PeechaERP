@@ -1,5 +1,5 @@
-"""تنظیماتِ دامنهٔ مدیریتِ بازرگانی — نگاشتِ حساب‌ها، Feature Toggle،
-نمایه‌هایِ صنعتی، شماره‌گذاریِ اسناد، کانال‌ها (مرحلهٔ ۱۱)."""
+"""تنظیمات دامنهٔ مدیریت بازرگانی — نگاشت حساب‌ها، Feature Toggle،
+نمایه‌های صنعتی، شماره‌گذاری اسناد، کانال‌ها (مرحلهٔ ۱۱)."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import sms_gateway as sms_gateway_service
 from peecha.services import voip_settings as voip_settings_service
 from peecha.db.models.commercial import Channel, DistributionSettlementType
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, confirm_and_delete, delete_button
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, confirm_and_delete, delete_button, set_widget_help
 
 # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
 # برایِ انتخابش نیست» -- هم‌الگو با inventory_settings._AccountMappingsTab):
@@ -45,7 +45,7 @@ _AUTO_SUPPLIED_DIMENSION_CODES = (
 
 
 def _list_table(headers: list[str], on_selected) -> QTableWidget:
-    """R276: جدولِ ردیف‌هایِ تعریف‌شده -- کلیک، ردیف را در فرمِ بالا برایِ ویرایش/حذف بار می‌کند."""
+    """R276: جدول ردیف‌های تعریف‌شده — کلیک، ردیف را در فرم بالا برای ویرایش/حذف بار می‌کند."""
     table = QTableWidget(0, len(headers))
     table.setHorizontalHeaderLabels(headers)
     table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -74,7 +74,7 @@ def _save_button(slot) -> QPushButton:
     button = QPushButton("💾")
     button.setObjectName("iconButton")
     button.setFixedWidth(44)
-    button.setToolTip("ذخیرهٔ تغییراتِ ردیفِ انتخاب‌شده")
+    button.setToolTip("ذخیرهٔ تغییرات ردیف انتخاب‌شده")
     button.clicked.connect(slot)
     return button
 
@@ -96,10 +96,10 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("نگاشتِ حساب‌هایِ بازرگانی")
+        title = QLabel("نگاشت حساب‌های بازرگانی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("حساب‌هایِ دریافتنیِ مشتریان/پرداختنیِ تامین‌کنندگان از تنظیماتِ انبار می‌آیند و این‌جا تکرار نمی‌شوند."))
+        layout.addWidget(QLabel("حساب‌های دریافتنی مشتریان/پرداختنی تامین‌کنندگان از تنظیمات انبار می‌آیند و این‌جا تکرار نمی‌شوند."))
 
         mapping_fields = []
         for key, label in settings_service.MAPPING_LABELS.items():
@@ -117,6 +117,8 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
             combo.currentIndexChanged.connect(lambda _index, k=key: self._on_account_changed(k))
             self._combos[key] = combo
             self._detail_combos[key] = detail_combo
+            set_widget_help(combo, f"حساب معینی که «{label}» در اسناد خودکار (فاکتور، برگشت، تسویه و ...) به آن ثبت می‌شود.")
+            set_widget_help(detail_combo, "اگر این حساب معین، تفصیلی الزامی دارد، تفصیلی ثابتی که همیشه همراه آن ثبت می‌شود.")
             mapping_fields.append(FieldSpec(key, label, row_widget, span=3))
         self.mappings_grid = FieldGrid(mapping_fields, columns=3)
         layout.addWidget(self.mappings_grid)
@@ -201,7 +203,7 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
                 continue
             if self._detail_required.get(key) and self._detail_combos[key].currentData() is None:
                 self.status_label.setObjectName("statusError")
-                self.status_label.setText(f"حسابِ «{settings_service.MAPPING_LABELS[key]}» یک تفصیلیِ ثابت هم لازم دارد.")
+                self.status_label.setText(f"حساب «{settings_service.MAPPING_LABELS[key]}» یک تفصیلی ثابت هم لازم دارد.")
                 return
             settings_service.set_account_mapping(company_id, key, account_id, self._detail_combos[key].currentData())
         self.status_label.setObjectName("statusSuccess")
@@ -215,10 +217,10 @@ class _FeatureToggleTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("قابلیت‌هایِ فعال (Feature Toggle)")
+        title = QLabel("قابلیت‌های فعال")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("فعال‌سازیِ هر قابلیت ممکن است به قابلیتِ دیگری وابسته باشد."))
+        layout.addWidget(QLabel("فعال‌سازی هر قابلیت ممکن است به قابلیت دیگری وابسته باشد."))
 
         self.rows_layout = QVBoxLayout()
         layout.addLayout(self.rows_layout)
@@ -270,7 +272,7 @@ class _IndustryProfileTab(QWidget):
         title = QLabel("نمایهٔ صنعتی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("اعمالِ نمایه، فقط قابلیت‌هایِ هنوز-تنظیم‌نشده را پر می‌کند — تنظیماتِ دستیِ قبلی دست‌نخورده می‌ماند."))
+        layout.addWidget(QLabel("اعمال نمایه، فقط قابلیت‌های هنوز-تنظیم‌نشده را پر می‌کند — تنظیمات دستی قبلی دست‌نخورده می‌ماند."))
 
         row = QHBoxLayout()
         self.profile_combo = QComboBox()
@@ -278,7 +280,7 @@ class _IndustryProfileTab(QWidget):
         apply_button = QPushButton("✔️")
         apply_button.setObjectName("primaryIconButton")
         apply_button.setFixedWidth(48)
-        apply_button.setToolTip("اعمالِ نمایه")
+        apply_button.setToolTip("اعمال نمایه")
         apply_button.clicked.connect(self._apply)
         row.addWidget(apply_button)
         layout.addLayout(row)
@@ -304,10 +306,10 @@ class _IndustryProfileTab(QWidget):
 
 
 class _PricingPolicyTab(QWidget):
-    """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت... حاشیهٔ سود... تخفیفِ
-    مجاز»): سقفِ حداقلِ حاشیهٔ سودِ مجاز -- این تنظیم و لایهٔ سرویسش
+    """طبق درخواست صریح («موتور پیشنهاد قیمت... حاشیهٔ سود... تخفیف
+    مجاز»): سقف حداقل حاشیهٔ سود مجاز — این تنظیم و لایهٔ سرویسش
     (commercial_pricing.get/set_pricing_policy) از قبل ساخته شده بود ولی
-    به هیچ فرمی وصل نبود؛ همین‌جا وصل می‌شود تا دیالوگِ ردیفِ سند بتواند
+    به هیچ فرمی وصل نبود؛ همین‌جا وصل می‌شود تا دیالوگ ردیف سند بتواند
     آن را بخواند."""
 
     def __init__(self) -> None:
@@ -315,27 +317,27 @@ class _PricingPolicyTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("حاشیهٔ سود و پیشنهادِ قیمت")
+        title = QLabel("حاشیهٔ سود و پیشنهاد قیمت")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "این حداقل، مبنایِ «حداکثرِ تخفیفِ مجاز» و هشدارِ افتِ سود در دیالوگِ افزودنِ ردیفِ فاکتورِ فروش قرار می‌گیرد."
+            "این حداقل، مبنای «حداکثر تخفیف مجاز» و هشدار افت سود در دیالوگ افزودن ردیف فاکتور فروش قرار می‌گیرد."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         margin_row = QHBoxLayout()
-        margin_row.addWidget(QLabel("حداقلِ حاشیهٔ سودِ مجاز (٪)"))
+        margin_row.addWidget(QLabel("حداقل حاشیهٔ سود مجاز (٪)"))
         self.min_margin_spin = QSpinBox()
         self.min_margin_spin.setRange(0, 95)
-        self.min_margin_spin.setSpecialValueText("بدونِ محدودیت")
+        self.min_margin_spin.setSpecialValueText("بدون محدودیت")
         self.min_margin_spin.valueChanged.connect(self._save)
         margin_row.addWidget(self.min_margin_spin)
         margin_row.addStretch(1)
         layout.addLayout(margin_row)
 
-        self.requires_approval_checkbox = QCheckBox("عبور از این حداقل نیازمندِ تاییدِ مدیر باشد")
+        self.requires_approval_checkbox = QCheckBox("عبور از این حداقل نیازمند تایید مدیر باشد")
         self.requires_approval_checkbox.toggled.connect(self._save)
         layout.addWidget(self.requires_approval_checkbox)
 
@@ -369,10 +371,10 @@ class _PricingPolicyTab(QWidget):
 
 
 class _VoipSettingsTab(QWidget):
-    """طبقِ درخواستِ صریحِ کاربر («وصل بشه به سیستمِ سانترال یا وویپ»):
-    اتصالِ AMIِ آستریسک/ایزابل برایِ Click-to-Call از داشبوردِ معلقِ
+    """طبق درخواست صریح کاربر («وصل بشه به سیستم سانترال یا وویپ»):
+    اتصال AMI آستریسک/ایزابل برای Click-to-Call از داشبورد معلق
     مشتری (telesales.py، R136/R137). هم‌الگو با _PricingPolicyTab --
-    یک ردیفِ تنظیماتِ یکتا به‌ازایِ هر شرکت."""
+    یک ردیف تنظیمات یکتا به‌ازای هر شرکت."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -383,7 +385,7 @@ class _VoipSettingsTab(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "اطلاعاتِ اتصال به سرورِ AMIِ آستریسک/ایزابل -- برایِ برقراریِ خودکارِ تماس با کلیک رویِ شماره‌یِ مشتری در فروشِ تلفنی."
+            "اطلاعات اتصال به سرور AMI آستریسک/ایزابل — برای برقراری خودکار تماس با کلیک روی شمارهٔ مشتری در فروش تلفنی."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -402,12 +404,12 @@ class _VoipSettingsTab(QWidget):
         self.is_active_checkbox = QCheckBox("این اتصال فعال باشد")
 
         self.grid = FieldGrid([
-            FieldSpec("voip_host", "آدرسِ سرور", self.host_field, span=2),
+            FieldSpec("voip_host", "آدرس سرور", self.host_field, span=2),
             FieldSpec("voip_port", "پورت", self.port_field, span=1),
-            FieldSpec("voip_context", "کانتکستِ دایل‌پلن", self.context_field, span=1),
-            FieldSpec("voip_channel_prefix", "پیشوندِ کانال", self.channel_prefix_field, span=1),
-            FieldSpec("voip_username", "نامِ‌کاربریِ AMI", self.username_field, span=1),
-            FieldSpec("voip_secret", "رمزِ AMI", self.secret_field, span=1),
+            FieldSpec("voip_context", "کانتکست دایل‌پلن", self.context_field, span=1),
+            FieldSpec("voip_channel_prefix", "پیشوند کانال", self.channel_prefix_field, span=1),
+            FieldSpec("voip_username", "نام‌کاربری AMI", self.username_field, span=1),
+            FieldSpec("voip_secret", "رمز AMI", self.secret_field, span=1),
             FieldSpec("voip_is_active", "", self.is_active_checkbox, span=1),
         ])
         layout.addWidget(self.grid)
@@ -445,7 +447,7 @@ class _VoipSettingsTab(QWidget):
             return
         host = self.host_field.text().strip()
         if not host:
-            self.status_label.setText("آدرسِ سرور را وارد کنید.")
+            self.status_label.setText("آدرس سرور را وارد کنید.")
             return
         try:
             port = int(self.port_field.text().strip() or "5038")
@@ -460,21 +462,21 @@ class _VoipSettingsTab(QWidget):
 
 
 class _SmsGatewaySettingsTab(QWidget):
-    """طبقِ درخواستِ صریحِ کاربر («ارسالِ پیامکِ زمان‌بندی‌شده»): چون
-    ارائه‌دهنده مشخص نبود، یک الگویِ URLِ عمومی با {phone}/{text}
-    ذخیره می‌شود -- هم‌الگو با _VoipSettingsTab."""
+    """طبق درخواست صریح کاربر («ارسال پیامک زمان‌بندی‌شده»): چون
+    ارائه‌دهنده مشخص نبود، یک الگوی URL عمومی با {phone}/{text}
+    ذخیره می‌شود — هم‌الگو با _VoipSettingsTab."""
 
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("درگاهِ پیامک")
+        title = QLabel("درگاه پیامک")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "الگویِ آدرسِ ارسالِ پیامکِ ارائه‌دهنده -- هرگونه کلیدِ API/نامِ‌کاربری/رمز را مستقیماً در همین آدرس بگذارید. "
-            "جایگزین‌هایِ {phone} و {text} در لحظهٔ ارسال با شماره و متنِ پیامک پر می‌شوند."
+            "الگوی آدرس ارسال پیامک ارائه‌دهنده — هرگونه کلید API/نام‌کاربری/رمز را مستقیماً در همین آدرس بگذارید. "
+            "جایگزین‌های {phone} و {text} در لحظهٔ ارسال با شماره و متن پیامک پر می‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -488,8 +490,8 @@ class _SmsGatewaySettingsTab(QWidget):
         self.is_active_checkbox = QCheckBox("این درگاه فعال باشد")
 
         self.grid = FieldGrid([
-            FieldSpec("sms_template", "الگویِ آدرس", self.template_field, span=3),
-            FieldSpec("sms_method", "روشِ HTTP", self.method_combo, span=1),
+            FieldSpec("sms_template", "الگوی آدرس", self.template_field, span=3),
+            FieldSpec("sms_method", "روش HTTP", self.method_combo, span=1),
             FieldSpec("sms_is_active", "", self.is_active_checkbox, span=1),
         ])
         layout.addWidget(self.grid)
@@ -521,26 +523,26 @@ class _SmsGatewaySettingsTab(QWidget):
             return
         template = self.template_field.text().strip()
         if not template:
-            self.status_label.setText("الگویِ آدرس را وارد کنید.")
+            self.status_label.setText("الگوی آدرس را وارد کنید.")
             return
         sms_gateway_service.set_sms_gateway(company_id, template, self.method_combo.currentData(), self.is_active_checkbox.isChecked())
         self.status_label.setText("ذخیره شد.")
 
 
 class _SettlementAlarmTab(QWidget):
-    """طبقِ درخواستِ صریح («در تنظیمات آپشنی باشد که تعداد مثلاً ۲ روز
-    مانده به موعدِ تسویه برنامه آلارم بدهد»)."""
+    """طبق درخواست صریح («در تنظیمات آپشنی باشد که تعداد مثلاً ۲ روز
+    مانده به موعد تسویه برنامه آلارم بدهد»)."""
 
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("هشدارِ موعدِ تسویه")
+        title = QLabel("هشدار موعد تسویه")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        self.enabled_checkbox = QCheckBox("نمایشِ هشدار برایِ فاکتورهایِ نزدیک به موعدِ تسویه/معوقه")
+        self.enabled_checkbox = QCheckBox("نمایش هشدار برای فاکتورهای نزدیک به موعد تسویه/معوقه")
         self.enabled_checkbox.toggled.connect(self._save)
         layout.addWidget(self.enabled_checkbox)
 
@@ -589,7 +591,7 @@ class _NumberingSequencesTab(LayoutEditMixin, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("شماره‌گذاریِ اسناد")
+        title = QLabel("شماره‌گذاری اسناد")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -604,8 +606,8 @@ class _NumberingSequencesTab(LayoutEditMixin, QWidget):
             for reset_code, reset_label in self._RESET_LABELS.items():
                 reset_combo.addItem(reset_label, reset_code)
             self._reset_combos[code] = reset_combo
-            specs.append(FieldSpec(f"{code}_prefix", f"پیشوندِ {label}", prefix_field, span=1))
-            specs.append(FieldSpec(f"{code}_reset", f"سیاستِ بازنشانیِ {label}", reset_combo, span=1))
+            specs.append(FieldSpec(f"{code}_prefix", f"پیشوند {label}", prefix_field, span=1))
+            specs.append(FieldSpec(f"{code}_reset", f"سیاست بازنشانی {label}", reset_combo, span=1))
         self.numbering_grid = FieldGrid(specs, columns=2)
         layout.addWidget(self.numbering_grid)
         self.register_field_grids("commercial_settings_numbering", [self.numbering_grid])
@@ -645,8 +647,8 @@ class _NumberingSequencesTab(LayoutEditMixin, QWidget):
 
 class _ChannelsTab(QWidget):
     _CHANNEL_TYPES = {
-        "POS": "فروشگاهِ حضوری", "WHOLESALE": "عمده‌فروشی", "ONLINE": "اینترنتی", "AGENT": "نمایندگی",
-        "MARKETPLACE": "بازارگاهِ آنلاین", "PRE_SALES": "پخشِ سرد (پیش‌فروش)", "VAN_SALES": "پخشِ گرم (فروشِ خودرویی)",
+        "POS": "فروشگاه حضوری", "WHOLESALE": "عمده‌فروشی", "ONLINE": "اینترنتی", "AGENT": "نمایندگی",
+        "MARKETPLACE": "بازارگاه آنلاین", "PRE_SALES": "پخش سرد (پیش‌فروش)", "VAN_SALES": "پخش گرم (فروش خودرویی)",
     }
 
     def __init__(self) -> None:
@@ -654,7 +656,7 @@ class _ChannelsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("کانال‌هایِ فروش")
+        title = QLabel("کانال‌های فروش")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -680,7 +682,7 @@ class _ChannelsTab(QWidget):
         self.active_checkbox.setChecked(True)
         form.addWidget(self.active_checkbox)
         form.addWidget(_save_button(self._update))
-        delete = delete_button("حذفِ کانالِ انتخاب‌شده")
+        delete = delete_button("حذف کانال انتخاب‌شده")
         delete.clicked.connect(self._delete)
         form.addWidget(delete)
         layout.addLayout(form)
@@ -692,7 +694,7 @@ class _ChannelsTab(QWidget):
         # شود»): سفارش‌هایِ ثبت‌شده از موبایل (پخشِ گرم) اگر به حسابی با
         # مرکزِ هزینه/پروژهٔ الزامی پست شوند، بدونِ این پیش‌فرض با خطایِ
         # حسابداری رد می‌شوند (چون ویزیتور در محل چیزی انتخاب نمی‌کند).
-        defaults_title = QLabel("پیش‌فرضِ سفارشِ موبایل برایِ یک کانال")
+        defaults_title = QLabel("پیش‌فرض سفارش موبایل برای یک کانال")
         defaults_title.setObjectName("sectionHint")
         layout.addWidget(defaults_title)
 
@@ -714,7 +716,7 @@ class _ChannelsTab(QWidget):
         # وقتی برایِ یک کانال تعیین شود، GET /pricing/resolve (موبایل) و
         # دسکتاپ به‌جایِ فهرستِ قیمتِ پیش‌فرضِ خودِ مشتری، همین‌ها را
         # اعمال می‌کنند. خالی‌گذاشتن یعنی رفتارِ قبلی دست‌نخورده بماند.
-        pricing_title = QLabel("لیست‌قیمت/تخفیفِ پیش‌فرضِ یک کانال (پخشِ گرم/سرد و غیره)")
+        pricing_title = QLabel("لیست‌قیمت/تخفیف پیش‌فرض یک کانال (پخش گرم/سرد و غیره)")
         pricing_title.setObjectName("sectionHint")
         layout.addWidget(pricing_title)
 
@@ -762,11 +764,11 @@ class _ChannelsTab(QWidget):
         cost_center_options = dimensions_service.list_leaf_detail_accounts(company_id, cost_center_type_id)
         project_options = dimensions_service.list_leaf_detail_accounts(company_id, project_type_id)
         self.defaults_cost_center_combo.clear()
-        self.defaults_cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        self.defaults_cost_center_combo.addItem("(بدون مرکز هزینه)", None)
         for opt in cost_center_options:
             self.defaults_cost_center_combo.addItem(opt.name or opt.code, opt.detail_account_id)
         self.defaults_project_combo.clear()
-        self.defaults_project_combo.addItem("(بدونِ پروژه)", None)
+        self.defaults_project_combo.addItem("(بدون پروژه)", None)
         for opt in project_options:
             self.defaults_project_combo.addItem(opt.name or opt.code, opt.detail_account_id)
 
@@ -784,11 +786,11 @@ class _ChannelsTab(QWidget):
         self.pricing_channel_combo.blockSignals(False)
 
         self.pricing_price_list_combo.clear()
-        self.pricing_price_list_combo.addItem("(پیش‌فرضِ خودِ مشتری)", None)
+        self.pricing_price_list_combo.addItem("(پیش‌فرض خود مشتری)", None)
         for pl in pricing_service.list_price_lists(company_id, "SALES"):
             self.pricing_price_list_combo.addItem(f"{pl.code} — {pl.name}", pl.price_list_id)
         self.pricing_discount_rule_combo.clear()
-        self.pricing_discount_rule_combo.addItem("(بهترینِ قاعدهٔ عمومیِ فعال)", None)
+        self.pricing_discount_rule_combo.addItem("(بهترین قاعدهٔ عمومی فعال)", None)
         for rule in pricing_service.list_discount_rules(company_id, active_only=False):
             self.pricing_discount_rule_combo.addItem(f"{rule.code} — {rule.name}", rule.rule_id)
 
@@ -817,7 +819,7 @@ class _ChannelsTab(QWidget):
             company_id, channel_code,
             self.defaults_cost_center_combo.currentData(), self.defaults_project_combo.currentData(),
         )
-        self.status_label.setText("پیش‌فرضِ موبایلِ این کانال ذخیره شد.")
+        self.status_label.setText("پیش‌فرض موبایل این کانال ذخیره شد.")
 
     def _load_channel_pricing_defaults(self) -> None:
         company_id = _company_id()
@@ -842,7 +844,7 @@ class _ChannelsTab(QWidget):
             company_id, channel_code,
             self.pricing_price_list_combo.currentData(), self.pricing_discount_rule_combo.currentData(),
         )
-        self.status_label.setText("لیست‌قیمت/تخفیفِ پیش‌فرضِ این کانال ذخیره شد.")
+        self.status_label.setText("لیست‌قیمت/تخفیف پیش‌فرض این کانال ذخیره شد.")
 
     def _on_selected(self, code) -> None:
         ch = next((c for c in self._channels if c.channel_code == code), None)
@@ -869,7 +871,7 @@ class _ChannelsTab(QWidget):
 
     def _delete(self) -> None:
         code = _selected_key(self.table)
-        confirm_and_delete(self, "کانالِ فروش", self.name_field.text(), Channel,
+        confirm_and_delete(self, "کانال فروش", self.name_field.text(), Channel,
                            (code, _company_id()) if code else None, _company_id(), self.refresh)
 
     def _add(self) -> None:
@@ -894,23 +896,23 @@ class _ChannelsTab(QWidget):
 
 
 class _DistributionSettlementTypesTab(QWidget):
-    """طبقِ اصلاحِ صریحِ کاربر: «نوعِ تسویه»یِ پخشِ سرد (تسویهٔ نقدیِ پایِ
-    بار/چک/رسید/یک‌هفته‌ای/پایِ بار/...) کاملاً مفهومی جدا از نوعِ
-    تسویه/روشِ دریافتِ خزانه‌داری است -- این تب همان‌جایی است که این
-    فهرست تعریف می‌شود (چند نمونهٔ پیش‌فرض از قبل ساخته شده، قابلِ‌
-    افزودنِ بیشتر)."""
+    """طبق اصلاح صریح کاربر: «نوع تسویه»ی پخش سرد (تسویهٔ نقدی پای
+    بار/چک/رسید/یک‌هفته‌ای/پای بار/...) کاملاً مفهومی جدا از نوع
+    تسویه/روش دریافت خزانه‌داری است — این تب همان‌جایی است که این
+    فهرست تعریف می‌شود (چند نمونهٔ پیش‌فرض از قبل ساخته شده، قابل‌
+    افزودن بیشتر)."""
 
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("انواعِ تسویهٔ پخش")
+        title = QLabel("انواع تسویهٔ پخش")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "این فهرست مخصوصِ نحوهٔ وصولِ فاکتورهایِ پخشِ سرد است (مثلاً «تسویهٔ نقدیِ پایِ بار» یا «تسویهٔ یک‌هفته‌ای») -- "
-            "کاملاً جدا از روش‌هایِ دریافت/پرداختِ خزانه‌داری."
+            "این فهرست مخصوص نحوهٔ وصول فاکتورهای پخش سرد است (مثلاً «تسویهٔ نقدی پای بار» یا «تسویهٔ یک‌هفته‌ای») -- "
+            "کاملاً جدا از روش‌های دریافت/پرداخت خزانه‌داری."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -933,7 +935,7 @@ class _DistributionSettlementTypesTab(QWidget):
         self.active_checkbox.setChecked(True)
         form.addWidget(self.active_checkbox)
         form.addWidget(_save_button(self._update))
-        delete = delete_button("حذفِ نوعِ تسویهٔ انتخاب‌شده")
+        delete = delete_button("حذف نوع تسویهٔ انتخاب‌شده")
         delete.clicked.connect(self._delete)
         form.addWidget(delete)
         layout.addLayout(form)
@@ -978,7 +980,7 @@ class _DistributionSettlementTypesTab(QWidget):
 
     def _delete(self) -> None:
         code = _selected_key(self.table)
-        confirm_and_delete(self, "نوعِ تسویهٔ پخش", self.name_field.text(), DistributionSettlementType,
+        confirm_and_delete(self, "نوع تسویهٔ پخش", self.name_field.text(), DistributionSettlementType,
                            (code, _company_id()) if code else None, _company_id(), self.refresh)
 
     def _add(self) -> None:
@@ -1000,8 +1002,8 @@ class _DistributionSettlementTypesTab(QWidget):
 
 
 class _MobileSettlementMethodsTab(QWidget):
-    """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
-    انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
+    """طبق درخواست صریح کاربر («نوع تسویه در پخش گرم باید همانند
+    انواع تسویه در دسکتاپ باشد — فقط جایی باشد که برخی را برای
     موبایل خاموش کنیم»)."""
 
     def __init__(self) -> None:
@@ -1010,13 +1012,13 @@ class _MobileSettlementMethodsTab(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("روش‌هایِ تسویهٔ موبایل")
+        title = QLabel("روش‌های تسویهٔ موبایل")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "این‌ها همان روش‌هایِ واقعیِ تسویهٔ فاکتورِ فروشِ همین شرکت‌اند (دسکتاپ) -- فقط مشخص کن کدام‌ها "
-            "برایِ ثبتِ فاکتورِ پخشِ گرم در موبایل هم قابلِ‌انتخاب باشند."
+            "این‌ها همان روش‌های واقعی تسویهٔ فاکتور فروش همین شرکت‌اند (دسکتاپ) — فقط مشخص کن کدام‌ها "
+            "برای ثبت فاکتور پخش گرم در موبایل هم قابل‌انتخاب باشند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)

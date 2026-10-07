@@ -34,7 +34,7 @@ export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
       setDebtors(debtorRows);
       setTodayCollections(todayRows);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ اطلاعاتِ وصول ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت اطلاعات وصول ناموفق بود.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -72,7 +72,7 @@ export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
 
       <View>
         <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-          وصولِ امروز {totalCollectedToday > 0 ? `· ${formatAmount(String(totalCollectedToday))}` : ""}
+          وصول امروز {totalCollectedToday > 0 ? `· ${formatAmount(String(totalCollectedToday))}` : ""}
         </Text>
         {todayCollections.length === 0 ? (
           <EmptyState title="هنوز وصولی ثبت نشده" />
@@ -94,7 +94,7 @@ export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
       <View>
         <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>بدهکاران</Text>
         {debtors.length === 0 ? (
-          <EmptyState title="بدهکاری در برنامه‌یِ شما نیست" />
+          <EmptyState title="بدهکاری در برنامهٔ شما نیست" />
         ) : (
           <View style={{ gap: spacing.sm }}>
             {debtors.map((d) => (

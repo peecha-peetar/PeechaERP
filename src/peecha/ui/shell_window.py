@@ -1,24 +1,24 @@
-"""پنجره‌ی اصلیِ برنامه (پوسته) — معادلِ Qt برایِ shell.py/shell.kv در Kivy.
+"""پنجرهٔ اصلی برنامه (پوسته) — معادل Qt برای shell.py/shell.kv در Kivy.
 
-تفاوتِ کلیدی با نسخه‌ی Kivy: هیچ تکنیکِ «ترتیبِ معکوسِ اعلامِ فرزندان»
+تفاوت کلیدی با نسخه‌ی Kivy: هیچ تکنیک «ترتیب معکوس اعلام فرزندان»
 لازم نیست — با `app.setLayoutDirection(Qt.RightToLeft)` (در main.py)،
-خودِ Qt ترتیبِ افقیِ هر QHBoxLayout را آینه می‌کند، و QComboBox به‌طورِ
+خود Qt ترتیب افقی هر QHBoxLayout را آینه می‌کند، و QComboBox به‌طور
 بومی راست‌چین و جهت‌دار می‌شود.
 
-طبقِ بازخوردِ صریح (با دو تصویرِ مرجع از یک نرم‌افزارِ حسابداریِ قدیمی):
-ناوبریِ اصلی سه لایه دارد —
-۱) یک ساید‌بارِ دائمی و جمع‌شونده (Sidebar) با گروه‌هایِ آکاردئونی، سمتِ
-   راستِ صفحه؛
-۲) یک ریبونِ افقیِ میان‌برهایِ پرکاربرد (کاشی‌هایِ آیکون‌دار) زیرِ هدر؛
-۳) صفحه‌ها به‌جایِ جایگزینیِ کاملِ محتوا، به‌صورتِ «فرمِ شناور» (MDI —
-   قابلِ‌درگ/تغییرِاندازه/بستن، با تیتربارِ خودش) رویِ یک ناحیه‌یِ کاریِ
-   مشترک باز می‌شوند — دقیقاً همان الگویِ عکسِ مرجع، فقط با ظاهرِ روشن و
-   مدرنِ ۲۰۲۶ به‌جایِ رنگِ سرمه‌ایِ تخت/فونتِ ریزِ قدیمی. برایِ این لایه از
-   ویجتِ بومیِ Qt به‌همین منظور (QMdiArea/QMdiSubWindow) استفاده شده —
-   نه شبیه‌سازیِ دستی.
+طبق بازخورد صریح (با دو تصویر مرجع از یک نرم‌افزار حسابداری قدیمی):
+ناوبری اصلی سه لایه دارد —
+۱) یک ساید‌بار دائمی و جمع‌شونده (Sidebar) با گروه‌های آکاردئونی، سمت
+   راست صفحه؛
+۲) یک ریبون افقی میان‌برهای پرکاربرد (کاشی‌های آیکون‌دار) زیر هدر؛
+۳) صفحه‌ها به‌جای جایگزینی کامل محتوا، به‌صورت «فرم شناور» (MDI —
+   قابل‌درگ/تغییر اندازه/بستن، با تیتربار خودش) روی یک ناحیهٔ کاری
+   مشترک باز می‌شوند — دقیقاً همان الگوی عکس مرجع، فقط با ظاهر روشن و
+   مدرن ۲۰۲۶ به‌جای رنگ سرمه‌ای تخت/فونت ریز قدیمی. برای این لایه از
+   ویجت بومی Qt به‌همین منظور (QMdiArea/QMdiSubWindow) استفاده شده —
+   نه شبیه‌سازی دستی.
 
-مگاپنلِ افقیِ قبلی (پاپ‌آپِ بازشونده‌یِ زیرِ منویِ بالا) طبقِ همین بازخورد
-به‌طورِ کامل کنار گذاشته شد.
+مگاپنل افقی قبلی (پاپ‌آپ بازشوندهٔ زیر منوی بالا) طبق همین بازخورد
+به‌طور کامل کنار گذاشته شد.
 """
 
 from __future__ import annotations
@@ -98,9 +98,9 @@ def _leaf_nav_children(item: dict) -> list[dict]:
 
 
 def _leaf_nav_children_for_module(module_code: str) -> list[dict]:
-    """همه‌یِ آیتم‌هایِ برگِ یک ماژولِ سطحِ‌بالا (برایِ فرمِ تنظیمِ ریبون) —
-    ماژولی مثلِ dashboard که خودش برگ است، لیستِ خالی برمی‌گرداند (چیزی
-    برایِ میان‌برزدن به خودش وجود ندارد)."""
+    """همهٔ آیتم‌های برگ یک ماژول سطح‌بالا (برای فرم تنظیم ریبون) —
+    ماژولی مثل dashboard که خودش برگ است، لیست خالی برمی‌گرداند (چیزی
+    برای میان‌برزدن به خودش وجود ندارد)."""
     module_item = next((item for item in NAV_ITEMS if item["code"] == module_code), None)
     if module_item is None:
         return []
@@ -108,14 +108,14 @@ def _leaf_nav_children_for_module(module_code: str) -> list[dict]:
 
 
 def _ribbon_module(module_code: str) -> str:
-    """R275: صفحه‌هایِ تک‌برگ (داشبورد، کارتابل، تنظیمات، ...) ریبونِ صفحهٔ اصلی را نشان می‌دهند، نه ریبونِ خالی."""
+    """R275: صفحه‌های تک‌برگ (داشبورد، کارتابل، تنظیمات، ...) ریبون صفحهٔ اصلی را نشان می‌دهند، نه ریبون خالی."""
     if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and DEFAULT_QUICK_ACCESS_BY_MODULE[module_code]:
         return module_code
     return module_code if _leaf_nav_children_for_module(module_code) else "dashboard"
 
 
 def _ribbon_choices(module_code: str) -> list[tuple[str, list[dict]]]:
-    """گزینه‌هایِ فرمِ تنظیمِ ریبون: [(عنوانِ گروه، برگ‌ها)] -- ریبونِ صفحهٔ اصلی از همهٔ ماژول‌ها."""
+    """گزینه‌های فرم تنظیم ریبون: [(عنوان گروه، برگ‌ها)] -- ریبون صفحهٔ اصلی از همهٔ ماژول‌ها."""
     if module_code != "dashboard":
         return [("", _leaf_nav_children_for_module(module_code))]
     groups: list[tuple[str, list[dict]]] = []
@@ -130,13 +130,13 @@ def _ribbon_choices(module_code: str) -> list[tuple[str, list[dict]]]:
 
 
 class _QuickAccessTile(QFrame):
-    """کاشیِ ریبونِ میان‌بر — طبقِ نمونه‌طراحیِ کارت‌رنگیِ ارسالیِ کاربر،
-    هم‌زبان با widgets.SummaryCard شد: بجِ آیکونِ ته‌رنگ‌دار (شیشه‌ایِ رنگیِ
-    اکسنت، نه فقط متنِ خام)، لبه/زمینه‌یِ کم‌رنگِ کارت در حالتِ استراحت
-    (نه دیگر کاملاً شفاف) و همان سایه‌ای که رویِ هاور بلندتر می‌شود. چون
+    """کاشی ریبون میان‌بر — طبق نمونه‌طراحی کارت‌رنگی ارسالی کاربر،
+    هم‌زبان با widgets.SummaryCard شد: بج آیکون ته‌رنگ‌دار (شیشه‌ای رنگی
+    اکسنت، نه فقط متن خام)، لبه/زمینهٔ کم‌رنگ کارت در حالت استراحت
+    (نه دیگر کاملاً شفاف) و همان سایه‌ای که روی هاور بلندتر می‌شود. چون
     این کاشی‌ها هر بار در `_set_quick_access_module` از نو ساخته می‌شوند
-    (نه singleton مثلِ KpiCardِ داشبورد)، رنگ‌هایِ inline اینجا مشکلِ
-    «منجمدشدن رویِ سوییچِ تم» ندارند — با هر بازسازی از رویِ توکن‌هایِ
+    (نه singleton مثل KpiCard داشبورد)، رنگ‌های inline اینجا مشکل
+    «منجمدشدن روی سوییچ تم» ندارند — با هر بازسازی از روی توکن‌های
     تازه ساخته می‌شوند."""
 
     def __init__(self, icon: str, label: str, on_click, color: str | None = None) -> None:
@@ -208,8 +208,8 @@ class _QuickAccessTile(QFrame):
 
 
 class _SidebarButton(HoverButton):
-    """R245: دکمهٔ ساید‌بار که متنِ بلندش را کوتاه (…) می‌کند به‌جایِ پهن‌کردنِ ساید‌بار
-    (پهن‌شدن، دکمهٔ تنظیماتِ کنارِ ماژول‌ها را از دید بیرون می‌برد)."""
+    """R245: دکمهٔ ساید‌بار که متن بلندش را کوتاه (…) می‌کند به‌جای پهن‌کردن ساید‌بار
+    (پهن‌شدن، دکمهٔ تنظیمات کنار ماژول‌ها را از دید بیرون می‌برد)."""
 
     def __init__(self, text: str, **kwargs) -> None:
         super().__init__("", **kwargs)
@@ -236,7 +236,7 @@ class _SidebarButton(HoverButton):
 
 
 class _SidebarSubGroup(QWidget):
-    """R245: زیرگروهِ جمع‌شونده داخلِ یک ماژول (مثلاً گزارش‌ها › گزارشاتِ خرید › عملیاتی)."""
+    """R245: زیرگروه جمع‌شونده داخل یک ماژول (مثلاً گزارش‌ها › گزارشات خرید › عملیاتی)."""
 
     def __init__(self, item: dict, depth: int, on_toggle) -> None:
         super().__init__()
@@ -282,9 +282,9 @@ class _SidebarSubGroup(QWidget):
 
 
 class _SidebarGroup(QWidget):
-    """یک گروهِ آکاردئونیِ ساید‌بار — سرتیترِ آیکون‌دار که با کلیک، بدنه‌ی
-    زیرِ خودش (فهرستِ آیتم‌هایِ برگ) را با انیمیشنِ ارتفاع باز/بسته
-    می‌کند. آیتم‌هایِ بدونِ فرزند مستقیم یک دکمه‌ی تک‌سطحی‌اند (بدونِ فلش)."""
+    """یک گروه آکاردئونی ساید‌بار — سرتیتر آیکون‌دار که با کلیک، بدنه‌ی
+    زیر خودش (فهرست آیتم‌های برگ) را با انیمیشن ارتفاع باز/بسته
+    می‌کند. آیتم‌های بدون فرزند مستقیم یک دکمهٔ تک‌سطحی‌اند (بدون فلش)."""
 
     def __init__(self, item: dict, icon: str, on_leaf_click, gear_click=None) -> None:
         super().__init__()
@@ -408,9 +408,9 @@ class _SidebarGroup(QWidget):
             self.body.adjustSize()
 
     def retranslate(self, translate_fn) -> None:
-        """طبقِ حسابرسیِ صریح: با تغییرِ زبانِ فعال، متنِ سرتیترِ گروه،
-        زیرتیترها، و آیتم‌هایِ برگ (بدونِ بازسازیِ کاملِ ساید‌بار، تا
-        انیمیشن/حالتِ باز-بسته‌بودنِ گروه دست‌نخورده بماند) عوض می‌شود."""
+        """طبق حسابرسی صریح: با تغییر زبان فعال، متن سرتیتر گروه،
+        زیرتیترها، و آیتم‌های برگ (بدون بازسازی کامل ساید‌بار، تا
+        انیمیشن/حالت باز-بسته‌بودن گروه دست‌نخورده بماند) عوض می‌شود."""
         self._label = translate_fn(self._item["code"], self._item["label"])
         self._update_header_text(self._icon, self._label, expanded=getattr(self, "_expanded", False))
         for code, widget in self._widgets_by_code.items():
@@ -439,7 +439,7 @@ class _SidebarGroup(QWidget):
         self.header.set_active(expanded)
 
     def set_active_leaf(self, code: str | None) -> bool:
-        """اگر یکی از آیتم‌هایِ این گروه با کد مچ شود، آن را برجسته و
+        """اگر یکی از آیتم‌های این گروه با کد مچ شود، آن را برجسته و
         گروه را باز می‌کند؛ برمی‌گرداند که آیا مچی پیدا شد یا نه."""
         found = code in self._entries
         for entry_code, button in self._entries.items():
@@ -460,14 +460,14 @@ _MIN_SUBWINDOW_SIZE = QSize(420, 320)
 
 
 def _clamp_rect_to_area(rect: QRect, area: QRect) -> QRect:
-    """یک مستطیل (geometryِ زیرپنجره) را طوری به داخلِ area (مرزهایِ
-    فعلیِ ناحیه‌یِ MDI) می‌کشد که هیچ بخشی از آن — به‌خصوص فوترِ دکمه‌ها
-    در پایینِ فرم — بیرون از دیدِ کاربر نماند؛ ریاضیِ فیزیکیِ ساده،
-    نه تکیه بر مکانیزمِ داخلیِ QMdiArea که تحتِ راست‌چین درست عمل
-    نمی‌کند. هم در بازیابی/کدربندیِ اولیه‌یِ زیرپنجره استفاده می‌شود
-    (MainWindow._clamp_to_mdi_area) و هم در هر resizeِ زنده‌یِ خودِ
-    ناحیه‌یِ MDI (_ClampingMdiArea.resizeEvent) — یک منبعِ حقیقتِ واحد،
-    به‌جایِ دو پیاده‌سازیِ جدا که ممکن بود از هم عقب بمانند."""
+    """یک مستطیل (geometry زیرپنجره) را طوری به داخل area (مرزهای
+    فعلی ناحیهٔ MDI) می‌کشد که هیچ بخشی از آن — به‌خصوص فوتر دکمه‌ها
+    در پایین فرم — بیرون از دید کاربر نماند؛ ریاضی فیزیکی ساده،
+    نه تکیه بر مکانیزم داخلی QMdiArea که تحت راست‌چین درست عمل
+    نمی‌کند. هم در بازیابی/کدربندی اولیهٔ زیرپنجره استفاده می‌شود
+    (MainWindow._clamp_to_mdi_area) و هم در هر resize زندهٔ خود
+    ناحیهٔ MDI (_ClampingMdiArea.resizeEvent) — یک منبع حقیقت واحد،
+    به‌جای دو پیاده‌سازی جدا که ممکن بود از هم عقب بمانند."""
     width = min(rect.width(), max(area.width(), _MIN_SUBWINDOW_SIZE.width()))
     height = min(rect.height(), max(area.height(), _MIN_SUBWINDOW_SIZE.height()))
     max_x = max(0, area.width() - width)
@@ -478,10 +478,10 @@ def _clamp_rect_to_area(rect: QRect, area: QRect) -> QRect:
 
 
 class _MdiTitleBar(QWidget):
-    """تیتربارِ کاملاً سفارشی برایِ فرم‌هایِ شناور — طبقِ درخواستِ صریح
-    (تیتربارِ بومیِ Fusion با بقیه‌ی برنامه هم‌خوان نبود). قابلِ‌درگ (کلیک
-    و کشیدن از هرجایِ نوار جز دکمه‌ها) برایِ جابه‌جاییِ پنجره، و
-    دوبار-کلیک برایِ maximize/restore — دقیقاً رفتارِ متعارفِ تیتربار."""
+    """تیتربار کاملاً سفارشی برای فرم‌های شناور — طبق درخواست صریح
+    (تیتربار بومی Fusion با بقیهٔ برنامه هم‌خوان نبود). قابل‌درگ (کلیک
+    و کشیدن از هرجای نوار جز دکمه‌ها) برای جابه‌جایی پنجره، و
+    دوبار-کلیک برای maximize/restore — دقیقاً رفتار متعارف تیتربار."""
 
     def __init__(self, title: str, icon: str, sub_window: "_FramelessMdiSubWindow") -> None:
         super().__init__()
@@ -566,15 +566,15 @@ class _MdiTitleBar(QWidget):
 
 
 class _FramelessMdiSubWindow(QMdiSubWindow):
-    """زیرپنجره‌یِ MDI بدونِ چارچومِ بومیِ Qt — تیتربارِ خودمان
-    (_MdiTitleBar) استفاده می‌شود. نکته‌یِ فنیِ کشف‌شده حینِ توسعه:
-    Qt.FramelessWindowHint هم‌زمان تشخیصِ resize-by-edge-drag بومیِ خودِ
-    QMdiSubWindow را هم غیرفعال می‌کند (تأییدشده با تست: بعدِ حذفِ
-    چارچوب، نشانگرِ ماوس نزدیکِ لبه دیگر به شکلِ تغییرِاندازه برنمی‌گشت)
-    — پس این کلاس آن رفتار را دستی، رویِ خودِ زیرپنجره، بازسازی می‌کند.
+    """زیرپنجرهٔ MDI بدون چارچوم بومی Qt — تیتربار خودمان
+    (_MdiTitleBar) استفاده می‌شود. نکتهٔ فنی کشف‌شده حین توسعه:
+    Qt.FramelessWindowHint هم‌زمان تشخیص resize-by-edge-drag بومی خود
+    QMdiSubWindow را هم غیرفعال می‌کند (تاییدشده با تست: بعد حذف
+    چارچوب، نشانگر ماوس نزدیک لبه دیگر به شکل تغییر اندازه برنمی‌گشت)
+    — پس این کلاس آن رفتار را دستی، روی خود زیرپنجره، بازسازی می‌کند.
 
-    با دکمه‌ی × واقعاً بسته/نابود نمی‌شود — فقط مخفی می‌شود، تا نمونه‌یِ
-    singletonِ صفحه (با هر state ای که دارد) زنده بماند و با بازکردنِ
+    با دکمه‌ی × واقعاً بسته/نابود نمی‌شود — فقط مخفی می‌شود، تا نمونهٔ
+    singleton صفحه (با هر state ای که دارد) زنده بماند و با بازکردن
     دوباره از ساید‌بار/ریبون همان‌جا که بود ادامه پیدا کند."""
 
     maximized_changed = Signal(bool)
@@ -750,7 +750,7 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
 
 
 class _LazyScreens(dict):
-    """نام ← صفحه؛ صفحه‌یِ ثبت‌شده با factory در اولین دسترسی ساخته می‌شود. values() فقط ساخته‌شده‌ها."""
+    """نام ← صفحه؛ صفحهٔ ثبت‌شده با factory در اولین دسترسی ساخته می‌شود. values() فقط ساخته‌شده‌ها."""
 
     def __init__(self, on_build) -> None:
         super().__init__()
@@ -782,15 +782,15 @@ class _LazyScreens(dict):
 
 
 class _MdiFormWrapper(QFrame):
-    """محتوایِ واقعیِ زیرپنجره — تیتربارِ سفارشی (بالا) + خودِ صفحه
-    (پایین). این ویجت، نه خودِ صفحه، رویِ QMdiSubWindow.setWidget
+    """محتوای واقعی زیرپنجره — تیتربار سفارشی (بالا) + خود صفحه
+    (پایین). این ویجت، نه خود صفحه، روی QMdiSubWindow.setWidget
     می‌نشیند.
 
-    باگِ واقعیِ کشف‌شده (با گزارشِ عکسِ واقعیِ کاربر): وقتی این کلاس
-    QWidgetِ ساده بود (نه QFrame)، پس‌زمینه‌ی سفیدش از QSS اصلاً رسم
-    نمی‌شد — QWidgetِ خام برخلافِ QFrame، پس‌زمینه‌ی استایل‌شیت را بدونِ
-    WA_StyledBackground صریح نقاشی نمی‌کند — نتیجه‌اش فرمِ «شفاف» بود که
-    محتوایِ فرمِ پشتی (مثلِ نمودارِ دونات یا کارت‌هایِ KPI) از زیرش
+    باگ واقعی کشف‌شده (با گزارش عکس واقعی کاربر): وقتی این کلاس
+    QWidget ساده بود (نه QFrame)، پس‌زمینهٔ سفیدش از QSS اصلاً رسم
+    نمی‌شد — QWidget خام برخلاف QFrame، پس‌زمینهٔ استایل‌شیت را بدون
+    WA_StyledBackground صریح نقاشی نمی‌کند — نتیجه‌اش فرم «شفاف» بود که
+    محتوای فرم پشتی (مثل نمودار دونات یا کارت‌های KPI) از زیرش
     دیده می‌شد."""
 
     def __init__(self, title: str, icon: str, screen: QWidget, sub_window: _FramelessMdiSubWindow) -> None:
@@ -815,21 +815,21 @@ class _MdiFormWrapper(QFrame):
 
 
 class _ClampingMdiArea(QMdiArea):
-    """QMdiAreaِ معمولی، وقتی خودش کوچک‌تر می‌شود (کوچک‌کردنِ پنجره‌یِ
-    اصلی از حالتِ maximize، اسنپ‌کردنِ ویندوز به نیمِ صفحه، جمع‌شدنِ
-    نوارِ کناری، تغییرِ اندازه‌یِ چندمانیتوره)، زیرپنجره‌هایی را که از
-    قبل با اندازه‌یِ بزرگ‌تر باز شده‌اند خودش دوباره اندازه نمی‌دهد —
-    آن‌ها همان اندازه‌یِ قبلی را نگه می‌دارند و فقط یک اسکرول‌بار رویِ
-    خودِ ناحیه‌یِ MDI ظاهر می‌شود؛ از دیدِ کاربر این دقیقاً همان چیزی‌ست
-    که به‌عنوانِ «دکمه‌هایِ پایینِ فرم زیرِ تسک‌بار/از دید رفتن» گزارش
+    """QMdiArea معمولی، وقتی خودش کوچک‌تر می‌شود (کوچک‌کردن پنجرهٔ
+    اصلی از حالت maximize، اسنپ‌کردن ویندوز به نیم صفحه، جمع‌شدن
+    نوار کناری، تغییر اندازهٔ چندمانیتوره)، زیرپنجره‌هایی را که از
+    قبل با اندازهٔ بزرگ‌تر باز شده‌اند خودش دوباره اندازه نمی‌دهد —
+    آن‌ها همان اندازهٔ قبلی را نگه می‌دارند و فقط یک اسکرول‌بار روی
+    خود ناحیهٔ MDI ظاهر می‌شود؛ از دید کاربر این دقیقاً همان چیزی‌ست
+    که به‌عنوان «دکمه‌های پایین فرم زیر تسک‌بار/از دید رفتن» گزارش
     می‌شود — چون MainWindow خودش به‌درستی clamp می‌شود (ر.ک.
     _clamp_geometry_to_available_screen)، اما این clamp تا امروز فقط
-    یک‌بار، در لحظه‌یِ بازشدن/بازیابیِ هر زیرپنجره اجرا می‌شد
-    (_restore_or_size_subwindow)، نه در هر resizeِ بعدیِ خودِ ناحیه‌یِ
-    MDI. این‌جا با override کردنِ resizeEvent، در *هر* تغییرِ اندازه‌ای
-    همه‌یِ زیرپنجره‌هایِ غیرِmaximize/غیرِminimize را دوباره به داخلِ
-    مرزهایِ تازه می‌کشیم — با همان تابعِ مشترکِ _clamp_rect_to_area که
-    MainWindow._clamp_to_mdi_area هم استفاده می‌کند، تا دو پیاده‌سازیِ
+    یک‌بار، در لحظهٔ بازشدن/بازیابی هر زیرپنجره اجرا می‌شد
+    (_restore_or_size_subwindow)، نه در هر resize بعدی خود ناحیهٔ
+    MDI. این‌جا با override کردن resizeEvent، در *هر* تغییر اندازه‌ای
+    همهٔ زیرپنجره‌های غیرmaximize/غیرminimize را دوباره به داخل
+    مرزهای تازه می‌کشیم — با همان تابع مشترک _clamp_rect_to_area که
+    MainWindow._clamp_to_mdi_area هم استفاده می‌کند، تا دو پیاده‌سازی
     جدا از هم عقب نمانند."""
 
     def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
@@ -965,9 +965,9 @@ class MainWindow(QMainWindow):
             app.installEventFilter(self)
 
     def _clamp_geometry_to_available_screen(self) -> None:
-        """پنجره را داخلِ availableGeometryِ صفحه‌یِ فعلی نگه می‌دارد —
-        یعنی هیچ‌وقت زیرِ نوارِ وظیفه (یا هر ناحیه‌یِ رزروشده‌یِ دیگرِ
-        سیستم‌عامل) نمی‌رود، برخلافِ geometry/screenGeometریِ خام."""
+        """پنجره را داخل availableGeometry صفحهٔ فعلی نگه می‌دارد —
+        یعنی هیچ‌وقت زیر نوار وظیفه (یا هر ناحیهٔ رزروشدهٔ دیگر
+        سیستم‌عامل) نمی‌رود، برخلاف geometry/screenGeometری خام."""
         screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
             return
@@ -979,15 +979,15 @@ class MainWindow(QMainWindow):
         self.setGeometry(x, y, width, height)
 
     def _ensure_screen_geometry_watcher(self) -> None:
-        """طبقِ گزارشِ صریح: اگر کاربر حالتِ auto-hideِ نوارِ وظیفه را در
-        حینِ بازبودنِ برنامه خاموش کند (یا هر تغییرِ دیگری در
-        availableGeometryِ صفحه رخ دهد)، هیچ‌کدام از رویدادهایِ خودِ
-        پنجره (resizeEvent/changeEvent) شلیک نمی‌شوند — چون اندازه/حالتِ
-        خودِ پنجره تغییر نکرده، فقط ناحیه‌یِ رزروشده‌یِ سیستم‌عامل عوض شده.
-        برایِ همین باید مستقیماً به QScreen.availableGeometryChanged
-        گوش داد. این‌جا وصل می‌شود (نه در __init__، چونِ self.screen()
-        پیش از نمایشِ واقعیِ پنجره قابلِ‌اتکا نیست) و اگر پنجره به
-        مانیتورِ دیگری منتقل شود هم خودش را دوباره به صفحه‌یِ تازه وصل
+        """طبق گزارش صریح: اگر کاربر حالت auto-hide نوار وظیفه را در
+        حین بازبودن برنامه خاموش کند (یا هر تغییر دیگری در
+        availableGeometry صفحه رخ دهد)، هیچ‌کدام از رویدادهای خود
+        پنجره (resizeEvent/changeEvent) شلیک نمی‌شوند — چون اندازه/حالت
+        خود پنجره تغییر نکرده، فقط ناحیهٔ رزروشدهٔ سیستم‌عامل عوض شده.
+        برای همین باید مستقیماً به QScreen.availableGeometryChanged
+        گوش داد. این‌جا وصل می‌شود (نه در __init__، چون self.screen()
+        پیش از نمایش واقعی پنجره قابل‌اتکا نیست) و اگر پنجره به
+        مانیتور دیگری منتقل شود هم خودش را دوباره به صفحهٔ تازه وصل
         می‌کند."""
         screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
@@ -1011,8 +1011,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self._clamp_geometry_to_available_screen)
 
     def _poll_available_geometry(self) -> None:
-        """پشتیبانِ سیگنالِ availableGeometryChanged (ر.ک. توضیحِ کاملِ
-        دلیلِ نیاز به این تایمر در __init__)."""
+        """پشتیبان سیگنال availableGeometryChanged (ر.ک. توضیح کامل
+        دلیل نیاز به این تایمر در __init__)."""
         screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
             return
@@ -1022,10 +1022,10 @@ class MainWindow(QMainWindow):
         self._last_known_available_geometry = available
 
     def _tick_ecommerce_auto_sync(self) -> None:
-        """پشتیبانِ تایمرِ سینکِ خودکارِ فروشِ اینترنتی (ر.ک. توضیحِ کاملِ
-        دلیلِ نیاز به این تایمر در __init__). کاملاً بی‌صدا اجرا می‌شود --
-        نه دیالوگِ خطا، نه اعلانی به کاربر -- چون این یک عملِ پس‌زمینه‌ایِ
-        دوره‌ای است، نه یک اکشنِ دستیِ کاربر."""
+        """پشتیبان تایمر همگام‌سازی خودکار فروش اینترنتی (ر.ک. توضیح کامل
+        دلیل نیاز به این تایمر در __init__). کاملاً بی‌صدا اجرا می‌شود --
+        نه دیالوگ خطا، نه اعلانی به کاربر — چون این یک عمل پس‌زمینه‌ای
+        دوره‌ای است، نه یک اکشن دستی کاربر."""
         if session.current_company is None or session.current_user is None:
             return
         try:
@@ -1038,7 +1038,7 @@ class MainWindow(QMainWindow):
             pass
 
     def _tick_content_calendar(self) -> None:
-        """پشتیبانِ تایمرِ تقویمِ محتوا -- کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
+        """پشتیبان تایمر تقویم محتوا — کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
         با _tick_ecommerce_auto_sync."""
         if session.current_company is None:
             return
@@ -1050,7 +1050,7 @@ class MainWindow(QMainWindow):
             pass
 
     def _tick_sms_campaigns(self) -> None:
-        """پشتیبانِ تایمرِ کمپینِ پیامک -- کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
+        """پشتیبان تایمر کمپین پیامک — کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
         با _tick_ecommerce_auto_sync/_tick_content_calendar."""
         if session.current_company is None:
             return
@@ -1144,13 +1144,13 @@ class MainWindow(QMainWindow):
 
     # --- سوییچِ زنده‌یِ تمِ روشن/تیره ---------------------------------------
     def _on_theme_toggled(self, light_checked: bool) -> None:
-        """طبقِ خواسته‌یِ صریح: سوییچِ واقعیِ رفت‌وبرگشتی بینِ تمِ روشن/تیره،
-        بدونِ نیاز به ری‌استارتِ برنامه. `theme.set_theme_mode` خودش
-        QPalette/QSS/QSettings را هندل می‌کند و یک پاسِ repolish رویِ
-        همه‌یِ ویجت‌هایِ زنده می‌زند (کافی برایِ اکثرِ سطحِ برنامه — جدول‌ها،
+        """طبق خواستهٔ صریح: سوییچ واقعی رفت‌وبرگشتی بین تم روشن/تیره،
+        بدون نیاز به ری‌استارت برنامه. `theme.set_theme_mode` خودش
+        QPalette/QSS/QSettings را هندل می‌کند و یک پاس repolish روی
+        همهٔ ویجت‌های زنده می‌زند (کافی برای اکثر سطح برنامه — جدول‌ها،
         فیلدها، دکمه‌ها، کارت‌ها، تب‌ها). آنچه repolish پوشش نمی‌دهد
-        (HoverButtonِ سرتیترها/آیتم‌هایِ ساید‌بار که رنگِ هاورشان را در
-        __init__ منجمد می‌کنند) با بازسازیِ درجایِ کرومِ هدر/ریبون/ساید‌بار
+        (HoverButton سرتیترها/آیتم‌های ساید‌بار که رنگ هاورشان را در
+        __init__ منجمد می‌کنند) با بازسازی درجای کروم هدر/ریبون/ساید‌بار
         در `_rebuild_chrome()` رفع می‌شود."""
         app = QApplication.instance()
         theme.set_theme_mode(app, dark=not light_checked)
@@ -1162,10 +1162,10 @@ class MainWindow(QMainWindow):
         self.mdi_area.setBackground(QBrush(QColor(theme.BACKGROUND)))
 
     def _rebuild_chrome(self) -> None:
-        """هدر/ریبون/ساید‌بار را با مقادیرِ تازه‌یِ theme.* دوباره می‌سازد
-        و به‌جایِ نسخه‌هایِ قدیمی در همان جایگاهِ layout می‌نشاند — چون
-        HoverButton (سرتیترها/آیتم‌هایِ ساید‌بار، دکمه‌یِ گیر) رنگِ
-        پس‌زمینه‌یِ هاور/فعالش را در __init__ منجمد می‌کند."""
+        """هدر/ریبون/ساید‌بار را با مقادیر تازهٔ theme.* دوباره می‌سازد
+        و به‌جای نسخه‌های قدیمی در همان جایگاه layout می‌نشاند — چون
+        HoverButton (سرتیترها/آیتم‌های ساید‌بار، دکمهٔ گیر) رنگ
+        پس‌زمینهٔ هاور/فعالش را در __init__ منجمد می‌کند."""
         old_header, old_quick_access, old_sidebar = (
             self._header_scroll, self._quick_access_scroll, self._sidebar_scroll,
         )
@@ -1237,7 +1237,7 @@ class MainWindow(QMainWindow):
         # بشه تا مطمئن بشیم آخرین نسخه در حالِ اجراست»)
         self.version_label = QLabel(APP_VERSION)
         self.version_label.setStyleSheet(f"color: {theme.TEXT_DISABLED}; font-size: 11px;")
-        self.version_label.setToolTip("نسخه‌یِ نصب‌شده‌یِ برنامه")
+        self.version_label.setToolTip("نسخهٔ نصب‌شدهٔ برنامه")
         brand_row.addWidget(self.version_label)
         layout.addLayout(brand_row)
 
@@ -1253,7 +1253,7 @@ class MainWindow(QMainWindow):
         self.field_help_toggle.setChecked(field_help_is_enabled())
         self.field_help_toggle.setCursor(Qt.PointingHandCursor)
         self.field_help_toggle.setText("⚙")
-        self.field_help_toggle.setToolTip("راهنمایِ فیلدها را نشان بده یا مخفی کن")
+        self.field_help_toggle.setToolTip("راهنمای فیلدها را نشان بده یا مخفی کن")
         self.field_help_toggle.setStyleSheet(
             "#fieldHelpToggle {"
             "   border: none; border-radius: 14px; padding: 4px 10px;"
@@ -1274,7 +1274,7 @@ class MainWindow(QMainWindow):
         self.theme_toggle.setChecked(not theme.is_dark_mode())
         self.theme_toggle.setCursor(Qt.PointingHandCursor)
         self.theme_toggle.setText("☀" if theme.is_dark_mode() else "🌙")
-        self.theme_toggle.setToolTip("رفتن به حالتِ روشن" if theme.is_dark_mode() else "رفتن به حالتِ تیره")
+        self.theme_toggle.setToolTip("رفتن به حالت روشن" if theme.is_dark_mode() else "رفتن به حالت تیره")
         self.theme_toggle.setStyleSheet(
             "#fieldHelpToggle {"
             "   border: none; border-radius: 14px; padding: 4px 10px;"
@@ -1328,7 +1328,7 @@ class MainWindow(QMainWindow):
         self.open_windows_button = QToolButton()
         self.open_windows_button.setObjectName("fieldHelpToggle")
         self.open_windows_button.setText("🗔")
-        self.open_windows_button.setToolTip("فرم‌هایِ بازِ جاری")
+        self.open_windows_button.setToolTip("فرم‌های باز جاری")
         self.open_windows_button.setCursor(Qt.PointingHandCursor)
         self.open_windows_button.setPopupMode(QToolButton.InstantPopup)
         self.open_windows_menu = QMenu(self.open_windows_button)
@@ -1381,8 +1381,8 @@ class MainWindow(QMainWindow):
         return f"quickAccess/{module_code}"
 
     def _quick_access_codes_for_module(self, module_code: str) -> list[str]:
-        """کدهایِ میان‌برهایِ همین ماژول — شخصی‌سازیِ کاربر (اگر ذخیره شده)
-        وگرنه فهرستِ پیش‌فرضِ همان ماژول."""
+        """کدهای میان‌برهای همین ماژول — شخصی‌سازی کاربر (اگر ذخیره شده)
+        وگرنه فهرست پیش‌فرض همان ماژول."""
         settings = QSettings("Peecha", "PeechaERP")
         stored = settings.value(self._quick_access_settings_key(module_code), None)
         if stored is not None:
@@ -1394,9 +1394,9 @@ class MainWindow(QMainWindow):
         return [code for code, _icon in default_items]
 
     def _refresh_quick_access_bar(self, module_code: str) -> None:
-        """ریبون را با میان‌برهایِ مربوط به ماژولِ فعلی دوباره می‌سازد —
-        طبقِ درخواستِ صریح، ریبون باید مرتبط با ماژولی باشد که در ساید‌بار
-        باز شده، نه یک فهرستِ ثابتِ سراسری."""
+        """ریبون را با میان‌برهای مربوط به ماژول فعلی دوباره می‌سازد —
+        طبق درخواست صریح، ریبون باید مرتبط با ماژولی باشد که در ساید‌بار
+        باز شده، نه یک فهرست ثابت سراسری."""
         module_code = _ribbon_module(module_code)
         if module_code == self._quick_access_module_code:
             return
@@ -1432,13 +1432,13 @@ class MainWindow(QMainWindow):
             config_button = HoverButton("⚙", hover_color=theme.HOVER, radius=8, margin=4)
             config_button.setObjectName("quickAccessConfigButton")
             config_button.setFixedSize(30, 30)
-            config_button.setToolTip("تنظیمِ میان‌برهایِ این ماژول")
+            config_button.setToolTip("تنظیم میان‌برهای این ماژول")
             config_button.clicked.connect(lambda _checked=False, m=module_code: self._open_quick_access_config(m))
             self._quick_access_layout.addWidget(config_button)
 
     def _open_quick_access_config(self, module_code: str) -> None:
-        """طبقِ درخواستِ صریح («قابلیتِ کم‌وزیادکردنِ دکمه‌هایِ ریبون»):
-        همه‌یِ آیتم‌هایِ برگِ همین ماژول را با تیک نشان می‌دهد — کاربر
+        """طبق درخواست صریح («قابلیت کم‌وزیادکردن دکمه‌های ریبون»):
+        همهٔ آیتم‌های برگ همین ماژول را با تیک نشان می‌دهد — کاربر
         هرکدام را می‌تواند اضافه/کم کند."""
         groups = _ribbon_choices(module_code)
         if not any(leaves for _title, leaves in groups):
@@ -1446,10 +1446,10 @@ class MainWindow(QMainWindow):
         current_codes = set(self._quick_access_codes_for_module(module_code))
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("تنظیمِ میان‌برهایِ ریبون")
+        dialog.setWindowTitle("تنظیم میان‌برهای ریبون")
         dialog.setLayoutDirection(Qt.RightToLeft)
         layout = QVBoxLayout(dialog)
-        hint = QLabel("آیتم‌هایی که می‌خواهید در ریبونِ این ماژول به‌صورتِ میان‌بر دیده شوند را تیک بزنید.")
+        hint = QLabel("آیتم‌هایی که می‌خواهید در ریبون این ماژول به‌صورت میان‌بر دیده شوند را تیک بزنید.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
@@ -1541,10 +1541,10 @@ class MainWindow(QMainWindow):
         return self.mdi_area
 
     def _on_subwindow_activated(self, active_sub_window) -> None:
-        """طبقِ نگرانیِ صریح («وقتی همه‌ی فرم‌ها روی هم بازِ می‌شوند به
-        مشکل نمی‌خورد؟»): فرمِ درحالِ‌فعالیت با ته‌رنگِ اکسنت روی تیتربارش
-        از بقیه‌ی فرم‌هایِ بازِ پشتِ‌سرش متمایز می‌شود — تا در انبوهِ
-        پنجره‌هایِ روی‌هم، همیشه واضح باشد کدام فرم الان کارِ کاربر است."""
+        """طبق نگرانی صریح («وقتی همهٔ فرم‌ها روی هم باز می‌شوند به
+        مشکل نمی‌خورد؟»): فرم درحال‌فعالیت با ته‌رنگ اکسنت روی تیتربارش
+        از بقیهٔ فرم‌های باز پشت‌سرش متمایز می‌شود — تا در انبوه
+        پنجره‌های روی‌هم، همیشه واضح باشد کدام فرم الان کار کاربر است."""
         for sub_window in self.mdi_area.subWindowList():
             wrapper = sub_window.widget()
             title_bar = getattr(wrapper, "title_bar", None)
@@ -1573,12 +1573,12 @@ class MainWindow(QMainWindow):
                 screen.refresh()
 
     def _update_chrome_visibility(self, *_args) -> None:
-        """طبقِ گزارشِ صریح («فرم‌ها وقتی تمام‌صفحه می‌شن، فقط تویِ یک
-        کانتینرِ محدود جا می‌گیرن، چون هدرِ برنامه و ساید‌بار همچنان
-        نمایش داده می‌شن»): وقتی حداقل یک فرمِ شناور maximize شده باشد،
-        ریبونِ میان‌بر و ساید‌بار موقتاً مخفی می‌شوند تا ناحیه‌یِ MDI کلِ
-        عرض/ارتفاعِ زیرِ هدرِ اصلی را در اختیارِ فرمِ maximize‌شده بگذارد؛
-        با خارج‌شدن از حالتِ maximize (یا بستنِ فرم)، هردو دوباره
+        """طبق گزارش صریح («فرم‌ها وقتی تمام‌صفحه می‌شن، فقط توی یک
+        کانتینر محدود جا می‌گیرن، چون هدر برنامه و ساید‌بار همچنان
+        نمایش داده می‌شن»): وقتی حداقل یک فرم شناور maximize شده باشد،
+        ریبون میان‌بر و ساید‌بار موقتاً مخفی می‌شوند تا ناحیهٔ MDI کل
+        عرض/ارتفاع زیر هدر اصلی را در اختیار فرم maximize‌شده بگذارد؛
+        با خارج‌شدن از حالت maximize (یا بستن فرم)، هردو دوباره
         نمایش داده می‌شوند."""
         # R230: با بستنِ آخرین فرم، حالتِ تمرکز خودکار تمام می‌شود -- وگرنه
         # منو/ریبون پنهان می‌ماند و راهی برایِ بازکردنِ فرمِ دیگر نبود.
@@ -1589,16 +1589,16 @@ class MainWindow(QMainWindow):
         self._sidebar_scroll.setVisible(not focus)
 
     def toggle_focus_mode(self) -> None:
-        """R227: دکمهٔ بزرگ‌کردنِ تیتربار -- پنهان/نمایانِ ساید‌بار و ریبون؛
-        فرم‌ها (با resizeEventِ ناحیه) خودکار کلِ فضایِ تازه را پر می‌کنند."""
+        """R227: دکمهٔ بزرگ‌کردن تیتربار — پنهان/نمایان ساید‌بار و ریبون؛
+        فرم‌ها (با resizeEvent ناحیه) خودکار کل فضای تازه را پر می‌کنند."""
         self._focus_mode = not getattr(self, "_focus_mode", False)
         self._update_chrome_visibility()
 
     def _populate_open_windows_menu(self) -> None:
-        """طبقِ نگرانیِ صریح دربابِ انبوهِ فرم‌هایِ روی‌هم — فهرستِ همه‌ی
-        فرم‌هایِ بازِ جاری (با امکانِ کلیک برایِ رفتنِ مستقیم به هرکدام)،
-        بدونِ نیازِ کاربر به جابه‌جاکردنِ دستیِ پنجره‌ها برایِ پیداکردنِ
-        فرمِ موردِنظر."""
+        """طبق نگرانی صریح درباب انبوه فرم‌های روی‌هم — فهرست همه‌ی
+        فرم‌های باز جاری (با امکان کلیک برای رفتن مستقیم به هرکدام)،
+        بدون نیاز کاربر به جابه‌جاکردن دستی پنجره‌ها برای پیداکردن
+        فرم مورد نظر."""
         self.open_windows_menu.clear()
         visible_subs = [sw for sw in self.mdi_area.subWindowList() if sw.isVisible()]
         if not visible_subs:
@@ -1613,9 +1613,9 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda _checked=False, sw=sub_window: self._focus_subwindow(sw))
 
         self.open_windows_menu.addSeparator()
-        cascade_action = self.open_windows_menu.addAction("مرتب‌سازیِ آبشاری")
+        cascade_action = self.open_windows_menu.addAction("مرتب‌سازی آبشاری")
         cascade_action.triggered.connect(self.mdi_area.cascadeSubWindows)
-        tile_action = self.open_windows_menu.addAction("مرتب‌سازیِ کاشی‌ای")
+        tile_action = self.open_windows_menu.addAction("مرتب‌سازی کاشی‌ای")
         tile_action.triggered.connect(self.mdi_area.tileSubWindows)
 
     def _focus_subwindow(self, sub_window: QMdiSubWindow) -> None:
@@ -1904,8 +1904,8 @@ class MainWindow(QMainWindow):
         self.register_screen("treasury_vouchers_list", lambda: JournalEntriesListScreen(
                 self,
                 entry_type_codes=["RECEIPT", "PAYMENT"],
-                title="اسنادِ خزانه‌داری",
-                new_entry_options=[("+ سندِ دریافت", "TREASURY_RECEIPT"), ("+ سندِ پرداخت", "TREASURY_PAYMENT")],
+                title="اسناد خزانه‌داری",
+                new_entry_options=[("+ سند دریافت", "TREASURY_RECEIPT"), ("+ سند پرداخت", "TREASURY_PAYMENT")],
                 # ویرایشِ سندِ ازقبل‌ثبت‌شده همیشه از فرمِ عمومیِ GL_JE انجام
                 # می‌شود (پیش‌فرضِ edit_screen_by_type={}) — فرمِ چندروشی فقط
                 # برایِ صدورِ سندِ تازه است، نه بازسازیِ ردیف‌ها از رویِ یک
@@ -1922,7 +1922,7 @@ class MainWindow(QMainWindow):
         self.register_screen("treasury_petty_cash_list", lambda: JournalEntriesListScreen(
                 self,
                 entry_type_codes=["TANKHAH"],
-                title="اسنادِ تنخواه‌گردان",
+                title="اسناد تنخواه‌گردان",
                 new_entry_options=[("+ تنخواه‌گردان", "TREASURY_PETTY_CASH")],
             ),
         )
@@ -2057,11 +2057,11 @@ class MainWindow(QMainWindow):
         self._cascade_index += 1
 
     def _restore_or_size_subwindow(self, sub_window: QMdiSubWindow, screen_name: str) -> None:
-        """طبقِ درخواستِ صریح: جایگاه/اندازه/حالتِ maximize که کاربر آخرین
-        بار برایِ این صفحه تنظیم کرده (با QSettings، در _save_geometryِ
-        _FramelessMdiSubWindow) این‌جا بازیابی می‌شود — حتی بعدِ بستنِ
-        کاملِ برنامه. اگر چیزی ذخیره نشده باشد (اولین بارِ بازکردنِ این
-        صفحه)، همان چیدمانِ آبشاریِ پیش‌فرض به‌کار می‌رود."""
+        """طبق درخواست صریح: جایگاه/اندازه/حالت maximize که کاربر آخرین
+        بار برای این صفحه تنظیم کرده (با QSettings، در _save_geometry
+        _FramelessMdiSubWindow) این‌جا بازیابی می‌شود — حتی بعد بستن
+        کامل برنامه. اگر چیزی ذخیره نشده باشد (اولین بار بازکردن این
+        صفحه)، همان چیدمان آبشاری پیش‌فرض به‌کار می‌رود."""
         # نکته‌یِ فنیِ کشف‌شده حینِ تست: QMdiArea وقتی از قبل یک زیرپنجره‌یِ
         # دیگر (مثلاً داشبورد، چون همیشه اول باز می‌شود) maximize باشد،
         # زیرپنجره‌یِ تازه را هم با اولین show()اش خودکار maximize نمایش
@@ -2086,10 +2086,10 @@ class MainWindow(QMainWindow):
             sub_window._restoring = False
 
     def _clamp_to_mdi_area(self, rect: QRect) -> QRect:
-        """اگر جایگاهِ ذخیره‌شده (مثلاً از یک اجرایِ قبلی با پنجره‌یِ بزرگ‌تر)
-        دیگر تویِ ناحیه‌یِ MDIِ فعلی جا نشود، آن را به داخلِ مرزها می‌کشیم
-        — با همان تابعِ مشترکِ _clamp_rect_to_area که _ClampingMdiArea هم
-        رویِ هر resizeِ زنده استفاده می‌کند."""
+        """اگر جایگاه ذخیره‌شده (مثلاً از یک اجرای قبلی با پنجرهٔ بزرگ‌تر)
+        دیگر توی ناحیهٔ MDI فعلی جا نشود، آن را به داخل مرزها می‌کشیم
+        — با همان تابع مشترک _clamp_rect_to_area که _ClampingMdiArea هم
+        روی هر resize زنده استفاده می‌کند."""
         return _clamp_rect_to_area(rect, self.mdi_area.rect())
 
     def _highlight_active_leaf(self, code: str) -> None:
@@ -2168,16 +2168,16 @@ class MainWindow(QMainWindow):
             active_sub.widget().refresh()
 
     def _setup_global_search(self) -> None:
-        """طبقِ ادامهٔ فهرستِ درخواستی («جستجویِ زبانِ‌طبیعی در سراسرِ
-        سیستم»): این کادر از اولِ ساختِ نوارِ بالایی وجود داشت ولی به
-        هیچ signalای وصل نبود -- عملاً یک ورودیِ کاملاً بی‌اثر. حالا
-        از رویِ همان تکِ‌منبعِ حقیقتیِ منو (nav_catalog) یک نمایه‌یِ
-        جستجو ساخته می‌شود: نوشتن هر بخشی از نامِ هر صفحه/گزارش (حتی با
-        مسیرِ منویش، مثلاً «فروش › سودِ واقعیِ مشتریان») آن را در یک
-        منویِ کشویی پیشنهاد می‌دهد؛ زدنِ Enter، حتی بدونِ انتخابِ دقیقِ
-        یک گزینه، بهترین تطبیقِ چندکلمه‌ای را مستقیماً باز می‌کند --
-        بدونِ نیاز به مدلِ یادگیریِ ماشین، فقط تطبیقِ متنیِ ساده رویِ
-        همان کاتالوگِ ازپیش‌موجود."""
+        """طبق ادامهٔ فهرست درخواستی («جستجوی زبان‌طبیعی در سراسر
+        سیستم»): این کادر از اول ساخت نوار بالایی وجود داشت ولی به
+        هیچ signalای وصل نبود — عملاً یک ورودی کاملاً بی‌اثر. حالا
+        از روی همان تک‌منبع حقیقتی منو (nav_catalog) یک نمایهٔ
+        جستجو ساخته می‌شود: نوشتن هر بخشی از نام هر صفحه/گزارش (حتی با
+        مسیر منویش، مثلاً «فروش › سود واقعی مشتریان») آن را در یک
+        منوی کشویی پیشنهاد می‌دهد؛ زدن Enter، حتی بدون انتخاب دقیق
+        یک گزینه، بهترین تطبیق چندکلمه‌ای را مستقیماً باز می‌کند --
+        بدون نیاز به مدل یادگیری ماشین، فقط تطبیق متنی ساده روی
+        همان کاتالوگ ازپیش‌موجود."""
         self._search_entries = flatten_nav_items_with_breadcrumb()
         self._search_code_by_breadcrumb = {breadcrumb: code for code, _label, breadcrumb in self._search_entries}
 
@@ -2196,13 +2196,13 @@ class MainWindow(QMainWindow):
         self.search_field.clear()
 
     def _on_global_search_return_pressed(self) -> None:
-        """طبقِ ادامهٔ فهرستِ درخواستی: به‌جایِ تکیه بر
-        completer().currentCompletion() (که فقط پیشوندِ همان
-        completionPrefixِ درونیِ QCompleter را می‌شناسد و در حالتِ
+        """طبق ادامهٔ فهرست درخواستی: به‌جای تکیه بر
+        completer().currentCompletion() (که فقط پیشوند همان
+        completionPrefix درونی QCompleter را می‌شناسد و در حالت
         MatchContains می‌تواند با آنچه کاربر واقعاً می‌بیند هم‌خوان
-        نباشد)، مستقیماً همان نمایه‌یِ ساختگیِ خودمان با تطبیقِ توکنی
-        (همه‌یِ کلماتِ عبارت، در هر ترتیبی) جست‌وجو می‌شود -- پیش‌بینی‌
-        پذیرتر و مستقل از حالتِ داخلیِ ویجت."""
+        نباشد)، مستقیماً همان نمایهٔ ساختگی خودمان با تطبیق توکنی
+        (همهٔ کلمات عبارت، در هر ترتیبی) جست‌وجو می‌شود — پیش‌بینی‌
+        پذیرتر و مستقل از حالت داخلی ویجت."""
         query = self.search_field.text().strip()
         if not query:
             return
@@ -2219,10 +2219,10 @@ class MainWindow(QMainWindow):
             self.search_field.clear()
 
     def _on_language_changed(self, index: int) -> None:
-        """طبقِ حسابرسیِ صریح: قبلاً این سوییچر هیچ signalای وصل نداشت —
+        """طبق حسابرسی صریح: قبلاً این سوییچر هیچ signalای وصل نداشت —
         session.current_language هیچ‌وقت مقداردهی نمی‌شد و ساید‌بار همیشه
-        فارسی می‌ماند، صرفِ‌نظر از انتخابِ کاربر. حالا با انتخاب، برچسبِ
-        هرگروه/آیتم/زیرگروهِ ساید‌بار با ترجمه‌یِ ذخیره‌شده در
+        فارسی می‌ماند، صرف‌نظر از انتخاب کاربر. حالا با انتخاب، برچسب
+        هرگروه/آیتم/زیرگروه ساید‌بار با ترجمهٔ ذخیره‌شده در
         services/translations.py (اگر موجود باشد) دوباره نوشته می‌شود."""
         language_id = self.language_combo.itemData(index)
         languages = languages_service.list_languages()

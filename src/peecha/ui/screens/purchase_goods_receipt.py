@@ -1,18 +1,18 @@
-"""تاییدِ رسیدِ کالا -- طبقِ گزارشِ صریحِ کاربر: «بعدِ تاییدِ سفارشِ خرید
-انباردار کجا باید رسیدنِ کالا را تایید کند؟ و دسترسی هم نداشته باشد
-قیمتِ کالا را ببیند -- و این تنظیمی باشد.»
+"""تایید رسید کالا — طبق گزارش صریح کاربر: «بعد تایید سفارش خرید
+انباردار کجا باید رسیدن کالا را تایید کند؟ و دسترسی هم نداشته باشد
+قیمت کالا را ببیند — و این تنظیمی باشد.»
 
-هم‌الگو با pre_sales_fulfillment.py (همان زیرساختِ warehouse_approved_at/
-warehouse_delivered_quantیِ ازپیش‌موجود)، با دو تفاوتِ عمده:
-۱) این‌جا برایِ PURCHASE_ORDER است، نه SALES_ORDERِ کانالِ پخشِ سرد --
-   و فقط وقتی Toggleِ PURCHASE_ORDER_GOODS_RECEIPT (تنظیماتِ بازرگانی)
-   برایِ شرکت روشن باشد چیزی نشان می‌دهد.
-۲) جدولِ ردیف‌ها عمداً هیچ ستونِ قیمتی ندارد -- و چون این یک آیتمِ
-   ناوبریِ مستقل است (نه تبی درونِ فرمِ کاملِ سفارشِ خرید)، می‌توان به
-   نقشِ انباردار فقط دسترسیِ همین فرم را داد، نه فرمِ سفارشِ خرید که
-   قیمت دارد؛ یعنی «پنهان‌کردنِ قیمت» از طریقِ همان مدلِ استانداردِ
-   دسترسیِ فرم‌ها (roles.py) انجام می‌شود، نه یک مکانیزمِ تازه.
-۳) بدونِ مفهومِ توزین (آن فقط برایِ کالایِ وزنیِ فروشِ حضوری معنا دارد).
+هم‌الگو با pre_sales_fulfillment.py (همان زیرساخت warehouse_approved_at/
+warehouse_delivered_quantی ازپیش‌موجود)، با دو تفاوت عمده:
+۱) این‌جا برای PURCHASE_ORDER است، نه SALES_ORDER کانال پخش سرد --
+   و فقط وقتی Toggle PURCHASE_ORDER_GOODS_RECEIPT (تنظیمات بازرگانی)
+   برای شرکت روشن باشد چیزی نشان می‌دهد.
+۲) جدول ردیف‌ها عمداً هیچ ستون قیمتی ندارد — و چون این یک آیتم
+   ناوبری مستقل است (نه تبی درون فرم کامل سفارش خرید)، می‌توان به
+   نقش انباردار فقط دسترسی همین فرم را داد، نه فرم سفارش خرید که
+   قیمت دارد؛ یعنی «پنهان‌کردن قیمت» از طریق همان مدل استاندارد
+   دسترسی فرم‌ها (roles.py) انجام می‌شود، نه یک مکانیزم تازه.
+۳) بدون مفهوم توزین (آن فقط برای کالای وزنی فروش حضوری معنا دارد).
 """
 
 from __future__ import annotations
@@ -42,15 +42,15 @@ from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
-_COLUMNS = ["شماره", "تاریخ", "طرفِ حساب", "وضعیت", "عملیات"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی/تحویلی", "انبار", "مکان", "بچ/سریال/انقضا"]
+_COLUMNS = ["شماره", "تاریخ", "طرف حساب", "وضعیت", "عملیات"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدار سفارش", "مقدار دریافتی/تحویلی", "انبار", "مکان", "بچ/سریال/انقضا"]
 _BIN_COL, _TRACK_COL = 5, 6
 
 
 _DOC_TITLES = {
-    "PURCHASE_ORDER": "سفارشِ خرید", "SALES_ORDER": "سفارشِ فروش",
-    "CONSIGNMENT_IN": "امانیِ ورودی", "CONSIGNMENT_OUT": "امانیِ خروجی",
-    "PURCHASE_INVOICE": "فاکتورِ خرید",
+    "PURCHASE_ORDER": "سفارش خرید", "SALES_ORDER": "سفارش فروش",
+    "CONSIGNMENT_IN": "امانی ورودی", "CONSIGNMENT_OUT": "امانی خروجی",
+    "PURCHASE_INVOICE": "فاکتور خرید",
 }
 _ORDER_TYPES = ("PURCHASE_ORDER", "SALES_ORDER")
 # خروجِ کالا: بچ/سریال از موجودیِ همان انبار انتخاب می‌شود
@@ -62,9 +62,9 @@ _IN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN", "PURCHASE_INVOICE")
 def _status_label(doc) -> str:
     title = _DOC_TITLES.get(doc.document_type_code, "")
     if doc.warehouse_approved_at is None:
-        return f"{title} -- در انتظارِ تاییدِ انباردار"
+        return f"{title} -- در انتظار تایید انباردار"
     if doc.document_type_code not in _ORDER_TYPES:
-        return f"{title} -- تاییدِ انبار شد، آمادهٔ ثبتِ نهایی"
+        return f"{title} -- تایید انبار شد، آمادهٔ ثبت نهایی"
     if doc.document_type_code == "SALES_ORDER":
         return f"{title} -- حواله تایید شده، آمادهٔ تبدیل به فاکتور"
     return f"{title} -- رسید تایید شده، آمادهٔ تبدیل به فاکتور"
@@ -73,7 +73,7 @@ def _status_label(doc) -> str:
 class _GoodsReceiptDialog(QDialog):
     def __init__(self, parent: QWidget, document_id: int, company_id: int) -> None:
         super().__init__(parent)
-        self.setWindowTitle("بازکردنِ سند -- تاییدِ انبار (رسید/حواله)")
+        self.setWindowTitle("بازکردن سند — تایید انبار (رسید/حواله)")
         self.setMinimumWidth(900)
         self._document_id = document_id
         self._company_id = company_id
@@ -89,8 +89,8 @@ class _GoodsReceiptDialog(QDialog):
         layout.addWidget(self.header_label)
 
         hint = QLabel(
-            "مقدارِ واقعاً دریافت‌شده (خرید) یا تحویل‌شده (فروش) هر ردیف را وارد/ویرایش کنید -- اگر برابرِ مقدارِ سفارش بماند، "
-            "همان مقدارِ سفارش لحاظ می‌شود. برایِ کالایِ بچ/سریال‌دار، از «🏷 ردیابی» وارد/انتخاب کنید."
+            "مقدار واقعاً دریافت‌شده (خرید) یا تحویل‌شده (فروش) هر ردیف را وارد/ویرایش کنید — اگر برابر مقدار سفارش بماند، "
+            "همان مقدار سفارش لحاظ می‌شود. برای کالای بچ/سریال‌دار، از «🏷 ردیابی» وارد/انتخاب کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -111,7 +111,7 @@ class _GoodsReceiptDialog(QDialog):
         # هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد؛ فقط
         # انبارهایی که خودش انباردارشان است (فیلدِ «مسئولِ انبار») -- مدیر همه را.
         warehouse_row = QHBoxLayout()
-        warehouse_row.addWidget(QLabel("انبارِ پیش‌فرضِ همهٔ ردیف‌ها"))
+        warehouse_row.addWidget(QLabel("انبار پیش‌فرض همهٔ ردیف‌ها"))
         self.warehouse_combo = QComboBox()
         # R226: انتخابِ انبارِ پیش‌فرض، انبارِ همهٔ ردیف‌ها را هم عوض می‌کند؛
         # هر ردیف می‌تواند جداگانه انبارِ دیگری داشته باشد.
@@ -119,7 +119,7 @@ class _GoodsReceiptDialog(QDialog):
         warehouse_row.addWidget(self.warehouse_combo, stretch=1)
         layout.addLayout(warehouse_row)
 
-        self.save_button = QPushButton("💾 ذخیرهٔ مقادیرِ دریافتی/تحویلی")
+        self.save_button = QPushButton("💾 ذخیرهٔ مقادیر دریافتی/تحویلی")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self._save_quantities)
         layout.addWidget(self.save_button)
@@ -164,7 +164,7 @@ class _GoodsReceiptDialog(QDialog):
         self.warehouse_combo.setEnabled(doc.warehouse_approved_at is None and not converted)
 
         self.header_label.setText(
-            f"{_DOC_TITLES.get(doc.document_type_code, 'سند')}ِ شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))} -- "
+            f"{_DOC_TITLES.get(doc.document_type_code, 'سند')} شمارهٔ {numerals.to_persian_digits(str(doc.document_no))} -- "
             f"{dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)} -- "
             f"{numerals.format_jalali_date(doc.document_date)}"
         )
@@ -213,21 +213,21 @@ class _GoodsReceiptDialog(QDialog):
                 )
                 self.lines_table.setCellWidget(row_index, _TRACK_COL, track_button)
 
-        word = "حوالهٔ انبار" if doc.document_type_code in _OUT_TYPES else "رسیدِ کالا"
+        word = "حوالهٔ انبار" if doc.document_type_code in _OUT_TYPES else "رسید کالا"
         self.save_button.setEnabled(not converted and not is_consignment)
         if is_consignment:
             self.warehouse_combo.setEnabled(False)
 
         if converted:
-            self.receipt_button.setText(f"✅ تاییدِ {word} (قطعی -- به فاکتور تبدیل شده)")
+            self.receipt_button.setText(f"✅ تایید {word} (قطعی — به فاکتور تبدیل شده)")
             self.receipt_button.setEnabled(False)
             return
 
         if doc.warehouse_approved_at is None:
-            self.receipt_button.setText(f"✅ تاییدِ {word}")
+            self.receipt_button.setText(f"✅ تایید {word}")
             self.receipt_button.setObjectName("primaryButton")
         else:
-            self.receipt_button.setText(f"↩️ بازگشتِ تاییدِ {word}")
+            self.receipt_button.setText(f"↩️ بازگشت تایید {word}")
             self.receipt_button.setObjectName("dangerButton")
         self.receipt_button.setEnabled(True)
         self.receipt_button.setStyleSheet("")
@@ -235,7 +235,7 @@ class _GoodsReceiptDialog(QDialog):
         self.receipt_button.style().polish(self.receipt_button)
 
     def _bins_of(self, warehouse_id) -> list[tuple[int, str]]:
-        """محل‌هایِ برگِ فعالِ انبار (کدِ کامل)."""
+        """محل‌های برگ فعال انبار (کد کامل)."""
         if warehouse_id is None:
             return []
         if warehouse_id not in self._bin_cache:
@@ -265,10 +265,10 @@ class _GoodsReceiptDialog(QDialog):
         combo.setMinimumWidth(150)
         self._fill_bin_combo(combo, wh_combo.currentData(), ln.bin_location_id)
         combo.setEnabled(editable)
-        combo.setToolTip("مکانِ قرارگیریِ کالا در انبار -- برایِ انبارِ دارایِ مکان‌بندی الزامی است.")
+        combo.setToolTip("مکان قرارگیری کالا در انبار — برای انبار دارای مکان‌بندی الزامی است.")
         wh_combo.currentIndexChanged.connect(lambda _i, c=combo, w=wh_combo: self._fill_bin_combo(c, w.currentData(), None))
         map_button = QPushButton("نقشه")
-        map_button.setToolTip("انتخابِ مکان رویِ نقشهٔ انبار (با پیشنهادِ جانمایی)")
+        map_button.setToolTip("انتخاب مکان روی نقشهٔ انبار (با پیشنهاد جانمایی)")
         map_button.setEnabled(editable)
         map_button.clicked.connect(lambda _c=False, line=ln, it=item, c=combo, w=wh_combo: self._pick_on_map(line, it, c, w))
         row.addWidget(combo, stretch=1)
@@ -281,7 +281,7 @@ class _GoodsReceiptDialog(QDialog):
 
         warehouse_id = wh_combo.currentData()
         if warehouse_id is None:
-            self.status_label.setText("ابتدا انبارِ ردیف را انتخاب کنید.")
+            self.status_label.setText("ابتدا انبار ردیف را انتخاب کنید.")
             return
         field = self._qty_fields.get(line.line_id)
         qty = decimal.Decimal(str(field.value())) if field is not None else line.quantity
@@ -351,12 +351,12 @@ class PurchaseGoodsReceiptScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(14)
 
-        title = QLabel("تاییدِ انبار -- رسید/حوالهٔ سفارش‌هایِ خرید و فروش و امانیِ ورودی/خروجی")
+        title = QLabel("تایید انبار — رسید/حوالهٔ سفارش‌های خرید و فروش و امانی ورودی/خروجی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "سفارش‌هایِ خرید (رسید) و فروش (حواله) که آمادهٔ تاییدِ انبار هستند و هنوز به فاکتور تبدیل نشده‌اند، "
-            "به‌همراهِ امانی‌ها -- بدونِ قیمت، فقط مقدار. با «📂 بازکردن» مقدار، انبار و بچ/سریالِ هر ردیف را ثبت و تایید کنید."
+            "سفارش‌های خرید (رسید) و فروش (حواله) که آمادهٔ تایید انبار هستند و هنوز به فاکتور تبدیل نشده‌اند، "
+            "به‌همراه امانی‌ها — بدون قیمت، فقط مقدار. با «📂 بازکردن» مقدار، انبار و بچ/سریال هر ردیف را ثبت و تایید کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -376,7 +376,7 @@ class PurchaseGoodsReceiptScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.status_label)
 
         self.set_field_help([
-            (self.table, "سفارش‌هایِ خریدِ تاییدشده/تصویب‌شده‌ای که هنوز به فاکتور تبدیل نشده‌اند -- با «بازکردن»، مقدارِ دریافتی و تاییدِ رسید انجام می‌شود."),
+            (self.table, "سفارش‌های خرید تاییدشده/تصویب‌شده‌ای که هنوز به فاکتور تبدیل نشده‌اند — با «بازکردن»، مقدار دریافتی و تایید رسید انجام می‌شود."),
         ])
 
     def _company_id(self) -> int | None:
@@ -394,8 +394,8 @@ class PurchaseGoodsReceiptScreen(FieldHelpMixin, QWidget):
         if not self._queue:
             self.status_label.setObjectName("sectionHint")
             self.status_label.setText(
-                "موردی نیست -- یا سندِ در انتظار وجود ندارد، یا «تاییدِ رسیدِ کالا»/«تاییدِ حوالهٔ انبار» "
-                "در تنظیماتِ بازرگانی روشن نیست، یا شما انباردارِ (مسئولِ) هیچ انباری نیستید."
+                "موردی نیست — یا سند در انتظار وجود ندارد، یا «تایید رسید کالا»/«تایید حوالهٔ انبار» "
+                "در تنظیمات بازرگانی روشن نیست، یا شما انباردار (مسئول) هیچ انباری نیستید."
             )
         self.table.setRowCount(len(self._queue))
         for row_index, doc in enumerate(self._queue):

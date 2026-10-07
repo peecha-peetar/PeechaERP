@@ -27,7 +27,7 @@ scr.refresh()
 scr.select_type_for_new_entry(("person", dd.CUSTOMER_GROUP_CODE))
 check(scr.parent_combo.findData(region) >= 0, "parent that already has a child stays selectable")
 scr.parent_combo.setCurrentIndex(scr.parent_combo.findData(region))
-check("سطحِ 2 از 2" in scr.level_info_label.text(), "level info shows leaf level under parent")
+check("سطح 2 از 2" in scr.level_info_label.text(), "level info shows leaf level under parent")
 scr.edit_detail_account(child1)
 check(scr._current_level_no() == 2 and scr.parent_combo.currentData() == region, "editing a level-2 customer keeps its level")
 check(scr.person_fields_label.isVisibleTo(scr), "leaf customer shows its fields on edit")
@@ -54,31 +54,31 @@ from peecha.services import master_data, commercial_pricing as pricing, commerci
 from peecha.services.fixed_assets import common as fac
 from peecha.db.models import fixed_assets as fam
 from peecha.db.models.commercial import PriceList, PriceListItem
-gid = fac.save_group(company_id, "G1", "گروهِ ۱")
-fac.save_group(company_id, "G1", "گروهِ یک", group_id=gid)
-check([g.name for g in fac.list_groups(company_id) if g.group_id == gid] == ["گروهِ یک"], "FA group edit")
+gid = fac.save_group(company_id, "G1", "گروه ۱")
+fac.save_group(company_id, "G1", "گروه یک", group_id=gid)
+check([g.name for g in fac.list_groups(company_id) if g.group_id == gid] == ["گروه یک"], "FA group edit")
 check(master_data.delete_or_deactivate(fam.AssetGroup, gid, company_id) == master_data.DELETED, "FA group delete")
-lid = fac.save_location(company_id, "L1", "اتاقِ ۱")
+lid = fac.save_location(company_id, "L1", "اتاق ۱")
 check(master_data.delete_or_deactivate(fam.AssetLocation, lid, company_id) == master_data.DELETED, "FA location delete")
 check(fx.raises(lambda: master_data.delete_or_deactivate(fam.AssetGroup, 999999, company_id), "پیدا نشد"), "missing row message")
 
 pricing.create_channel(company_id, "WEB", "وب", "ONLINE")
-pricing.update_channel(company_id, "WEB", "فروشگاهِ وب", "ONLINE", False)
+pricing.update_channel(company_id, "WEB", "فروشگاه وب", "ONLINE", False)
 ch = next(c for c in pricing.list_channels(company_id) if c.channel_code == "WEB")
-check(ch.name == "فروشگاهِ وب" and not ch.is_active, "channel update")
-pl = pricing.create_price_list(company_id, "PL1", "فهرستِ ۱", "SALES", company.base_currency_id, today)
+check(ch.name == "فروشگاه وب" and not ch.is_active, "channel update")
+pl = pricing.create_price_list(company_id, "PL1", "فهرست ۱", "SALES", company.base_currency_id, today)
 check(fx.raises(lambda: pricing.create_price_list(company_id, "PL1", "x", "SALES", company.base_currency_id, today), ""),
       "duplicate price list code rejected")
-pricing.update_price_list(company_id, pl, "فهرستِ اصلی", False)
+pricing.update_price_list(company_id, pl, "فهرست اصلی", False)
 row = next(p for p in pricing.list_price_lists(company_id) if p.price_list_id == pl)
-check(row.name == "فهرستِ اصلی" and not row.is_active, "price list update")
+check(row.name == "فهرست اصلی" and not row.is_active, "price list update")
 check(master_data.delete_or_deactivate(PriceList, pl, company_id, children=[(PriceListItem, "price_list_id")])
       == master_data.DELETED, "price list delete with its items")
 
-term = pos.create_terminal(company_id, wh_fg, "T1", "صندوقِ ۱")
-pos.update_terminal(company_id, term, wh_rm, "صندوقِ اصلی", False)
+term = pos.create_terminal(company_id, wh_fg, "T1", "صندوق ۱")
+pos.update_terminal(company_id, term, wh_rm, "صندوق اصلی", False)
 t = next(t for t in pos.list_terminals(company_id) if t.terminal_id == term)
-check(t.name == "صندوقِ اصلی" and t.warehouse_id == wh_rm and not t.is_active, "POS terminal update")
+check(t.name == "صندوق اصلی" and t.warehouse_id == wh_rm and not t.is_active, "POS terminal update")
 
 # ۳) داشبورد: نمایِ مدیریتی + تب‌هایِ تولید/دارایی + پیوند به داشبوردهایِ ماژول
 from peecha import nav_catalog
@@ -94,7 +94,7 @@ class _MW:
         opened.append(code)
 dash = DashboardScreen(_MW())
 titles = [dash.tabs.tabText(i) for i in range(dash.tabs.count())]
-check({"کلی", "تولید", "دارایی‌هایِ ثابت", "منابعِ‌انسانی"} <= set(titles), f"dashboard tabs {titles}")
+check({"کلی", "تولید", "دارایی‌های ثابت", "منابع‌انسانی"} <= set(titles), f"dashboard tabs {titles}")
 errors = []
 for i in range(dash.tabs.count()):
     try:

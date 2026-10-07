@@ -1,10 +1,10 @@
-"""صفحهٔ گزارشاتِ تدارکات -- R233. یک صفحهٔ عمومی برایِ همهٔ گزارش‌هایِ
-services/purchase_reports.py (هر آیتمِ منو یک نمونه با کدِ گزارشِ خودش)؛
-فیلتر/چاپ/PDF/اکسل/CSV/کپی/ستون‌ها از ReportScreenBase، و دابل‌کلیک رویِ ردیفِ
-سندی، خودِ سند را باز می‌کند.
+"""صفحهٔ گزارشات تدارکات — R233. یک صفحهٔ عمومی برای همهٔ گزارش‌های
+services/purchase_reports.py (هر آیتم منو یک نمونه با کد گزارش خودش)؛
+فیلتر/چاپ/PDF/اکسل/CSV/کپی/ستون‌ها از ReportScreenBase، و دابل‌کلیک روی ردیف
+سندی، خود سند را باز می‌کند.
 
-R239: مرتب‌سازی با کلیک رویِ سرِ ستون، گروه‌بندی با جمعِ هر گروه، نماهایِ
-ذخیره‌شده، نمودارِ نتیجه، و Drill-down از ردیفِ تجمیعی (تامین‌کننده/کالا/گروه)."""
+R239: مرتب‌سازی با کلیک روی سر ستون، گروه‌بندی با جمع هر گروه، نماهای
+ذخیره‌شده، نمودار نتیجه، و ریزنمایی از ردیف تجمیعی (تامین‌کننده/کالا/گروه)."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def _sort_key(value):
 
 
 class ReportChartDialog(QDialog):
-    """نمودارِ نتیجهٔ گزارش: یک ستونِ برچسب × یک ستونِ عددی (۱۵ موردِ بزرگ‌تر)."""
+    """نمودار نتیجهٔ گزارش: یک ستون برچسب × یک ستون عددی (۱۵ مورد بزرگ‌تر)."""
 
     def __init__(self, parent, title: str, result: reports_service.ReportResult) -> None:
         super().__init__(parent)
@@ -208,7 +208,7 @@ class PurchaseReportScreen(ReportScreenBase):
         self.status_combo.setVisible(False)
         for label in self.findChildren(QLabel):
             text = label.text()
-            if text == "وضعیتِ سند:" or (mode == "none" and text in ("از تاریخ:", "تا تاریخ:")) \
+            if text == "وضعیت سند:" or (mode == "none" and text in ("از تاریخ:", "تا تاریخ:")) \
                     or (mode == "as_of" and text == "از تاریخ:"):
                 label.setVisible(False)
         self.date_from.setVisible(mode == "range")
@@ -229,14 +229,14 @@ class PurchaseReportScreen(ReportScreenBase):
         self._filter_widgets = {
             "fa_category": ("طبقه:", self.fa_category_combo),
             "fa_location": ("محل:", self.fa_location_combo),
-            "cost_center": ("مرکزِ هزینه:", self.cost_center_combo_f),
+            "cost_center": ("مرکز هزینه:", self.cost_center_combo_f),
             "account": ("حساب:", self.account_combo),
             "detail": ("تفصیلی:", self.detail_combo),
             "brand": ("برند:", self.brand_combo),
             "branch": ("شعبه:", self.branch_combo),
             "supplier": ("تامین‌کننده:" if side == "PURCHASE" else "مشتری:", self.supplier_combo),
             "item": ("کالا:", self.item_combo),
-            "category": ("گروهِ کالا:", self.category_combo),
+            "category": ("گروه کالا:", self.category_combo),
             "warehouse": ("انبار:", self.warehouse_combo),
         }
         for key in self._filters_used:
@@ -274,7 +274,7 @@ class PurchaseReportScreen(ReportScreenBase):
             tools.addSpacing(24)
         tools.addWidget(QLabel("گروه‌بندی:"))
         self.group_combo = QComboBox()
-        self.group_combo.addItem("— بدونِ گروه‌بندی —", None)
+        self.group_combo.addItem("— بدون گروه‌بندی —", None)
         self.group_combo.currentIndexChanged.connect(lambda _i: self._rebuild())
         tools.addWidget(self.group_combo)
         chart_button = QPushButton("نمودار")
@@ -288,19 +288,19 @@ class PurchaseReportScreen(ReportScreenBase):
             map_button.clicked.connect(lambda: self.show_on_map(self.table.currentRow()))
             tools.addWidget(map_button)
         tools.addSpacing(24)
-        tools.addWidget(QLabel("نمایِ ذخیره‌شده:"))
+        tools.addWidget(QLabel("نمای ذخیره‌شده:"))
         self.view_combo = QComboBox()
         self.view_combo.setMinimumWidth(180)
         self.view_combo.activated.connect(lambda _i: self.load_view(self.view_combo.currentData()))
         tools.addWidget(self.view_combo)
         self.shared_check = QCheckBox("اشتراکی")
-        self.shared_check.setToolTip("نما برایِ همهٔ کاربرانِ شرکت هم نمایش داده شود")
+        self.shared_check.setToolTip("نما برای همهٔ کاربران شرکت هم نمایش داده شود")
         tools.addWidget(self.shared_check)
         save_view = QPushButton("ذخیرهٔ نما")
         save_view.setObjectName("flatButton")
         save_view.clicked.connect(self._on_save_view)
         tools.addWidget(save_view)
-        delete_view = QPushButton("حذفِ نما")
+        delete_view = QPushButton("حذف نما")
         delete_view.setObjectName("flatButton")
         delete_view.clicked.connect(lambda: self.delete_view(self.view_combo.currentData()))
         tools.addWidget(delete_view)
@@ -336,20 +336,20 @@ class PurchaseReportScreen(ReportScreenBase):
         header.setSectionsClickable(True)
         header.sectionClicked.connect(self._on_header_clicked)
         self.table.cellDoubleClicked.connect(self._open_row)
-        self.table.setToolTip("دابل‌کلیک: بازکردنِ سند یا ریزِ ردیفِ تجمیعی. کلیک رویِ سرِ ستون: مرتب‌سازی.")
+        self.table.setToolTip("دابل‌کلیک: بازکردن سند یا ریز ردیف تجمیعی. کلیک روی سر ستون: مرتب‌سازی.")
         persist_column_widths(self.table, f"{side.lower() if side in ('ACCOUNTING', 'INVENTORY') else 'purchase' if side == 'PURCHASE' else 'sales'}"
                                           f"Report/{report_code}")
         self.add_field_help([
-            (self.supplier_combo, "فقط اسنادِ همین طرفِ حساب. با تایپِ کد/نام جستجو کنید."),
-            (self.item_combo, "فقط ردیف‌هایِ همین کالا."),
-            (self.category_combo, "فقط کالاهایِ این گروه."),
-            (self.warehouse_combo, "فقط ردیف‌هایِ این انبار."),
+            (self.supplier_combo, "فقط اسناد همین طرف حساب. با تایپ کد/نام جستجو کنید."),
+            (self.item_combo, "فقط ردیف‌های همین کالا."),
+            (self.category_combo, "فقط کالاهای این گروه."),
+            (self.warehouse_combo, "فقط ردیف‌های این انبار."),
             (self.account_combo, "فقط این حساب و همهٔ زیرحساب‌هایش."),
-            (self.detail_combo, "فقط ردیف‌هایی که این حسابِ تفصیلی را دارند."),
-            (self.brand_combo, "فقط کالاهایِ این برند."),
-            (self.branch_combo, "فقط انبارهایِ این شعبه."),
-            (self.group_combo, "ردیف‌ها بر اساسِ این ستون گروه و برایِ هر گروه جمع زده می‌شوند."),
-            (self.view_combo, "فیلترها، گزینه‌ها، مرتب‌سازی، گروه‌بندی و ستون‌هایِ پنهانِ ذخیره‌شده با یک نام."),
+            (self.detail_combo, "فقط ردیف‌هایی که این حساب تفصیلی را دارند."),
+            (self.brand_combo, "فقط کالاهای این برند."),
+            (self.branch_combo, "فقط انبارهای این شعبه."),
+            (self.group_combo, "ردیف‌ها بر اساس این ستون گروه و برای هر گروه جمع زده می‌شوند."),
+            (self.view_combo, "فیلترها، گزینه‌ها، مرتب‌سازی، گروه‌بندی و ستون‌های پنهان ذخیره‌شده با یک نام."),
         ])
 
     # ------------------------------------------------------------------
@@ -391,7 +391,7 @@ class PurchaseReportScreen(ReportScreenBase):
 
     def apply_preset(self, date_from: datetime.date | None = None, date_to: datetime.date | None = None,
                      options: dict | None = None, **filters) -> None:
-        """بازشدن از داشبورد/Drill-down با فیلترهایِ ازپیش‌تعیین‌شده (پس از refresh)."""
+        """بازشدن از داشبورد/ریزنمایی با فیلترهای ازپیش‌تعیین‌شده (پس از refresh)."""
         if date_from is not None:
             self.date_from.setDate(date_from)
         if date_to is not None:
@@ -469,7 +469,7 @@ class PurchaseReportScreen(ReportScreenBase):
         current = self.group_combo.currentData()
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
-        self.group_combo.addItem("— بدونِ گروه‌بندی —", None)
+        self.group_combo.addItem("— بدون گروه‌بندی —", None)
         for i, (header, kind) in enumerate(self._result.columns if self._result else []):
             if kind in _LABEL_KINDS:
                 self.group_combo.addItem(header, i)
@@ -507,7 +507,7 @@ class PurchaseReportScreen(ReportScreenBase):
                 subtotal = [""] * len(kinds)
                 for c in summable:
                     subtotal[c] = self._fmt(sum((result.rows[i][c] or 0 for i in members), decimal.Decimal(0)), kinds[c])
-                subtotal[0] = f"جمعِ {label} ({numerals.to_persian_digits(str(len(members)))})"
+                subtotal[0] = f"جمع {label} ({numerals.to_persian_digits(str(len(members)))})"
                 rows.append(subtotal)
                 ids.append(None)
                 bold.append(True)
@@ -539,11 +539,11 @@ class PurchaseReportScreen(ReportScreenBase):
         worker.done.connect(self._on_worker_done)
         worker.finished.connect(lambda w=worker: self._workers.remove(w) if w in self._workers else None)
         self._workers.append(worker)
-        self.busy_label.setText("در حالِ محاسبهٔ گزارش…")
+        self.busy_label.setText("در حال محاسبهٔ گزارش…")
         worker.start()
 
     def wait_for_report(self, timeout_ms: int = 60000) -> None:
-        """برایِ تست/اسکریپت: صبر تا پایانِ اجرایِ پس‌زمینه و اعمالِ نتیجه."""
+        """برای تست/اسکریپت: صبر تا پایان اجرای پس‌زمینه و اعمال نتیجه."""
         from PySide6.QtCore import QCoreApplication
 
         for worker in list(self._workers):
@@ -558,7 +558,7 @@ class PurchaseReportScreen(ReportScreenBase):
         try:
             self._headers, self._all_rows, self._footer = self._apply_result(result, error)
         except Exception as exc:  # noqa: BLE001
-            self.hint_label.setText(f"{self._def.hint}\n⚠ خطا در اجرایِ گزارش: {exc}")
+            self.hint_label.setText(f"{self._def.hint}\n⚠ خطا در اجرای گزارش: {exc}")
             self._result = None
             self._headers, self._all_rows, self._footer = [], [], None
         self._apply_search_filter()
@@ -590,7 +590,7 @@ class PurchaseReportScreen(ReportScreenBase):
         finally:
             self._row_bold = saved_bold
         self.page_label.setText(numerals.to_persian_digits(
-            f"ردیفِ {start + 1 if total else 0}–{start + len(shown)} از {total}" + (f" (صفحهٔ {self._page + 1}/{pages})" if pages > 1 else "")))
+            f"ردیف {start + 1 if total else 0}–{start + len(shown)} از {total}" + (f" (صفحهٔ {self._page + 1}/{pages})" if pages > 1 else "")))
         self.prev_page_button.setEnabled(self._page > 0)
         self.next_page_button.setEnabled(self._page < pages - 1)
 
@@ -675,7 +675,7 @@ class PurchaseReportScreen(ReportScreenBase):
         self.view_combo.setCurrentIndex(self.view_combo.findData(name))
 
     def _on_save_view(self) -> None:
-        name, ok = QInputDialog.getText(self, "ذخیرهٔ نما", "نامِ نما:")
+        name, ok = QInputDialog.getText(self, "ذخیرهٔ نما", "نام نما:")
         if ok and name.strip():
             self.save_view(name.strip())
 
@@ -687,7 +687,7 @@ class PurchaseReportScreen(ReportScreenBase):
         if view is None:
             return
         if not view.is_mine:
-            QMessageBox.information(self, "حذفِ نما", "نمایِ اشتراکیِ دیگران فقط توسطِ سازنده‌اش حذف می‌شود.")
+            QMessageBox.information(self, "حذف نما", "نمای اشتراکی دیگران فقط توسط سازنده‌اش حذف می‌شود.")
             return
         views_service.delete_view(self._company_id(), view.view_id, app_session.current_user.user_id)
         self._reload_views()
@@ -800,7 +800,7 @@ class PurchaseReportScreen(ReportScreenBase):
         return None
 
     def show_on_map(self, row: int) -> bool:
-        """R248: کالایِ ردیف → محل‌هایش رویِ نقشه (هایلایت)؛ فقط انبار → نقشهٔ همان انبار."""
+        """R248: کالای ردیف → محل‌هایش روی نقشه (هایلایت)؛ فقط انبار → نقشهٔ همان انبار."""
         if self._main_window is None:
             return False
         raw = self.raw_row(row) if row >= 0 else None
@@ -823,7 +823,7 @@ class PurchaseReportScreen(ReportScreenBase):
         return True
 
     def inventory_drill_target(self, raw: list) -> tuple[str, dict] | None:
-        """ردیفِ تجمیعیِ گزارشِ انبار: کالا (و انبارِ همان ردیف) → کارتکس؛ فقط انبار/گروه → موجودیِ لحظه‌ای با همان فیلتر."""
+        """ردیف تجمیعی گزارش انبار: کالا (و انبار همان ردیف) → کاردکس؛ فقط انبار/گروه → موجودی لحظه‌ای با همان فیلتر."""
         found: dict = {}
         for cell in raw:
             if not isinstance(cell, str) or " — " not in cell:
@@ -842,7 +842,7 @@ class PurchaseReportScreen(ReportScreenBase):
         return None
 
     def _account_drill_target(self, raw: list) -> tuple[str, dict] | None:
-        """ردیفِ تجمیعیِ گزارشِ حسابداری: اولین برچسبِ حساب → گردش و ماندهٔ ماهانهٔ همان حساب."""
+        """ردیف تجمیعی گزارش حسابداری: اولین برچسب حساب → گردش و ماندهٔ ماهانهٔ همان حساب."""
         for cell in raw:
             if isinstance(cell, str) and " — " in cell:
                 index = self.account_combo.findText(numerals.to_persian_digits(cell))

@@ -1,13 +1,13 @@
-"""ترمینال‌ها و شیفت‌هایِ صندوق (مرحلهٔ ۷) — بازکردن/بستنِ شیفت، آزادسازیِ
-مغایرت، و تنظیماتِ فاکتورِ صندوق (تک‌فروشی). طبقِ درخواستِ صریح
-(«اصطلاحِ جلسه گنگ است»)، برچسبِ نمایشی «شیفت» است -- شناسه‌هایِ داخلیِ
-کد (session_id, PosSession) بدونِ تغییر مانده‌اند.
+"""ترمینال‌ها و شیفت‌های صندوق (مرحلهٔ ۷) — بازکردن/بستن شیفت، آزادسازی
+مغایرت، و تنظیمات فاکتور صندوق (تک‌فروشی). طبق درخواست صریح
+(«اصطلاح جلسه گنگ است»)، برچسب نمایشی «شیفت» است — شناسه‌های داخلی
+کد (session_id, PosSession) بدون تغییر مانده‌اند.
 
-طبقِ بازخوردِ صریحِ کاربر («منویِ تازه اضافه نکن -- همه‌یِ تنظیماتِ
-تک‌فروشی باید همین‌جا، در تب‌هایِ مختلف بیاید»)، هیچ نویِ جداگانه‌ای
-برایِ تنظیماتِ POS در ناوبری وجود ندارد -- گروه‌هایِ POS و اندازهٔ
-کلیدهایِ فوری هم به‌عنوانِ تب در همین صفحه (بخشِ «تنظیماتِ تک‌فروشی»)
-جا گرفته‌اند، نه یک صفحه/منویِ مستقل."""
+طبق بازخورد صریح کاربر («منوی تازه اضافه نکن — همهٔ تنظیمات
+تک‌فروشی باید همین‌جا، در تب‌های مختلف بیاید»)، هیچ نوی جداگانه‌ای
+برای تنظیمات POS در ناوبری وجود ندارد — گروه‌های POS و اندازهٔ
+کلیدهای فوری هم به‌عنوان تب در همین صفحه (بخش «تنظیمات تک‌فروشی»)
+جا گرفته‌اند، نه یک صفحه/منوی مستقل."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         outer.setSpacing(16)
 
         left = QVBoxLayout()
-        title = QLabel("ترمینال‌هایِ صندوق")
+        title = QLabel("ترمینال‌های صندوق")
         title.setObjectName("pageTitle")
         left.addWidget(title)
 
@@ -92,22 +92,22 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         add_terminal_button = QPushButton("➕")
         add_terminal_button.setObjectName("primaryIconButton")
         add_terminal_button.setFixedWidth(48)
-        add_terminal_button.setToolTip("ترمینالِ تازه")
+        add_terminal_button.setToolTip("ترمینال تازه")
         add_terminal_button.clicked.connect(self._add_terminal)
         new_terminal_box.addWidget(add_terminal_button)
         # R276: ویرایش/حذفِ ترمینالِ انتخاب‌شده
         save_terminal_button = QPushButton("💾")
         save_terminal_button.setObjectName("iconButton")
         save_terminal_button.setFixedWidth(44)
-        save_terminal_button.setToolTip("ذخیرهٔ تغییراتِ ترمینالِ انتخاب‌شده (نام/انبار)")
+        save_terminal_button.setToolTip("ذخیرهٔ تغییرات ترمینال انتخاب‌شده (نام/انبار)")
         save_terminal_button.clicked.connect(self._update_terminal)
         new_terminal_box.addWidget(save_terminal_button)
-        delete_terminal_button = delete_button("حذفِ ترمینالِ انتخاب‌شده (اگر سابقه دارد غیرفعال می‌شود)")
+        delete_terminal_button = delete_button("حذف ترمینال انتخاب‌شده (اگر سابقه دارد غیرفعال می‌شود)")
         delete_terminal_button.clicked.connect(self._delete_terminal)
         new_terminal_box.addWidget(delete_terminal_button)
         left.addLayout(new_terminal_box)
 
-        settings_title = QLabel("تنظیماتِ فاکتورِ صندوق (تک‌فروشی)")
+        settings_title = QLabel("تنظیمات فاکتور صندوق (تک‌فروشی)")
         settings_title.setObjectName("sectionTitle")
         left.addWidget(settings_title)
 
@@ -116,7 +116,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         general_tab = QWidget()
         general_layout = QVBoxLayout(general_tab)
         settings_box = QHBoxLayout()
-        settings_box.addWidget(QLabel("مشتریِ متفرقهٔ پیش‌فرض"))
+        settings_box.addWidget(QLabel("مشتری متفرقهٔ پیش‌فرض"))
         self.guest_customer_combo = QComboBox()
         settings_box.addWidget(self.guest_customer_combo, stretch=1)
         settings_box.addWidget(QLabel("آستانهٔ مغایرت"))
@@ -136,7 +136,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
 
         retail_tab = QWidget()
         retail_layout = QVBoxLayout(retail_tab)
-        quick_settings_title = QLabel("اندازه/جهتِ کلیدهایِ فوریِ صفحه‌یِ فروش (سراسریِ شرکت -- نه به‌ازایِ هر کاربر)")
+        quick_settings_title = QLabel("اندازه/جهت کلیدهای فوری صفحهٔ فروش (سراسری شرکت — نه به‌ازای هر کاربر)")
         quick_settings_title.setObjectName("sectionHint")
         quick_settings_title.setWordWrap(True)
         retail_layout.addWidget(quick_settings_title)
@@ -153,7 +153,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self.quick_button_font_size_field = QSpinBox()
         self.quick_button_font_size_field.setRange(6, 32)
         quick_settings_box.addWidget(self.quick_button_font_size_field)
-        quick_settings_box.addWidget(QLabel("تعدادِ ستون"))
+        quick_settings_box.addWidget(QLabel("تعداد ستون"))
         self.quick_grid_columns_field = QSpinBox()
         self.quick_grid_columns_field.setRange(2, 12)
         quick_settings_box.addWidget(self.quick_grid_columns_field)
@@ -170,7 +170,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         # کنترل‌هایِ بالا (سراسریِ شرکت)، این دو فقط رویِ حسابِ کاربرِ
         # جاری اثر می‌گذارد (PosCashierSettings.quick_button_*_override) --
         # قبلاً این دو اسپین‌باکس مستقیماً در commercial_pos_sale.py بود.
-        my_size_title = QLabel("اندازهٔ کلیدهایِ فوریِ من (فقط برایِ حسابِ جاری -- بازنویسیِ اندازهٔ سراسریِ بالا)")
+        my_size_title = QLabel("اندازهٔ کلیدهای فوری من (فقط برای حساب جاری — بازنویسی اندازهٔ سراسری بالا)")
         my_size_title.setObjectName("sectionHint")
         my_size_title.setWordWrap(True)
         retail_layout.addWidget(my_size_title)
@@ -188,7 +188,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         save_my_size_button = QPushButton("💾")
         save_my_size_button.setObjectName("iconButton")
         save_my_size_button.setFixedWidth(44)
-        save_my_size_button.setToolTip("ذخیره (فقط برایِ من)")
+        save_my_size_button.setToolTip("ذخیره (فقط برای من)")
         save_my_size_button.clicked.connect(self._save_my_quick_button_size)
         my_size_box.addWidget(save_my_size_button)
         my_size_box.addStretch(1)
@@ -197,12 +197,12 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی
         # در لوکیشن‌هایِ مختلفِ صفحه و ترازبندی‌هایِ مختلف قرار بگیرد»).
         layout_settings_box = QHBoxLayout()
-        layout_settings_box.addWidget(QLabel("جایگاهِ منویِ دسترسیِ‌سریع"))
+        layout_settings_box.addWidget(QLabel("جایگاه منوی دسترسی‌سریع"))
         self.quick_access_position_combo = QComboBox()
-        self.quick_access_position_combo.addItem("چپِ صفحه", "LEFT")
-        self.quick_access_position_combo.addItem("راستِ صفحه", "RIGHT")
+        self.quick_access_position_combo.addItem("چپ صفحه", "LEFT")
+        self.quick_access_position_combo.addItem("راست صفحه", "RIGHT")
         layout_settings_box.addWidget(self.quick_access_position_combo)
-        layout_settings_box.addWidget(QLabel("جهتِ چیدمانِ کلیدها"))
+        layout_settings_box.addWidget(QLabel("جهت چیدمان کلیدها"))
         self.quick_access_orientation_combo = QComboBox()
         self.quick_access_orientation_combo.addItem("افقی", "HORIZONTAL")
         self.quick_access_orientation_combo.addItem("عمودی", "VERTICAL")
@@ -220,13 +220,13 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         # عمومیِ فاکتور/تنظیماتِ تک‌فروشی) -- فقط مواردِ واقعاً قابلِ‌اجرا
         # و مرتبط با دامنهٔ فعلی، طبقِ لیست/پیشنهادِ ارائه‌شده به کاربر.
         toggles_box = QHBoxLayout()
-        self.allow_price_override_checkbox = QCheckBox("اجازهٔ تغییرِ قیمت توسط کاربر")
+        self.allow_price_override_checkbox = QCheckBox("اجازهٔ تغییر قیمت توسط کاربر")
         toggles_box.addWidget(self.allow_price_override_checkbox)
-        self.allow_discount_override_checkbox = QCheckBox("اجازهٔ تغییرِ تخفیف توسط کاربر")
+        self.allow_discount_override_checkbox = QCheckBox("اجازهٔ تغییر تخفیف توسط کاربر")
         toggles_box.addWidget(self.allow_discount_override_checkbox)
-        self.quick_access_enabled_checkbox = QCheckBox("نمایشِ منویِ دسترسیِ‌سریع")
+        self.quick_access_enabled_checkbox = QCheckBox("نمایش منوی دسترسی‌سریع")
         toggles_box.addWidget(self.quick_access_enabled_checkbox)
-        self.scan_beep_enabled_checkbox = QCheckBox("بوقِ تاییدِ اسکن/افزودن")
+        self.scan_beep_enabled_checkbox = QCheckBox("بوق تایید اسکن/افزودن")
         toggles_box.addWidget(self.scan_beep_enabled_checkbox)
         toggles_box.addStretch(1)
         retail_layout.addLayout(toggles_box)
@@ -234,13 +234,13 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح («جایی باشه که بتوان نمایش یا عدمِ نمایشِ
         # بخش‌هایِ فاکتورِ تک‌فروشی را انتخاب کرد»).
         visibility_box = QHBoxLayout()
-        self.show_price_list_field_checkbox = QCheckBox("نمایشِ فیلدِ «فهرستِ قیمت»")
+        self.show_price_list_field_checkbox = QCheckBox("نمایش فیلد «فهرست قیمت»")
         visibility_box.addWidget(self.show_price_list_field_checkbox)
-        self.show_tax_discount_breakdown_checkbox = QCheckBox("نمایشِ ریزِ تخفیف/مالیات در فوتر")
+        self.show_tax_discount_breakdown_checkbox = QCheckBox("نمایش ریز تخفیف/مالیات در فوتر")
         visibility_box.addWidget(self.show_tax_discount_breakdown_checkbox)
-        self.show_customer_credit_warning_checkbox = QCheckBox("نمایشِ هشدارِ سقفِ اعتبار")
+        self.show_customer_credit_warning_checkbox = QCheckBox("نمایش هشدار سقف اعتبار")
         visibility_box.addWidget(self.show_customer_credit_warning_checkbox)
-        visibility_box.addWidget(QLabel("تعدادِ فاکتورهایِ اخیر"))
+        visibility_box.addWidget(QLabel("تعداد فاکتورهای اخیر"))
         self.recent_invoices_count_field = QSpinBox()
         self.recent_invoices_count_field.setRange(1, 100)
         visibility_box.addWidget(self.recent_invoices_count_field)
@@ -250,17 +250,17 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («دکمهٔ تسویه با پرینت خیلی طول
         # می‌کشد»): چاپِ حرفه‌ایِ Jasper هر بار یک JVMِ تازه بالا می‌آورد.
         print_box = QHBoxLayout()
-        self.fast_receipt_printing_checkbox = QCheckBox("چاپِ سریعِ فیش (بدونِ Jasper -- توصیه‌شده برایِ صندوق)")
+        self.fast_receipt_printing_checkbox = QCheckBox("چاپ سریع فیش (بدون Jasper — توصیه‌شده برای صندوق)")
         print_box.addWidget(self.fast_receipt_printing_checkbox)
         print_box.addStretch(1)
         retail_layout.addLayout(print_box)
 
         receipt_box = QHBoxLayout()
-        receipt_box.addWidget(QLabel("سرتیترِ فیش"))
+        receipt_box.addWidget(QLabel("سرتیتر فیش"))
         self.receipt_header_field = QLineEdit()
-        self.receipt_header_field.setPlaceholderText("مثلاً: با تشکر از خریدِ شما")
+        self.receipt_header_field.setPlaceholderText("مثلاً: با تشکر از خرید شما")
         receipt_box.addWidget(self.receipt_header_field, stretch=1)
-        receipt_box.addWidget(QLabel("توضیحاتِ انتهایِ فیش"))
+        receipt_box.addWidget(QLabel("توضیحات انتهای فیش"))
         self.receipt_footer_field = QLineEdit()
         receipt_box.addWidget(self.receipt_footer_field, stretch=1)
         save_toggles_button = QPushButton("💾")
@@ -285,17 +285,17 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         defaults_tab = QWidget()
         defaults_layout = QVBoxLayout(defaults_tab)
         defaults_hint = QLabel(
-            "برایِ هر روشِ دریافتِ فرمِ «نحوهٔ تسویه»یِ تک‌فروشی، تفصیلیِ "
-            "پیش‌فرض را این‌جا مشخص کنید -- صندوق‌دار دیگر هر بار در لحظهٔ "
+            "برای هر روش دریافت فرم «نحوهٔ تسویه»ی تک‌فروشی، تفصیلی "
+            "پیش‌فرض را این‌جا مشخص کنید — صندوق‌دار دیگر هر بار در لحظهٔ "
             "فروش پرسیده نمی‌شود (ولی همان‌جا هم می‌تواند عوضش کند). "
-            "مرکزِ هزینه/پروژه هم فقط وقتی فعال است که معینِ همان روش "
+            "مرکز هزینه/پروژه هم فقط وقتی فعال است که معین همان روش "
             "این ابعاد را الزامی کرده باشد."
         )
         defaults_hint.setObjectName("sectionHint")
         defaults_hint.setWordWrap(True)
         defaults_layout.addWidget(defaults_hint)
         self.settlement_defaults_table = QTableWidget(0, 4)
-        self.settlement_defaults_table.setHorizontalHeaderLabels(["روش", "تفصیلیِ پیش‌فرض", "مرکزِ هزینه", "پروژه"])
+        self.settlement_defaults_table.setHorizontalHeaderLabels(["روش", "تفصیلی پیش‌فرض", "مرکز هزینه", "پروژه"])
         self.settlement_defaults_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.settlement_defaults_table.verticalHeader().setVisible(False)
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («ارتفاعِ فیلدها خیلی کمه»):
@@ -316,12 +316,12 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         # برایِ طرفِ حسابِ دریافتنیِ مشتری (نه نقد/بانک) هم این‌جا وارد
         # می‌شود -- دیگر نیازی نیست سرپرست هربار در لحظهٔ تاییدِ فروش این
         # دو را دستی وارد کند (اصلاً فرمی برایِ این کار وجود ندارد).
-        receivable_title = QLabel("پیش‌فرضِ مرکزِ هزینه/پروژهٔ حسابِ دریافتنیِ مشتری")
+        receivable_title = QLabel("پیش‌فرض مرکز هزینه/پروژهٔ حساب دریافتنی مشتری")
         receivable_title.setObjectName("sectionHint")
         receivable_title.setWordWrap(True)
         defaults_layout.addWidget(receivable_title)
         receivable_box = QHBoxLayout()
-        receivable_box.addWidget(QLabel("مرکزِ هزینه"))
+        receivable_box.addWidget(QLabel("مرکز هزینه"))
         self.receivable_cost_center_combo = QComboBox()
         receivable_box.addWidget(self.receivable_cost_center_combo, stretch=1)
         receivable_box.addWidget(QLabel("پروژه"))
@@ -335,7 +335,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         save_defaults_button.setToolTip("ذخیره")
         save_defaults_button.clicked.connect(self._save_settlement_method_defaults)
         defaults_layout.addWidget(save_defaults_button)
-        self.settings_tabs.addTab(defaults_tab, "پیش‌فرضِ تسویه")
+        self.settings_tabs.addTab(defaults_tab, "پیش‌فرض تسویه")
 
         # طبقِ درخواستِ صریحِ کاربر («ترازوی آفلاین با بارکدِ وزنی برایِ
         # فروشِ حضوری طراحی شود -- ترتیبِ ارقام و تعدادِ آن‌ها قابلِ‌
@@ -344,14 +344,14 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         scale_layout = QVBoxLayout(scale_tab)
 
         weight_barcode_hint = QLabel(
-            "بارکدِ چاپ‌شده‌یِ ترازو (بدونِ نیاز به هیچ اتصالِ زنده‌ای، فقط با یک اسکنرِ معمولی) "
-            "از سه بخش تشکیل شده: پیشوندِ نوع، کدِ کالا، و وزن -- تعدادِ ارقامِ هر بخش این‌جا قابلِ‌تنظیم است."
+            "بارکد چاپ‌شدهٔ ترازو (بدون نیاز به هیچ اتصال زنده‌ای، فقط با یک اسکنر معمولی) "
+            "از سه بخش تشکیل شده: پیشوند نوع، کد کالا، و وزن — تعداد ارقام هر بخش این‌جا قابل‌تنظیم است."
         )
         weight_barcode_hint.setObjectName("sectionHint")
         weight_barcode_hint.setWordWrap(True)
         scale_layout.addWidget(weight_barcode_hint)
 
-        self.weight_barcode_enabled_checkbox = QCheckBox("فعال‌بودنِ خواندنِ بارکدِ وزنی در فروشِ حضوری")
+        self.weight_barcode_enabled_checkbox = QCheckBox("فعال‌بودن خواندن بارکد وزنی در فروش حضوری")
         scale_layout.addWidget(self.weight_barcode_enabled_checkbox)
 
         weight_barcode_box = QHBoxLayout()
@@ -360,15 +360,15 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self.weight_barcode_prefix_field.setMaximumWidth(70)
         self.weight_barcode_prefix_field.setPlaceholderText("مثلاً ۲۰")
         weight_barcode_box.addWidget(self.weight_barcode_prefix_field)
-        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ کدِ کالا"))
+        weight_barcode_box.addWidget(QLabel("تعداد رقم کد کالا"))
         self.weight_barcode_item_code_digits_field = QSpinBox()
         self.weight_barcode_item_code_digits_field.setRange(1, 12)
         weight_barcode_box.addWidget(self.weight_barcode_item_code_digits_field)
-        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ وزن"))
+        weight_barcode_box.addWidget(QLabel("تعداد رقم وزن"))
         self.weight_barcode_weight_digits_field = QSpinBox()
         self.weight_barcode_weight_digits_field.setRange(1, 12)
         weight_barcode_box.addWidget(self.weight_barcode_weight_digits_field)
-        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ اعشارِ وزن"))
+        weight_barcode_box.addWidget(QLabel("تعداد رقم اعشار وزن"))
         self.weight_barcode_weight_decimals_field = QSpinBox()
         self.weight_barcode_weight_decimals_field.setRange(0, 8)
         weight_barcode_box.addWidget(self.weight_barcode_weight_decimals_field)
@@ -382,28 +382,28 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         scale_layout.addLayout(weight_barcode_box)
 
         scale_online_hint = QLabel(
-            "ترازویِ آنلاین (خواندنِ خودکارِ همه‌یِ اقلامِ ذخیره‌شده در حافظه‌یِ ترازو با یک بارکد/RFIDِ کلی): "
-            "فعلاً فقط چارچوبِ تنظیماتی آماده است -- تا مشخص‌شدنِ پروتکلِ دقیقِ ارتباطیِ مدلِ دستگاهِ شما، "
-            "خودِ خواندنِ زنده هنوز پیاده‌سازی نشده."
+            "ترازوی آنلاین (خواندن خودکار همهٔ اقلام ذخیره‌شده در حافظهٔ ترازو با یک بارکد/RFID کلی): "
+            "فعلاً فقط چارچوب تنظیماتی آماده است — تا مشخص‌شدن پروتکل دقیق ارتباطی مدل دستگاه شما، "
+            "خود خواندن زنده هنوز پیاده‌سازی نشده."
         )
         scale_online_hint.setObjectName("sectionHint")
         scale_online_hint.setWordWrap(True)
         scale_layout.addWidget(scale_online_hint)
 
-        self.scale_online_enabled_checkbox = QCheckBox("فعال‌بودنِ ترازویِ آنلاین")
+        self.scale_online_enabled_checkbox = QCheckBox("فعال‌بودن ترازوی آنلاین")
         scale_layout.addWidget(self.scale_online_enabled_checkbox)
 
         scale_online_box = QHBoxLayout()
-        scale_online_box.addWidget(QLabel("نوعِ اتصال"))
+        scale_online_box.addWidget(QLabel("نوع اتصال"))
         self.scale_connection_type_combo = QComboBox()
         self.scale_connection_type_combo.addItem("(هنوز مشخص نشده)", "NONE")
         self.scale_connection_type_combo.addItem("سریال / RS232", "SERIAL")
         self.scale_connection_type_combo.addItem("شبکه / TCP", "TCP")
         scale_online_box.addWidget(self.scale_connection_type_combo)
-        scale_online_box.addWidget(QLabel("آدرس (پورتِ COM یا host:port)"))
+        scale_online_box.addWidget(QLabel("آدرس (پورت COM یا host:port)"))
         self.scale_address_field = QLineEdit()
         scale_online_box.addWidget(self.scale_address_field, stretch=1)
-        scale_online_box.addWidget(QLabel("پیشوندِ بارکدِ دسته"))
+        scale_online_box.addWidget(QLabel("پیشوند بارکد دسته"))
         self.scale_batch_barcode_prefix_field = QLineEdit()
         self.scale_batch_barcode_prefix_field.setMaximumWidth(70)
         scale_online_box.addWidget(self.scale_batch_barcode_prefix_field)
@@ -415,7 +415,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         scale_online_box.addWidget(save_scale_button)
         scale_layout.addLayout(scale_online_box)
         scale_layout.addStretch(1)
-        self.settings_tabs.addTab(scale_tab, "ترازو و بارکدِ وزنی")
+        self.settings_tabs.addTab(scale_tab, "ترازو و بارکد وزنی")
 
         left.addWidget(self.settings_tabs, stretch=1)
 
@@ -436,7 +436,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         right.addWidget(self.session_status_label)
 
         open_box = QHBoxLayout()
-        open_box.addWidget(QLabel("وجهِ نقدِ ابتدایِ کار"))
+        open_box.addWidget(QLabel("وجه نقد ابتدای کار"))
         self.opening_cash_field = QDoubleSpinBox()
         self.opening_cash_field.setDecimals(2)
         self.opening_cash_field.setRange(0, 999999999)
@@ -444,13 +444,13 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self.open_session_button = QPushButton("📂")
         self.open_session_button.setObjectName("primaryIconButton")
         self.open_session_button.setFixedWidth(48)
-        self.open_session_button.setToolTip("بازکردنِ شیفت")
+        self.open_session_button.setToolTip("بازکردن شیفت")
         self.open_session_button.clicked.connect(self._open_session)
         open_box.addWidget(self.open_session_button)
         right.addLayout(open_box)
 
         close_box = QHBoxLayout()
-        close_box.addWidget(QLabel("وجهِ نقدِ شمارش‌شده"))
+        close_box.addWidget(QLabel("وجه نقد شمارش‌شده"))
         self.closing_cash_field = QDoubleSpinBox()
         self.closing_cash_field.setDecimals(2)
         self.closing_cash_field.setRange(0, 999999999)
@@ -458,19 +458,19 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self.close_session_button = QPushButton("🔒")
         self.close_session_button.setObjectName("dangerIconButton")
         self.close_session_button.setFixedWidth(44)
-        self.close_session_button.setToolTip("بستنِ شیفت")
+        self.close_session_button.setToolTip("بستن شیفت")
         self.close_session_button.clicked.connect(self._close_session)
         close_box.addWidget(self.close_session_button)
         right.addLayout(close_box)
 
         override_box = QHBoxLayout()
         self.override_reason_field = QLineEdit()
-        self.override_reason_field.setPlaceholderText("دلیلِ آزادسازیِ مغایرت")
+        self.override_reason_field.setPlaceholderText("دلیل آزادسازی مغایرت")
         override_box.addWidget(self.override_reason_field)
         self.override_button = QPushButton("➕")
         self.override_button.setObjectName("iconButton")
         self.override_button.setFixedWidth(44)
-        self.override_button.setToolTip("آزادسازیِ مغایرت")
+        self.override_button.setToolTip("آزادسازی مغایرت")
         self.override_button.clicked.connect(self._override_variance)
         override_box.addWidget(self.override_button)
         right.addLayout(override_box)
@@ -479,7 +479,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         history_title.setObjectName("sectionTitle")
         right.addWidget(history_title)
         self.sessions_table = QTableWidget(0, 6)
-        self.sessions_table.setHorizontalHeaderLabels(["شناسه", "وضعیت", "نقدِ ابتدا", "نقدِ پایان", "مغایرت", "آزادسازی‌شده"])
+        self.sessions_table.setHorizontalHeaderLabels(["شناسه", "وضعیت", "نقد ابتدا", "نقد پایان", "مغایرت", "آزادسازی‌شده"])
         self.sessions_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.sessions_table.verticalHeader().setVisible(False)
         right.addWidget(self.sessions_table, stretch=1)
@@ -495,44 +495,44 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         root.addWidget(wrap_scrollable(page))
 
         self.set_field_help([
-            (self.terminal_code_field, "کدِ یکتایِ ترمینالِ صندوقِ تازه."),
-            (self.terminal_name_field, "نامِ نمایشیِ ترمینالِ صندوقِ تازه."),
-            (self.terminal_warehouse_combo, "انباری که موجودیِ فروش‌هایِ این ترمینال از آن کم می‌شود."),
-            (self.guest_customer_combo, "مشتری‌ای که برایِ فروشِ نقدیِ بدونِ مشخصاتِ خریدار پیش‌فرض انتخاب می‌شود."),
-            (self.threshold_field, "بیشترین مغایرتِ صندوق (بینِ نقدِ شمارش‌شده و محاسبه‌شده) که بدونِ نیاز به دلیلِ صریح پذیرفته می‌شود."),
-            (self.quick_button_width_field, "عرضِ دکمه‌هایِ کلیدِ فوری در صفحه‌یِ فروشِ حضوری -- سراسریِ شرکت."),
-            (self.quick_button_height_field, "ارتفاعِ دکمه‌هایِ کلیدِ فوری -- سراسریِ شرکت."),
-            (self.quick_button_font_size_field, "اندازهٔ فونتِ متنِ دکمه‌هایِ کلیدِ فوری."),
-            (self.quick_grid_columns_field, "تعدادِ ستون‌هایِ چیدمانِ کلیدهایِ فوری."),
-            (self.my_quick_button_width_field, "عرضِ کلیدهایِ فوری فقط برایِ حسابِ کاربریِ شما -- «پیش‌فرض» یعنی از تنظیمِ سراسریِ بالا پیروی کند."),
-            (self.my_quick_button_height_field, "ارتفاعِ کلیدهایِ فوری فقط برایِ حسابِ کاربریِ شما."),
-            (self.quick_access_position_combo, "کلیدهایِ فوری در کدام سمتِ صفحه‌یِ فروش نمایش داده شوند."),
-            (self.quick_access_orientation_combo, "کلیدهایِ فوری به‌صورتِ افقی یا عمودی چیده شوند."),
-            (self.allow_price_override_checkbox, "کاربرِ فروشنده می‌تواند در لحظهٔ فروش، قیمتِ پیشنهادی را دستی تغییر دهد."),
-            (self.allow_discount_override_checkbox, "کاربرِ فروشنده می‌تواند در لحظهٔ فروش، تخفیف اعمال کند."),
-            (self.quick_access_enabled_checkbox, "منویِ کلیدهایِ فوری در صفحه‌یِ فروشِ حضوری نمایش داده شود."),
-            (self.scan_beep_enabled_checkbox, "با هر اسکن/افزودنِ موفق، یک بوقِ کوتاه پخش شود."),
-            (self.show_price_list_field_checkbox, "فیلدِ انتخابِ فهرستِ قیمت در فرمِ فروشِ حضوری نمایش داده شود."),
-            (self.show_tax_discount_breakdown_checkbox, "ریزِ تخفیف/مالیات در فوترِ فاکتورِ حضوری نمایش داده شود."),
-            (self.show_customer_credit_warning_checkbox, "اگر مشتری از سقفِ اعتبارش عبور کرده، هشدار نشان داده شود."),
-            (self.recent_invoices_count_field, "چند فاکتورِ اخیر در پنلِ کنارِ صفحه‌یِ فروش نمایش داده شود."),
-            (self.fast_receipt_printing_checkbox, "چاپِ فیش بدونِ موتورِ Jasper (سریع‌تر) -- برایِ صندوق توصیه می‌شود."),
-            (self.receipt_header_field, "متنِ سرتیترِ چاپ‌شده بالایِ فیشِ فروش."),
-            (self.receipt_footer_field, "متنِ توضیحاتِ چاپ‌شده انتهایِ فیشِ فروش."),
-            (self.weight_barcode_enabled_checkbox, "بارکدِ وزنیِ چاپ‌شده‌یِ ترازو با اسکنرِ معمولی خوانده و مقدارِ ردیف خودکار محاسبه شود."),
-            (self.weight_barcode_prefix_field, "چند رقمِ اولِ بارکدِ وزنی که نشان می‌دهد این بارکد وزنی است."),
-            (self.weight_barcode_item_code_digits_field, "تعدادِ رقمِ بخشِ کدِ کالا در بارکدِ وزنی."),
-            (self.weight_barcode_weight_digits_field, "تعدادِ رقمِ بخشِ وزن در بارکدِ وزنی."),
-            (self.weight_barcode_weight_decimals_field, "تعدادِ رقمِ اعشاریِ وزن در بارکدِ وزنی."),
-            (self.scale_online_enabled_checkbox, "اتصالِ زندهٔ ترازویِ آنلاین فعال باشد -- هنوز فقط چارچوبِ تنظیماتی است."),
-            (self.scale_connection_type_combo, "نوعِ اتصالِ ترازویِ آنلاین (سریال یا شبکه)."),
-            (self.scale_address_field, "آدرسِ اتصال -- پورتِ COM برایِ سریال، یا host:port برایِ شبکه."),
-            (self.scale_batch_barcode_prefix_field, "پیشوندِ بارکدِ دسته‌ایِ ترازویِ آنلاین."),
-            (self.receivable_cost_center_combo, "مرکزِ هزینه‌ای که پیش‌فرضِ حسابِ دریافتنیِ مشتری در تاییدِ سرپرست از آن استفاده می‌کند."),
-            (self.receivable_project_combo, "پروژه‌ای که پیش‌فرضِ حسابِ دریافتنیِ مشتری در تاییدِ سرپرست از آن استفاده می‌کند."),
-            (self.opening_cash_field, "وجهِ نقدی که در ابتدایِ شیفت داخلِ صندوق شمرده و ثبت می‌شود."),
-            (self.closing_cash_field, "وجهِ نقدی که در پایانِ شیفت واقعاً داخلِ صندوق شمرده شده -- با محاسبه‌شده مقایسه و مغایرت مشخص می‌شود."),
-            (self.override_reason_field, "دلیلِ پذیرفتنِ مغایرتِ صندوقِ شیفتِ قبلی، بدونِ رفعِ کاملِ آن."),
+            (self.terminal_code_field, "کد یکتای ترمینال صندوق تازه."),
+            (self.terminal_name_field, "نام نمایشی ترمینال صندوق تازه."),
+            (self.terminal_warehouse_combo, "انباری که موجودی فروش‌های این ترمینال از آن کم می‌شود."),
+            (self.guest_customer_combo, "مشتری‌ای که برای فروش نقدی بدون مشخصات خریدار پیش‌فرض انتخاب می‌شود."),
+            (self.threshold_field, "بیشترین مغایرت صندوق (بین نقد شمارش‌شده و محاسبه‌شده) که بدون نیاز به دلیل صریح پذیرفته می‌شود."),
+            (self.quick_button_width_field, "عرض دکمه‌های کلید فوری در صفحهٔ فروش حضوری — سراسری شرکت."),
+            (self.quick_button_height_field, "ارتفاع دکمه‌های کلید فوری — سراسری شرکت."),
+            (self.quick_button_font_size_field, "اندازهٔ فونت متن دکمه‌های کلید فوری."),
+            (self.quick_grid_columns_field, "تعداد ستون‌های چیدمان کلیدهای فوری."),
+            (self.my_quick_button_width_field, "عرض کلیدهای فوری فقط برای حساب کاربری شما — «پیش‌فرض» یعنی از تنظیم سراسری بالا پیروی کند."),
+            (self.my_quick_button_height_field, "ارتفاع کلیدهای فوری فقط برای حساب کاربری شما."),
+            (self.quick_access_position_combo, "کلیدهای فوری در کدام سمت صفحهٔ فروش نمایش داده شوند."),
+            (self.quick_access_orientation_combo, "کلیدهای فوری به‌صورت افقی یا عمودی چیده شوند."),
+            (self.allow_price_override_checkbox, "کاربر فروشنده می‌تواند در لحظهٔ فروش، قیمت پیشنهادی را دستی تغییر دهد."),
+            (self.allow_discount_override_checkbox, "کاربر فروشنده می‌تواند در لحظهٔ فروش، تخفیف اعمال کند."),
+            (self.quick_access_enabled_checkbox, "منوی کلیدهای فوری در صفحهٔ فروش حضوری نمایش داده شود."),
+            (self.scan_beep_enabled_checkbox, "با هر اسکن/افزودن موفق، یک بوق کوتاه پخش شود."),
+            (self.show_price_list_field_checkbox, "فیلد انتخاب فهرست قیمت در فرم فروش حضوری نمایش داده شود."),
+            (self.show_tax_discount_breakdown_checkbox, "ریز تخفیف/مالیات در فوتر فاکتور حضوری نمایش داده شود."),
+            (self.show_customer_credit_warning_checkbox, "اگر مشتری از سقف اعتبارش عبور کرده، هشدار نشان داده شود."),
+            (self.recent_invoices_count_field, "چند فاکتور اخیر در بخش کنار صفحهٔ فروش نمایش داده شود."),
+            (self.fast_receipt_printing_checkbox, "چاپ فیش بدون موتور Jasper (سریع‌تر) — برای صندوق توصیه می‌شود."),
+            (self.receipt_header_field, "متن سرتیتر چاپ‌شده بالای فیش فروش."),
+            (self.receipt_footer_field, "متن توضیحات چاپ‌شده انتهای فیش فروش."),
+            (self.weight_barcode_enabled_checkbox, "بارکد وزنی چاپ‌شدهٔ ترازو با اسکنر معمولی خوانده و مقدار ردیف خودکار محاسبه شود."),
+            (self.weight_barcode_prefix_field, "چند رقم اول بارکد وزنی که نشان می‌دهد این بارکد وزنی است."),
+            (self.weight_barcode_item_code_digits_field, "تعداد رقم بخش کد کالا در بارکد وزنی."),
+            (self.weight_barcode_weight_digits_field, "تعداد رقم بخش وزن در بارکد وزنی."),
+            (self.weight_barcode_weight_decimals_field, "تعداد رقم اعشاری وزن در بارکد وزنی."),
+            (self.scale_online_enabled_checkbox, "اتصال زندهٔ ترازوی آنلاین فعال باشد — هنوز فقط چارچوب تنظیماتی است."),
+            (self.scale_connection_type_combo, "نوع اتصال ترازوی آنلاین (سریال یا شبکه)."),
+            (self.scale_address_field, "آدرس اتصال — پورت COM برای سریال، یا host:port برای شبکه."),
+            (self.scale_batch_barcode_prefix_field, "پیشوند بارکد دسته‌ای ترازوی آنلاین."),
+            (self.receivable_cost_center_combo, "مرکز هزینه‌ای که پیش‌فرض حساب دریافتنی مشتری در تایید سرپرست از آن استفاده می‌کند."),
+            (self.receivable_project_combo, "پروژه‌ای که پیش‌فرض حساب دریافتنی مشتری در تایید سرپرست از آن استفاده می‌کند."),
+            (self.opening_cash_field, "وجه نقدی که در ابتدای شیفت داخل صندوق شمرده و ثبت می‌شود."),
+            (self.closing_cash_field, "وجه نقدی که در پایان شیفت واقعاً داخل صندوق شمرده شده — با محاسبه‌شده مقایسه و مغایرت مشخص می‌شود."),
+            (self.override_reason_field, "دلیل پذیرفتن مغایرت صندوق شیفت قبلی، بدون رفع کامل آن."),
         ])
 
     def _company_id(self) -> int | None:
@@ -658,7 +658,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
             return
         prefix = self.weight_barcode_prefix_field.text().strip()
         if self.weight_barcode_enabled_checkbox.isChecked() and not prefix:
-            self.status_label.setText("پیشوندِ بارکدِ وزنی نمی‌تواند خالی باشد.")
+            self.status_label.setText("پیشوند بارکد وزنی نمی‌تواند خالی باشد.")
             return
         pos_service.set_weight_barcode_settings(
             company_id, self.weight_barcode_enabled_checkbox.isChecked(), prefix,
@@ -700,7 +700,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
                 company_id, "RECEIPT", method_code
             )
             detail_combo = QComboBox()
-            detail_combo.addItem("(بدونِ پیش‌فرض)", None)
+            detail_combo.addItem("(بدون پیش‌فرض)", None)
             for option in detail_options:
                 detail_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
             if default is not None and default.detail_account_id is not None:
@@ -715,7 +715,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
             )
 
             cc_combo = QComboBox()
-            cc_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+            cc_combo.addItem("(بدون مرکز هزینه)", None)
             for option in cc_options:
                 cc_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
             if default is not None and default.cost_center_detail_account_id is not None:
@@ -726,7 +726,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
             self.settlement_defaults_table.setCellWidget(row_index, 2, cc_combo)
 
             proj_combo = QComboBox()
-            proj_combo.addItem("(بدونِ پروژه)", None)
+            proj_combo.addItem("(بدون پروژه)", None)
             for option in proj_options:
                 proj_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
             if default is not None and default.project_detail_account_id is not None:
@@ -763,7 +763,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
 
         pos_settings_row = pos_service.get_pos_settings(company_id)
         self.receivable_cost_center_combo.clear()
-        self.receivable_cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        self.receivable_cost_center_combo.addItem("(بدون مرکز هزینه)", None)
         for option in cc_options:
             self.receivable_cost_center_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
         if pos_settings_row is not None and pos_settings_row.default_receivable_cost_center_detail_account_id is not None:
@@ -773,7 +773,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self.receivable_cost_center_combo.setEnabled(requires_receivable_cc)
 
         self.receivable_project_combo.clear()
-        self.receivable_project_combo.addItem("(بدونِ پروژه)", None)
+        self.receivable_project_combo.addItem("(بدون پروژه)", None)
         for option in proj_options:
             self.receivable_project_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
         if pos_settings_row is not None and pos_settings_row.default_receivable_project_detail_account_id is not None:
@@ -865,7 +865,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self.refresh()
 
     def _delete_terminal(self) -> None:
-        if confirm_and_delete(self, "ترمینالِ صندوق", self.terminal_name_field.text(), PosTerminal, self._selected_terminal_id,
+        if confirm_and_delete(self, "ترمینال صندوق", self.terminal_name_field.text(), PosTerminal, self._selected_terminal_id,
                               self._company_id()):
             self._selected_terminal_id = None
             self.terminal_code_field.clear()
@@ -882,7 +882,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
                 widget.setEnabled(False)
             return
         terminal = next((t for t in self._terminals if t.terminal_id == self._selected_terminal_id), None)
-        self.session_title.setText(f"شیفت‌هایِ ترمینالِ «{terminal.name}»" if terminal else "")
+        self.session_title.setText(f"شیفت‌های ترمینال «{terminal.name}»" if terminal else "")
         open_session = pos_service.get_open_session(self._selected_terminal_id)
         sessions = pos_service.list_sessions(self._selected_terminal_id)
 
@@ -894,11 +894,11 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         )
 
         if open_session is not None:
-            self.session_status_label.setText(f"شیفتِ باز — شناسه: {numerals.to_persian_digits(str(open_session.session_id))}")
+            self.session_status_label.setText(f"شیفت باز — شناسه: {numerals.to_persian_digits(str(open_session.session_id))}")
         elif has_unresolved_variance:
-            self.session_status_label.setText("شیفتِ قبلی مغایرتِ آزادنشده دارد — ابتدا آزادسازی کنید.")
+            self.session_status_label.setText("شیفت قبلی مغایرت آزادنشده دارد — ابتدا آزادسازی کنید.")
         else:
-            self.session_status_label.setText("شیفتِ بازی وجود ندارد.")
+            self.session_status_label.setText("شیفت بازی وجود ندارد.")
 
         self.open_session_button.setEnabled(open_session is None and not has_unresolved_variance)
         self.close_session_button.setEnabled(open_session is not None)
@@ -933,7 +933,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
     def _close_session(self) -> None:
         if getattr(self, "_open_session_id", None) is None:
             return
-        confirm = QMessageBox.question(self, "بستنِ شیفت", "این شیفت بسته شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "بستن شیفت", "این شیفت بسته شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         session_id = self._open_session_id
@@ -954,8 +954,8 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
                 for e in audit_entries
             ]
             QMessageBox.information(
-                self, "گزارشِ اصلاح/حذفِ فاکتورهایِ این شیفت",
-                "فاکتورهایِ زیر توسطِ صندوق‌دار، پیش از تاییدِ سرپرست، اصلاح یا حذف شده‌اند:\n\n" + "\n".join(lines),
+                self, "گزارش اصلاح/حذف فاکتورهای این شیفت",
+                "فاکتورهای زیر توسط صندوق‌دار، پیش از تایید سرپرست، اصلاح یا حذف شده‌اند:\n\n" + "\n".join(lines),
             )
         self.refresh()
 
@@ -964,7 +964,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
             return
         reason = self.override_reason_field.text().strip()
         if not reason:
-            self.status_label.setText("دلیلِ آزادسازی را وارد کنید.")
+            self.status_label.setText("دلیل آزادسازی را وارد کنید.")
             return
         pos_service.override_session_variance(self._last_closed_session_id, app_session.current_user.user_id, reason)
         self.override_reason_field.clear()

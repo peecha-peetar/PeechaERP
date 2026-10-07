@@ -1,10 +1,10 @@
-"""مدیریتِ محلِ انبار و نقشهٔ تعاملی -- R248 (لایهٔ WMS رویِ همان inv.bin_locations).
+"""مدیریت محل انبار و نقشهٔ تعاملی — R248 (لایهٔ WMS روی همان inv.bin_locations).
 
 - سلسله‌مراتب: انبار ← AREA (منطقه/Zone) ← AISLE (راهرو) ← RACK (قفسه) ← SHELF (طبقه/Level) ← BIN.
-  سطح همان ستونِ موجودِ bin_type_code است؛ کدِ کاملِ محل (location_code) مثلِ WH01-Z01-A03-R02-L04-B07 یکتاست.
-- موجودی هرگز این‌جا نگه داشته نمی‌شود: محتوا، اشغال و محلِ کالا از inv.stock_balance (همان موجودیِ سیستم) خوانده می‌شود.
-- جابه‌جاییِ کالا بینِ محل‌ها فقط با سندِ انتقالِ عادیِ سیستم (inventory_documents) انجام می‌شود.
-- تاریخچه: حرکات از inv.stock_ledger و تغییرِ مشخصات از audit.activity_log موجود.
+  سطح همان ستون موجود bin_type_code است؛ کد کامل محل (location_code) مثل WH01-Z01-A03-R02-L04-B07 یکتاست.
+- موجودی هرگز این‌جا نگه داشته نمی‌شود: محتوا، اشغال و محل کالا از inv.stock_balance (همان موجودی سیستم) خوانده می‌شود.
+- جابه‌جایی کالا بین محل‌ها فقط با سند انتقال عادی سیستم (inventory_documents) انجام می‌شود.
+- تاریخچه: حرکات از inv.stock_ledger و تغییر مشخصات از audit.activity_log موجود.
 """
 
 from __future__ import annotations
@@ -29,16 +29,16 @@ FORM_CODE = "warehouse_map"  # کدِ فرمِ دسترسی (همان screenِ n
 QR_PREFIX = "PEECHA-LOC"
 
 LEVELS = ("AREA", "AISLE", "RACK", "SHELF", "BIN")
-LEVEL_LABELS = {"AREA": "منطقه (Zone)", "AISLE": "راهرو", "RACK": "قفسه", "SHELF": "طبقه", "BIN": "محل (Bin)"}
+LEVEL_LABELS = {"AREA": "منطقه", "AISLE": "راهرو", "RACK": "قفسه", "SHELF": "طبقه", "BIN": "خانهٔ قفسه"}
 LEVEL_PREFIX = {"AREA": "Z", "AISLE": "A", "RACK": "R", "SHELF": "L", "BIN": "B"}
 _ALLOWED_PARENTS = {"AREA": (None,), "AISLE": ("AREA",), "RACK": ("AISLE", "AREA"), "SHELF": ("RACK",), "BIN": ("SHELF", "RACK")}
 LOCATION_TYPES = {
-    "RECEIVING": "دریافت", "QC": "کنترلِ کیفیت", "QUARANTINE": "قرنطینه", "BULK": "انبارشِ حجیم", "RESERVE": "ذخیره",
-    "PICK_FACE": "جبههٔ برداشت", "PICKING": "برداشت", "STAGING": "آماده‌سازی", "SHIPPING": "ارسال", "RETURNS": "مرجوعی",
-    "DAMAGED": "آسیب‌دیده", "HIGH_VALUE": "کالایِ گران‌بها", "COLD": "سردخانه", "FREEZER": "فریزر", "TRANSIT": "ترانزیت",
+    "RECEIVING": "دریافت", "QC": "کنترل کیفیت", "QUARANTINE": "قرنطینه", "BULK": "انبارش حجیم", "RESERVE": "ذخیره",
+    "PICK_FACE": "محل‌های برداشت", "PICKING": "برداشت", "STAGING": "آماده‌سازی", "SHIPPING": "ارسال", "RETURNS": "مرجوعی",
+    "DAMAGED": "آسیب‌دیده", "HIGH_VALUE": "کالای گران‌بها", "COLD": "سردخانه", "FREEZER": "فریزر", "TRANSIT": "ترانزیت",
 }
 STATUSES = {"ACTIVE": "فعال", "INACTIVE": "غیرفعال", "BLOCKED": "مسدود", "FULL": "پر", "RESERVED": "رزرو",
-            "QUARANTINE": "قرنطینه", "MAINTENANCE": "در حالِ تعمیر"}
+            "QUARANTINE": "قرنطینه", "MAINTENANCE": "در حال تعمیر"}
 DIRECTIONS = {"NS": "شمال–جنوب", "EW": "شرق–غرب"}
 _OPERABLE = ("ACTIVE",)
 _DEFAULT_SIZE = {"AREA": (400, 300), "AISLE": (60, 260), "RACK": (40, 200), "SHELF": (40, 200), "BIN": (40, 40)}
@@ -92,7 +92,7 @@ def _location(session, company_id: int, location_id: int) -> BinLocation:
 
 
 def display_code(loc, warehouse_code: str) -> str:
-    """کدِ کامل؛ محل‌هایِ قدیمی (بدونِ location_code) = کدِ انبار + کدِ محل."""
+    """کد کامل؛ محل‌های قدیمی (بدون location_code) = کد انبار + کد محل."""
     return loc.location_code or f"{warehouse_code}-{loc.code}"
 
 
@@ -102,12 +102,12 @@ def _validate(fields: LocationFields) -> None:
         if value is not None and value < 0:
             raise ValueError("ابعاد و ظرفیت نمی‌توانند منفی باشند.")
     if fields.status_code not in STATUSES:
-        raise ValueError("وضعیتِ محل نامعتبر است.")
+        raise ValueError("وضعیت محل نامعتبر است.")
     if fields.location_type_code is not None and fields.location_type_code not in LOCATION_TYPES:
-        raise ValueError("نوعِ محل نامعتبر است.")
+        raise ValueError("نوع محل نامعتبر است.")
     if (fields.temperature_min_c is not None and fields.temperature_max_c is not None
             and fields.temperature_min_c > fields.temperature_max_c):
-        raise ValueError("دمایِ حداقل نمی‌تواند بیشتر از دمایِ حداکثر باشد.")
+        raise ValueError("دمای حداقل نمی‌تواند بیشتر از دمای حداکثر باشد.")
 
 
 def _changes(row, fields: LocationFields) -> dict:
@@ -124,7 +124,7 @@ _GAP = 10
 
 
 def _container(parent, wh) -> tuple[float, float, float, float] | None:
-    """مستطیلِ والد (یا خودِ انبار) برایِ چیدنِ محلِ تازه درونِ آن."""
+    """مستطیل والد (یا خود انبار) برای چیدن محل تازه درون آن."""
     if parent is not None and parent.map_x is not None and parent.map_width is not None:
         if parent.width_m and parent.length_m:
             return float(parent.map_x), float(parent.map_y or 0), float(parent.width_m) * _U, float(parent.length_m) * _U
@@ -135,8 +135,8 @@ def _container(parent, wh) -> tuple[float, float, float, float] | None:
 
 
 def _place_new(row, level: str, parent, wh, siblings: list[tuple[float, float, float, float]]) -> None:
-    """R252: اندازه از ابعادِ واقعی (متر)؛ وگرنه اندازهٔ پیش‌فرض که داخلِ والد/انبار جا شود؛ چیدن کنارِ هم‌سطح‌ها
-    با شکستنِ ردیف وقتی از عرضِ والد بیرون می‌زند. ابعادِ متری هم از اندازهٔ نقشه پر می‌شود تا همیشه هم‌خوان باشند."""
+    """R252: اندازه از ابعاد واقعی (متر)؛ وگرنه اندازهٔ پیش‌فرض که داخل والد/انبار جا شود؛ چیدن کنار هم‌سطح‌ها
+    با شکستن ردیف وقتی از عرض والد بیرون می‌زند. ابعاد متری هم از اندازهٔ نقشه پر می‌شود تا همیشه هم‌خوان باشند."""
     box = _container(parent, wh)
     g = _GAP if box is None else min(_GAP, max(2.0, min(box[2], box[3]) * 0.04))
     off = g if parent is None or box is None else max(2 * g, min(box[3] * 0.15, 1.5 * _U))  # جایِ برچسبِ والد
@@ -179,13 +179,13 @@ def _place_new(row, level: str, parent, wh, siblings: list[tuple[float, float, f
 
 def create_location(company_id: int, warehouse_id: int, level: str, segment: str, parent_id: int | None = None,
                     fields: LocationFields | None = None, user_id: int | None = None) -> int:
-    """محلِ تازه در سلسله‌مراتب؛ کدِ کامل = کدِ والد (یا انبار) + «-» + کدِ بخش و در انبار یکتاست."""
+    """محل تازه در سلسله‌مراتب؛ کد کامل = کد والد (یا انبار) + «-» + کد بخش و در انبار یکتاست."""
     fields = fields or LocationFields()
     if level not in LEVELS:
-        raise ValueError("سطحِ محل نامعتبر است.")
+        raise ValueError("سطح محل نامعتبر است.")
     segment = (segment or "").strip().upper()
     if not segment or "-" in segment or " " in segment:
-        raise ValueError("کدِ بخش الزامی است و نباید «-» یا فاصله داشته باشد.")
+        raise ValueError("کد بخش الزامی است و نباید «-» یا فاصله داشته باشد.")
     _validate(fields)
     with new_session() as session:
         wh = _warehouse(session, company_id, warehouse_id)
@@ -193,20 +193,20 @@ def create_location(company_id: int, warehouse_id: int, level: str, segment: str
         if parent_id is not None:
             parent = session.get(BinLocation, parent_id)
             if parent is None or parent.warehouse_id != warehouse_id:
-                raise ValueError("محلِ والد باید در همین انبار باشد.")
+                raise ValueError("محل والد باید در همین انبار باشد.")
         parent_level = parent.bin_type_code if parent is not None else None
         if parent_level not in _ALLOWED_PARENTS[level]:
-            allowed = "، ".join(LEVEL_LABELS[p] if p else "خودِ انبار" for p in _ALLOWED_PARENTS[level])
-            raise ValueError(f"{LEVEL_LABELS[level]} فقط زیرِ {allowed} تعریف می‌شود.")
+            allowed = "، ".join(LEVEL_LABELS[p] if p else "خود انبار" for p in _ALLOWED_PARENTS[level])
+            raise ValueError(f"{LEVEL_LABELS[level]} فقط زیر {allowed} تعریف می‌شود.")
         prefix = display_code(parent, wh.code) if parent is not None else wh.code
         full = f"{prefix}-{segment}"
         short = full[len(wh.code) + 1:]
         if len(short) > 30:
-            raise ValueError("کدِ محل (بدونِ کدِ انبار) حداکثر ۳۰ نویسه است؛ کدهایِ بخش را کوتاه‌تر کنید.")
+            raise ValueError("کد محل (بدون کد انبار) حداکثر ۳۰ نویسه است؛ کدهای بخش را کوتاه‌تر کنید.")
         if session.scalar(select(BinLocation.bin_location_id).where(
                 BinLocation.warehouse_id == warehouse_id,
                 or_(BinLocation.location_code == full, BinLocation.code == short))):
-            raise ValueError(f"محلِ «{full}» قبلاً تعریف شده است.")
+            raise ValueError(f"محل «{full}» قبلاً تعریف شده است.")
         siblings = session.scalar(select(func.count()).select_from(BinLocation).where(
             BinLocation.warehouse_id == warehouse_id, BinLocation.bin_type_code == level,
             BinLocation.parent_bin_location_id.is_(None) if parent is None else BinLocation.parent_bin_location_id == parent.bin_location_id))
@@ -262,10 +262,10 @@ def set_status(company_id: int, location_id: int, status_code: str, user_id: int
 
 
 def save_geometry(company_id: int, location_id: int, x, y, width=None, height=None, rotation=None, user_id: int | None = None) -> None:
-    """ذخیرهٔ جابه‌جایی/تغییرِ اندازه/چرخشِ عنصرِ نقشه."""
+    """ذخیرهٔ جابه‌جایی/تغییر اندازه/چرخش عنصر نقشه."""
     q = lambda v: decimal.Decimal(str(round(float(v), 2))) if v is not None else None  # noqa: E731
     if (width is not None and float(width) <= 0) or (height is not None and float(height) <= 0):
-        raise ValueError("اندازهٔ عنصرِ نقشه باید مثبت باشد.")
+        raise ValueError("اندازهٔ عنصر نقشه باید مثبت باشد.")
     f = get_fields(company_id, location_id)
     f.map_x, f.map_y = q(x), q(y)
     if width is not None:
@@ -280,8 +280,8 @@ def save_geometry(company_id: int, location_id: int, x, y, width=None, height=No
 
 
 def delete_location(company_id: int, location_id: int, user_id: int | None = None) -> str:
-    """حذفِ محل همراهِ همهٔ زیرمحل‌ها اگر هیچ‌کدام سابقه (موجودی، حرکت، سند، وظیفه، شمارش) نداشته باشند؛
-    وگرنه کلِ زیرشاخه غیرفعال می‌شود. خروجی: DELETED | DEACTIVATED."""
+    """حذف محل همراه همهٔ زیرمحل‌ها اگر هیچ‌کدام سابقه (موجودی، حرکت، سند، وظیفه، شمارش) نداشته باشند؛
+    وگرنه کل زیرشاخه غیرفعال می‌شود. خروجی: DELETED | DEACTIVATED."""
     from peecha.db.models.inventory import CycleCountLine, LocationReplenishmentRule, LotMovement, StockReservation
 
     with new_session() as session:
@@ -329,7 +329,7 @@ def save_warehouse_dimensions(company_id: int, warehouse_id: int, width_m=None, 
                               max_weight_kg=None, description: str | None = None) -> None:
     for v in (width_m, length_m, height_m, max_weight_kg):
         if v is not None and decimal.Decimal(v) < 0:
-            raise ValueError("ابعاد/ظرفیتِ انبار نمی‌تواند منفی باشد.")
+            raise ValueError("ابعاد/ظرفیت انبار نمی‌تواند منفی باشد.")
     with new_session() as session:
         wh = _warehouse(session, company_id, warehouse_id)
         wh.width_m, wh.length_m, wh.height_m = width_m, length_m, height_m
@@ -345,7 +345,7 @@ def save_warehouse_dimensions(company_id: int, warehouse_id: int, width_m=None, 
 # درخت، هندسه و اشغال
 # =====================================================================
 def tree(company_id: int, warehouse_id: int, active_only: bool = False) -> list[SimpleNamespace]:
-    """همهٔ محل‌هایِ انبار با کدِ کامل، سطح و والد (یک کوئری)."""
+    """همهٔ محل‌های انبار با کد کامل، سطح و والد (یک کوئری)."""
     with new_session() as session:
         wh = _warehouse(session, company_id, warehouse_id)
         rows = list(session.scalars(select(BinLocation).where(BinLocation.warehouse_id == warehouse_id)
@@ -384,9 +384,9 @@ def ancestors(nodes_by_id: dict, location_id: int) -> list:
 
 
 def geometry(company_id: int, warehouse_id: int, nodes: list | None = None) -> dict[int, tuple[float, float, float, float, float]]:
-    """(x, y, w, h, rotation) هر محل رویِ نقشه. Zone/Aisle/Rack مختصاتِ ذخیره‌شده دارند؛ طبقه هم‌اندازهٔ قفسه
-    است و Binهایِ بی‌مختصات پشتِ‌سرِهم در طولِ قفسه با عرضِ واقعیِ خودشان (R254) چیده می‌شوند؛ فقط Binِ بی‌اندازه
-    از باقی‌ماندهٔ طولِ قفسه سهمِ مساوی می‌گیرد."""
+    """(x, y, w, h, rotation) هر محل روی نقشه. Zone/Aisle/Rack مختصات ذخیره‌شده دارند؛ طبقه هم‌اندازهٔ قفسه
+    است و خانه‌های بی‌مختصات پشت‌سرهم در طول قفسه با عرض واقعی خودشان (R254) چیده می‌شوند؛ فقط خانه بی‌اندازه
+    از باقی‌ماندهٔ طول قفسه سهم مساوی می‌گیرد."""
     nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
     by_id = {n.location_id: n for n in nodes}
     children = defaultdict(list)
@@ -431,7 +431,7 @@ def geometry(company_id: int, warehouse_id: int, nodes: list | None = None) -> d
 
 
 def _split_real(total: float, sizes: list[float | None]) -> list[tuple[float, float]]:
-    """(شروع، اندازه)ِ اجزایِ پشتِ‌سرِهم: اندازهٔ واقعیِ هر جزء؛ اجزایِ بی‌اندازه باقی‌مانده را مساوی تقسیم می‌کنند."""
+    """(شروع، اندازه) اجزای پشت‌سرهم: اندازهٔ واقعی هر جزء؛ اجزای بی‌اندازه باقی‌مانده را مساوی تقسیم می‌کنند."""
     unknown = sum(1 for v in sizes if not v)
     rest = total - sum(v for v in sizes if v)
     share = (rest / unknown if rest > 0 else total / len(sizes)) if unknown else 0.0
@@ -467,7 +467,7 @@ def capacity_of(node) -> tuple[decimal.Decimal | None, decimal.Decimal | None]:
 
 
 def occupancy(company_id: int, warehouse_id: int, nodes: list | None = None) -> dict[int, SimpleNamespace]:
-    """اشغالِ هر محل (با زیرمحل‌ها): مقدار، وزن، حجم، ارزش و درصد = بیشترینِ (وزن/ظرفیتِ وزنی، حجم/ظرفیتِ حجمی)."""
+    """اشغال هر محل (با زیرمحل‌ها): مقدار، وزن، حجم، ارزش و درصد = بیشترین (وزن/ظرفیت وزنی، حجم/ظرفیت حجمی)."""
     nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
     dims = _item_dims(company_id)
     own: dict[int, list] = defaultdict(lambda: [_ZERO, _ZERO, _ZERO, _ZERO, set()])
@@ -522,7 +522,7 @@ def is_operable(node) -> bool:
 # محتوا، محلِ کالا، جستجو و QR
 # =====================================================================
 def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
-    """کالاهایِ این محل و زیرمحل‌هایش از موجودیِ سیستم + سریال‌هایِ همین محل و بچ/انقضایِ کالا در همان انبار."""
+    """کالاهای این محل و زیرمحل‌هایش از موجودی سیستم + سریال‌های همین محل و بچ/انقضای کالا در همان انبار."""
     from peecha.services import inventory_catalog as catalog_service
 
     with new_session() as session:
@@ -555,8 +555,8 @@ def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
 
 
 def item_presence(company_id: int, warehouse_id: int, item_ids: list[int], nodes: list | None = None) -> dict[int, SimpleNamespace]:
-    """R256: برایِ کالا(های) جستجوشده: هر محل → مقدار، سریال‌ها و بچ‌هایِ همان کالا؛ جمعِ زیرمحل‌ها رویِ والدها
-    (قفسه/منطقه) هم می‌نشیند تا با بردنِ ماوس رویِ هر سطح دیده شود."""
+    """R256: برای کالا(های) جستجوشده: هر محل → مقدار، سریال‌ها و بچ‌های همان کالا؛ جمع زیرمحل‌ها روی والدها
+    (قفسه/منطقه) هم می‌نشیند تا با بردن ماوس روی هر سطح دیده شود."""
     if not item_ids:
         return {}
     nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
@@ -592,7 +592,7 @@ def item_presence(company_id: int, warehouse_id: int, item_ids: list[int], nodes
 
 
 def product_locations(company_id: int, item_id: int) -> list[SimpleNamespace]:
-    """همهٔ محل‌هایِ یک کالا (چند انبار/چند محل) با مقدار -- از موجودیِ سیستم."""
+    """همهٔ محل‌های یک کالا (چند انبار/چند محل) با مقدار — از موجودی سیستم."""
     from peecha.services import inventory_locations as locations_service
 
     rows = [r for r in _stock_by_bin(company_id) if r[1] == item_id and r[2]]
@@ -621,16 +621,16 @@ def qr_payload(location_id: int, location_code: str) -> str:
 
 
 def decode_qr(company_id: int, payload: str) -> int:
-    """متنِ QR → شناسهٔ محل (کدِ ثبت‌شده باید با کدِ فعلیِ محل بخواند)."""
+    """متن QR → شناسهٔ محل (کد ثبت‌شده باید با کد فعلی محل بخواند)."""
     parts = (payload or "").strip().split(":", 2)
     if len(parts) != 3 or parts[0] != QR_PREFIX or not parts[1].isdigit():
-        raise ValueError("QR محلِ انبار نیست.")
+        raise ValueError("QR محل انبار نیست.")
     location_id = int(parts[1])
     with new_session() as session:
         loc = _location(session, company_id, location_id)
         wh = session.get(Warehouse, loc.warehouse_id)
         if display_code(loc, wh.code) != parts[2]:
-            raise ValueError("QR با کدِ فعلیِ محل نمی‌خواند (کدِ محل تغییر کرده است).")
+            raise ValueError("QR با کد فعلی محل نمی‌خواند (کد محل تغییر کرده است).")
     return location_id
 
 
@@ -641,14 +641,14 @@ def qr_matrix(payload: str) -> list[list[int]]:
 
 
 def barcode_bits(code: str) -> str:
-    """الگویِ میله‌هایِ Code128 (برایِ چاپِ برچسب با QPainter)."""
+    """الگوی میله‌های Code128 (برای چاپ برچسب با QPainter)."""
     import barcode
 
     return barcode.get_barcode_class("code128")(code).build()[0]
 
 
 def search(company_id: int, text: str, warehouse_id: int | None = None) -> SimpleNamespace:
-    """QR/کدِ محل/بارکدِ محل → همان محل؛ وگرنه کد/نام/بارکد/SKUِ کالا → همهٔ محل‌هایِ آن کالا."""
+    """QR/کد محل/بارکد محل → همان محل؛ وگرنه کد/نام/بارکد/کد کالا کالا → همهٔ محل‌های آن کالا."""
     from peecha import numerals
     from peecha.services import inventory_catalog as catalog_service
 
@@ -698,8 +698,8 @@ def _leaf_nodes(nodes: list) -> list:
 
 
 def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quantity: decimal.Decimal, limit: int = 5) -> list:
-    """بهترین محل‌ها برایِ جانمایی: فقط محلِ فعال/مجاز با ظرفیتِ کافی؛ امتیاز با تجمیعِ همان کالا، تطبیقِ نوعِ محل
-    با کلاسِ ABC (A → جبههٔ برداشت، C → حجیم/ذخیره)، و ظرفیتِ باقی‌مانده."""
+    """بهترین محل‌ها برای جانمایی: فقط محل فعال/مجاز با ظرفیت کافی؛ امتیاز با تجمیع همان کالا، تطبیق نوع محل
+    با کلاس ABC (A → محل‌های برداشت، C → حجیم/ذخیره)، و ظرفیت باقی‌مانده."""
     from peecha.services import purchase_reports as base
     from peecha.services import warehouse_reports as wr
 
@@ -727,7 +727,7 @@ def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quanti
             continue
         if o and (o.max_weight is not None or o.max_volume is not None):
             score += 20
-            reasons.append("ظرفیتِ کافی (وزن/حجم)")
+            reasons.append("ظرفیت کافی (وزن/حجم)")
         else:
             score += 5
             reasons.append("ظرفیت تعریف نشده")
@@ -736,14 +736,14 @@ def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quanti
             reasons.append("همین کالا در این محل است (تجمیع)")
         elif o and o.items:
             score -= 10
-            reasons.append("محل کالایِ دیگر دارد")
+            reasons.append("محل کالای دیگر دارد")
         types = {a.location_type_code for a in ancestors(by_id, n.location_id) if a.location_type_code}
         if cls == "A" and types & {"PICK_FACE", "PICKING"}:
             score += 25
-            reasons.append("نزدیکِ جبههٔ برداشت -- مناسبِ کالایِ A")
+            reasons.append("نزدیک محل‌های برداشت — مناسب کالای A")
         if cls in ("B", "C") and types & {"BULK", "RESERVE"}:
             score += 15
-            reasons.append(f"منطقهٔ ذخیره/حجیم -- مناسبِ کالایِ {cls}")
+            reasons.append(f"منطقهٔ ذخیره/حجیم — مناسب کالای {cls}")
         if types & {"QUARANTINE", "DAMAGED", "RETURNS", "RECEIVING", "SHIPPING", "STAGING"}:
             score -= 30
             reasons.append("منطقهٔ عملیاتی/قرنطینه")
@@ -751,9 +751,9 @@ def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quanti
             score += int((100 - min(o.percent, 100)) / 10)
         if profile.is_fragile and n.level_number is not None and n.level_number <= 1:
             score += 10
-            reasons.append("طبقهٔ پایین -- مناسبِ کالایِ شکستنی")
+            reasons.append("طبقهٔ پایین — مناسب کالای شکستنی")
         if profile.temperature_max_c is not None or profile.hazard_class_code:
-            reasons.append("با شرایطِ نگهداریِ کالا سازگار است")
+            reasons.append("با شرایط نگهداری کالا سازگار است")
         out.append(SimpleNamespace(location_id=n.location_id, location_code=n.full_code, score=score, abc_class=cls,
                                    reasons=reasons, occupancy=o.percent if o else None))
     out.sort(key=lambda s: (-s.score, s.location_code))
@@ -761,7 +761,7 @@ def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quanti
 
 
 def picking_path(company_id: int, warehouse_id: int, location_ids: list[int]) -> SimpleNamespace:
-    """مسیرِ پیشنهادی (نزدیک‌ترین همسایه) از منطقهٔ دریافت/ابتدایِ انبار تا منطقهٔ ارسال، رویِ مراکزِ نقشه."""
+    """مسیر پیشنهادی (نزدیک‌ترین همسایه) از منطقهٔ دریافت/ابتدای انبار تا منطقهٔ ارسال، روی مراکز نقشه."""
     nodes = tree(company_id, warehouse_id)
     geo = geometry(company_id, warehouse_id, nodes)
     center = lambda lid: (geo[lid][0] + geo[lid][2] / 2, geo[lid][1] + geo[lid][3] / 2)  # noqa: E731
@@ -783,12 +783,12 @@ def picking_path(company_id: int, warehouse_id: int, location_ids: list[int]) ->
                            start=start_zone, end=end_zone)
 
 
-HEATMAP_MODES = {"NORMAL": "عادی", "OCCUPANCY": "اشغال", "PICK_FREQ": "تواترِ برداشت", "VALUE": "ارزشِ موجودی", "ABC": "ABC",
-                 "EXPIRY": "ریسکِ انقضا", "CONGESTION": "ازدحام", "TEMPERATURE": "دما"}
+HEATMAP_MODES = {"NORMAL": "عادی", "OCCUPANCY": "اشغال", "PICK_FREQ": "تواتر برداشت", "VALUE": "ارزش موجودی", "ABC": "ABC",
+                 "EXPIRY": "ریسک انقضا", "CONGESTION": "ازدحام", "TEMPERATURE": "دما"}
 
 
 def heatmap(company_id: int, warehouse_id: int, mode: str, nodes: list | None = None) -> dict[int, object]:
-    """مقدارِ هر محل (برگ‌ها و والدها) برایِ حالتِ نقشه."""
+    """مقدار هر محل (برگ‌ها و والدها) برای حالت نقشه."""
     nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
     if mode == "OCCUPANCY":
         return {k: v.percent for k, v in occupancy(company_id, warehouse_id, nodes).items()}
@@ -857,7 +857,7 @@ def _roll_up(nodes: list, values: dict[int, int]) -> dict[int, int]:
 
 
 def history(company_id: int, location_id: int, limit: int = 200) -> list[SimpleNamespace]:
-    """ورود/خروج/انتقال از دفترِ انبار + تغییرِ مشخصات/وضعیت/ظرفیت از audit.activity_log."""
+    """ورود/خروج/انتقال از دفتر انبار + تغییر مشخصات/وضعیت/ظرفیت از audit.activity_log."""
     from peecha.db.models.audit import ActivityLog
     from peecha.services import inventory_catalog as catalog_service
 
@@ -880,7 +880,7 @@ def history(company_id: int, location_id: int, limit: int = 200) -> list[SimpleN
                            detail=f"{doc_type} {doc_no}", item=items.get(item_id, ""), quantity=qty, stock_document_id=doc_id,
                            doc_type=doc_type)
            for d, created, direction, qty, item_id, doc_type, doc_no, doc_id in moves]
-    labels = {"CREATE": "ایجاد", "UPDATE": "تغییرِ مشخصات", "DELETE": "حذف"}
+    labels = {"CREATE": "ایجاد", "UPDATE": "تغییر مشخصات", "DELETE": "حذف"}
     for a in audits:
         detail = "، ".join(f"{k}: {v[0]} ← {v[1]}" if isinstance(v, list) else f"{k}: {v}" for k, v in (a.changes or {}).items())
         out.append(SimpleNamespace(at=a.created_at, kind=labels.get(a.action, a.action), detail=detail, item="", quantity=None,
@@ -893,12 +893,12 @@ def history(company_id: int, location_id: int, limit: int = 200) -> list[SimpleN
 # =====================================================================
 def transfer(company_id: int, user_id: int, item_id: int, from_location_id: int, to_location_id: int,
              quantity: decimal.Decimal, allow_over_capacity: bool = False) -> int:
-    """اعتبارسنجیِ محلِ مقصد (فعال، مجاز برایِ جانمایی، ظرفیت) و ثبتِ سندِ انتقالِ عادی؛ خروجی = شناسهٔ سند."""
+    """اعتبارسنجی محل مقصد (فعال، مجاز برای جانمایی، ظرفیت) و ثبت سند انتقال عادی؛ خروجی = شناسهٔ سند."""
     from peecha.services import inventory_documents as inv_documents_service
 
     quantity = decimal.Decimal(quantity)
     if quantity <= 0:
-        raise ValueError("مقدارِ انتقال باید مثبت باشد.")
+        raise ValueError("مقدار انتقال باید مثبت باشد.")
     with new_session() as session:
         src = _location(session, company_id, from_location_id)
         dst = _location(session, company_id, to_location_id)
@@ -910,26 +910,26 @@ def transfer(company_id: int, user_id: int, item_id: int, from_location_id: int,
         src_wh, dst_wh = src.warehouse_id, dst.warehouse_id
     dst_node = next(n for n in tree(company_id, dst_wh) if n.location_id == to_location_id)
     if not is_operable(dst_node) or not dst_node.allow_putaway:
-        raise ValueError(f"محلِ مقصد «{dst_node.full_code}» برایِ ورودِ کالا فعال/مجاز نیست ({STATUSES.get(dst_node.status_code)}).")
+        raise ValueError(f"محل مقصد «{dst_node.full_code}» برای ورود کالا فعال/مجاز نیست ({STATUSES.get(dst_node.status_code)}).")
     from peecha.services import warehouse_operations as ops
 
     held = ops.reserved_by_bin(company_id, src_wh).get((from_location_id, item_id), _ZERO)
     if quantity > available - held:
-        raise ValueError("مقدارِ انتقال بیش از موجودیِ آزادِ محلِ مبدا است"
-                         + (f" ({held} عدد برایِ وظایفِ انبار رزرو شده است)." if held else "."))
+        raise ValueError("مقدار انتقال بیش از موجودی آزاد محل مبدا است"
+                         + (f" ({held} عدد برای وظایف انبار رزرو شده است)." if held else "."))
     issues = compatibility_issues(company_id, item_id, to_location_id)
     if issues:
-        raise ValueError(f"کالا با محلِ «{dst_node.full_code}» سازگار نیست: " + "؛ ".join(issues))
+        raise ValueError(f"کالا با محل «{dst_node.full_code}» سازگار نیست: " + "؛ ".join(issues))
     if not allow_over_capacity:
         o = occupancy(company_id, dst_wh).get(to_location_id)
         weight, volume = _item_dims(company_id).get(item_id, (None, None))
         if o and ((o.max_weight is not None and o.weight + quantity * (weight or _ZERO) > o.max_weight)
                   or (o.max_volume is not None and o.volume + quantity * (volume or _ZERO) > o.max_volume)):
-            raise ValueError("ظرفیتِ محلِ مقصد کافی نیست (برایِ ادامه، عبور از ظرفیت را تایید کنید).")
+            raise ValueError("ظرفیت محل مقصد کافی نیست (برای ادامه، عبور از ظرفیت را تایید کنید).")
     doc_id = inv_documents_service.create_stock_document(
         company_id, user_id, "TRANSFER", datetime.date.today(),
         inv_documents_service.DocumentHeaderFields(source_warehouse_id=src_wh, destination_warehouse_id=dst_wh,
-                                                   description="انتقالِ محل از نقشهٔ انبار"))
+                                                   description="انتقال محل از نقشهٔ انبار"))
     inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(
         item_id=item_id, uom_id=base_uom, quantity=quantity, quantity_base=quantity, conversion_factor=decimal.Decimal(1),
         bin_location_id=from_location_id, destination_bin_location_id=to_location_id))
@@ -939,7 +939,7 @@ def transfer(company_id: int, user_id: int, item_id: int, from_location_id: int,
 
 
 def can(user_id: int | None, company_id: int, action: str) -> bool:
-    """دسترسی از همان سیستمِ نقش‌ها (sec.role_form_permissions) با فرمِ «warehouse_map»."""
+    """دسترسی از همان سیستم نقش‌ها (sec.role_form_permissions) با فرم «warehouse_map»."""
     from peecha.services import roles as roles_service
 
     return user_id is not None and roles_service.user_has_permission(user_id, company_id, FORM_CODE, action)
@@ -950,7 +950,7 @@ def can(user_id: int | None, company_id: int, action: str) -> bool:
 # R249: سازگاریِ کالا با محل و بررسیِ محل‌هایِ سندِ انبار
 # =====================================================================
 HAZARD_CLASSES = {
-    "EXPLOSIVE": "منفجره (۱)", "GAS": "گاز (۲)", "FLAMMABLE_LIQUID": "مایعِ آتش‌گیر (۳)", "FLAMMABLE_SOLID": "جامدِ آتش‌گیر (۴)",
+    "EXPLOSIVE": "منفجره (۱)", "GAS": "گاز (۲)", "FLAMMABLE_LIQUID": "مایع آتش‌گیر (۳)", "FLAMMABLE_SOLID": "جامد آتش‌گیر (۴)",
     "OXIDIZER": "اکسیدکننده (۵)", "TOXIC": "سمی (۶)", "RADIOACTIVE": "پرتوزا (۷)", "CORROSIVE": "خورنده (۸)", "MISC": "سایر (۹)",
 }
 AMBIENT_RANGE = (decimal.Decimal(15), decimal.Decimal(25))  # محلِ بی‌دمایِ تعریف‌شده = دمایِ محیط
@@ -984,14 +984,14 @@ def get_storage_profile(company_id: int, item_id: int) -> StorageProfile:
 
 
 def save_storage_profile(company_id: int, item_id: int, profile: StorageProfile, user_id: int | None = None) -> None:
-    """ذخیرهٔ شرایطِ نگهداریِ کالا؛ پروفایلِ خالی حذف می‌شود."""
+    """ذخیرهٔ شرایط نگهداری کالا؛ پروفایل خالی حذف می‌شود."""
     if (profile.temperature_min_c is not None and profile.temperature_max_c is not None
             and profile.temperature_min_c > profile.temperature_max_c):
-        raise ValueError("دمایِ حداقلِ نگهداری نمی‌تواند بیشتر از دمایِ حداکثر باشد.")
+        raise ValueError("دمای حداقل نگهداری نمی‌تواند بیشتر از دمای حداکثر باشد.")
     if profile.hazard_class_code and profile.hazard_class_code not in HAZARD_CLASSES:
-        raise ValueError("کلاسِ خطر نامعتبر است.")
+        raise ValueError("کلاس خطر نامعتبر است.")
     if profile.required_location_type_code and profile.required_location_type_code not in LOCATION_TYPES:
-        raise ValueError("نوعِ محلِ الزامی نامعتبر است.")
+        raise ValueError("نوع محل الزامی نامعتبر است.")
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
@@ -1019,7 +1019,7 @@ def save_storage_profile(company_id: int, item_id: int, profile: StorageProfile,
 
 
 def location_temperature(by_id: dict, location_id: int) -> tuple | None:
-    """بازهٔ دمایِ نزدیک‌ترین محل (خودش یا والدها) که دما دارد."""
+    """بازهٔ دمای نزدیک‌ترین محل (خودش یا والدها) که دما دارد."""
     for n in reversed(ancestors(by_id, location_id)):
         if n.temperature_min_c is not None or n.temperature_max_c is not None:
             return n.temperature_min_c, n.temperature_max_c
@@ -1028,7 +1028,7 @@ def location_temperature(by_id: dict, location_id: int) -> tuple | None:
 
 def compatibility_issues(company_id: int, item_id: int, location_id: int, by_id: dict | None = None,
                          profile: StorageProfile | None = None) -> list[str]:
-    """ناسازگاری‌هایِ کالا با محل (دما، کالایِ خطرناک، نوعِ محلِ الزامی)؛ فهرستِ خالی = سازگار."""
+    """ناسازگاری‌های کالا با محل (دما، کالای خطرناک، نوع محل الزامی)؛ فهرست خالی = سازگار."""
     profile = profile if profile is not None else get_storage_profile(company_id, item_id)
     if profile.is_empty():
         return []
@@ -1045,19 +1045,19 @@ def compatibility_issues(company_id: int, item_id: int, location_id: int, by_id:
         loc_max = loc_max if loc_max is not None else loc_min
         if (profile.temperature_min_c is not None and loc_min is not None and loc_min < profile.temperature_min_c) or \
                 (profile.temperature_max_c is not None and loc_max is not None and loc_max > profile.temperature_max_c):
-            where = "محیط (بی‌دمایِ تعریف‌شده)" if loc_range is None else f"{loc_min} تا {loc_max}"
+            where = "محیط (بی‌دمای تعریف‌شده)" if loc_range is None else f"{loc_min} تا {loc_max}"
             need = f"{profile.temperature_min_c if profile.temperature_min_c is not None else '…'} تا " \
                    f"{profile.temperature_max_c if profile.temperature_max_c is not None else '…'}"
-            issues.append(f"دمایِ محل {where} است ولی کالا {need} درجه نیاز دارد")
+            issues.append(f"دمای محل {where} است ولی کالا {need} درجه نیاز دارد")
     if profile.hazard_class_code and not any(n.allows_hazardous for n in chain):
-        issues.append(f"کالایِ خطرناک ({HAZARD_CLASSES.get(profile.hazard_class_code)}) فقط در محلِ مجاز برایِ کالایِ خطرناک")
+        issues.append(f"کالای خطرناک ({HAZARD_CLASSES.get(profile.hazard_class_code)}) فقط در محل مجاز برای کالای خطرناک")
     if profile.required_location_type_code and not any(n.location_type_code == profile.required_location_type_code for n in chain):
-        issues.append(f"کالا فقط در محلِ «{LOCATION_TYPES[profile.required_location_type_code]}» نگهداری می‌شود")
+        issues.append(f"کالا فقط در محل «{LOCATION_TYPES[profile.required_location_type_code]}» نگهداری می‌شود")
     return issues
 
 
 def _document_moves(doc, ln) -> list[tuple[str, int]]:
-    """(جهت، محل) ردیفِ سند با همان قاعدهٔ موتورِ انبار؛ ردیفِ بی‌محل (محلِ پیش‌فرض) بررسی نمی‌شود."""
+    """(جهت، محل) ردیف سند با همان قاعدهٔ موتور انبار؛ ردیف بی‌محل (محل پیش‌فرض) بررسی نمی‌شود."""
     t = doc.document_type_code
     moves = []
     if t == "TRANSFER":
@@ -1072,8 +1072,8 @@ def _document_moves(doc, ln) -> list[tuple[str, int]]:
 
 
 def check_document_locations(company_id: int, stock_document_id: int) -> SimpleNamespace:
-    """پیش از تایید/ثبتِ سندِ انبار: خطا = ورود به محلِ غیرفعال/مسدود/در تعمیر/پر یا خروج از محلِ مسدود/در تعمیر؛
-    هشدار = محلِ بدونِ اجازهٔ جانمایی/آسیب‌دیده، ناسازگاریِ کالا و عبور از ظرفیت."""
+    """پیش از تایید/ثبت سند انبار: خطا = ورود به محل غیرفعال/مسدود/در تعمیر/پر یا خروج از محل مسدود/در تعمیر؛
+    هشدار = محل بدون اجازهٔ جانمایی/آسیب‌دیده، ناسازگاری کالا و عبور از ظرفیت."""
     errors, warnings = [], []
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
@@ -1095,16 +1095,16 @@ def check_document_locations(company_id: int, stock_document_id: int) -> SimpleN
         if wid not in trees:
             trees[wid] = {n.location_id: n for n in tree(company_id, wid)}
         node = trees[wid].get(bin_id)
-        label = f"ردیفِ {ln.line_no}: محلِ «{node.full_code}»"
+        label = f"ردیف {ln.line_no}: محل «{node.full_code}»"
         if direction == "OUT" and node.status_code in NO_EXIT_STATUSES:
-            errors.append(f"{label} {STATUSES[node.status_code]} است و خروجِ کالا از آن مجاز نیست.")
+            errors.append(f"{label} {STATUSES[node.status_code]} است و خروج کالا از آن مجاز نیست.")
         if direction != "IN":
             continue
         if node.status_code in NO_ENTRY_STATUSES or not node.is_active:
-            errors.append(f"{label} {STATUSES.get(node.status_code, 'غیرفعال')} است و ورودِ کالا به آن مجاز نیست.")
+            errors.append(f"{label} {STATUSES.get(node.status_code, 'غیرفعال')} است و ورود کالا به آن مجاز نیست.")
             continue
         if not node.allow_putaway or node.is_damaged:
-            warnings.append(f"{label} برایِ جانمایی مجاز نیست یا آسیب‌دیده است.")
+            warnings.append(f"{label} برای جانمایی مجاز نیست یا آسیب‌دیده است.")
         for issue in compatibility_issues(company_id, ln.item_id, bin_id, trees[wid]):
             warnings.append(f"{label}: {issue}.")
         w, v = dims.get(ln.item_id, (None, None))
@@ -1117,7 +1117,7 @@ def check_document_locations(company_id: int, stock_document_id: int) -> SimpleN
         o = occ_cache[wid].get(bin_id)
         if o and ((o.max_weight is not None and o.weight + w_in > o.max_weight)
                   or (o.max_volume is not None and o.volume + v_in > o.max_volume)):
-            warnings.append(f"ظرفیتِ محلِ «{trees[wid][bin_id].full_code}» با این سند پر می‌شود (عبور از ظرفیت).")
+            warnings.append(f"ظرفیت محل «{trees[wid][bin_id].full_code}» با این سند پر می‌شود (عبور از ظرفیت).")
     return SimpleNamespace(errors=errors, warnings=warnings)
 
 
@@ -1130,8 +1130,8 @@ _DEFAULT_HEIGHT_M = {"AREA": decimal.Decimal("0.05"), "AISLE": decimal.Decimal("
 
 
 def scene_3d(company_id: int, warehouse_id: int, nodes: list | None = None) -> list[SimpleNamespace]:
-    """جعبه‌هایِ سه‌بعدیِ محل‌ها (x, y, z, w, d, h به واحدِ نقشه). منطقه/راهرو کف‌اند؛ قفسه به ارتفاعِ خودش
-    (یا ۲٫۵ متر)؛ طبقه‌ها ارتفاعِ قفسه را به ترتیبِ شمارهٔ طبقه تقسیم می‌کنند و Bin ارتفاعِ طبقه‌اش را می‌گیرد."""
+    """جعبه‌های سه‌بعدی محل‌ها (x, y, z, w, d, h به واحد نقشه). منطقه/راهرو کف‌اند؛ قفسه به ارتفاع خودش
+    (یا ۲٫۵ متر)؛ طبقه‌ها ارتفاع قفسه را به ترتیب شمارهٔ طبقه تقسیم می‌کنند و خانه ارتفاع طبقه‌اش را می‌گیرد."""
     nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
     geo = geometry(company_id, warehouse_id, nodes)
     by_id = {n.location_id: n for n in nodes}
@@ -1184,7 +1184,7 @@ def scene_3d(company_id: int, warehouse_id: int, nodes: list | None = None) -> l
 # R251: بچ به تفکیکِ محل (از ستونِ محلِ inv.lot_movements)
 # =====================================================================
 def bin_batches(company_id: int, warehouse_id: int, item_id: int | None = None) -> dict[tuple[int, int], list[SimpleNamespace]]:
-    """(محل، کالا) → بچ‌هایِ موجود در همان محل به ترتیبِ انقضا (FEFO)."""
+    """(محل، کالا) → بچ‌های موجود در همان محل به ترتیب انقضا (FEFO)."""
     from peecha.db.models.inventory import Batch, LotMovement
 
     with new_session() as session:
@@ -1212,10 +1212,10 @@ _OUT_TYPES = ("ISSUE", "RETURN_OUT", "CONSIGN_RETURN", "TRANSFER")
 
 
 def assign_outbound_bins(company_id: int, stock_document_id: int) -> list[tuple[int, str]]:
-    """ردیفِ خروجیِ بی‌محل در انبارِ دارایِ نقشه: اگر محلِ پیش‌فرض موجودیِ کافی ندارد، یک محل که کلِ مقدار را دارد
-    انتخاب می‌شود (اول محلِ بچ/سریالِ تعیین‌شده، سپس زودانقضاترین بچ، سپس جبههٔ برداشت و بیشترین موجودی).
-    ردیف تقسیم نمی‌شود؛ اگر هیچ محلی کلِ مقدار را نداشته باشد رفتارِ قبلی (محلِ پیش‌فرض) می‌ماند.
-    خروجی: [(شمارهٔ ردیف، کدِ محلِ انتخاب‌شده)]."""
+    """ردیف خروجی بی‌محل در انبار دارای نقشه: اگر محل پیش‌فرض موجودی کافی ندارد، یک محل که کل مقدار را دارد
+    انتخاب می‌شود (اول محل بچ/سریال تعیین‌شده، سپس زودانقضاترین بچ، سپس محل‌های برداشت و بیشترین موجودی).
+    ردیف تقسیم نمی‌شود؛ اگر هیچ محلی کل مقدار را نداشته باشد رفتار قبلی (محل پیش‌فرض) می‌ماند.
+    خروجی: [(شمارهٔ ردیف، کد محل انتخاب‌شده)]."""
     from peecha.services import inventory_locations as locations_service
     from peecha.services import lot_tracking
 

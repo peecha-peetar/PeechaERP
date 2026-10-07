@@ -1,7 +1,7 @@
-"""شرکایِ تجاری (مرحلهٔ ۳): customer_profiles/supplier_profiles جدولِ
-اقماریِ یک‌به‌یکِ تفصیلیِ گروهِ CUSTOMER/SUPPLIER هستند — هویت و مانده
-هرگز این‌جا بازتعریف نمی‌شوند، فقط لایهٔ تجاری (فهرستِ قیمت، مهلت، سقفِ
-اعتبار، گردشِ کارِ تایید) اضافه می‌شود."""
+"""شرکای تجاری (مرحلهٔ ۳): customer_profiles/supplier_profiles جدول
+اقماری یک‌به‌یک تفصیلی گروه CUSTOMER/SUPPLIER هستند — هویت و مانده
+هرگز این‌جا بازتعریف نمی‌شوند، فقط لایهٔ تجاری (فهرست قیمت، مهلت، سقف
+اعتبار، گردش کار تایید) اضافه می‌شود."""
 
 from __future__ import annotations
 
@@ -121,18 +121,18 @@ def create_customer(
     fast_track: bool = False, submitted_by_user_id: int | None = None,
     parent_detail_account_id: int | None = None, **extra_fields,
 ) -> int:
-    """fast_track=True (مرحلهٔ ۳، پیشنهادِ معمار): مشتریِ کم‌ریسک بدونِ
+    """fast_track=True (مرحلهٔ ۳، پیشنهاد معمار): مشتری کم‌ریسک بدون
     گذر از PENDING_APPROVAL مستقیم ACTIVE می‌شود.
 
-    extra_fields (R134، برایِ APIِ موبایل): فیلدهایِ خودِ customer_details
-    (مثلِ phone/address) -- مستقیم به dimensions_service.create_customer
-    منتقل می‌شود، اختیاری و عطف‌به‌ماسبق‌سازگار (فراخوانی‌هایِ قبلی بدونِ
+    extra_fields (R134، برای API موبایل): فیلدهای خود customer_details
+    (مثل phone/address) — مستقیم به dimensions_service.create_customer
+    منتقل می‌شود، اختیاری و عطف‌به‌ماسبق‌سازگار (فراخوانی‌های قبلی بدون
     این فیلدها دست‌نخورده می‌مانند).
 
-    parent_detail_account_id (R218، بازبینیِ صریحِ کاربر): وقتی گروهِ
-    مشتری بیش از یک سطح دارد (dimension_group_config.py)، مشتریِ
-    تراکنش‌پذیر همیشه باید فرزندِ سطحِ آخر باشد -- None یعنی گروهِ تخت
-    (تکسطحی، رفتارِ پیش‌فرض/قبلی، بدونِ تغییر)."""
+    parent_detail_account_id (R218، بازبینی صریح کاربر): وقتی گروه
+    مشتری بیش از یک سطح دارد (dimension_group_config.py)، مشتری
+    تراکنش‌پذیر همیشه باید فرزند سطح آخر باشد — None یعنی گروه تخت
+    (تکسطحی، رفتار پیش‌فرض/قبلی، بدون تغییر)."""
     fields = fields or CustomerProfileFields()
     detail_account_id = dimensions_service.create_customer(
         company_id, code, name, parent_detail_account_id=parent_detail_account_id, **extra_fields
@@ -182,7 +182,7 @@ def approve_customer(customer_detail_account_id: int, approved_by_user_id: int) 
         if profile is None:
             raise ValueError("مشتری نامعتبر است.")
         if profile.status_code != "PENDING_APPROVAL":
-            raise ValueError("فقط مشتریِ درانتظارِ تایید قابلِ‌تاییدِ اعتباری است.")
+            raise ValueError("فقط مشتری درانتظار تایید قابل‌تایید اعتباری است.")
         profile.status_code = "ACTIVE"
         profile.approved_by_user_id = approved_by_user_id
         profile.approved_at = datetime.datetime.now()
@@ -190,17 +190,17 @@ def approve_customer(customer_detail_account_id: int, approved_by_user_id: int) 
 
 
 def reject_customer(customer_detail_account_id: int, rejected_by_user_id: int, reason: str) -> None:
-    """طبقِ درخواستِ صریحِ کاربر («Manager بتواند Approve/Reject کند»):
-    مشتریِ درانتظارِ تایید را غیرِفعال می‌کند -- comm.customer_profiles.
-    status_code هیچ مقدارِ «REJECTED»یِ جداگانه ندارد (بدونِ migrationِ
-    غیرضروری)، پس هم‌الگو با set_customer_hold از همان دو ستونِ عمومیِ
+    """طبق درخواست صریح کاربر («Manager بتواند Approve/Reject کند»):
+    مشتری درانتظار تایید را غیرفعال می‌کند — comm.customer_profiles.
+    status_code هیچ مقدار «REJECTED»ی جداگانه ندارد (بدون migration
+    غیرضروری)، پس هم‌الگو با set_customer_hold از همان دو ستون عمومی
     hold_reason/held_at/held_by_user_id استفاده می‌کند."""
     with new_session() as session:
         profile = session.get(CustomerProfile, customer_detail_account_id)
         if profile is None:
             raise ValueError("مشتری نامعتبر است.")
         if profile.status_code != "PENDING_APPROVAL":
-            raise ValueError("فقط مشتریِ درانتظارِ تایید قابلِ‌رد است.")
+            raise ValueError("فقط مشتری درانتظار تایید قابل‌رد است.")
         profile.status_code = "INACTIVE"
         profile.hold_reason = reason
         profile.held_at = datetime.datetime.now()
@@ -212,7 +212,7 @@ def set_customer_hold(
     customer_detail_account_id: int, status_code: str, reason: str, held_by_user_id: int
 ) -> None:
     if status_code not in ("SUSPENDED", "BLACKLISTED"):
-        raise ValueError("وضعیتِ توقف نامعتبر است.")
+        raise ValueError("وضعیت توقف نامعتبر است.")
     with new_session() as session:
         profile = session.get(CustomerProfile, customer_detail_account_id)
         if profile is None:
@@ -226,7 +226,7 @@ def set_customer_hold(
 
 def set_customer_status(customer_detail_account_id: int, status_code: str) -> None:
     if status_code not in _CUSTOMER_STATUSES:
-        raise ValueError("وضعیتِ نامعتبر است.")
+        raise ValueError("وضعیت نامعتبر است.")
     with new_session() as session:
         profile = session.get(CustomerProfile, customer_detail_account_id)
         if profile is None:
@@ -236,9 +236,9 @@ def set_customer_status(customer_detail_account_id: int, status_code: str) -> No
 
 
 def count_new_customers(company_id: int, date_from: datetime.date, date_to: datetime.date) -> int:
-    """طبقِ داشبوردِ مدیریتی (Phase 7): «مشتریِ جدید» یعنی ثبت‌شده
-    (submitted_at، همان کدی که با ثبتِ مشتری از موبایل/دسکتاپ پر
-    می‌شود) در بازهٔ درخواستی -- صرفِ نظر از این‌که هنوز تاییدشده باشد
+    """طبق داشبورد مدیریتی (Phase 7): «مشتری جدید» یعنی ثبت‌شده
+    (submitted_at، همان کدی که با ثبت مشتری از موبایل/دسکتاپ پر
+    می‌شود) در بازهٔ درخواستی — صرف نظر از این‌که هنوز تاییدشده باشد
     یا نه."""
     with new_session() as session:
         return session.scalar(
@@ -251,8 +251,8 @@ def count_new_customers(company_id: int, date_from: datetime.date, date_to: date
 
 
 def count_customers_without_purchase(company_id: int) -> int:
-    """طبقِ داشبوردِ مدیریتی: مشتریانِ فعالی که هرگز فاکتورِ POSTED
-    نداشته‌اند -- سرنخِ فروشِ ازدست‌رفته."""
+    """طبق داشبورد مدیریتی: مشتریان فعالی که هرگز فاکتور POSTED
+    نداشته‌اند — سرنخ فروش ازدست‌رفته."""
     with new_session() as session:
         has_invoice_subquery = (
             select(CommercialDocument.document_id)
@@ -273,11 +273,11 @@ def count_customers_without_purchase(company_id: int) -> int:
 
 
 def set_customer_credit_limit(customer_detail_account_id: int, credit_limit_amount) -> None:
-    """طبقِ درخواستِ صریح («دستیارِ فروش» -- پیشنهادِ افزایشِ سقفِ اعتبار
-    برایِ مشتریِ روبه‌رشد): تغییرِ سریعِ یک فیلد، بدونِ نیاز به فرمِ کاملِ
+    """طبق درخواست صریح («دستیار فروش» — پیشنهاد افزایش سقف اعتبار
+    برای مشتری روبه‌رشد): تغییر سریع یک فیلد، بدون نیاز به فرم کامل
     update_customer_detail_account."""
     if credit_limit_amount is None or credit_limit_amount < 0:
-        raise ValueError("سقفِ اعتبار نامعتبر است.")
+        raise ValueError("سقف اعتبار نامعتبر است.")
     with new_session() as session:
         profile = session.get(CustomerProfile, customer_detail_account_id)
         if profile is None:
@@ -316,13 +316,13 @@ def _split_customer_fields(person_fields: dict) -> tuple[dict, dict]:
 
 
 def get_customer_hierarchy_options(company_id: int) -> dict:
-    """طبقِ بازبینیِ صریحِ کاربر («مشتری یک تفصیلی‌ست که والد دارد و
-    چندسطحی‌ست؛ هنگامِ تعریف باید سطوحِ بالاتر انتخاب و طبقِ تعدادِ سطحِ
-    تنظیم‌شده، در سطحِ آخر تعریف شود»): اگر گروهِ مشتری تک‌سطحی است
-    (پیش‌فرض)، max_level_no=1 و parent_options خالی -- هیچ انتخابی لازم
-    نیست. اگر بیش از یک سطح دارد، parent_options فقط گره‌هایِ سطحِ
-    ماقبلِ‌آخر را برمی‌گرداند (تنها والدهایِ معتبر برایِ یک مشتریِ
-    تراکنش‌پذیرِ تازه، که همیشه باید در سطحِ آخر ساخته شود)."""
+    """طبق بازبینی صریح کاربر («مشتری یک تفصیلی‌ست که والد دارد و
+    چندسطحی‌ست؛ هنگام تعریف باید سطوح بالاتر انتخاب و طبق تعداد سطح
+    تنظیم‌شده، در سطح آخر تعریف شود»): اگر گروه مشتری تک‌سطحی است
+    (پیش‌فرض)، max_level_no=1 و parent_options خالی — هیچ انتخابی لازم
+    نیست. اگر بیش از یک سطح دارد، parent_options فقط گره‌های سطح
+    ماقبل‌آخر را برمی‌گرداند (تنها والدهای معتبر برای یک مشتری
+    تراکنش‌پذیر تازه، که همیشه باید در سطح آخر ساخته شود)."""
     dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     customer_group_id = dimensions_service.get_person_group_id(company_id, dimensions_service.CUSTOMER_GROUP_CODE)
     max_level_no = dimensions_service.get_group_max_level_no(dimension_type_id, customer_group_id)
@@ -347,11 +347,11 @@ def get_customer_hierarchy_options(company_id: int) -> dict:
 def find_duplicate_customers(
     company_id: int, name: str | None = None, mobile: str | None = None, phone: str | None = None, limit: int = 5,
 ) -> list[dict]:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۱۶ -- تشخیصِ مشتریِ
-    تکراری): برایِ فرمِ ثبتِ سریعِ موبایل، پیش از ارسالِ واقعی -- موبایل/
-    تلفنِ یکسان (بعدِ نرمال‌سازیِ ارقامِ فارسی) یا نامِ مشابه (زیررشته‌ای،
-    غیرِحساس‌به‌بزرگی/کوچکی). ردِ ثبت نمی‌کند، فقط برایِ هشدار به کاربر
-    برمی‌گردد -- تصمیمِ نهایی (ادامه یا مشاهده‌یِ مشتریِ موجود) با خودِ کاربر است."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R216، بخش ۱۶ — تشخیص مشتری
+    تکراری): برای فرم ثبت سریع موبایل، پیش از ارسال واقعی — موبایل/
+    تلفن یکسان (بعد نرمال‌سازی ارقام فارسی) یا نام مشابه (زیررشته‌ای،
+    غیرحساس‌به‌بزرگی/کوچکی). رد ثبت نمی‌کند، فقط برای هشدار به کاربر
+    برمی‌گردد — تصمیم نهایی (ادامه یا مشاهدهٔ مشتری موجود) با خود کاربر است."""
     from peecha import numerals
 
     name_norm = (name or "").strip().lower()
@@ -366,11 +366,11 @@ def find_duplicate_customers(
         row_phone = numerals.to_ascii_digits((row.get("phone") or "").strip())
         row_name = (row.get("name") or "").strip().lower()
         if mobile_norm and row_mobile and row_mobile == mobile_norm:
-            reasons.append("موبایلِ یکسان")
+            reasons.append("موبایل یکسان")
         if phone_norm and row_phone and row_phone == phone_norm:
-            reasons.append("تلفنِ یکسان")
+            reasons.append("تلفن یکسان")
         if name_norm and row_name and (row_name == name_norm or name_norm in row_name or row_name in name_norm):
-            reasons.append("نامِ مشابه")
+            reasons.append("نام مشابه")
         if reasons:
             matches.append({**row, "match_reasons": reasons})
     matches.sort(key=lambda r: len(r["match_reasons"]), reverse=True)
@@ -500,7 +500,7 @@ def approve_supplier(supplier_detail_account_id: int, approved_by_user_id: int) 
         if profile is None:
             raise ValueError("تامین‌کننده نامعتبر است.")
         if profile.status_code != "PENDING_APPROVAL":
-            raise ValueError("فقط تامین‌کنندهٔ درانتظارِ تایید قابلِ‌تاییدِ اعتباری است.")
+            raise ValueError("فقط تامین‌کنندهٔ درانتظار تایید قابل‌تایید اعتباری است.")
         profile.status_code = "ACTIVE"
         profile.approved_by_user_id = approved_by_user_id
         profile.approved_at = datetime.datetime.now()
@@ -509,7 +509,7 @@ def approve_supplier(supplier_detail_account_id: int, approved_by_user_id: int) 
 
 def set_supplier_hold(supplier_detail_account_id: int, status_code: str, reason: str, held_by_user_id: int) -> None:
     if status_code not in ("ON_HOLD", "DISQUALIFIED"):
-        raise ValueError("وضعیتِ توقف نامعتبر است.")
+        raise ValueError("وضعیت توقف نامعتبر است.")
     with new_session() as session:
         profile = session.get(SupplierProfile, supplier_detail_account_id)
         if profile is None:
@@ -522,8 +522,8 @@ def set_supplier_hold(supplier_detail_account_id: int, status_code: str, reason:
 
 
 def update_supplier_quality_rating(supplier_detail_account_id: int, quality_rating) -> None:
-    """فقط از رخدادهایِ QC انبار فراخوانی شود — هرگز از فرمِ کاربر مستقیم
-    (مرحلهٔ ۳، بخشِ ۷)."""
+    """فقط از رخدادهای QC انبار فراخوانی شود — هرگز از فرم کاربر مستقیم
+    (مرحلهٔ ۳، بخش ۷)."""
     with new_session() as session:
         profile = session.get(SupplierProfile, supplier_detail_account_id)
         if profile is None:
@@ -638,7 +638,7 @@ def add_party_address(
     geofence_radius_meters: int | None = None,
 ) -> int:
     if address_type_code not in _PARTY_ADDRESS_TYPES:
-        raise ValueError("نوعِ آدرس نامعتبر است.")
+        raise ValueError("نوع آدرس نامعتبر است.")
     with new_session() as session:
         if is_default:
             session.query(PartyAddress).filter(
@@ -663,7 +663,7 @@ def update_party_address(
     geofence_radius_meters: int | None = None,
 ) -> None:
     if address_type_code not in _PARTY_ADDRESS_TYPES:
-        raise ValueError("نوعِ آدرس نامعتبر است.")
+        raise ValueError("نوع آدرس نامعتبر است.")
     with new_session() as session:
         row = session.get(PartyAddress, address_id)
         if row is None or row.party_detail_account_id != party_detail_account_id:
@@ -718,9 +718,9 @@ def add_customer_guarantee(
     check_due_date: datetime.date | None = None, description: str | None = None,
 ) -> int:
     if guarantee_type_code not in _GUARANTEE_TYPES:
-        raise ValueError("نوعِ ضمانت نامعتبر است.")
+        raise ValueError("نوع ضمانت نامعتبر است.")
     if amount is None or amount < 0:
-        raise ValueError("مبلغِ ضمانت باید نامنفی باشد.")
+        raise ValueError("مبلغ ضمانت باید نامنفی باشد.")
     with new_session() as session:
         row = CustomerGuarantee(
             company_id=company_id, customer_detail_account_id=customer_detail_account_id,
@@ -735,7 +735,7 @@ def add_customer_guarantee(
 
 def release_customer_guarantee(guarantee_id: int, company_id: int, released_by_user_id: int, status_code: str = "RELEASED") -> None:
     if status_code not in ("RELEASED", "CALLED", "EXPIRED"):
-        raise ValueError("وضعیتِ نامعتبر برایِ آزادسازیِ ضمانت.")
+        raise ValueError("وضعیت نامعتبر برای آزادسازی ضمانت.")
     with new_session() as session:
         row = session.get(CustomerGuarantee, guarantee_id)
         if row is None or row.company_id != company_id:
@@ -749,10 +749,10 @@ def release_customer_guarantee(guarantee_id: int, company_id: int, released_by_u
 
 
 def total_active_guarantee_amount(customer_detail_account_id: int) -> "decimal.Decimal":
-    """طبقِ اصلِ «سقفِ اعتبارِ تضمین‌شده»: جمعِ ضمانت‌هایِ فعالِ مشتری --
-    برایِ نمایشِ کنارِ سقفِ اعتبار (بدونِ اضافه‌کردنِ خودکار به آن، چون
-    تصمیمِ سیاستیِ «آیا ضمانت سقفِ اعتبار را افزایش می‌دهد یا نه» به
-    مدیریتِ مالیِ شرکت وابسته است، نه چیزی که این‌جا حدس زده شود)."""
+    """طبق اصل «سقف اعتبار تضمین‌شده»: جمع ضمانت‌های فعال مشتری --
+    برای نمایش کنار سقف اعتبار (بدون اضافه‌کردن خودکار به آن، چون
+    تصمیم سیاستی «آیا ضمانت سقف اعتبار را افزایش می‌دهد یا نه» به
+    مدیریت مالی شرکت وابسته است، نه چیزی که این‌جا حدس زده شود)."""
     with new_session() as session:
         total = session.scalar(
             select(func.coalesce(func.sum(CustomerGuarantee.amount), 0)).where(
@@ -781,7 +781,7 @@ def set_customer_merchandising(
     competitor_brands: str | None = None, layout_status_code: str | None = None,
 ) -> None:
     if layout_status_code is not None and layout_status_code not in _LAYOUT_STATUS_CODES:
-        raise ValueError("وضعیتِ چیدمان نامعتبر است.")
+        raise ValueError("وضعیت چیدمان نامعتبر است.")
     with new_session() as session:
         row = session.get(CustomerMerchandising, customer_detail_account_id)
         if row is None:
@@ -832,7 +832,7 @@ def create_customer_activity(
     estimated_value: "decimal.Decimal | None" = None, assigned_to_user_id: int | None = None,
 ) -> int:
     if activity_type_code not in _ACTIVITY_TYPES:
-        raise ValueError("نوعِ فعالیت نامعتبر است.")
+        raise ValueError("نوع فعالیت نامعتبر است.")
     if not subject.strip():
         raise ValueError("موضوع الزامی است.")
     with new_session() as session:
@@ -855,7 +855,7 @@ def close_customer_activity(activity_id: int, company_id: int, status_code: str,
         if row.status_code not in _ACTIVITY_OPEN_STATUSES:
             raise ValueError("این فعالیت قبلاً بسته شده است.")
         if status_code not in _ACTIVITY_CLOSE_STATUSES[row.activity_type_code]:
-            raise ValueError("وضعیتِ نامعتبر برایِ بستنِ این نوعِ فعالیت.")
+            raise ValueError("وضعیت نامعتبر برای بستن این نوع فعالیت.")
         row.status_code = status_code
         row.resolved_at = datetime.datetime.now()
         row.resolved_by_user_id = resolved_by_user_id

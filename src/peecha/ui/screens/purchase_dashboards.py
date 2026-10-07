@@ -1,7 +1,7 @@
-"""داشبوردِ مدیریتیِ خرید و داشبوردِ استثناهایِ خرید -- R239.
+"""داشبورد مدیریتی خرید و داشبورد استثناهای خرید — R239.
 
-هر کارت/ردیف از services/purchase_dashboard می‌آید و با کلیک، همان گزارشِ مبدا
-با همان بازهٔ تاریخ و گزینه‌ها باز می‌شود (Drill-down)."""
+هر کارت/ردیف از services/purchase_dashboard می‌آید و با کلیک، همان گزارش مبدا
+با همان بازهٔ تاریخ و گزینه‌ها باز می‌شود (ریزنمایی)."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ class _ProcurementDashboardBase(QWidget):
         apply_button.clicked.connect(self.reload)
         header.addWidget(apply_button)
         outer.addLayout(header)
-        hint = QLabel("روی هر کارت/ردیف کلیک کنید تا گزارشِ مبدا با همین بازه باز شود.")
+        hint = QLabel("روی هر کارت/ردیف کلیک کنید تا گزارش مبدا با همین بازه باز شود.")
         hint.setObjectName("sectionHint")
         outer.addWidget(hint)
         scroll = QScrollArea()
@@ -113,7 +113,7 @@ class _ProcurementDashboardBase(QWidget):
 
 
 class ProcurementExecutiveDashboard(_ProcurementDashboardBase):
-    TITLE = "داشبوردِ مدیریتیِ خرید"
+    TITLE = "داشبورد مدیریتی خرید"
 
     def __init__(self, main_window=None) -> None:
         super().__init__(main_window)
@@ -133,8 +133,8 @@ class ProcurementExecutiveDashboard(_ProcurementDashboardBase):
         charts.setSpacing(16)
         self.chart_views = {}
         for i, (key, title) in enumerate((
-            ("monthly", "روندِ ماهانهٔ خالصِ خرید"), ("suppliers", "۱۰ تامین‌کنندهٔ برتر"),
-            ("items", "۱۰ کالایِ پرخرید"), ("categories", "سهمِ گروه‌هایِ کالا"), ("aging", "سنی‌کردنِ بدهی"),
+            ("monthly", "روند ماهانهٔ خالص خرید"), ("suppliers", "۱۰ تامین‌کنندهٔ برتر"),
+            ("items", "۱۰ کالای پرخرید"), ("categories", "سهم گروه‌های کالا"), ("aging", "سنی‌بندی بدهی‌ها"),
         )):
             card, view = build_chart_card(title)
             self.chart_views[key] = view
@@ -157,20 +157,20 @@ class ProcurementExecutiveDashboard(_ProcurementDashboardBase):
             card = self.cards[code]
             card._title_label.setText(kpi.title)
             card.set_value(format_kpi(kpi.value, kpi.kind, self._decimal_places))
-            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارشِ مبدا")
+            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارش مبدا")
         charts = dashboard_service.executive_charts(company_id, date_from, date_to)
         persian = numerals.to_persian_digits
         render_bar_chart(self.chart_views["monthly"], [persian(str(k)) for k, _v in charts["monthly"]],
-                         [v for _k, v in charts["monthly"]], "خالصِ خرید")
+                         [v for _k, v in charts["monthly"]], "خالص خرید")
         for key in ("suppliers", "items"):
             render_bar_chart(self.chart_views[key], [persian(k.split(" — ")[-1]) for k, _v in charts[key]],
-                             [v for _k, v in charts[key]], "خالصِ خرید")
+                             [v for _k, v in charts[key]], "خالص خرید")
         render_donut_chart(self.chart_views["categories"], [(persian(k), v) for k, v in charts["categories"] if v > 0])
         render_bar_chart(self.chart_views["aging"], [k for k, _v in charts["aging"]], [v for _k, v in charts["aging"]], "مانده")
 
 
 class ProcurementExceptionDashboard(_ProcurementDashboardBase):
-    TITLE = "داشبوردِ استثناهایِ خرید"
+    TITLE = "داشبورد استثناهای خرید"
 
     def __init__(self, main_window=None) -> None:
         super().__init__(main_window)
@@ -185,7 +185,7 @@ class ProcurementExceptionDashboard(_ProcurementDashboardBase):
         self.table.setMinimumHeight(460)
         self.table.cellDoubleClicked.connect(lambda row, _c: self.open_exception(row))
         self.body_layout.addWidget(self.table)
-        card, self.chart_view = build_chart_card("تعدادِ استثناها")
+        card, self.chart_view = build_chart_card("تعداد استثناها")
         self.body_layout.addWidget(card)
 
     def reload(self) -> None:

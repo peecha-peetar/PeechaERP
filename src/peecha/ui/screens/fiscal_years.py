@@ -1,11 +1,11 @@
-"""مدیریتِ سال‌های مالی — معادلِ Qt برایِ fiscal_years.py/.kv در Kivy.
+"""مدیریت سال‌های مالی — معادل Qt برای fiscal_years.py/.kv در Kivy.
 
-طبقِ حسابرسیِ صریح: قبلاً این صفحه فقط بازکردن/بستنِ کلِ سالِ مالی را
-نشان می‌داد؛ جدولِ دوره‌هایِ ماهانه (FiscalPeriod) در دیتابیس ساخته
-می‌شد ولی هیچ‌جای برنامه دیده/بسته نمی‌شد. حالا با انتخابِ یک سالِ
-مالی از فهرست، ۱۲ دوره‌ی ماهانه‌اش هم پایین دیده می‌شود و هرکدام
-جداگانه قابلِ‌بستن/بازکردن است (services/journal_entries.py هم این
-وضعیت را واقعاً هنگامِ ثبت/ویرایشِ سند چک می‌کند)."""
+طبق حسابرسی صریح: قبلاً این صفحه فقط بازکردن/بستن کل سال مالی را
+نشان می‌داد؛ جدول دوره‌های ماهانه (FiscalPeriod) در دیتابیس ساخته
+می‌شد ولی هیچ‌جای برنامه دیده/بسته نمی‌شد. حالا با انتخاب یک سال
+مالی از فهرست، ۱۲ دورهٔ ماهانه‌اش هم پایین دیده می‌شود و هرکدام
+جداگانه قابل‌بستن/بازکردن است (services/journal_entries.py هم این
+وضعیت را واقعاً هنگام ثبت/ویرایش سند چک می‌کند)."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ from peecha.ui.widgets import (
     FieldHelpMixin, FormDrawer, JalaliDateEdit, confirm_and_delete, delete_button, wrap_scrollable, wrap_scrollable_with_footer,
 )
 
-_YEAR_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
-_PERIOD_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "دوره"]
+_YEAR_COLUMNS = ["وضعیت", "تاریخ پایان", "تاریخ شروع", "کد"]
+_PERIOD_COLUMNS = ["وضعیت", "تاریخ پایان", "تاریخ شروع", "دوره"]
 
 
 class FiscalYearsScreen(FieldHelpMixin, QWidget):
@@ -49,15 +49,15 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         form_panel = self._build_form_panel()
         outer.addWidget(form_panel, stretch=1)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.status_label.clear, new_tooltip="سالِ مالیِ جدید", handle_new=False)
+        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.status_label.clear, new_tooltip="سال مالی جدید", handle_new=False)
 
         self.set_field_help([
             (
                 self.date_field,
-                "هر تاریخِ دلخواه از سالِ مالی‌ای که می‌خواهید بسازید را وارد کنید. لازم نیست اولِ سال باشد. "
-                "برنامه با استفاده از «ماه و روزِ شروعِ سالِ مالی» شرکت، بازه‌ی کاملِ آن سال را خودش حساب می‌کند. "
-                "نکته: لازم نیست حتماً از این‌جا سالِ مالی بسازید — با ثبتِ اولین سند در یک تاریخ، اگر سالِ "
-                "مالی‌اش وجود نداشته باشد، خودکار ساخته می‌شود (بدونِ دوره‌بندیِ ماهانه).",
+                "هر تاریخ دلخواه از سال مالی‌ای که می‌خواهید بسازید را وارد کنید. لازم نیست اول سال باشد. "
+                "برنامه با استفاده از «ماه و روز شروع سال مالی» شرکت، بازهٔ کامل آن سال را خودش حساب می‌کند. "
+                "نکته: لازم نیست حتماً از این‌جا سال مالی بسازید — با ثبت اولین سند در یک تاریخ، اگر سال "
+                "مالی‌اش وجود نداشته باشد، خودکار ساخته می‌شود (بدون دوره‌بندی ماهانه).",
             ),
         ])
 
@@ -71,7 +71,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("روی یک سالِ مالی کلیک کنید تا دوره‌های ماهانه‌اش پایین نمایش داده شود.")
+        hint = QLabel("روی یک سال مالی کلیک کنید تا دوره‌های ماهانه‌اش پایین نمایش داده شود.")
         hint.setObjectName("sectionHint")
         layout.addWidget(hint)
 
@@ -88,12 +88,12 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self.toggle_year_button = QPushButton("📂")
         self.toggle_year_button.setObjectName("iconButton")
         self.toggle_year_button.setFixedWidth(44)
-        self.toggle_year_button.setToolTip("بازکردن/بستنِ سالِ مالیِ انتخاب‌شده")
+        self.toggle_year_button.setToolTip("بازکردن/بستن سال مالی انتخاب‌شده")
         self.toggle_year_button.setEnabled(False)
         self.toggle_year_button.clicked.connect(self._toggle_selected_year)
         toggle_year_row.addWidget(self.toggle_year_button)
         # R276: حذفِ سالِ مالیِ بی‌سند (با دوره‌هایش)؛ سالِ دارایِ سند قابلِ حذف نیست
-        self.delete_year_button = delete_button("حذفِ سالِ مالیِ انتخاب‌شده (فقط اگر هیچ سندی نداشته باشد)")
+        self.delete_year_button = delete_button("حذف سال مالی انتخاب‌شده (فقط اگر هیچ سندی نداشته باشد)")
         self.delete_year_button.setEnabled(False)
         self.delete_year_button.clicked.connect(self._delete_selected_year)
         toggle_year_row.addWidget(self.delete_year_button)
@@ -121,11 +121,11 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("افزودنِ سالِ مالیِ جدید")
+        title = QLabel("افزودن سال مالی جدید")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("یک تاریخِ دلخواهِ شمسی در سالِ موردنظر را وارد کنید — بازه‌ی کامل خودکار محاسبه می‌شود.")
+        hint = QLabel("یک تاریخ دلخواه شمسی در سال موردنظر را وارد کنید — بازهٔ کامل خودکار محاسبه می‌شود.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -141,7 +141,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         create_button = QPushButton("➕")
         create_button.setObjectName("primaryIconButton")
         create_button.setFixedWidth(48)
-        create_button.setToolTip("ایجادِ سالِ مالی")
+        create_button.setToolTip("ایجاد سال مالی")
         create_button.clicked.connect(self._create)
 
         layout.addStretch(1)
@@ -153,9 +153,9 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
             return
         current = app_session.current_fiscal_year
         if current is not None and current.fiscal_year_id == year.fiscal_year_id:
-            QMessageBox.warning(self, "سالِ مالی", "سالِ مالیِ جاری را نمی‌توان حذف کرد.")
+            QMessageBox.warning(self, "سال مالی", "سال مالی جاری را نمی‌توان حذف کرد.")
             return
-        if confirm_and_delete(self, "سالِ مالی", numerals.to_persian_digits(year.code), FiscalYear, year.fiscal_year_id,
+        if confirm_and_delete(self, "سال مالی", numerals.to_persian_digits(year.code), FiscalYear, year.fiscal_year_id,
                               self._company_id(), children=((FiscalPeriod, "fiscal_year_id"),)):
             self._selected_fiscal_year_id = None
             self.refresh()
@@ -221,7 +221,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
                 item.setData(Qt.UserRole, period.fiscal_period_id)
                 self.periods_table.setItem(row_index, col_index, item)
         if not self._period_rows:
-            self.periods_title.setText("دوره‌های ماهانه — این سالِ مالی دوره‌بندی ندارد (خودکار از رویِ سند ساخته شده).")
+            self.periods_title.setText("دوره‌های ماهانه — این سال مالی دوره‌بندی ندارد (خودکار از روی سند ساخته شده).")
         else:
             self.periods_title.setText("دوره‌های ماهانه")
 
@@ -232,8 +232,8 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
             return
         confirm = QMessageBox.question(
             self,
-            "تغییرِ وضعیت",
-            f"سالِ مالیِ «{fy.code}» {'باز' if fy.is_closed else 'بسته'} شود؟",
+            "تغییر وضعیت",
+            f"سال مالی «{fy.code}» {'باز' if fy.is_closed else 'بسته'} شود؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -249,8 +249,8 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
             return
         confirm = QMessageBox.question(
             self,
-            "تغییرِ وضعیت",
-            f"دوره‌ی شماره‌ی {numerals.to_persian_digits(str(period.period_no))} "
+            "تغییر وضعیت",
+            f"دورهٔ شماره‌ی {numerals.to_persian_digits(str(period.period_no))} "
             f"{'باز' if period.is_closed else 'بسته'} شود؟",
             QMessageBox.Yes | QMessageBox.No,
         )

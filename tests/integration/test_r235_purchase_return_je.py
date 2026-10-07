@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -101,8 +101,8 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
-reval_gl = A("598", "تسعیرِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+reval_gl = A("598", "تسعیر موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 item_dim = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
@@ -125,7 +125,7 @@ def status(doc_id):
     return documents_service.get_document(doc_id, company_id)[0]
 
 
-var_gl = A("597", "مغایرتِ بها", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+var_gl = A("597", "مغایرت بها", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 def post(doc_type, qty, price, discount=D(0)):
     d = documents_service.create_document(company_id, user.user_id, doc_type, today, HF(s1))
     documents_service.add_line(d, company_id, plain, pcs, D(qty), D(qty), unit_price=D(price), discount_amount=discount)
@@ -147,23 +147,23 @@ post("PURCHASE_INVOICE", 10, 120)   # میانگینِ بها = ۱۱۰
 
 # بدونِ نگاشتِ «مغایرتِ بها»: اختلاف به سود/زیانِ اصلاحِ موجودی
 r1 = je(post("PURCHASE_RETURN", 5, 120))
-check(r1.get(ap_gl.account_id) == 600, f"پرداختنی با مبلغِ برگشت (۵×۱۲۰=۶۰۰) بدهکار شد (got {r1.get(ap_gl.account_id)})")
-check(r1.get(inv_gl.account_id) == -550, f"موجودی با بهایِ تمام‌شده (۵×۱۱۰=۵۵۰) بستانکار شد (got {r1.get(inv_gl.account_id)})")
-check(r1.get(adj_gl.account_id) == -50, f"اختلافِ ۵۰ به حسابِ اصلاحِ موجودی (got {r1.get(adj_gl.account_id)})")
+check(r1.get(ap_gl.account_id) == 600, f"پرداختنی با مبلغ برگشت (۵×۱۲۰=۶۰۰) بدهکار شد (got {r1.get(ap_gl.account_id)})")
+check(r1.get(inv_gl.account_id) == -550, f"موجودی با بهای تمام‌شده (۵×۱۱۰=۵۵۰) بستانکار شد (got {r1.get(inv_gl.account_id)})")
+check(r1.get(adj_gl.account_id) == -50, f"اختلاف ۵۰ به حساب اصلاح موجودی (got {r1.get(adj_gl.account_id)})")
 check(sum(r1.values()) == 0, "سند تراز است")
 
 engine_service.set_account_mapping(company_id, "INVENTORY_COST_VARIANCE", var_gl.account_id)
 r2 = je(post("PURCHASE_RETURN", 5, 100))
 check(r2.get(ap_gl.account_id) == 500 and r2.get(inv_gl.account_id) == -550 and r2.get(var_gl.account_id) == 50,
-      f"برگشت ارزان‌تر از بها: اختلافِ ۵۰ بدهکارِ مغایرتِ بها (got {r2})")
+      f"برگشت ارزان‌تر از بها: اختلاف ۵۰ بدهکار مغایرت بها (got {r2})")
 r3 = je(post("PURCHASE_RETURN", 5, 120, discount=D(50)))
 check(r3.get(ap_gl.account_id) == 550 and r3.get(var_gl.account_id, D(0)) == 0,
-      f"تخفیفِ ردیف از مبلغِ برگشت کم می‌شود (۶۰۰−۵۰=۵۵۰) (got {r3})")
+      f"تخفیف ردیف از مبلغ برگشت کم می‌شود (۶۰۰−۵۰=۵۵۰) (got {r3})")
 
 # ماندهٔ تامین‌کننده = خرید − مبلغِ واقعیِ برگشت‌ها
 from peecha.services import purchase_reports as pr
 bal = next(x for x in pr.run_report(company_id, "BALANCES", pr.PurchaseFilters(today, today)).rows if "یک" in x[0])
-check(bal[4] == 2200 - 600 - 500 - 550, f"ماندهٔ حسابِ تامین‌کننده با صورت‌حسابِ او می‌خواند (got {bal[4]})")
+check(bal[4] == 2200 - 600 - 500 - 550, f"ماندهٔ حساب تامین‌کننده با صورت‌حساب او می‌خواند (got {bal[4]})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

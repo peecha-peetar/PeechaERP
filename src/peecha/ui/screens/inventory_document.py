@@ -1,10 +1,10 @@
-"""فرمِ اسنادِ عملیاتیِ انبار — رسید/حواله/انتقال/برگشت/اصلاح، همه رویِ
-همان اسکلتِ سرِسند+ردیفِ inv.stock_documents/stock_document_lines
-(services/inventory_documents.py) و موتورِ Postِ services/inventory_engine.py.
+"""فرم اسناد عملیاتی انبار — رسید/حواله/انتقال/برگشت/اصلاح، همه روی
+همان اسکلت سرسند+ردیف inv.stock_documents/stock_document_lines
+(services/inventory_documents.py) و موتور Post services/inventory_engine.py.
 
-طبقِ اسکوپِ آگاهانهٔ این دور: تبدیلِ واحد (UOM conversion)، بچ/سریال/QC،
-و ارجاعِ صریحِ برگشت به ردیفِ سندِ اصلی، به دورِ بعدی موکول شده‌اند — هر
-ردیف با واحدِ پایهٔ خودِ کالا ثبت می‌شود (quantity_base = quantity)."""
+طبق اسکوپ آگاهانهٔ این دور: تبدیل واحد (UOM conversion)، بچ/سریال/QC،
+و ارجاع صریح برگشت به ردیف سند اصلی، به دور بعدی موکول شده‌اند — هر
+ردیف با واحد پایهٔ خود کالا ثبت می‌شود (quantity_base = quantity)."""
 
 from __future__ import annotations
 
@@ -61,20 +61,20 @@ DOC_TYPE_TITLES = {
     "TRANSFER": "انتقال",
     "RETURN_IN": "برگشت از فروش",
     "RETURN_OUT": "برگشت به تامین‌کننده",
-    "ADJUSTMENT": "اصلاحِ موجودی",
+    "ADJUSTMENT": "اصلاح موجودی",
     # طبقِ رفعِ باگِ واقعی («نوعِ سند در کاردکس برایِ اسنادِ امانی، کدِ
     # خامِ CONSIGNMENT_IN را نمایش می‌داد»): همان برچسبِ فارسیِ استفاده‌شده
     # در commercial_document.py، برایِ یکدستی.
-    "CONSIGNMENT_IN": "امانیِ ورودی",
-    "CONSIGN_RETURN": "برگشتِ امانی",
+    "CONSIGNMENT_IN": "امانی ورودی",
+    "CONSIGN_RETURN": "برگشت امانی",
 }
-STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "POSTED": "ثبتِ‌نهایی‌شده", "CANCELLED": "لغوشده"}
-_LINE_COLUMNS = ["کالا", "مقدار", "مکان", "مکانِ مقصد", "بهایِ واحد", "بهایِ کل", "دلیل", "توضیح", "عملیات"]
+STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "POSTED": "ثبت‌نهایی‌شده", "CANCELLED": "لغوشده"}
+_LINE_COLUMNS = ["کالا", "مقدار", "مکان", "مکان مقصد", "بهای واحد", "بهای کل", "دلیل", "توضیح", "عملیات"]
 
 
 def _enter_signal(widget: QWidget):
-    """سیگنالِ Enterِ درستِ هر نوع فیلد — برایِ ساختِ زنجیره‌هایِ ناوبریِ
-    کیبوردی، هم در هدرِ فرم و هم در دیالوگِ ردیف."""
+    """سیگنال Enter درست هر نوع فیلد — برای ساخت زنجیره‌های ناوبری
+    کیبوردی، هم در هدر فرم و هم در دیالوگ ردیف."""
     if isinstance(widget, _EnterComboBox):
         return widget.enterPressed
     if isinstance(widget, (QComboBox, QDoubleSpinBox)):
@@ -82,7 +82,7 @@ def _enter_signal(widget: QWidget):
     return widget.returnPressed
 
 
-_COST_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
+_COST_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهای واحد"]
 
 
 # طبقِ درخواستِ صریح («به‌جایِ خلاصه، پرینتِ سند را نشان بده»): هم‌الگو با
@@ -111,18 +111,18 @@ def _build_stock_document_print_html(
     <body style="font-family:'{font_family}', Tahoma, sans-serif; font-size:11pt;">
       <div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>
       <div style="text-align:center; font-size:12pt; font-weight:bold; margin:6px 0 16px 0;">
-        سندِ {esc(DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code))}
+        سند {esc(DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code))}
       </div>
       <table width="100%" style="margin-bottom:12px;">
         <tr>
-          <td>شماره‌یِ سند: {numerals.to_persian_digits(str(doc.document_no))}</td>
+          <td>شمارهٔ سند: {numerals.to_persian_digits(str(doc.document_no))}</td>
           <td style="text-align:center;">تاریخ: {numerals.format_jalali_date(doc.document_date)}</td>
-          <td style="text-align:left;">طرفِ‌حساب: {esc(counterparty_label)}</td>
+          <td style="text-align:left;">طرف‌حساب: {esc(counterparty_label)}</td>
         </tr>
       </table>
       <table width="100%" border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;">
         <tr style="background:#eee; font-weight:bold;">
-          <td>کالا</td><td>مقدار</td><td>بهایِ واحد</td><td>بهایِ کل</td><td>توضیح</td>
+          <td>کالا</td><td>مقدار</td><td>بهای واحد</td><td>بهای کل</td><td>توضیح</td>
         </tr>
         {rows_html}
       </table>
@@ -131,9 +131,9 @@ def _build_stock_document_print_html(
 
 
 def _build_stock_document_print_rows_and_params(company_id: int, doc, lines: list, counterparty_label: str | None = None):
-    """طبقِ همان الگویِ commercial_documents._build_invoice_print_rows_and_params:
-    دیتایِ آماده‌شده برایِ جدولِ رجیستریِ گزارش‌هایِ حرفه‌ای (فرمِ
-    STOCK_DOCUMENT، پوششِ مشترکِ رسید/حواله/انتقال/برگشت/اصلاح/امانی)."""
+    """طبق همان الگوی commercial_documents._build_invoice_print_rows_and_params:
+    دیتای آماده‌شده برای جدول رجیستری گزارش‌های حرفه‌ای (فرم
+    STOCK_DOCUMENT، پوشش مشترک رسید/حواله/انتقال/برگشت/اصلاح/امانی)."""
     items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
     uoms_by_id = {u.uom_id: u for u in catalog_service.list_uoms(company_id)}
     warehouses_by_id = {w.warehouse_id: w.name for w in locations_service.list_warehouses(company_id)}
@@ -198,13 +198,13 @@ def _show_stock_document_print(
             fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_stockdoc_")
             os.close(fd)
             jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, tmp_path, "pdf")
-            dialog = JasperReportPreviewDialog(parent, jrxml_path, print_rows, params, "سندِ انبار", title="پیش‌نمایشِ سندِ انبار", pdf_path=tmp_path)
+            dialog = JasperReportPreviewDialog(parent, jrxml_path, print_rows, params, "سند انبار", title="پیش‌نمایش سند انبار", pdf_path=tmp_path)
             dialog.exec()
             return
         except Exception as exc:
             QMessageBox.warning(
-                parent, "چاپِ حرفه‌ای",
-                f"ساختِ سندِ حرفه‌ای ناموفق بود؛ نسخه‌یِ ساده نمایش داده می‌شود.\n{exc}",
+                parent, "چاپ حرفه‌ای",
+                f"ساخت سند حرفه‌ای ناموفق بود؛ نسخهٔ ساده نمایش داده می‌شود.\n{exc}",
             )
 
     # طبقِ حفظِ سازگاری: اگر موتورِ چاپِ حرفه‌ای هنوز build نشده (یا خطا
@@ -221,8 +221,8 @@ def _show_stock_document_print(
 
 
 class _ItemCostHistoryDialog(QDialog):
-    """طبقِ درخواستِ صریح: ۱۰ بهایِ آخرِ این کالا از همین طرفِ‌حساب --
-    با دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سندِ انبار نمایش داده می‌شود."""
+    """طبق درخواست صریح: ۱۰ بهای آخر این کالا از همین طرف‌حساب --
+    با دابل‌کلیک روی هر ردیف، خلاصهٔ همان سند انبار نمایش داده می‌شود."""
 
     def __init__(
         self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str,
@@ -232,13 +232,13 @@ class _ItemCostHistoryDialog(QDialog):
         self._company_id = company_id
         self._unit_cost_decimal_places = unit_cost_decimal_places
         self._qty_decimal_places = qty_decimal_places
-        self.setWindowTitle(f"بهایِ قبلیِ «{item_label}»")
+        self.setWindowTitle(f"بهای قبلی «{item_label}»")
         self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
 
         self._rows = engine_service.list_item_cost_history(company_id, item_id, counterparty_id)
         if not self._rows:
-            layout.addWidget(QLabel("برایِ این کالا و این طرفِ‌حساب هنوز سابقه‌یِ بهایی ثبت نشده است."))
+            layout.addWidget(QLabel("برای این کالا و این طرف‌حساب هنوز سابقهٔ بهایی ثبت نشده است."))
 
         self.table = QTableWidget(0, len(_COST_HISTORY_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COST_HISTORY_COLUMNS)
@@ -247,7 +247,7 @@ class _ItemCostHistoryDialog(QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.cellDoubleClicked.connect(self._show_summary)
         layout.addWidget(self.table, stretch=1)
-        layout.addWidget(QLabel("برایِ دیدنِ خلاصهٔ سند، رویِ ردیفِ موردِنظر دابل‌کلیک کنید."))
+        layout.addWidget(QLabel("برای دیدن خلاصهٔ سند، روی ردیف مورد نظر دابل‌کلیک کنید."))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -286,7 +286,7 @@ class _LineDialog(QDialog):
         self._unit_cost_decimal_places = unit_cost_decimal_places
         self._main_window = main_window
         self._counterparty_id = counterparty_id
-        self.setWindowTitle("ردیفِ سند")
+        self.setWindowTitle("ردیف سند")
         self.setMinimumWidth(380)
         layout = QVBoxLayout(self)
 
@@ -297,7 +297,7 @@ class _LineDialog(QDialog):
         item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items]
         self.item_combo = _make_searchable_combo(item_options)
         item_row.addWidget(self.item_combo, stretch=1)
-        add_quick_add_button(item_row, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
+        add_quick_add_button(item_row, self.item_combo, main_window, "GL_DIM", "تعریف کالای تازه")
         layout.addLayout(item_row)
         self._items_by_id = {it.item_id: it for it in items}
 
@@ -311,10 +311,10 @@ class _LineDialog(QDialog):
         self.kardex_button.setEnabled(False)
         self.kardex_button.clicked.connect(self._open_kardex)
         stock_row.addWidget(self.kardex_button)
-        self.price_history_button = QPushButton("🕘 قیمت‌هایِ قبلی")
+        self.price_history_button = QPushButton("🕘 قیمت‌های قبلی")
         self.price_history_button.setObjectName("flatButton")
         self.price_history_button.setEnabled(False)
-        self.price_history_button.setToolTip("۱۰ بهایِ آخرِ این کالا از همین طرفِ‌حساب")
+        self.price_history_button.setToolTip("۱۰ بهای آخر این کالا از همین طرف‌حساب")
         self.price_history_button.clicked.connect(self._open_price_history)
         stock_row.addWidget(self.price_history_button)
         layout.addLayout(stock_row)
@@ -342,7 +342,7 @@ class _LineDialog(QDialog):
         bin_layout.setContentsMargins(0, 0, 0, 0)
         bin_layout.addWidget(QLabel("مکان"))
         self.bin_combo = _EnterComboBox()
-        self.bin_combo.addItem("(پیش‌فرضِ انبار)", None)
+        self.bin_combo.addItem("(پیش‌فرض انبار)", None)
         for b in source_bins:
             self.bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
         bin_layout.addWidget(self.bin_combo)
@@ -351,9 +351,9 @@ class _LineDialog(QDialog):
         self.destination_bin_row = QWidget()
         dest_bin_layout = QVBoxLayout(self.destination_bin_row)
         dest_bin_layout.setContentsMargins(0, 0, 0, 0)
-        dest_bin_layout.addWidget(QLabel("مکانِ مقصد"))
+        dest_bin_layout.addWidget(QLabel("مکان مقصد"))
         self.destination_bin_combo = _EnterComboBox()
-        self.destination_bin_combo.addItem("(پیش‌فرضِ انبار)", None)
+        self.destination_bin_combo.addItem("(پیش‌فرض انبار)", None)
         for b in destination_bins:
             self.destination_bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
         dest_bin_layout.addWidget(self.destination_bin_combo)
@@ -363,7 +363,7 @@ class _LineDialog(QDialog):
         self.unit_cost_row = QWidget()
         cost_layout = QVBoxLayout(self.unit_cost_row)
         cost_layout.setContentsMargins(0, 0, 0, 0)
-        cost_layout.addWidget(QLabel("بهایِ واحد (اختیاری -- به‌ازایِ واحدِ انتخاب‌شده)"))
+        cost_layout.addWidget(QLabel("بهای واحد (اختیاری — به‌ازای واحد انتخاب‌شده)"))
         self.unit_cost_field = _AmountField()
         self.unit_cost_field.setDecimals(unit_cost_decimal_places)
         cost_layout.addWidget(self.unit_cost_field)
@@ -510,7 +510,7 @@ class _LineDialog(QDialog):
         else:
             total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
             per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_money(r.quantity_on_hand, qty_decimals)}" for r in nonzero)
-            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_money(total, qty_decimals)} ({per_warehouse})")
+            self.stock_info_label.setText(f"موجودی کل: {numerals.format_money(total, qty_decimals)} ({per_warehouse})")
         self.kardex_button.setEnabled(True)
         self.price_history_button.setEnabled(self._counterparty_id is not None)
 
@@ -526,7 +526,7 @@ class _LineDialog(QDialog):
         from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.setWindowTitle("کاردکس کالا")
         dialog.resize(900, 560)
         dialog_layout = QVBoxLayout(dialog)
         dialog_layout.setContentsMargins(0, 0, 0, 0)
@@ -554,7 +554,7 @@ class _LineDialog(QDialog):
             self.status_label.setText("کالا را انتخاب کنید.")
             return
         if self.reason_row.isVisibleTo(self) and self.reason_combo.currentData() is None:
-            self.status_label.setText("انتخابِ دلیل الزامی است.")
+            self.status_label.setText("انتخاب دلیل الزامی است.")
             return
         self.accept()
 
@@ -608,7 +608,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         title = DOC_TYPE_TITLES[document_type_code]
         title_row = QHBoxLayout()
-        self.page_title = QLabel(f"سندِ {title}")
+        self.page_title = QLabel(f"سند {title}")
         self.page_title.setObjectName("pageTitle")
         title_row.addWidget(self.page_title)
         self.status_badge = QLabel("")
@@ -618,7 +618,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.body_layout.addLayout(title_row)
 
         # R275: گام‌نما در همان ردیفِ عنوان (یک ردیفِ کمتر در سرِ فرم)
-        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        self.step_stepper = SectionStepper(["اطلاعات سند", "ردیف‌ها"])
         title_row.addWidget(self.step_stepper)
         self.step_stepper.setMaximumWidth(460)
 
@@ -659,14 +659,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         _growable_box(self.source_wh_box, 150)
         source_wh_layout = QVBoxLayout(self.source_wh_box)
         source_wh_layout.setContentsMargins(0, 0, 0, 0)
-        source_wh_layout.addWidget(QLabel("انبارِ مبدا"))
+        source_wh_layout.addWidget(QLabel("انبار مبدا"))
         source_wh_row = QHBoxLayout()
         source_wh_row.setContentsMargins(0, 0, 0, 0)
         source_wh_row.setSpacing(3)
         self.source_wh_combo = _EnterComboBox()
         self.source_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         source_wh_row.addWidget(self.source_wh_combo, stretch=1)
-        add_quick_add_button(source_wh_row, self.source_wh_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        add_quick_add_button(source_wh_row, self.source_wh_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
         source_wh_layout.addLayout(source_wh_row)
         header_row.addWidget(self.source_wh_box, 1)
 
@@ -674,14 +674,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         _growable_box(self.destination_wh_box, 150)
         dest_wh_layout = QVBoxLayout(self.destination_wh_box)
         dest_wh_layout.setContentsMargins(0, 0, 0, 0)
-        dest_wh_layout.addWidget(QLabel("انبارِ مقصد"))
+        dest_wh_layout.addWidget(QLabel("انبار مقصد"))
         dest_wh_row = QHBoxLayout()
         dest_wh_row.setContentsMargins(0, 0, 0, 0)
         dest_wh_row.setSpacing(3)
         self.destination_wh_combo = _EnterComboBox()
         self.destination_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         dest_wh_row.addWidget(self.destination_wh_combo, stretch=1)
-        add_quick_add_button(dest_wh_row, self.destination_wh_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        add_quick_add_button(dest_wh_row, self.destination_wh_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
         dest_wh_layout.addLayout(dest_wh_row)
         header_row.addWidget(self.destination_wh_box, 1)
 
@@ -701,14 +701,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         _growable_box(self.counterparty_box, 220)
         counterparty_layout = QVBoxLayout(self.counterparty_box)
         counterparty_layout.setContentsMargins(0, 0, 0, 0)
-        self.counterparty_label = QLabel("طرفِ‌حساب")
+        self.counterparty_label = QLabel("طرف‌حساب")
         counterparty_layout.addWidget(self.counterparty_label)
         counterparty_row = QHBoxLayout()
         counterparty_row.setContentsMargins(0, 0, 0, 0)
         counterparty_row.setSpacing(3)
         self.counterparty_combo = _make_searchable_combo([])
         counterparty_row.addWidget(self.counterparty_combo, stretch=1)
-        add_quick_add_button(counterparty_row, self.counterparty_combo, main_window, "GL_DIM", "تعریفِ طرفِ‌حسابِ تازه")
+        add_quick_add_button(counterparty_row, self.counterparty_combo, main_window, "GL_DIM", "تعریف طرف‌حساب تازه")
         counterparty_layout.addLayout(counterparty_row)
         header_row.addWidget(self.counterparty_box, 1)
 
@@ -736,14 +736,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         _growable_box(self.cost_center_box, 200)
         cost_center_layout = QVBoxLayout(self.cost_center_box)
         cost_center_layout.setContentsMargins(0, 0, 0, 0)
-        self.cost_center_label = QLabel("مرکزِ هزینه")
+        self.cost_center_label = QLabel("مرکز هزینه")
         cost_center_layout.addWidget(self.cost_center_label)
         cost_center_row = QHBoxLayout()
         cost_center_row.setContentsMargins(0, 0, 0, 0)
         cost_center_row.setSpacing(3)
         self.cost_center_combo = _EnterComboBox()
         cost_center_row.addWidget(self.cost_center_combo, stretch=1)
-        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریفِ مرکزِ هزینه‌یِ تازه")
+        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریف مرکز هزینهٔ تازه")
         cost_center_layout.addLayout(cost_center_row)
         header_row2.addWidget(self.cost_center_box, 1)
 
@@ -758,7 +758,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         project_row.setSpacing(3)
         self.project_combo = _EnterComboBox()
         project_row.addWidget(self.project_combo, stretch=1)
-        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریفِ پروژه‌یِ تازه")
+        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریف پروژهٔ تازه")
         project_layout.addLayout(project_row)
         header_row2.addWidget(self.project_box, 1)
         header_row2.addStretch(1)
@@ -804,13 +804,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         edit_line_button = QPushButton("✏️")
         edit_line_button.setObjectName("iconButton")
         edit_line_button.setFixedWidth(44)
-        edit_line_button.setToolTip("ویرایشِ ردیف")
+        edit_line_button.setToolTip("ویرایش ردیف")
         edit_line_button.clicked.connect(self._edit_line)
         line_buttons.addWidget(edit_line_button)
         delete_line_button = QPushButton("🗑️")
         delete_line_button.setObjectName("dangerIconButton")
         delete_line_button.setFixedWidth(44)
-        delete_line_button.setToolTip("حذفِ ردیف")
+        delete_line_button.setToolTip("حذف ردیف")
         delete_line_button.clicked.connect(self._delete_line)
         line_buttons.addWidget(delete_line_button)
         self.body_layout.addWidget(line_button_cluster, alignment=Qt.AlignLeft)
@@ -827,42 +827,42 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.new_button = QPushButton("🆕")
         self.new_button.setObjectName("iconButton")
         self.new_button.setFixedWidth(44)
-        self.new_button.setToolTip("سندِ جدید — فرم را برایِ ثبتِ سندِ بعدی خالی می‌کند")
+        self.new_button.setToolTip("سند جدید — فرم را برای ثبت سند بعدی خالی می‌کند")
         self.new_button.clicked.connect(self._reset_form)
         self.footer_layout.addWidget(self.new_button)
 
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
-        self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرِسند و ردیف‌ها بعداً قابلِ‌ویرایش/حذف‌اند")
+        self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرسند و ردیف‌ها بعداً قابل‌ویرایش/حذف‌اند")
         self.save_button.clicked.connect(lambda: self._save_header(notify=True))
         self.footer_layout.addWidget(self.save_button)
 
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
         self.confirm_button.setFixedWidth(44)
-        self.confirm_button.setToolTip("۲) تاییدِ سند — پیش از ثبتِ نهایی؛ اگر لازم بود می‌توان به پیش‌نویس برگرداند")
+        self.confirm_button.setToolTip("۲) تایید سند — پیش از ثبت نهایی؛ اگر لازم بود می‌توان به پیش‌نویس برگرداند")
         self.confirm_button.clicked.connect(self._confirm)
         self.footer_layout.addWidget(self.confirm_button)
 
         self.revert_button = QPushButton("↩️")
         self.revert_button.setObjectName("iconButton")
         self.revert_button.setFixedWidth(44)
-        self.revert_button.setToolTip("بازگشت به پیش‌نویس — سندِ تاییدشده دوباره قابلِ‌ویرایش می‌شود")
+        self.revert_button.setToolTip("بازگشت به پیش‌نویس — سند تاییدشده دوباره قابل‌ویرایش می‌شود")
         self.revert_button.clicked.connect(self._revert_to_draft)
         self.footer_layout.addWidget(self.revert_button)
 
         self.post_button = QPushButton("🔒")
         self.post_button.setObjectName("primaryIconButton")
         self.post_button.setFixedWidth(48)
-        self.post_button.setToolTip("۳) ثبتِ نهایی — قطعی و برگشت‌ناپذیر؛ سندِ حسابداریِ واقعی همین‌جا ساخته می‌شود")
+        self.post_button.setToolTip("۳) ثبت نهایی — قطعی و برگشت‌ناپذیر؛ سند حسابداری واقعی همین‌جا ساخته می‌شود")
         self.post_button.clicked.connect(self._post)
         self.footer_layout.addWidget(self.post_button)
 
         self.cancel_button = QPushButton("🚫")
         self.cancel_button.setObjectName("dangerIconButton")
         self.cancel_button.setFixedWidth(44)
-        self.cancel_button.setToolTip("لغوِ سند — سند باطل می‌شود (فقط پیش از ثبتِ نهایی ممکن است)")
+        self.cancel_button.setToolTip("لغو سند — سند باطل می‌شود (فقط پیش از ثبت نهایی ممکن است)")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
 
@@ -870,8 +870,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.report_button.setObjectName("iconButton")
         self.report_button.setFixedWidth(44)
         self.report_button.setToolTip(
-            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به سندِ انبار -- "
-            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+            "اجرای یکی از گزارش‌های حرفه‌ای تخصیص‌داده‌شده به سند انبار -- "
+            "برای تعریف/ویرایش گزارش‌ها به «تنظیمات سیستم ›  گزارش‌های حرفه‌ای» مراجعه کنید."
         )
         self.report_button.clicked.connect(self._run_stock_document_report)
         self.footer_layout.addWidget(self.report_button)
@@ -886,15 +886,15 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         self._apply_type_visibility()
         self.set_field_help([
-            (self.date_field, "تاریخِ سند — پایهٔ تعیینِ سالِ مالی و ترتیبِ حرکاتِ موجودی."),
-            (self.source_wh_combo, "انباری که موجودی از آن کم می‌شود (حواله/انتقال) یا مبنایِ کمبود/مازادِ اصلاح است."),
+            (self.date_field, "تاریخ سند — پایهٔ تعیین سال مالی و ترتیب حرکات موجودی."),
+            (self.source_wh_combo, "انباری که موجودی از آن کم می‌شود (حواله/انتقال) یا مبنای کمبود/مازاد اصلاح است."),
             (self.destination_wh_combo, "انباری که موجودی به آن اضافه می‌شود (رسید/انتقال)."),
-            (self.adjustment_direction_combo, "این سندِ اصلاح موجودی را افزایش می‌دهد (مازاد) یا کاهش می‌دهد (کسری)."),
-            (self.counterparty_combo, "طرفِ‌حسابِ این سند (مثلاً تامین‌کننده برایِ رسید، مشتری برایِ برگشت)."),
-            (self.reference_field, "مثلاً شمارهٔ فاکتورِ خرید یا سندِ اصلیِ برگشت."),
-            (self.cost_center_combo, "مرکزِ هزینه‌ای که این سندِ انبار به آن نسبت داده می‌شود -- فقط اگر معینِ نقش‌محورِ این نوعِ سند الزامی‌اش کرده باشد."),
-            (self.project_combo, "پروژه‌ای که این سندِ انبار به آن مربوط است -- فقط اگر معینِ نقش‌محورِ این نوعِ سند الزامی‌اش کرده باشد."),
-            (self.description_field, "توضیحِ آزادِ داخلی دربارهٔ این سند."),
+            (self.adjustment_direction_combo, "این سند اصلاح موجودی را افزایش می‌دهد (مازاد) یا کاهش می‌دهد (کسری)."),
+            (self.counterparty_combo, "طرف‌حساب این سند (مثلاً تامین‌کننده برای رسید، مشتری برای برگشت)."),
+            (self.reference_field, "مثلاً شمارهٔ فاکتور خرید یا سند اصلی برگشت."),
+            (self.cost_center_combo, "مرکز هزینه‌ای که این سند انبار به آن نسبت داده می‌شود — فقط اگر معین نقش‌محور این نوع سند الزامی‌اش کرده باشد."),
+            (self.project_combo, "پروژه‌ای که این سند انبار به آن مربوط است — فقط اگر معین نقش‌محور این نوع سند الزامی‌اش کرده باشد."),
+            (self.description_field, "توضیح آزاد داخلی دربارهٔ این سند."),
         ])
 
     def _apply_type_visibility(self) -> None:
@@ -912,20 +912,20 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.adjustment_direction_box.setVisible(t == "ADJUSTMENT")
         self.counterparty_box.setVisible(t in ("RECEIPT", "ISSUE", "RETURN_IN", "RETURN_OUT"))
         if t == "RECEIPT":
-            self.counterparty_label.setText("طرفِ‌حساب (تامین‌کننده)")
+            self.counterparty_label.setText("طرف‌حساب (تامین‌کننده)")
         elif t == "RETURN_OUT":
-            self.counterparty_label.setText("طرفِ‌حساب (تامین‌کننده) — الزامی")
+            self.counterparty_label.setText("طرف‌حساب (تامین‌کننده) — الزامی")
         elif t == "RETURN_IN":
-            self.counterparty_label.setText("طرفِ‌حساب (مشتری) — الزامی")
+            self.counterparty_label.setText("طرف‌حساب (مشتری) — الزامی")
         elif t == "ISSUE":
-            self.counterparty_label.setText("طرفِ‌حساب (مشتری)")
+            self.counterparty_label.setText("طرف‌حساب (مشتری)")
         self._wire_header_enter_chain()
 
     def _wire_header_enter_chain(self) -> None:
-        """طبقِ درخواستِ صریح («مثلِ فرمِ دریافت»): زنجیره‌یِ Enter از
-        تاریخ تا آخرین فیلدِ هدر، و در پایان به بازکردنِ دیالوگِ افزودنِ
+        """طبق درخواست صریح («مثل فرم دریافت»): زنجیرهٔ Enter از
+        تاریخ تا آخرین فیلد هدر، و در پایان به بازکردن دیالوگ افزودن
         ردیف می‌رسد — دقیقاً هم‌الگو با treasury_voucher.py. چون
-        visibilityِ فیلدهایِ هدر فقط یک‌بار (برایِ نوعِ سندِ ثابتِ همین
+        visibility فیلدهای هدر فقط یک‌بار (برای نوع سند ثابت همین
         نمونه) در _apply_type_visibility تعیین می‌شود، این‌جا هم فقط
         همان یک‌بار زنجیره ساخته می‌شود — نه در هر refresh."""
         # طبقِ باگِ واقعیِ کشف‌شده: این تابع در __init__ (پیش از نمایشِ
@@ -1029,21 +1029,21 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         current_cc = self.cost_center_combo.currentData()
         self.cost_center_combo.clear()
-        self.cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        self.cost_center_combo.addItem("(بدون مرکز هزینه)", None)
         for opt in cost_center_options:
             self.cost_center_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
         if current_cc is not None:
             index = self.cost_center_combo.findData(current_cc)
             if index >= 0:
                 self.cost_center_combo.setCurrentIndex(index)
-        self.cost_center_label.setText("مرکزِ هزینه *" if self._cost_center_required else "مرکزِ هزینه")
+        self.cost_center_label.setText("مرکز هزینه *" if self._cost_center_required else "مرکز هزینه")
 
         self._project_required, project_options = documents_service.get_header_dimension_requirement(
             company_id, self.document_type_code, dimensions_service.PROJECT_CODE
         )
         current_project = self.project_combo.currentData()
         self.project_combo.clear()
-        self.project_combo.addItem("(بدونِ پروژه)", None)
+        self.project_combo.addItem("(بدون پروژه)", None)
         for opt in project_options:
             self.project_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
         if current_project is not None:
@@ -1072,7 +1072,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._status_code = doc.status_code
         self._origin_label = doc.origin_label
-        self.page_title.setText(f"سندِ {DOC_TYPE_TITLES[self.document_type_code]} #{doc.document_no}")
+        self.page_title.setText(f"سند {DOC_TYPE_TITLES[self.document_type_code]} #{doc.document_no}")
         self.date_field.setDate(doc.document_date)
         if self.document_type_code == "ADJUSTMENT":
             if doc.source_warehouse_id is not None:
@@ -1148,7 +1148,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 # R227: ورودِ بچ/سریال/انقضایِ همین ردیف
                 track_button = QPushButton("🏷 ردیابی")
                 track_button.setObjectName("iconButton")
-                track_button.setToolTip("بچ / سریال / تاریخِ انقضا")
+                track_button.setToolTip("بچ / سریال / تاریخ انقضا")
                 track_button.clicked.connect(lambda _c=False, line=ln, it=item: self._open_lot_tracking(line, it))
                 self.lines_table.setCellWidget(row_index, len(values) - 1, track_button)
         # طبقِ گزارشِ صریحِ کاربر («فرمِ سندِ انبار هم یک ردیفِ ورودیِ
@@ -1212,13 +1212,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setCellWidget(row_index, 1, qty_field)
 
         bin_combo = _EnterComboBox()
-        bin_combo.addItem("(پیش‌فرضِ انبار)", None)
+        bin_combo.addItem("(پیش‌فرض انبار)", None)
         for b in source_bins:
             bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
         self.lines_table.setCellWidget(row_index, 2, bin_combo)
 
         destination_bin_combo = _EnterComboBox()
-        destination_bin_combo.addItem("(پیش‌فرضِ انبار)", None)
+        destination_bin_combo.addItem("(پیش‌فرض انبار)", None)
         for b in destination_bins:
             destination_bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
         if show_destination_bin:
@@ -1257,18 +1257,18 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(28)
-        add_button.setToolTip("افزودنِ این ردیف به سند")
+        add_button.setToolTip("افزودن این ردیف به سند")
         actions_layout.addWidget(add_button)
         info_kardex_button = QPushButton("📇")
         info_kardex_button.setObjectName("iconButton")
         info_kardex_button.setFixedWidth(28)
-        info_kardex_button.setToolTip("کاردکسِ کالایِ انتخاب‌شده")
+        info_kardex_button.setToolTip("کاردکس کالای انتخاب‌شده")
         info_kardex_button.setEnabled(False)
         actions_layout.addWidget(info_kardex_button)
         info_price_button = QPushButton("🕘")
         info_price_button.setObjectName("iconButton")
         info_price_button.setFixedWidth(28)
-        info_price_button.setToolTip("بهایِ قبلیِ کالایِ انتخاب‌شده")
+        info_price_button.setToolTip("بهای قبلی کالای انتخاب‌شده")
         info_price_button.setEnabled(False)
         actions_layout.addWidget(info_price_button)
         self.lines_table.setCellWidget(row_index, 8, actions_container)
@@ -1318,7 +1318,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.setWindowTitle("کاردکس کالا")
         dialog.resize(900, 560)
         dialog_layout = QVBoxLayout(dialog)
         dialog_layout.setContentsMargins(0, 0, 0, 0)
@@ -1356,7 +1356,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         reason_widget = widgets.get("reason")
         if reason_widget is not None and reason_widget.currentData() is None:
-            self.status_label.setText("انتخابِ دلیل الزامی است.")
+            self.status_label.setText("انتخاب دلیل الزامی است.")
             return
         source_wh_id, destination_wh_id = self._current_warehouse_ids()
         line_wh_id = self._primary_line_warehouse_id(source_wh_id, destination_wh_id)
@@ -1407,13 +1407,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             # R226: سندِ صادرشده از فاکتور/برگشت فقط-خواندنی است.
             for button in (self.save_button, self.confirm_button, self.revert_button, self.post_button, self.cancel_button):
                 button.setEnabled(False)
-            self.status_label.setText(f"این سند از «{origin}» صادر شده و فقط از خودِ همان سند قابلِ‌تغییر است.")
+            self.status_label.setText(f"این سند از «{origin}» صادر شده و فقط از خود همان سند قابل‌تغییر است.")
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
         self._status_code = "DRAFT"
         self._lines = []
-        self.page_title.setText(f"سندِ {DOC_TYPE_TITLES[self.document_type_code]}ِ جدید")
+        self.page_title.setText(f"سند {DOC_TYPE_TITLES[self.document_type_code]} جدید")
         self.status_label.setText("")
         self.date_field.setDate(datetime.date.today())
         self.source_wh_combo.setCurrentIndex(0)
@@ -1437,7 +1437,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         source_wh, destination_wh = self._current_warehouse_ids()
         counterparty_id = self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None
         if self.document_type_code in ("RETURN_IN", "RETURN_OUT") and counterparty_id is None:
-            self.status_label.setText("انتخابِ طرفِ‌حساب برایِ این نوعِ سند الزامی است.")
+            self.status_label.setText("انتخاب طرف‌حساب برای این نوع سند الزامی است.")
             return None
         # طبقِ رفعِ باگِ واقعی («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ
         # هزینه نیست»): هم‌الگو با commercial_document.py — اگر حسابِ
@@ -1445,11 +1445,11 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         # همین‌جا (پیش از تلاشِ ذخیره) با یک پیامِ روشن جلوگیری می‌شود.
         cost_center_id = self.cost_center_combo.currentData()
         if cost_center_id is None and self._cost_center_required:
-            self.status_label.setText("انتخابِ «مرکزِ هزینه» برایِ این نوعِ سند الزامی است.")
+            self.status_label.setText("انتخاب «مرکز هزینه» برای این نوع سند الزامی است.")
             return None
         project_id = self.project_combo.currentData()
         if project_id is None and self._project_required:
-            self.status_label.setText("انتخابِ «پروژه» برایِ این نوعِ سند الزامی است.")
+            self.status_label.setText("انتخاب «پروژه» برای این نوع سند الزامی است.")
             return None
         return documents_service.DocumentHeaderFields(
             source_warehouse_id=source_wh, destination_warehouse_id=destination_wh,
@@ -1482,11 +1482,11 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ رفعِ باگِ واقعی («بعدِ ذخیره هیچ پیامی نمی‌دهد»): قبلاً این
         # مسیرِ موفقیت فقط status_label را خالی می‌کرد.
         theme.set_status_label(
-            self.status_label, "سند به‌عنوانِ پیش‌نویس ذخیره شد." if is_new else "تغییراتِ سند ذخیره شد.", ok=True,
+            self.status_label, "سند به‌عنوان پیش‌نویس ذخیره شد." if is_new else "تغییرات سند ذخیره شد.", ok=True,
         )
         if notify:
             title = DOC_TYPE_TITLES.get(self.document_type_code, "سند")
-            widgets.show_saved_dialog(self, f"{title} ذخیره شد." if is_new else f"تغییراتِ {title} ذخیره شد.")
+            widgets.show_saved_dialog(self, f"{title} ذخیره شد." if is_new else f"تغییرات {title} ذخیره شد.")
 
     def _ensure_saved(self) -> bool:
         if self._document_id is None:
@@ -1494,8 +1494,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         return self._document_id is not None
 
     def _primary_line_warehouse_id(self, source_wh_id: int | None, destination_wh_id: int | None) -> int | None:
-        """انبارِ مرجعِ ردیف — همان انباری که فهرستِ مکان‌هایِ «مکان» از
-        رویِ آن پر می‌شود (برایِ TRANSFER همیشه مبدا؛ «مکانِ مقصد» از رویِ
+        """انبار مرجع ردیف — همان انباری که فهرست مکان‌های «مکان» از
+        روی آن پر می‌شود (برای TRANSFER همیشه مبدا؛ «مکان مقصد» از روی
         destination_wh_id جداگانه پر می‌شود)."""
         if self.document_type_code in ("RECEIPT", "RETURN_IN"):
             return destination_wh_id
@@ -1547,7 +1547,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         line = self._selected_line()
         if line is None or self._document_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -1558,16 +1558,16 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._load_document()
 
     def _locations_ok(self) -> bool:
-        """R248/R249: محلِ غیرفعال/مسدود مانعِ تایید و ثبت است؛ ناسازگاری و عبور از ظرفیت فقط هشدار."""
+        """R248/R249: محل غیرفعال/مسدود مانع تایید و ثبت است؛ ناسازگاری و عبور از ظرفیت فقط هشدار."""
         from peecha.services import warehouse_locations as wl_service
 
         check = wl_service.check_document_locations(self._company_id(), self._document_id)
         if check.errors:
-            QMessageBox.warning(self, "محلِ انبار", "\n".join(check.errors))
+            QMessageBox.warning(self, "محل انبار", "\n".join(check.errors))
             self.status_label.setText(check.errors[0])
             return False
         if check.warnings:
-            answer = QMessageBox.question(self, "هشدارِ محلِ انبار", "\n".join(check.warnings) + "\n\nادامه می‌دهید؟",
+            answer = QMessageBox.question(self, "هشدار محل انبار", "\n".join(check.warnings) + "\n\nادامه می‌دهید؟",
                                           QMessageBox.Yes | QMessageBox.No)
             return answer == QMessageBox.Yes
         return True
@@ -1585,7 +1585,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             # هیچ اتفاقی نیفتاده. حالا هم‌الگو با خطاهایِ ردیف، یک
             # دیالوگِ مسدودکننده هم نمایش می‌دهد.
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در تاییدِ سند", str(exc))
+            QMessageBox.warning(self, "خطا در تایید سند", str(exc))
             return
         self._load_document()
         theme.set_status_label(self.status_label, "سند تایید شد.", ok=True)
@@ -1597,7 +1597,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             documents_service.revert_to_draft(self._document_id, self._company_id())
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در بازگردانیِ سند به پیش‌نویس", str(exc))
+            QMessageBox.warning(self, "خطا در بازگردانی سند به پیش‌نویس", str(exc))
             return
         self._load_document()
         theme.set_status_label(self.status_label, "سند به پیش‌نویس بازگشت.", ok=True)
@@ -1606,7 +1606,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self._document_id is None:
             return
         confirm = QMessageBox.question(
-            self, "ثبتِ نهایی", "این سند ثبتِ نهایی شود؟ پسِ این کار، سند دیگر قابلِ‌ویرایش/حذف نیست.",
+            self, "ثبت نهایی", "این سند ثبت نهایی شود؟ پس این کار، سند دیگر قابل‌ویرایش/حذف نیست.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -1617,30 +1617,30 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             result = documents_service.post_stock_document(self._document_id, self._company_id(), app_session.current_user.user_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در ثبتِ نهایی", str(exc))
+            QMessageBox.warning(self, "خطا در ثبت نهایی", str(exc))
             return
         # طبقِ رفعِ باگِ واقعی («بعدِ تایید، فرم ریست نمی‌شود»): بعدِ ثبتِ
         # نهایی، سند برایِ همیشه قفل است — دیگر کاری رویِ همین رکورد از
         # این فرم ممکن نیست، پس فرم برایِ سندِ بعدی ریست می‌شود، به‌جایِ
         # نگه‌داشتنِ سندِ بسته‌شده روی صفحه.
         je_note = (
-            f" (سندِ حسابداریِ #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
+            f" (سند حسابداری #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
             if result.journal_entry_id is not None else ""
         )
         self._reset_form()
-        theme.set_status_label(self.status_label, f"سند ثبتِ نهایی شد.{je_note}", ok=True)
+        theme.set_status_label(self.status_label, f"سند ثبت نهایی شد.{je_note}", ok=True)
 
     def _cancel(self) -> None:
         if self._document_id is None:
             return
-        confirm = QMessageBox.question(self, "لغوِ سند", "این سند لغو شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "لغو سند", "این سند لغو شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
             documents_service.cancel_stock_document(self._document_id, self._company_id())
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در لغوِ سند", str(exc))
+            QMessageBox.warning(self, "خطا در لغو سند", str(exc))
             return
         # لغو هم مثلِ ثبتِ نهایی یک وضعیتِ نهایی‌ست — سند دیگر رویِ همین
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.

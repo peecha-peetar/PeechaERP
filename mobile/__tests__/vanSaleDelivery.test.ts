@@ -34,8 +34,8 @@ const ORDER = {
   post_immediately: true,
 };
 
-describe("CREATE_VAN_SALE_DELIVERY (اقدامِ ترکیبیِ سفارش+تاییدِ تحویلِ پخشِ گرم)", () => {
-  it("سفارش را می‌سازد و بلافاصله با document_line_idِ برگشتی رسیدِ تحویل می‌فرستد", async () => {
+describe("CREATE_VAN_SALE_DELIVERY (اقدام ترکیبی سفارش+تایید تحویل پخش گرم)", () => {
+  it("سفارش را می‌سازد و بلافاصله با document_line_id برگشتی رسید تحویل می‌فرستد", async () => {
     const calls: { url: string; body: unknown; headers: Record<string, string> }[] = [];
     const fetcher: Fetcher = jest.fn(async (url: any, init: any) => {
       calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : undefined, headers: init?.headers });
@@ -62,7 +62,7 @@ describe("CREATE_VAN_SALE_DELIVERY (اقدامِ ترکیبیِ سفارش+تا�
     expect(deliveryCall.headers["Idempotency-Key"]).toBe(`${orderCall.headers["Idempotency-Key"]}:delivery`);
   });
 
-  it("اگر بعدِ موفقیتِ سفارش، تاییدِ تحویل با قطعیِ شبکه مواجه شود، سفارش دوباره ساخته نمی‌شود", async () => {
+  it("اگر بعد موفقیت سفارش، تایید تحویل با قطعی شبکه مواجه شود، سفارش دوباره ساخته نمی‌شود", async () => {
     let orderCallCount = 0;
     let deliveryCallCount = 0;
     const fetcher: Fetcher = jest.fn(async (url: any) => {
@@ -95,10 +95,10 @@ describe("CREATE_VAN_SALE_DELIVERY (اقدامِ ترکیبیِ سفارش+تا�
     expect(deliveryCallCount).toBe(2);
   });
 
-  it("اگر تاییدِ تحویل با خطایِ ۴xx شکست بخورد، از صف حذف می‌شود ولی document_id در نتیجه گزارش می‌شود", async () => {
+  it("اگر تایید تحویل با خطای ۴xx شکست بخورد، از صف حذف می‌شود ولی document_id در نتیجه گزارش می‌شود", async () => {
     const fetcher: Fetcher = jest.fn(async (url: any) => {
       if (String(url).endsWith("/orders")) return jsonResponse(200, { document_id: 42, line_ids: [777] });
-      return jsonResponse(400, { detail: "خطایِ اعتبارسنجیِ رسیدِ تحویل" });
+      return jsonResponse(400, { detail: "خطای اعتبارسنجی رسید تحویل" });
     }) as unknown as Fetcher;
     const { engine, queue } = await buildEngine(fetcher);
     await queue.enqueue({

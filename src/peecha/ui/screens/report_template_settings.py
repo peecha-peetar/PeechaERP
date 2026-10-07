@@ -1,11 +1,11 @@
-"""تنظیماتِ رجیستریِ گزارش‌هایِ حرفه‌ای -- طبقِ درخواستِ صریح («برایِ هر
-فرم بتوان چند گزارشِ نام‌گذاری‌شده تعریف/ویرایش/اجرا کرد»). طبقِ اصلاحِ
-صریحِ بعدی («یک پنل به‌ازایِ هر فرم فضایِ زیادی می‌گیرد»): همه‌یِ
-گزارش‌هایِ همه‌یِ فرم‌ها در یک جدولِ واحد (فرم/نام/پیش‌فرض) نشان داده
-می‌شوند؛ ستونِ «فرم» مشخص می‌کند هر ردیف مالِ کدام فرم است، و دکمه‌های
-عملیات (افزودن/ویرایش/تغییرِ نام/پیش‌فرض/حذف) رویِ همان یک جدول کار
-می‌کنند -- افزودنِ فرمِ جدید هیچ فضایِ اضافه‌ای در این صفحه نمی‌گیرد،
-فقط ردیف‌هایِ بیشتری به همان جدول اضافه می‌شود."""
+"""تنظیمات رجیستری گزارش‌های حرفه‌ای — طبق درخواست صریح («برای هر
+فرم بتوان چند گزارش نام‌گذاری‌شده تعریف/ویرایش/اجرا کرد»). طبق اصلاح
+صریح بعدی («یک پنل به‌ازای هر فرم فضای زیادی می‌گیرد»): همهٔ
+گزارش‌های همهٔ فرم‌ها در یک جدول واحد (فرم/نام/پیش‌فرض) نشان داده
+می‌شوند؛ ستون «فرم» مشخص می‌کند هر ردیف مال کدام فرم است، و دکمه‌های
+عملیات (افزودن/ویرایش/تغییر نام/پیش‌فرض/حذف) روی همان یک جدول کار
+می‌کنند — افزودن فرم جدید هیچ فضای اضافه‌ای در این صفحه نمی‌گیرد،
+فقط ردیف‌های بیشتری به همان جدول اضافه می‌شود."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from peecha.reporting import jasper_bridge
 from peecha.reporting.registry import FORM_DEFINITIONS
 from peecha.services import report_templates as templates_service
 
-_COLUMNS = ["فرم", "نامِ گزارش", "پیش‌فرض"]
+_COLUMNS = ["فرم", "نام گزارش", "پیش‌فرض"]
 
 
 def _company_id() -> int | None:
@@ -43,14 +43,14 @@ def _company_id() -> int | None:
 class _NewReportDialog(QDialog):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        self.setWindowTitle("گزارشِ جدید")
+        self.setWindowTitle("گزارش جدید")
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("فرم"))
         self.form_combo = QComboBox()
         for form_code, definition in FORM_DEFINITIONS.items():
             self.form_combo.addItem(definition["label"], form_code)
         layout.addWidget(self.form_combo)
-        layout.addWidget(QLabel("نامِ گزارش"))
+        layout.addWidget(QLabel("نام گزارش"))
         self.name_field = QLineEdit()
         layout.addWidget(self.name_field)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -72,11 +72,11 @@ class _ReportTemplatesTab(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("گزارش‌هایِ حرفه‌ای")
+        title = QLabel("گزارش‌های حرفه‌ای")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        add_button = QPushButton("➕ گزارشِ جدید")
+        add_button = QPushButton("➕ گزارش جدید")
         add_button.setObjectName("primaryIconButton")
         add_button.clicked.connect(self._add)
         layout.addWidget(add_button, alignment=Qt.AlignLeft)
@@ -95,23 +95,23 @@ class _ReportTemplatesTab(QWidget):
         buttons.setContentsMargins(0, 0, 0, 0)
 
         edit_button = QPushButton("✏️ ویرایش")
-        edit_button.setToolTip("بازکردنِ فایلِ این گزارش در Jaspersoft Studio")
+        edit_button.setToolTip("بازکردن فایل این گزارش در Jaspersoft Studio")
         edit_button.clicked.connect(self._edit)
         buttons.addWidget(edit_button)
 
-        rename_button = QPushButton("🖊️ تغییرِ نام")
+        rename_button = QPushButton("🖊️ تغییر نام")
         rename_button.clicked.connect(self._rename)
         buttons.addWidget(rename_button)
 
         default_button = QPushButton("⭐ پیش‌فرض")
-        default_button.setToolTip("این گزارش پیش‌فرضِ همان فرم شود")
+        default_button.setToolTip("این گزارش پیش‌فرض همان فرم شود")
         default_button.clicked.connect(self._set_default)
         buttons.addWidget(default_button)
 
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
-        delete_button.setToolTip("حذفِ این گزارش")
+        delete_button.setToolTip("حذف این گزارش")
         delete_button.clicked.connect(self._delete)
         buttons.addWidget(delete_button)
         layout.addWidget(button_cluster)
@@ -156,9 +156,9 @@ class _ReportTemplatesTab(QWidget):
         company_id = _company_id()
         row = self._selected_row()
         if company_id is None or row is None:
-            QMessageBox.information(self, "تغییرِ نام", "ابتدا یک گزارش را انتخاب کنید.")
+            QMessageBox.information(self, "تغییر نام", "ابتدا یک گزارش را انتخاب کنید.")
             return
-        new_name, ok = QInputDialog.getText(self, "تغییرِ نام", "نامِ جدید:", text=row.name)
+        new_name, ok = QInputDialog.getText(self, "تغییر نام", "نام جدید:", text=row.name)
         if not ok or not new_name.strip():
             return
         try:
@@ -209,20 +209,20 @@ class _ReportTemplatesTab(QWidget):
             QMessageBox.information(
                 self,
                 "ویرایش",
-                "Jaspersoft Studio به‌صورتِ خودکار پیدا نشد.\n\n"
-                f"مسیرِ فایلِ قالب: {path}\n\n"
-                "این فایل را به‌صورتِ دستی در Jaspersoft Studio باز کنید، یا "
-                "مسیرِ اجراییِ Studio را در متغیرِ محیطیِ PEECHA_JASPER_STUDIO_PATH تنظیم کنید.",
+                "Jaspersoft Studio به‌صورت خودکار پیدا نشد.\n\n"
+                f"مسیر فایل قالب: {path}\n\n"
+                "این فایل را به‌صورت دستی در Jaspersoft Studio باز کنید، یا "
+                "مسیر اجرایی Studio را در متغیر محیطی PEECHA_JASPER_STUDIO_PATH تنظیم کنید.",
             )
 
 
 class _ReportPickerDialog(QDialog):
-    """طبقِ درخواستِ صریح («در فرم‌ها فقط دکمهٔ گزارش را بزنیم، لیستِ
-    گزارش‌هایِ تخصیص‌داده‌شده را نمایش و انتخاب و اجرا کنیم»)."""
+    """طبق درخواست صریح («در فرم‌ها فقط دکمهٔ گزارش را بزنیم، لیست
+    گزارش‌های تخصیص‌داده‌شده را نمایش و انتخاب و اجرا کنیم»)."""
 
     def __init__(self, parent: QWidget, rows: list[templates_service.ReportTemplateRow]) -> None:
         super().__init__(parent)
-        self.setWindowTitle("انتخابِ گزارش")
+        self.setWindowTitle("انتخاب گزارش")
         self._rows = rows
         self._selected_id: int | None = None
         layout = QVBoxLayout(self)
@@ -255,15 +255,15 @@ class _ReportPickerDialog(QDialog):
 
 
 def pick_report_template(parent: QWidget, company_id: int, form_code: str) -> templates_service.ReportTemplateRow | None:
-    """گزارش‌هایِ تخصیص‌داده‌شده‌یِ این فرم را می‌آورد -- اگر هیچ‌کدام
-    تعریف نشده باشد پیامِ راهنما نشان می‌دهد، اگر فقط یکی باشد بدونِ
-    دیالوگ همان را برمی‌گرداند، وگرنه دیالوگِ انتخاب باز می‌شود."""
+    """گزارش‌های تخصیص‌داده‌شدهٔ این فرم را می‌آورد — اگر هیچ‌کدام
+    تعریف نشده باشد پیام راهنما نشان می‌دهد، اگر فقط یکی باشد بدون
+    دیالوگ همان را برمی‌گرداند، وگرنه دیالوگ انتخاب باز می‌شود."""
     rows = templates_service.list_templates(company_id, form_code)
     if not rows:
         QMessageBox.information(
             parent,
             "گزارش",
-            "برایِ این فرم هنوز هیچ گزارشی تعریف نشده — از «تنظیماتِ سیستم ›  گزارش‌ها» یک گزارش اضافه کنید.",
+            "برای این فرم هنوز هیچ گزارشی تعریف نشده — از «تنظیمات سیستم ›  گزارش‌ها» یک گزارش اضافه کنید.",
         )
         return None
     if len(rows) == 1:

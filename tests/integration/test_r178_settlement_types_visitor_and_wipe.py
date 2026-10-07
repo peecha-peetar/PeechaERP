@@ -57,16 +57,16 @@ from peecha.services import commercial_credit as credit_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k1 = coa_service.create_account(company_id, "11", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "101", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k1 = coa_service.create_account(company_id, "11", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "101", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -87,18 +87,18 @@ types = pricing_service.list_distribution_settlement_types(company_id)
 codes = {t.code for t in types}
 check(
     {"CASH_ON_TRUCK", "CHECK", "RECEIPT", "WEEKLY", "ON_TRUCK"}.issubset(codes),
-    f"انواعِ پیش‌فرضِ تسویهٔ پخش خودکار ساخته شدند (got {codes})",
+    f"انواع پیش‌فرض تسویهٔ پخش خودکار ساخته شدند (got {codes})",
 )
-pricing_service.create_distribution_settlement_type(company_id, "CUSTOM1", "تسویهٔ سفارشیِ آزمایشی")
+pricing_service.create_distribution_settlement_type(company_id, "CUSTOM1", "تسویهٔ سفارشی آزمایشی")
 types_after = {t.code: t.name for t in pricing_service.list_distribution_settlement_types(company_id)}
-check(types_after.get("CUSTOM1") == "تسویهٔ سفارشیِ آزمایشی", "نوعِ تسویهٔ سفارشی با موفقیت اضافه شد")
+check(types_after.get("CUSTOM1") == "تسویهٔ سفارشی آزمایشی", "نوع تسویهٔ سفارشی با موفقیت اضافه شد")
 
 # نوعِ تسویهٔ پخش باید از جدولِ مستقلِ خودش (comm.distribution_settlement_types)
 # بیاید، نه از تابعِ روشِ دریافتِ خزانه‌داری -- ولو کدهایی مثلِ "CHECK"
 # تصادفاً در هردو فهرستِ کاملاً مستقل تکرار شده باشند.
 check(
     "CASH_ON_TRUCK" not in set(settlements_service.settlement_plan_method_codes("SALES_INVOICE", company_id)),
-    "نوعِ تسویهٔ پخش از جدولِ مستقلِ خودش می‌آید، نه از روشِ دریافتِ خزانه‌داری",
+    "نوع تسویهٔ پخش از جدول مستقل خودش می‌آید، نه از روش دریافت خزانه‌داری",
 )
 
 # ==========================================================================
@@ -106,18 +106,18 @@ check(
 # ==========================================================================
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی",
+    company_id, "9101", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
+    company_id, "WH-1", "انبار آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
 )
-channel_code = pricing_service.create_channel(company_id, "COLD-1", "پخشِ سردِ منطقه‌یِ ۱", "PRE_SALES")
-customer_id = dimensions_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی")
+channel_code = pricing_service.create_channel(company_id, "COLD-1", "پخش سرد منطقهٔ ۱", "PRE_SALES")
+customer_id = dimensions_service.create_customer(company_id, "C-1", "مشتری آزمایشی")
 
 from peecha.services import users as users_service
 visitor_user = users_service.create_user(
-    "visitor1", "ویزیتورِ یک", "secret123", None, company.default_language_id, False, [company_id], company_id,
+    "visitor1", "ویزیتور یک", "secret123", None, company.default_language_id, False, [company_id], company_id,
 )
 visitor_user_id = visitor_user.user_id
 
@@ -151,34 +151,34 @@ eligible_by_visitor = distribution_service.list_eligible_invoices(company_id, vi
 check(
     invoice_by_visitor in [e.document_id for e in eligible_by_visitor]
     and invoice_by_admin not in [e.document_id for e in eligible_by_visitor],
-    "فیلترِ ویزیتور فقط فاکتورِ سفارشِ ثبت‌شده توسطِ همان ویزیتور را برمی‌گرداند",
+    "فیلتر ویزیتور فقط فاکتور سفارش ثبت‌شده توسط همان ویزیتور را برمی‌گرداند",
 )
 
 visitors = distribution_service.list_order_visitors(company_id)
-check(visitor_user_id in [v[0] for v in visitors], "ویزیتورِ تازه‌ساخته در فهرستِ list_order_visitors ظاهر شد")
+check(visitor_user_id in [v[0] for v in visitors], "ویزیتور تازه‌ساخته در فهرست list_order_visitors ظاهر شد")
 
 # ==========================================================================
 # ۳: رفعِ باگِ گزارش‌شده -- خام‌کردنِ اسناد نباید با نقضِ FKِ
 #    distribution_run_documents متوقف شود.
 # ==========================================================================
 vehicle_id = locations_service.create_warehouse(
-    company_id, "VEH-1", "وانتِ ۱", locations_service.WarehouseFields(warehouse_type_code="VEHICLE"),
+    company_id, "VEH-1", "وانت ۱", locations_service.WarehouseFields(warehouse_type_code="VEHICLE"),
 )
 run_id = distribution_service.create_distribution_run(company_id, user.user_id, datetime.date.today(), vehicle_id)
 distribution_service.add_document_to_run(run_id, company_id, invoice_by_admin)
 
 try:
     data_reset_service.wipe_documents(company_id)
-    check(True, "خام‌کردنِ اسناد با وجودِ تیمِ پخشِ فعال، بدونِ خطا انجام شد")
+    check(True, "خام‌کردن اسناد با وجود تیم پخش فعال، بدون خطا انجام شد")
 except ValueError as exc:
-    check(False, f"خام‌کردنِ اسناد هنوز با خطا متوقف می‌شود: {exc}")
+    check(False, f"خام‌کردن اسناد هنوز با خطا متوقف می‌شود: {exc}")
 
 with new_session() as s:
     from peecha.db.models.commercial import DistributionRun, DistributionRunDocument
     remaining_runs = s.scalar(select(DistributionRun).where(DistributionRun.company_id == company_id))
     remaining_links = s.scalar(select(DistributionRunDocument))
-check(remaining_runs is None, "تیمِ پخش هم واقعاً پاک شد")
-check(remaining_links is None, "الصاقِ فاکتور به تیمِ پخش هم واقعاً پاک شد")
+check(remaining_runs is None, "تیم پخش هم واقعاً پاک شد")
+check(remaining_links is None, "الصاق فاکتور به تیم پخش هم واقعاً پاک شد")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

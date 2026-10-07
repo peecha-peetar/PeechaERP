@@ -37,20 +37,20 @@ interface Props {
 
 const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   INDIVIDUAL: "شخص", COMPANY: "شرکت", STORE: "فروشگاه", ORGANIZATION: "سازمان",
-  WHOLESALER: "عمده‌فروش", RETAILER: "خرده‌فروش", AGENT: "نماینده", ONLINE: "مشتریِ آنلاین",
+  WHOLESALER: "عمده‌فروش", RETAILER: "خرده‌فروش", AGENT: "نماینده", ONLINE: "مشتری آنلاین",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال",
-  PENDING_APPROVAL: "درانتظارِ تایید",
+  PENDING_APPROVAL: "درانتظار تایید",
   SUSPENDED: "معلق",
-  BLACKLISTED: "لیستِ سیاه",
-  INACTIVE: "غیرِفعال",
+  BLACKLISTED: "لیست سیاه",
+  INACTIVE: "غیرفعال",
 };
 
 const SEGMENT_LABELS: Record<string, string> = {
-  NEW: "مشتریِ جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
-  AT_RISK: "در معرضِ ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
+  NEW: "مشتری جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
+  AT_RISK: "در معرض ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
 };
 
 function DashboardStat({ label, value }: { label: string; value: string }) {
@@ -100,7 +100,7 @@ export function CustomerDetailScreen({
       toast.show("مشتری تایید شد.", "success");
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "تاییدِ مشتری ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "تایید مشتری ناموفق بود.", "danger");
     } finally {
       setApproving(false);
     }
@@ -115,7 +115,7 @@ export function CustomerDetailScreen({
       setRejectReason("");
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "ردِ مشتری ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "رد مشتری ناموفق بود.", "danger");
     } finally {
       setApproving(false);
     }
@@ -142,7 +142,7 @@ export function CustomerDetailScreen({
       setDetail(data);
       setVisitPlan(cached?.visit_plans.find((p) => p.customer_detail_account_id === detailAccountId) ?? null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ اطلاعاتِ مشتری ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت اطلاعات مشتری ناموفق بود.");
     } finally {
       setLoading(false);
     }
@@ -220,7 +220,7 @@ export function CustomerDetailScreen({
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
             {[
               detail.customer_type_code ? CUSTOMER_TYPE_LABELS[detail.customer_type_code] ?? detail.customer_type_code : null,
-              detail.customer_class ? `طبقه‌یِ ${detail.customer_class}` : null,
+              detail.customer_class ? `طبقهٔ ${detail.customer_class}` : null,
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -234,37 +234,37 @@ export function CustomerDetailScreen({
       {segment ? (
         <Card>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm }}>
-            <Text style={[typography.captionBold, { color: colors.textSecondary }]}>داشبوردِ مشتری</Text>
+            <Text style={[typography.captionBold, { color: colors.textSecondary }]}>داشبورد مشتری</Text>
             <StatusBadge statusCode={segment.segment_code} label={SEGMENT_LABELS[segment.segment_code] ?? segment.segment_code} />
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
-            <DashboardStat label="فروشِ ماهِ جاری" value={formatAmount(segment.sales_this_month)} />
-            <DashboardStat label="فروشِ ۳ماهِ اخیر" value={formatAmount(segment.sales_last_3_months)} />
-            <DashboardStat label="تعدادِ سفارش (۱۲ماهِ اخیر)" value={String(segment.order_count_last_12_months)} />
-            <DashboardStat label="سودِ برآوردیِ ۳ماهِ اخیر" value={formatAmount(segment.estimated_profit_last_3_months)} />
+            <DashboardStat label="فروش ماه جاری" value={formatAmount(segment.sales_this_month)} />
+            <DashboardStat label="فروش ۳ماه اخیر" value={formatAmount(segment.sales_last_3_months)} />
+            <DashboardStat label="تعداد سفارش (۱۲ماه اخیر)" value={String(segment.order_count_last_12_months)} />
+            <DashboardStat label="سود برآوردی ۳ماه اخیر" value={formatAmount(segment.estimated_profit_last_3_months)} />
           </View>
-          <Button label="نمایِ کامل (۳۶۰)" size="md" fullWidth={false} variant="ghost" onPress={onOpen360} />
+          <Button label="نمای کامل (۳۶۰)" size="md" fullWidth={false} variant="ghost" onPress={onOpen360} />
         </Card>
       ) : null}
 
       {isManager && detail.status_code === "PENDING_APPROVAL" ? (
         <Card>
-          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>تاییدِ مشتریِ جدید</Text>
-          <Button label="تاییدِ مشتری" onPress={approve} loading={approving} />
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>تایید مشتری جدید</Text>
+          <Button label="تایید مشتری" onPress={approve} loading={approving} />
           <Input
-            label="دلیلِ رد (فقط اگر رد می‌کنید)"
+            label="دلیل رد (فقط اگر رد می‌کنید)"
             value={rejectReason}
             onChangeText={setRejectReason}
             placeholder="مثلاً: اطلاعات ناقص است"
             style={{ marginTop: spacing.sm }}
           />
-          <Button label="ردِ مشتری" variant="danger" onPress={reject} loading={approving} disabled={!rejectReason.trim()} />
+          <Button label="رد مشتری" variant="danger" onPress={reject} loading={approving} disabled={!rejectReason.trim()} />
         </Card>
       ) : null}
 
       <Card>
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Text style={[typography.caption, { color: colors.textSecondary }]}>مانده‌یِ حساب</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>ماندهٔ حساب</Text>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>{detail.balance_nature}</Text>
         </View>
         <Text
@@ -277,7 +277,7 @@ export function CustomerDetailScreen({
         </Text>
         {detail.credit_limit_amount ? (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.sm }]}>
-            سقفِ اعتبار: {formatAmount(detail.credit_limit_amount)} · مهلتِ پرداخت: {detail.payment_term_days} روز
+            سقف اعتبار: {formatAmount(detail.credit_limit_amount)} · مهلت پرداخت: {detail.payment_term_days} روز
           </Text>
         ) : null}
         {detail.last_purchase_date ? (
@@ -290,30 +290,30 @@ export function CustomerDetailScreen({
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
         {!collectionOnly && !vanSales ? (
           <Button
-            label="شروعِ ویزیت"
+            label="شروع ویزیت"
             fullWidth={false}
             disabled={visitPlan === null}
             onPress={() => visitPlan && onStartVisit(customerRow, visitPlan)}
           />
         ) : null}
         {!collectionOnly ? (
-          <Button label={vanSales ? "صدورِ فاکتور" : "ثبتِ سفارش"} fullWidth={false} variant="secondary" onPress={() => onCreateOrder(customerRow)} />
+          <Button label={vanSales ? "صدور فاکتور" : "ثبت سفارش"} fullWidth={false} variant="secondary" onPress={() => onCreateOrder(customerRow)} />
         ) : null}
-        <Button label="ثبتِ وصول" fullWidth={false} variant="secondary" onPress={() => onCreateCollection(customerRow)} />
+        <Button label="ثبت وصول" fullWidth={false} variant="secondary" onPress={() => onCreateCollection(customerRow)} />
         {detail.phone ? <Button label="تماس" fullWidth={false} variant="ghost" onPress={callCustomer} /> : null}
         {detail.gps_latitude || detail.address ? (
           <Button label="مسیریابی" fullWidth={false} variant="ghost" onPress={navigateToCustomer} />
         ) : null}
         <Button label="آدرس‌ها" fullWidth={false} variant="ghost" onPress={onOpenAddresses} />
-        <Button label="نمایِ کامل (۳۶۰)" fullWidth={false} variant="ghost" onPress={onOpen360} />
+        <Button label="نمای کامل (۳۶۰)" fullWidth={false} variant="ghost" onPress={onOpen360} />
       </View>
       {!collectionOnly && !vanSales && visitPlan === null ? (
-        <Text style={[typography.caption, { color: colors.textSecondary }]}>این مشتری برنامه‌یِ ویزیتِ ثبت‌شده‌ای ندارد.</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>این مشتری برنامهٔ ویزیت ثبت‌شده‌ای ندارد.</Text>
       ) : null}
 
       {detail.top_products.length > 0 ? (
         <View>
-          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>محصولاتِ پرفروش</Text>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>محصولات پرفروش</Text>
           <Card>
             {detail.top_products.map((p, index) => (
               <View
@@ -326,7 +326,7 @@ export function CustomerDetailScreen({
                   borderTopColor: colors.border,
                 }}
               >
-                <Text style={[typography.body, { color: colors.textPrimary }]}>{p.item_name ?? `کالایِ #${p.item_id}`}</Text>
+                <Text style={[typography.body, { color: colors.textPrimary }]}>{p.item_name ?? `کالای #${p.item_id}`}</Text>
                 <Text style={[typography.numeric, { color: colors.textSecondary }]}>{p.total_quantity}</Text>
               </View>
             ))}
@@ -336,7 +336,7 @@ export function CustomerDetailScreen({
 
       {detail.recent_documents.length > 0 ? (
         <View>
-          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>سفارش‌ها/فاکتورهایِ اخیر</Text>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>سفارش‌ها/فاکتورهای اخیر</Text>
           <Card>
             {detail.recent_documents.map((d, index) => (
               <View

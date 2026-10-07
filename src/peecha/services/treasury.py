@@ -1,7 +1,7 @@
-"""سرویسِ خزانه‌داری: نگاشتِ حساب‌ها، دسته‌چک، سندِ چندروشیِ دریافت/پرداخت
-(نقد/بانک/چک/تخفیف در یک سندِ واحد)، و چرخه‌یِ عمرِ چک‌هایِ دریافتی/پرداختی
-— همه رویِ همان موتورِ اسنادِ حسابداری (journal_entries.py) و ابعادِ
-تفصیلیِ موجود (detail_dimensions.py)، بدونِ موتورِ موازیِ تازه."""
+"""سرویس خزانه‌داری: نگاشت حساب‌ها، دسته‌چک، سند چندروشی دریافت/پرداخت
+(نقد/بانک/چک/تخفیف در یک سند واحد)، و چرخهٔ عمر چک‌های دریافتی/پرداختی
+— همه روی همان موتور اسناد حسابداری (journal_entries.py) و ابعاد
+تفصیلی موجود (detail_dimensions.py)، بدون موتور موازی تازه."""
 
 from __future__ import annotations
 
@@ -82,48 +82,48 @@ MAPPING_KEYS = [
 ]
 
 MAPPING_LABELS: dict[str, str] = {
-    "RECEIPT_CASH": "دریافتِ نقدی",
-    "RECEIPT_BANK": "دریافتِ بانکی",
-    "RECEIPT_CHECK": "چک‌هایِ دریافتنی (در جریانِ وصول)",
-    "RECEIPT_DISCOUNT": "تخفیفاتِ نقدیِ داده‌شده",
-    "RECEIPT_NETTING": "تهاترِ دریافت",
-    "RECEIPT_GOODS_COUPON": "کالابرگِ دریافتی",
-    "RECEIPT_VOUCHER": "بنِ دریافتی",
+    "RECEIPT_CASH": "دریافت نقدی",
+    "RECEIPT_BANK": "دریافت بانکی",
+    "RECEIPT_CHECK": "چک‌های دریافتنی (در جریان وصول)",
+    "RECEIPT_DISCOUNT": "تخفیفات نقدی داده‌شده",
+    "RECEIPT_NETTING": "تهاتر دریافت",
+    "RECEIPT_GOODS_COUPON": "کالابرگ دریافتی",
+    "RECEIPT_VOUCHER": "بن دریافتی",
     # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): این حساب، سهمی از
     # طلب/بدهیِ همان طرفِ‌حساب را که قرار است طیِ چند قسط دریافت/پرداخت
     # شود نگه می‌دارد -- معمولاً یک زیرحسابِ اختصاصیِ «دریافتنی/پرداختنیِ
     # اقساطی» (تا از AR/APِ عادی جدا و قابلِ‌ردیابی بماند).
-    "RECEIPT_INSTALLMENT": "دریافتنیِ اقساطی",
+    "RECEIPT_INSTALLMENT": "دریافتنی اقساطی",
     # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط و هزینه‌هایِ متفرقه»): سهمِ بهره/
     # هزینه‌یِ متفرقه‌یِ اقساط (مازاد بر اصلِ مبلغ) در همان سندِ ساختِ طرحِ
     # اقساط، مستقیماً به‌عنوانِ درآمد شناسایی می‌شود.
-    "RECEIPT_INSTALLMENT_INTEREST": "درآمدِ بهره/کارمزدِ اقساط",
-    "PAYMENT_CASH": "پرداختِ نقدی",
-    "PAYMENT_BANK": "پرداختِ بانکی",
-    "PAYMENT_CHECK": "چک‌هایِ پرداختنی",
-    "PAYMENT_DISCOUNT": "تخفیفاتِ نقدیِ دریافت‌شده",
-    "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
-    "PAYMENT_NETTING": "تهاترِ پرداخت",
-    "PAYMENT_INSTALLMENT": "پرداختنیِ اقساطی",
+    "RECEIPT_INSTALLMENT_INTEREST": "درآمد بهره/کارمزد اقساط",
+    "PAYMENT_CASH": "پرداخت نقدی",
+    "PAYMENT_BANK": "پرداخت بانکی",
+    "PAYMENT_CHECK": "چک‌های پرداختنی",
+    "PAYMENT_DISCOUNT": "تخفیفات نقدی دریافت‌شده",
+    "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چک دریافتی (خرج چک)",
+    "PAYMENT_NETTING": "تهاتر پرداخت",
+    "PAYMENT_INSTALLMENT": "پرداختنی اقساطی",
     # طبقِ همان موردِ ۶، سمتِ پرداخت: سهمِ بهره/هزینه‌یِ متفرقه به‌عنوانِ
     # هزینه شناسایی می‌شود (حسابِ هزینه‌یِ انتخابی).
-    "PAYMENT_INSTALLMENT_INTEREST": "هزینه‌یِ بهره/کارمزدِ اقساط",
-    "CHECK_RECEIVED_FUND_TRANSFER": "انتقالِ چکِ دریافتی بینِ صندوق‌ها",
-    "CHECK_RECEIVED_CASH_COLLECT": "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق",
-    "CHECK_RECEIVED_BANK_DEPOSIT": "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک",
-    "CHECK_RECEIVED_BANK_CLEAR": "اعلامِ وصولِ چکِ دریافتیِ نزدِ بانک",
-    "CHECK_RECEIVED_BANK_RETURN": "برگشتِ چکِ دریافتیِ نزدِ بانک به صندوق",
-    "CHECK_ISSUED_BANK_CLEAR": "وصولِ چکِ پرداختی از بانک",
-    "CHECK_ISSUED_RETURN_TO_FUND": "چکِ پرداختیِ وصول‌نشده جهتِ برگشت",
+    "PAYMENT_INSTALLMENT_INTEREST": "هزینهٔ بهره/کارمزد اقساط",
+    "CHECK_RECEIVED_FUND_TRANSFER": "انتقال چک دریافتی بین صندوق‌ها",
+    "CHECK_RECEIVED_CASH_COLLECT": "وصول نقدی چک دریافتی نزد صندوق",
+    "CHECK_RECEIVED_BANK_DEPOSIT": "واگذاری چک دریافتی نزد صندوق به بانک",
+    "CHECK_RECEIVED_BANK_CLEAR": "اعلام وصول چک دریافتی نزد بانک",
+    "CHECK_RECEIVED_BANK_RETURN": "برگشت چک دریافتی نزد بانک به صندوق",
+    "CHECK_ISSUED_BANK_CLEAR": "وصول چک پرداختی از بانک",
+    "CHECK_ISSUED_RETURN_TO_FUND": "چک پرداختی وصول‌نشده جهت برگشت",
     # این دو مرحله (برگشتِ چک به طرفِ‌حساب / برگشتِ چکِ خرجی به صندوق) حسابِ
     # کلِ تازه لازم ندارند — هر دو طرفِ سندشان پویا از رویِ خودِ چک تعیین
     # می‌شود؛ فقط این‌جا برایِ برچسبِ ردیفِ متنِ‌شرحِ قابل‌ویرایش (پایین)
     # استفاده می‌شوند، نه به‌عنوانِ کلیدِ نگاشتِ حساب.
-    "CHECK_RECEIVED_CUSTOMER_RETURN": "برگشتِ چکِ دریافتیِ نزدِ صندوق به طرفِ‌حساب",
-    "CHECK_RECEIVED_ENDORSED_RETURN": "برگشتِ چکِ خرجی به صندوق",
+    "CHECK_RECEIVED_CUSTOMER_RETURN": "برگشت چک دریافتی نزد صندوق به طرف‌حساب",
+    "CHECK_RECEIVED_ENDORSED_RETURN": "برگشت چک خرجی به صندوق",
     # طبقِ ساختارِ واقعیِ تنخواه‌گردان (services/petty_cash.py): حسابِ
     # پیش‌پرداختِ تنخواه‌داران — در افتتاح بدهکار، در بستن بستانکار می‌شود.
-    "PETTY_CASH_ADVANCE": "پیش‌پرداختِ تنخواه‌گردان",
+    "PETTY_CASH_ADVANCE": "پیش‌پرداخت تنخواه‌گردان",
 }
 
 METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER", "INSTALLMENT")
@@ -133,17 +133,17 @@ METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEM
 # هر تابعِ تغییرِ مرحله‌یِ پایین‌تر، یک ردیف در treasury.check_stage_events
 # با یکی از این کدها ثبت می‌کند.
 CHECK_EVENT_LABELS: dict[str, str] = {
-    "REGISTERED": "ثبتِ چک (سندِ دریافت/پرداخت)",
-    "FUND_TRANSFER": "انتقال بینِ صندوق‌ها",
-    "CASH_COLLECT": "وصولِ نقدیِ نزدِ صندوق",
+    "REGISTERED": "ثبت چک (سند دریافت/پرداخت)",
+    "FUND_TRANSFER": "انتقال بین صندوق‌ها",
+    "CASH_COLLECT": "وصول نقدی نزد صندوق",
     "BANK_DEPOSIT": "واگذاری به بانک",
-    "BANK_CLEAR": "اعلامِ وصول نزدِ بانک",
+    "BANK_CLEAR": "اعلام وصول نزد بانک",
     "BANK_RETURN": "برگشت از بانک به صندوق",
-    "BOUNCED": "برگشت‌خوردنِ چک به طرفِ‌حساب",
-    "ENDORSED": "خرج‌شدنِ چک (پرداخت با چکِ دریافتی)",
-    "UNENDORSED_RETURN": "برگشتِ چکِ خرجی به صندوق",
+    "BOUNCED": "برگشت‌خوردن چک به طرف‌حساب",
+    "ENDORSED": "خرج‌شدن چک (پرداخت با چک دریافتی)",
+    "UNENDORSED_RETURN": "برگشت چک خرجی به صندوق",
     "ISSUED_CLEARED": "وصول از بانک",
-    "ISSUED_RETURNED": "برگشت/ابطالِ چکِ پرداختیِ وصول‌نشده",
+    "ISSUED_RETURNED": "برگشت/ابطال چک پرداختی وصول‌نشده",
 }
 
 
@@ -193,8 +193,8 @@ class CheckStageEventRow:
 
 
 def get_check_stage_history(company_id: int, check_kind: str, check_id: int) -> list[CheckStageEventRow]:
-    """تاریخچه‌یِ کاملِ یک چکِ خاص (دریافتی یا پرداختی)، به‌ترتیبِ زمانی —
-    برایِ هر رویداد، شماره‌یِ سندِ حسابداری‌یی که آن مرحله را ثبت کرده هم
+    """تاریخچهٔ کامل یک چک خاص (دریافتی یا پرداختی)، به‌ترتیب زمانی —
+    برای هر رویداد، شمارهٔ سند حسابداری‌یی که آن مرحله را ثبت کرده هم
     برگردانده می‌شود (اگر مرحله سند داشته باشد)."""
     with new_session() as session:
         from peecha.db.models.accounting import JournalEntry
@@ -239,11 +239,11 @@ def get_check_stage_history(company_id: int, check_kind: str, check_id: int) -> 
 
 
 def undo_last_check_stage(check_kind: str, check_id: int, company_id: int, changed_by_user_id: int) -> None:
-    """طبقِ درخواستِ صریح: «سندِ مرحله‌یِ آخر حذف بشه تا چک برگرده به
-    حالتِ اول» — آخرین رویدادِ چک را برمی‌دارد، سندِ حسابداریِ همان مرحله
-    را حذف می‌کند (فقط اگر هنوز موقت باشد)، و وضعیت/محلِ چک را دقیقاً به
-    همانی که پیش‌از‌آن مرحله بود برمی‌گرداند. رویدادِ REGISTERED با این
-    تابع قابلِ‌برداشتن نیست — برایِ آن از حذفِ کاملِ چک استفاده کنید."""
+    """طبق درخواست صریح: «سند مرحلهٔ آخر حذف بشه تا چک برگرده به
+    حالت اول» — آخرین رویداد چک را برمی‌دارد، سند حسابداری همان مرحله
+    را حذف می‌کند (فقط اگر هنوز موقت باشد)، و وضعیت/محل چک را دقیقاً به
+    همانی که پیش‌از‌آن مرحله بود برمی‌گرداند. رویداد REGISTERED با این
+    تابع قابل‌برداشتن نیست — برای آن از حذف کامل چک استفاده کنید."""
     with new_session() as session:
         latest_event = session.scalar(
             select(CheckStageEvent)
@@ -255,9 +255,9 @@ def undo_last_check_stage(check_kind: str, check_id: int, company_id: int, chang
             .order_by(CheckStageEvent.event_id.desc())
         )
         if latest_event is None:
-            raise ValueError("برایِ این چک هیچ رویدادِ قابلِ‌برگشتی ثبت نشده است.")
+            raise ValueError("برای این چک هیچ رویداد قابل‌برگشتی ثبت نشده است.")
         if latest_event.event_code == "REGISTERED":
-            raise ValueError("این چک هنوز هیچ مرحله‌ای طی نکرده — برایِ حذفِ کاملِ آن از دکمه‌یِ «حذفِ چک» استفاده کنید.")
+            raise ValueError("این چک هنوز هیچ مرحله‌ای طی نکرده — برای حذف کامل آن از دکمهٔ «حذف چک» استفاده کنید.")
 
         journal_entry_id = latest_event.journal_entry_id
         model_cls = ReceivedCheck if check_kind == "RECEIVED" else IssuedCheck
@@ -304,13 +304,13 @@ def _fix_partial_check_line_description(
     new_amount: decimal.Decimal,
     remaining_check_count: int,
 ) -> str:
-    """طبقِ گزارشِ صریح: وقتی حذفِ یک چک فقط باعثِ کم‌شدنِ مبلغِ همان ردیف
-    می‌شود (نه حذفِ کاملِ ردیف، چون چکِ دیگری هم در همان ردیف مانده)، شرحِ
-    قدیمیِ ردیف دیگر درست نیست — چون هم مبلغ و هم تعدادِ «فقره چک»یِ
-    ذکرشده در آن به‌حالِ قبل از حذف اشاره دارند. این‌جا (۱) پیشوندِ «سندِ
-    اصلاح‌شده» اضافه می‌شود، (۲) مبلغِ قدیمی در متن، اگر عیناً پیدا شود، با
-    مبلغِ تازه جایگزین می‌شود، و (۳) عددِ جلویِ «فقره» هم به تعدادِ
-    باقی‌ماندهِ چک‌ها به‌روز می‌شود."""
+    """طبق گزارش صریح: وقتی حذف یک چک فقط باعث کم‌شدن مبلغ همان ردیف
+    می‌شود (نه حذف کامل ردیف، چون چک دیگری هم در همان ردیف مانده)، شرح
+    قدیمی ردیف دیگر درست نیست — چون هم مبلغ و هم تعداد «فقره چک»ی
+    ذکرشده در آن به‌حال قبل از حذف اشاره دارند. این‌جا (۱) پیشوند «سند
+    اصلاح‌شده» اضافه می‌شود، (۲) مبلغ قدیمی در متن، اگر عیناً پیدا شود، با
+    مبلغ تازه جایگزین می‌شود، و (۳) عدد جلوی «فقره» هم به تعداد
+    باقی‌ماندهٔ چک‌ها به‌روز می‌شود."""
     if not description:
         return description
     with new_session() as session:
@@ -329,7 +329,7 @@ def _fix_partial_check_line_description(
     if remaining_check_count > 0:
         count_text = numerals.to_persian_digits(str(remaining_check_count))
         fixed = _FA_DIGITS_BEFORE_FAGHARE_RE.sub(count_text, fixed, count=1)
-    prefix = "سندِ اصلاح‌شده — "
+    prefix = "سند اصلاح‌شده — "
     if not fixed.startswith(prefix):
         fixed = prefix + fixed
     return fixed
@@ -343,21 +343,21 @@ def _remove_check_amount_from_source_entry(
     changed_by_user_id: int | None,
     remaining_check_count: int = 0,
 ) -> bool:
-    """طبقِ گزارشِ صریح: حذفِ یک چک نباید کلِ سندِ چندروشیِ مربوطه را حذف
-    کند — ممکن است همان سند روش‌هایِ دیگری هم (نقد، چکِ دیگر، …) داشته
-    باشد، یا خودِ همان ردیف چند چکِ دیگر را هم دربرگرفته باشد. این تابع
-    فقط سهمِ همین یک چک را از سند کم می‌کند: اگر ردیفِ مربوطه مبلغِ
-    بیشتری هم داشت (چکِ دیگری در همان ردیف)، فقط مبلغِ ردیف کم می‌شود؛
-    اگر این چک تنها موردِ آن ردیف بود، کلِ ردیف حذف می‌شود. ردیفِ اولِ سند
-    (طرفِ‌حساب) هم به همان اندازه اصلاح می‌شود تا سند تراز بماند. اگر
-    بعدِ این کار چیزی جز ردیفِ طرفِ‌حساب باقی نماند، سند دیگر معنایی
-    ندارد و باید کلاً حذف شود (رفتارِ قدیم) — اما چون received_checks/
-    issued_checks با FK به journal_entry_id وصل‌اند، خودِ حذفِ سند باید
-    بعد از حذفِ ردیفِ چک (توسطِ فراخوان‌کننده) انجام شود، وگرنه با خطایِ
-    نقضِ FK رد می‌شود. برایِ همین این تابع در آن حالت فقط True برمی‌گرداند
-    («حذفِ کاملِ سند لازم است») و خودش سند را حذف نمی‌کند. اگر line_no
-    مشخص نباشد (داده‌یِ ثبت‌شده پیش از این ستون)، محافظه‌کارانه همان
-    رفتارِ قدیمی لازم است — چون معلوم نیست دقیقاً کدام ردیف مالِ این چک
+    """طبق گزارش صریح: حذف یک چک نباید کل سند چندروشی مربوطه را حذف
+    کند — ممکن است همان سند روش‌های دیگری هم (نقد، چک دیگر، …) داشته
+    باشد، یا خود همان ردیف چند چک دیگر را هم دربرگرفته باشد. این تابع
+    فقط سهم همین یک چک را از سند کم می‌کند: اگر ردیف مربوطه مبلغ
+    بیشتری هم داشت (چک دیگری در همان ردیف)، فقط مبلغ ردیف کم می‌شود؛
+    اگر این چک تنها مورد آن ردیف بود، کل ردیف حذف می‌شود. ردیف اول سند
+    (طرف‌حساب) هم به همان اندازه اصلاح می‌شود تا سند تراز بماند. اگر
+    بعد این کار چیزی جز ردیف طرف‌حساب باقی نماند، سند دیگر معنایی
+    ندارد و باید کلاً حذف شود (رفتار قدیم) — اما چون received_checks/
+    issued_checks با FK به journal_entry_id وصل‌اند، خود حذف سند باید
+    بعد از حذف ردیف چک (توسط فراخوان‌کننده) انجام شود، وگرنه با خطای
+    نقض FK رد می‌شود. برای همین این تابع در آن حالت فقط True برمی‌گرداند
+    («حذف کامل سند لازم است») و خودش سند را حذف نمی‌کند. اگر line_no
+    مشخص نباشد (دادهٔ ثبت‌شده پیش از این ستون)، محافظه‌کارانه همان
+    رفتار قدیمی لازم است — چون معلوم نیست دقیقاً کدام ردیف مال این چک
     بوده."""
     if line_no is None:
         return True
@@ -406,7 +406,7 @@ def _remove_check_amount_from_source_entry(
     with new_session() as session:
         entry = session.get(JournalEntry, journal_entry_id)
         if entry is None or entry.company_id != company_id:
-            raise ValueError("سندِ اصلیِ این چک یافت نشد.")
+            raise ValueError("سند اصلی این چک یافت نشد.")
         document_date = entry.document_date
         description = entry.description or ""
         alternative_number = entry.alternative_number or ""
@@ -417,10 +417,10 @@ def _remove_check_amount_from_source_entry(
 
 
 def delete_received_check(received_check_id: int, company_id: int, changed_by_user_id: int) -> None:
-    """طبقِ گزارشِ صریح: حذفِ کاملِ یک چکِ دریافتی — فقط وقتی چک هنوز به
-    همان حالتِ اولِ ثبت (نزدِ صندوق، بدونِ هیچ پیشرفتی) برگشته باشد. فقط
-    سهمِ همین چک از سندِ ثبتِ اولیه کم می‌شود (نه کلِ سند)، مگر این‌که این
-    چک تنها ردیفِ باقی‌مانده‌یِ سند بوده باشد."""
+    """طبق گزارش صریح: حذف کامل یک چک دریافتی — فقط وقتی چک هنوز به
+    همان حالت اول ثبت (نزد صندوق، بدون هیچ پیشرفتی) برگشته باشد. فقط
+    سهم همین چک از سند ثبت اولیه کم می‌شود (نه کل سند)، مگر این‌که این
+    چک تنها ردیف باقی‌ماندهٔ سند بوده باشد."""
     with new_session() as session:
         check = session.get(ReceivedCheck, received_check_id)
         if check is None or check.company_id != company_id:
@@ -428,8 +428,8 @@ def delete_received_check(received_check_id: int, company_id: int, changed_by_us
         status_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
         if status_code != "IN_HAND":
             raise ValueError(
-                "فقط چکِ «نزدِ صندوق» (بدونِ پیشرفتِ بیشتر) قابلِ‌حذف است — "
-                "ابتدا با «حذفِ آخرین سندِ مرحله» آن را به همین حالت برگردانید."
+                "فقط چک «نزد صندوق» (بدون پیشرفت بیشتر) قابل‌حذف است — "
+                "ابتدا با «حذف آخرین سند مرحله» آن را به همین حالت برگردانید."
             )
         source_journal_entry_id = check.source_journal_entry_id
         source_line_no = check.source_journal_entry_line_no
@@ -476,8 +476,8 @@ def delete_received_check(received_check_id: int, company_id: int, changed_by_us
 
 
 def delete_issued_check(issued_check_id: int, company_id: int, changed_by_user_id: int) -> None:
-    """هم‌ارزِ delete_received_check برایِ چکِ پرداختی — فقط وقتی هنوز
-    «صادرشده» (بدونِ پیشرفتِ بیشتر) باشد."""
+    """هم‌ارز delete_received_check برای چک پرداختی — فقط وقتی هنوز
+    «صادرشده» (بدون پیشرفت بیشتر) باشد."""
     with new_session() as session:
         check = session.get(IssuedCheck, issued_check_id)
         if check is None or check.company_id != company_id:
@@ -485,8 +485,8 @@ def delete_issued_check(issued_check_id: int, company_id: int, changed_by_user_i
         status_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
         if status_code != "ISSUED":
             raise ValueError(
-                "فقط چکِ «صادرشده» (بدونِ پیشرفتِ بیشتر) قابلِ‌حذف است — "
-                "ابتدا با «حذفِ آخرین سندِ مرحله» آن را به همین حالت برگردانید."
+                "فقط چک «صادرشده» (بدون پیشرفت بیشتر) قابل‌حذف است — "
+                "ابتدا با «حذف آخرین سند مرحله» آن را به همین حالت برگردانید."
             )
         source_journal_entry_id = check.source_journal_entry_id
         source_line_no = check.source_journal_entry_line_no
@@ -526,13 +526,13 @@ def delete_issued_check(issued_check_id: int, company_id: int, changed_by_user_i
 
 
 def list_check_numbers_on_journal_entry_line(company_id: int, journal_entry_id: int, line_no: int) -> list[str]:
-    """طبقِ گزارشِ صریح: کاربر از فرمِ عمومیِ سندِ حسابداری توانسته بود ردیفِ
-    مربوط به یک چک را مستقیماً حذف کند — بدونِ این‌که چکِ خزانه‌داری هم
-    حذف/اصلاح شود، یعنی چک به یک ردیفِ دیگر (یا هیچ ردیفی) اشاره می‌کرد.
-    این تابع برایِ اعتبارسنجیِ همان فرم استفاده می‌شود: اگر ردیفِ line_no
-    از سندِ journal_entry_id چک(هایِ) دریافتی/پرداختی داشته باشد، شماره‌یِ
-    آن‌ها را برمی‌گرداند تا فرمِ سند حذفِ آن ردیف را رد کند (باید کاربر از
-    صفحه‌یِ چک‌ها اقدام کند، جایی که مبلغ/شرحِ سند هم به‌درستی اصلاح
+    """طبق گزارش صریح: کاربر از فرم عمومی سند حسابداری توانسته بود ردیف
+    مربوط به یک چک را مستقیماً حذف کند — بدون این‌که چک خزانه‌داری هم
+    حذف/اصلاح شود، یعنی چک به یک ردیف دیگر (یا هیچ ردیفی) اشاره می‌کرد.
+    این تابع برای اعتبارسنجی همان فرم استفاده می‌شود: اگر ردیف line_no
+    از سند journal_entry_id چک(های) دریافتی/پرداختی داشته باشد، شمارهٔ
+    آن‌ها را برمی‌گرداند تا فرم سند حذف آن ردیف را رد کند (باید کاربر از
+    صفحهٔ چک‌ها اقدام کند، جایی که مبلغ/شرح سند هم به‌درستی اصلاح
     می‌شود)."""
     with new_session() as session:
         received = session.scalars(
@@ -558,23 +558,23 @@ def list_check_numbers_on_journal_entry_line(company_id: int, journal_entry_id: 
 # {مبلغ}، {طرف_حساب} (تفصیلیِ بالایِ فرم)، {تعداد} (فقط چک)، {یادداشت}
 # (فقط بن — سریال/مشخصات).
 DEFAULT_DESCRIPTION_TEMPLATES: dict[str, str] = {
-    "RECEIPT_CASH": "دریافتِ نقدی «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
-    "RECEIPT_BANK": "دریافتِ بانکی «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
-    "RECEIPT_CHECK": "دریافتِ {تعداد} فقره چک به مبلغِ {مبلغ} ریال از {طرف_حساب}",
-    "RECEIPT_DISCOUNT": "تخفیفِ نقدیِ داده‌شده به مبلغِ {مبلغ} ریال به {طرف_حساب}",
-    "RECEIPT_GOODS_COUPON": "دریافتِ کالابرگِ «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
-    "RECEIPT_VOUCHER": "دریافتِ بنِ {یادداشت} به مبلغِ {مبلغ} ریال از {طرف_حساب}",
-    "RECEIPT_NETTING": "تهاترِ حساب به مبلغِ {مبلغ} ریال با {طرف_حساب}",
+    "RECEIPT_CASH": "دریافت نقدی «{تفصیلی}» به مبلغ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_BANK": "دریافت بانکی «{تفصیلی}» به مبلغ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_CHECK": "دریافت {تعداد} فقره چک به مبلغ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_DISCOUNT": "تخفیف نقدی داده‌شده به مبلغ {مبلغ} ریال به {طرف_حساب}",
+    "RECEIPT_GOODS_COUPON": "دریافت کالابرگ «{تفصیلی}» به مبلغ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_VOUCHER": "دریافت بن {یادداشت} به مبلغ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_NETTING": "تهاتر حساب به مبلغ {مبلغ} ریال با {طرف_حساب}",
     # طبقِ درخواستِ صریحِ «مدلِ تنظیماتِ روش‌هایِ پرداخت مثلِ روش‌هایِ دریافت»:
     # قالب‌هایِ پیش‌فرضِ پرداخت هم، هم‌ارزِ دریافت، تعریف می‌شوند.
-    "PAYMENT_CASH": "پرداختِ نقدی «{تفصیلی}» به مبلغِ {مبلغ} ریال به {طرف_حساب}",
-    "PAYMENT_BANK": "پرداختِ بانکی «{تفصیلی}» به مبلغِ {مبلغ} ریال به {طرف_حساب}",
-    "PAYMENT_CHECK": "پرداختِ {تعداد} فقره چک به مبلغِ {مبلغ} ریال به {طرف_حساب}",
-    "PAYMENT_DISCOUNT": "تخفیفِ نقدیِ دریافت‌شده به مبلغِ {مبلغ} ریال از {طرف_حساب}",
-    "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با خرجِ {تعداد} فقره چکِ دریافتی به مبلغِ {مبلغ} ریال به {طرف_حساب}",
-    "PAYMENT_NETTING": "تهاترِ حساب به مبلغِ {مبلغ} ریال با {طرف_حساب}",
-    "CHECK_RECEIVED_CUSTOMER_RETURN": "برگشتِ چکِ دریافتیِ نزدِ صندوق به طرفِ‌حساب به مبلغِ {مبلغ} ریال",
-    "CHECK_RECEIVED_ENDORSED_RETURN": "برگشتِ چکِ خرجی‌شده به صندوق به مبلغِ {مبلغ} ریال",
+    "PAYMENT_CASH": "پرداخت نقدی «{تفصیلی}» به مبلغ {مبلغ} ریال به {طرف_حساب}",
+    "PAYMENT_BANK": "پرداخت بانکی «{تفصیلی}» به مبلغ {مبلغ} ریال به {طرف_حساب}",
+    "PAYMENT_CHECK": "پرداخت {تعداد} فقره چک به مبلغ {مبلغ} ریال به {طرف_حساب}",
+    "PAYMENT_DISCOUNT": "تخفیف نقدی دریافت‌شده به مبلغ {مبلغ} ریال از {طرف_حساب}",
+    "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با خرج {تعداد} فقره چک دریافتی به مبلغ {مبلغ} ریال به {طرف_حساب}",
+    "PAYMENT_NETTING": "تهاتر حساب به مبلغ {مبلغ} ریال با {طرف_حساب}",
+    "CHECK_RECEIVED_CUSTOMER_RETURN": "برگشت چک دریافتی نزد صندوق به طرف‌حساب به مبلغ {مبلغ} ریال",
+    "CHECK_RECEIVED_ENDORSED_RETURN": "برگشت چک خرجی‌شده به صندوق به مبلغ {مبلغ} ریال",
 }
 
 
@@ -632,8 +632,8 @@ class _SafeFormatDict(dict):
 
 
 def render_description_template(template_text: str, context: dict[str, str]) -> str:
-    """جایگذاریِ امنِ جای‌گذارهایِ قالب — کلیدِ ناشناخته/نبود به‌جایِ خطا،
-    رشته‌یِ خالی می‌شود؛ فرمتِ نامعتبر هم به‌جایِ کرش، همان متنِ خام را
+    """جایگذاری امن جای‌گذارهای قالب — کلید ناشناخته/نبود به‌جای خطا،
+    رشتهٔ خالی می‌شود؛ قالب نامعتبر هم به‌جای کرش، همان متن خام را
     برمی‌گرداند (تایپوی کاربر در قالب نباید فرم را از کار بیندازد)."""
     try:
         return template_text.format_map(_SafeFormatDict(context)).strip()
@@ -664,7 +664,7 @@ def list_banks(company_id: int, active_only: bool = False) -> list[BankRow]:
 def create_bank(company_id: int, name: str, code: str = "") -> BankRow:
     name = name.strip()
     if not name:
-        raise ValueError("نامِ بانک نمی‌تواند خالی باشد.")
+        raise ValueError("نام بانک نمی‌تواند خالی باشد.")
     with new_session() as session:
         bank = Bank(company_id=company_id, name=name, code=code.strip() or None, is_active=True)
         session.add(bank)
@@ -676,7 +676,7 @@ def create_bank(company_id: int, name: str, code: str = "") -> BankRow:
 def update_bank(bank_id: int, company_id: int, name: str, code: str = "") -> None:
     name = name.strip()
     if not name:
-        raise ValueError("نامِ بانک نمی‌تواند خالی باشد.")
+        raise ValueError("نام بانک نمی‌تواند خالی باشد.")
     with new_session() as session:
         bank = session.get(Bank, bank_id)
         if bank is None or bank.company_id != company_id:
@@ -705,7 +705,7 @@ def delete_bank(bank_id: int, company_id: int) -> None:
             .where(IssuedCheck.payee_bank_id == bank_id)
         )
         if usage_count:
-            raise ValueError("این بانک در چک‌هایِ ثبت‌شده استفاده شده؛ قابلِ‌حذف نیست.")
+            raise ValueError("این بانک در چک‌های ثبت‌شده استفاده شده؛ قابل‌حذف نیست.")
         session.delete(bank)
         session.commit()
 
@@ -724,9 +724,9 @@ class AccountMappingRow:
 
 
 def list_account_mappings(company_id: int) -> list[AccountMappingRow]:
-    """یک ردیفِ خلاصه به‌ازایِ هر mapping_key — برایِ کلیدهایی که طبقِ آیتمِ
-    ۹ ممکن است چند معین داشته باشند (RECEIPT_*)، فقط اولین معینِ تنظیم‌شده
-    نشان داده می‌شود (فهرستِ کاملشان: list_mapped_accounts_for_key)."""
+    """یک ردیف خلاصه به‌ازای هر mapping_key — برای کلیدهایی که طبق آیتم
+    ۹ ممکن است چند معین داشته باشند (RECEIPT_*)، فقط اولین معین تنظیم‌شده
+    نشان داده می‌شود (فهرست کاملشان: list_mapped_accounts_for_key)."""
     with new_session() as session:
         rows: dict[str, tuple[int, int | None]] = {}
         for m in session.scalars(
@@ -766,9 +766,9 @@ def _mapping_rows_query(session, company_id: int, mapping_key: str):
 
 
 def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
-    """نگاشتِ تک‌معینیِ قدیمی — همه‌ی ردیف‌هایِ این کلید را با فقط همین یک
-    معین جایگزین می‌کند (برایِ کلیدهایی مثلِ PAYMENT_*/CHECK_* که طبقِ
-    خواسته‌یِ صریحِ کاربر همچنان فقط یک معین دارند)."""
+    """نگاشت تک‌معینی قدیمی — همهٔ ردیف‌های این کلید را با فقط همین یک
+    معین جایگزین می‌کند (برای کلیدهایی مثل PAYMENT_*/CHECK_* که طبق
+    خواستهٔ صریح کاربر همچنان فقط یک معین دارند)."""
     set_account_mappings(company_id, mapping_key, [(account_id, detail_account_id)])
 
 
@@ -788,14 +788,14 @@ def _is_valid_custom_method_mapping_key(company_id: int, mapping_key: str) -> bo
 
 
 def set_account_mappings(company_id: int, mapping_key: str, entries: list[tuple[int, int | None]]) -> None:
-    """طبقِ آیتمِ ۹: جایگزینِ کاملِ همه‌ی ردیف‌هایِ یک mapping_key — هر ورودی
-    یک (account_id, detail_account_id) است. برایِ RECEIPT_* اجازه می‌دهد
-    چند معین هم‌زمان تنظیم شود؛ برایِ بقیه‌یِ کلیدها معمولاً یک ورودی."""
+    """طبق آیتم ۹: جایگزین کامل همهٔ ردیف‌های یک mapping_key — هر ورودی
+    یک (account_id, detail_account_id) است. برای RECEIPT_* اجازه می‌دهد
+    چند معین هم‌زمان تنظیم شود؛ برای بقیهٔ کلیدها معمولاً یک ورودی."""
     # طبقِ آیتمِ ۷: کلیدهایِ روش‌هایِ سفارشی (مثلِ RECEIPT_CUSTOM_5) در
     # MAPPING_LABELِ ثابت نیستند — چون هر شرکت روش‌هایِ خودش را دارد؛
     # این‌ها با وجودِ همان custom_method_id در جدولِ سفارشی‌ها تایید می‌شوند.
     if mapping_key not in MAPPING_LABELS and not _is_valid_custom_method_mapping_key(company_id, mapping_key):
-        raise ValueError("کلیدِ نگاشتِ نامعتبر است.")
+        raise ValueError("کلید نگاشت نامعتبر است.")
     with new_session() as session:
         for existing in _mapping_rows_query(session, company_id, mapping_key):
             session.delete(existing)
@@ -816,16 +816,16 @@ def _get_mapped_account_id(session, company_id: int, mapping_key: str) -> int:
     mapping = next(iter(_mapping_rows_query(session, company_id, mapping_key)), None)
     if mapping is None:
         raise ValueError(
-            f"حسابِ «{MAPPING_LABELS[mapping_key]}» هنوز در تنظیماتِ خزانه‌داری مشخص نشده است."
+            f"حساب «{MAPPING_LABELS[mapping_key]}» هنوز در تنظیمات خزانه‌داری مشخص نشده است."
         )
     return mapping.account_id
 
 
 def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
-    """نگاشتِ یک روش را برمی‌گرداند (یا None اگر هنوز تنظیم نشده) — برایِ
-    UI که می‌خواهد بُعدِ الزامیِ همان معین را از رویِ آن استنتاج کند
-    (مثلاً کدام تفصیلی برایِ ردیفِ نقدی/تخفیف/کالابرگ نشان داده شود)،
-    بدونِ ریسکِ raise شدنِ خطا در میانه‌یِ رفرشِ فرم. اگر چند معین تنظیم
+    """نگاشت یک روش را برمی‌گرداند (یا None اگر هنوز تنظیم نشده) — برای
+    UI که می‌خواهد بُعد الزامی همان معین را از روی آن استنتاج کند
+    (مثلاً کدام تفصیلی برای ردیف نقدی/تخفیف/کالابرگ نشان داده شود)،
+    بدون ریسک raise شدن خطا در میانهٔ رفرش فرم. اگر چند معین تنظیم
     شده باشد (RECEIPT_*)، اولین‌شان برمی‌گردد."""
     with new_session() as session:
         mapping = next(iter(_mapping_rows_query(session, company_id, mapping_key)), None)
@@ -833,11 +833,11 @@ def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
 
 
 def get_account_mapping_with_detail(company_id: int, mapping_key: str) -> tuple[int | None, int | None]:
-    """مثلِ get_account_mapping، به‌همراهِ تفصیلیِ اختصاصیِ از‌پیش‌تخصیص‌یافته
-    (اگر در تنظیمات مشخص شده باشد) — برایِ فرمِ سند تا اگر تفصیلی از پیش
+    """مثل get_account_mapping، به‌همراه تفصیلی اختصاصی از‌پیش‌تخصیص‌یافته
+    (اگر در تنظیمات مشخص شده باشد) — برای فرم سند تا اگر تفصیلی از پیش
     معلوم است، دیگر از کاربر دوباره نپرسد. فقط وقتی دقیقاً یک معین تنظیم
     شده باشد معنی دارد؛ اگر چند معین باشد، پیش‌تخصیص نادیده گرفته می‌شود
-    (list_mapped_accounts_for_key/آیتمِ ۹ برایِ حالتِ چندمعینی مصرف می‌شود)."""
+    (list_mapped_accounts_for_key/آیتم ۹ برای حالت چندمعینی مصرف می‌شود)."""
     with new_session() as session:
         rows = _mapping_rows_query(session, company_id, mapping_key)
         if len(rows) != 1:
@@ -854,8 +854,8 @@ class MappedAccountRow:
 
 
 def list_mapped_accounts_for_key(company_id: int, mapping_key: str) -> list[MappedAccountRow]:
-    """طبقِ آیتمِ ۹: همه‌ی معین‌هایِ تنظیم‌شده برایِ یک mapping_key (نه فقط
-    یکی) — فرمِ سند موقعِ ثبت، تفصیلی‌هایِ همه‌شان را با هم union می‌کند."""
+    """طبق آیتم ۹: همهٔ معین‌های تنظیم‌شده برای یک mapping_key (نه فقط
+    یکی) — فرم سند موقع ثبت، تفصیلی‌های همه‌شان را با هم union می‌کند."""
     with new_session() as session:
         raw = [(m.account_id, m.detail_account_id) for m in _mapping_rows_query(session, company_id, mapping_key)]
     accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
@@ -885,25 +885,25 @@ class CustomMethodRow:
 
 
 def custom_method_mapping_key(direction: str, custom_method_id: int) -> str:
-    """کلیدِ نگاشتِ حسابِ کلِ یک روشِ سفارشی — چون custom_method_id
-    منحصربه‌فردِ کلِ جدول است (نه فقط هر شرکت)، این کلید هم بینِ همه‌یِ
+    """کلید نگاشت حساب کل یک روش سفارشی — چون custom_method_id
+    منحصربه‌فرد کل جدول است (نه فقط هر شرکت)، این کلید هم بین همهٔ
     شرکت‌ها منحصربه‌فرد می‌ماند."""
     return f"{direction}_CUSTOM_{custom_method_id}"
 
 
 def create_custom_method(company_id: int, direction: str, code: str, label: str) -> CustomMethodRow:
-    """طبقِ آیتمِ ۷ (درخواستِ صریح: «بتونیم روش پرداخت و دریافت خودمون
-    درست کنیم غیر از موارد پیش‌فرض») — بر اساسِ توافقِ تاییدشده با کاربر،
-    روشِ سفارشی «ساده» است (مثلِ نقد/تخفیف/بن): فقط مبلغ + تفصیلیِ اختیاری
-    که به یک حسابِ کلِ ثابت می‌رود؛ نگاشتِ همان حسابِ کل جداگانه، از همان
-    فرمِ تنظیماتِ روش‌هایِ موجود (set_account_mapping/set_account_mappings
+    """طبق آیتم ۷ (درخواست صریح: «بتونیم روش پرداخت و دریافت خودمون
+    درست کنیم غیر از موارد پیش‌فرض») — بر اساس توافق تاییدشده با کاربر،
+    روش سفارشی «ساده» است (مثل نقد/تخفیف/بن): فقط مبلغ + تفصیلی اختیاری
+    که به یک حساب کل ثابت می‌رود؛ نگاشت همان حساب کل جداگانه، از همان
+    فرم تنظیمات روش‌های موجود (set_account_mapping/set_account_mappings
     با mapping_key حاصل از custom_method_mapping_key) تنظیم می‌شود."""
     if direction not in ("RECEIPT", "PAYMENT"):
-        raise ValueError("جهتِ روش نامعتبر است.")
+        raise ValueError("جهت روش نامعتبر است.")
     code = code.strip()
     label = label.strip()
     if not code or not label:
-        raise ValueError("کد و برچسبِ روش را وارد کنید.")
+        raise ValueError("کد و برچسب روش را وارد کنید.")
     with new_session() as session:
         existing = session.scalar(
             select(CustomMethod).where(
@@ -952,19 +952,19 @@ def set_custom_method_active(company_id: int, custom_method_id: int, is_active: 
     with new_session() as session:
         row = session.get(CustomMethod, custom_method_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("روشِ سفارشی یافت نشد.")
+            raise ValueError("روش سفارشی یافت نشد.")
         row.is_active = is_active
         session.commit()
 
 
 def delete_custom_method(company_id: int, custom_method_id: int) -> None:
-    """حذفِ کاملِ روش — چون سندهایِ قبلاً ثبت‌شده فقط به account_id (نه
-    خودِ کدِ روش) وصل‌اند، حذفِ این ردیف به سندهایِ قدیمی آسیبی نمی‌زند؛
-    نگاشتِ حسابِ متناظر (اگر تنظیم شده بود) هم همراه حذف می‌شود."""
+    """حذف کامل روش — چون سندهای قبلاً ثبت‌شده فقط به account_id (نه
+    خود کد روش) وصل‌اند، حذف این ردیف به سندهای قدیمی آسیبی نمی‌زند؛
+    نگاشت حساب متناظر (اگر تنظیم شده بود) هم همراه حذف می‌شود."""
     with new_session() as session:
         row = session.get(CustomMethod, custom_method_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("روشِ سفارشی یافت نشد.")
+            raise ValueError("روش سفارشی یافت نشد.")
         mapping_key = custom_method_mapping_key(row.direction, custom_method_id)
         session.execute(
             TreasuryAccountMapping.__table__.delete().where(
@@ -978,15 +978,15 @@ def delete_custom_method(company_id: int, custom_method_id: int) -> None:
 def compute_check_ras(
     entries: list[tuple[decimal.Decimal, datetime.date]], base_date: datetime.date | None = None
 ) -> tuple[datetime.date, decimal.Decimal]:
-    """طبقِ آیتمِ ۶: «راس‌گیریِ» چند چک با سررسیدهایِ مختلف — تاریخِ
-    میانگینِ وزنی (بر اساسِ مبلغِ هر چک) که معادلِ تنزیل/بهره‌یِ همه‌ی
-    چک‌ها با یک تاریخِ واحد است:
+    """طبق آیتم ۶: «راس‌گیری» چند چک با سررسیدهای مختلف — تاریخ
+    میانگین وزنی (بر اساس مبلغ هر چک) که معادل تنزیل/بهرهٔ همه‌ی
+    چک‌ها با یک تاریخ واحد است:
 
-        روزهایِ راس = Σ(مبلغ_i × (سررسید_i − تاریخِ‌مبنا)) / Σ(مبلغ_i)
-        تاریخِ راس = تاریخِ‌مبنا + روزهایِ راس
+        روزهای راس = Σ(مبلغ_i × (سررسید_i − تاریخ‌مبنا)) / Σ(مبلغ_i)
+        تاریخ راس = تاریخ‌مبنا + روزهای راس
 
-    خروجی: (تاریخِ راس، جمعِ مبالغ). اگر فهرست خالی یا جمعِ مبالغ صفر
-    باشد، تاریخِ‌مبنا (پیش‌فرض: امروز) بدونِ تغییر برمی‌گردد."""
+    خروجی: (تاریخ راس، جمع مبالغ). اگر فهرست خالی یا جمع مبالغ صفر
+    باشد، تاریخ‌مبنا (پیش‌فرض: امروز) بدون تغییر برمی‌گردد."""
     base = base_date or datetime.date.today()
     total = sum((amount for amount, _due in entries), decimal.Decimal(0))
     if not entries or total <= 0:
@@ -997,10 +997,10 @@ def compute_check_ras(
 
 
 def get_counterparty_balance(company_id: int, detail_account_id: int) -> tuple[decimal.Decimal, str]:
-    """طبقِ آیتمِ ۸: ماندهٔ فعلیِ یک طرفِ‌حسابِ خاص (خالصِ همه‌یِ گردش‌هایِ
-    ثبت‌شده تا امروز، بدونِ اسنادِ پیش‌نویس) + ماهیتِ همان مانده. طبقِ
-    قراردادِ استانداردِ حسابداری: اگر خالصِ بدهکار از بستانکار بیشتر باشد،
-    طرفِ‌حساب به ما بدهکار است («بدهکار»)؛ وگرنه ما به او بدهکاریم
+    """طبق آیتم ۸: ماندهٔ فعلی یک طرف‌حساب خاص (خالص همهٔ گردش‌های
+    ثبت‌شده تا امروز، بدون اسناد پیش‌نویس) + ماهیت همان مانده. طبق
+    قرارداد استاندارد حسابداری: اگر خالص بدهکار از بستانکار بیشتر باشد،
+    طرف‌حساب به ما بدهکار است («بدهکار»)؛ وگرنه ما به او بدهکاریم
     («بستانکار»)."""
     with new_session() as session:
         query = (
@@ -1026,9 +1026,9 @@ def get_counterparty_balance(company_id: int, detail_account_id: int) -> tuple[d
 def get_counterparty_balances_bulk(
     company_id: int, detail_account_ids: list[int]
 ) -> dict[int, tuple[decimal.Decimal, str]]:
-    """هم‌الگو با get_counterparty_balance ولی برایِ چند طرفِ‌حساب در یک
-    Query -- برایِ فهرستِ بدهکارانِ اپِ موبایل (Phase 5) که در حلقهٔ
-    N+1 برایِ صدها مشتری کند می‌شد."""
+    """هم‌الگو با get_counterparty_balance ولی برای چند طرف‌حساب در یک
+    Query — برای فهرست بدهکاران برنامهٔ موبایل (Phase 5) که در حلقهٔ
+    N+1 برای صدها مشتری کند می‌شد."""
     if not detail_account_ids:
         return {}
     with new_session() as session:
@@ -1067,9 +1067,9 @@ class ReceiptVoucherRow:
 def list_vouchers_for_user_on_date(
     company_id: int, created_by_user_id: int, document_date: datetime.date, direction: str,
 ) -> list[ReceiptVoucherRow]:
-    """فهرستِ تک‌تکِ سندهایِ دریافت/پرداختِ یک کاربر در یک روز (نه فقط
-    جمعِ کل مثلِ sum_voucher_amount_for_user_on_date) -- برایِ «وصولِ
-    امروزِ من» در اپِ موبایل (Phase 5)."""
+    """فهرست تک‌تک سندهای دریافت/پرداخت یک کاربر در یک روز (نه فقط
+    جمع کل مثل sum_voucher_amount_for_user_on_date) — برای «وصول
+    امروز من» در برنامهٔ موبایل (Phase 5)."""
     with new_session() as session:
         entries = session.scalars(
             select(JournalEntry)
@@ -1152,11 +1152,11 @@ def list_checkbooks(company_id: int, bank_account_detail_id: int | None = None) 
 
 def create_checkbook(company_id: int, bank_account_detail_id: int, start_no: int, end_no: int) -> CheckbookRow:
     if start_no > end_no:
-        raise ValueError("شماره‌یِ شروع نمی‌تواند از شماره‌یِ پایان بزرگ‌تر باشد.")
+        raise ValueError("شمارهٔ شروع نمی‌تواند از شمارهٔ پایان بزرگ‌تر باشد.")
     with new_session() as session:
         detail = session.get(DetailAccount, bank_account_detail_id)
         if detail is None or detail.company_id != company_id:
-            raise ValueError("حسابِ بانکیِ انتخاب‌شده نامعتبر است.")
+            raise ValueError("حساب بانکی انتخاب‌شده نامعتبر است.")
         checkbook = Checkbook(
             company_id=company_id,
             bank_account_detail_id=bank_account_detail_id,
@@ -1193,9 +1193,9 @@ def _allocate_check_no(session, checkbook_id: int, company_id: int) -> tuple[str
     if checkbook is None or checkbook.company_id != company_id:
         raise ValueError("دسته‌چک نامعتبر است.")
     if not checkbook.is_active:
-        raise ValueError("این دسته‌چک غیرِفعال است.")
+        raise ValueError("این دسته‌چک غیرفعال است.")
     if checkbook.next_no > checkbook.end_no:
-        raise ValueError("شماره‌هایِ این دسته‌چک تمام شده است.")
+        raise ValueError("شماره‌های این دسته‌چک تمام شده است.")
     allocated = checkbook.next_no
     checkbook.next_no += 1
     return str(allocated), checkbook.bank_account_detail_id
@@ -1263,17 +1263,17 @@ def list_counterparty_mappings(company_id: int, direction: str | None = None) ->
 def resolve_counterparty_for_detail_account(
     company_id: int, direction: str, detail_account_id: int
 ) -> tuple[int, dict[int, int]]:
-    """هم‌الگو با ساختِ _counterparty_index در UIِ فرمِ دریافت/پرداخت:
-    برایِ یک تفصیلیِ مشخص (مثلاً مشتری)، معینِ نگاشته‌شده (بر اساسِ
-    گروهِ اشخاص یا نوع‌بُعد) را پیدا می‌کند -- طبقِ همان اولویت: اگر هم
-    نگاشتِ گروهِ اشخاص و هم نگاشتِ سطحِ نوع‌بُعد برایِ همین تفصیلی وجود
-    داشته باشد، نگاشتِ نوع‌بُعد غالب است. برایِ استفادهٔ APIِ موبایل
-    (R134: /payments) که مستقیم شناسهٔ تفصیلیِ مشتری را دارد، نه یک UI
-    برایِ انتخابِ دستی."""
+    """هم‌الگو با ساخت _counterparty_index در UI فرم دریافت/پرداخت:
+    برای یک تفصیلی مشخص (مثلاً مشتری)، معین نگاشته‌شده (بر اساس
+    گروه اشخاص یا نوع‌بُعد) را پیدا می‌کند — طبق همان اولویت: اگر هم
+    نگاشت گروه اشخاص و هم نگاشت سطح نوع‌بُعد برای همین تفصیلی وجود
+    داشته باشد، نگاشت نوع‌بُعد غالب است. برای استفادهٔ API موبایل
+    (R134: /payments) که مستقیم شناسهٔ تفصیلی مشتری را دارد، نه یک UI
+    برای انتخاب دستی."""
     with new_session() as session:
         detail = session.get(DetailAccount, detail_account_id)
         if detail is None or detail.company_id != company_id:
-            raise ValueError("تفصیلیِ طرفِ‌حساب نامعتبر است.")
+            raise ValueError("تفصیلی طرف‌حساب نامعتبر است.")
         dimension_type_id = detail.dimension_type_id
         person_group_id = detail.person_group_id
 
@@ -1288,7 +1288,7 @@ def resolve_counterparty_for_detail_account(
     if dimension_type_id in dim_mapping_by_type:
         account_id = dim_mapping_by_type[dimension_type_id]
     if account_id is None:
-        raise ValueError("برایِ این طرفِ‌حساب، نگاشتِ حساب در تنظیماتِ خزانه‌داری تعریف نشده است.")
+        raise ValueError("برای این طرف‌حساب، نگاشت حساب در تنظیمات خزانه‌داری تعریف نشده است.")
 
     counterparty_details = {resolved_dimension_type_id: detail_account_id}
     return account_id, counterparty_details
@@ -1304,7 +1304,7 @@ def create_counterparty_mapping(
     if direction not in ("RECEIPT", "PAYMENT"):
         raise ValueError("جهت نامعتبر است.")
     if (person_group_id is None) == (dimension_type_id is None):
-        raise ValueError("دقیقاً یکی از گروهِ تفصیلی/نوعِ تفصیلی باید مشخص شود.")
+        raise ValueError("دقیقاً یکی از گروه تفصیلی/نوع تفصیلی باید مشخص شود.")
     with new_session() as session:
         session.add(
             CounterpartyAccountMapping(
@@ -1330,11 +1330,11 @@ def delete_counterparty_mapping(mapping_id: int, company_id: int) -> None:
 def sum_voucher_amount_for_user_on_date(
     company_id: int, created_by_user_id: int, document_date: datetime.date, direction: str,
 ) -> decimal.Decimal:
-    """جمعِ مبلغِ سندهایِ دریافت/پرداختِ یک کاربر در یک تاریخ -- برایِ
-    داشبوردِ خانه‌یِ اپِ موبایل («وصولِ امروز»، R135). طبقِ ساختارِ
-    create_treasury_voucher: جمعِ همه‌یِ ردیف‌هایِ بدهکار = جمعِ همه‌یِ
-    ردیف‌هایِ بستانکارِ همان سند (تراز)، پس همین یکی، نه ۲برابرِ مبلغِ
-    واقعی، مبلغِ کلِ سند را می‌دهد."""
+    """جمع مبلغ سندهای دریافت/پرداخت یک کاربر در یک تاریخ — برای
+    داشبورد خانهٔ برنامهٔ موبایل («وصول امروز»، R135). طبق ساختار
+    create_treasury_voucher: جمع همهٔ ردیف‌های بدهکار = جمع همهٔ
+    ردیف‌های بستانکار همان سند (تراز)، پس همین یکی، نه ۲برابر مبلغ
+    واقعی، مبلغ کل سند را می‌دهد."""
     with new_session() as session:
         total = session.scalar(
             select(func.coalesce(func.sum(JournalEntryLine.debit_amount_fc), 0))
@@ -1354,12 +1354,12 @@ def sum_voucher_amount_for_company(
     company_id: int, date_from: datetime.date, date_to: datetime.date, direction: str,
     created_by_user_id: int | None = None, route_detail_account_id: int | None = None,
 ) -> decimal.Decimal:
-    """هم‌الگو با sum_voucher_amount_for_user_on_date ولی برایِ بازهٔ
-    تاریخ و بدونِ الزامِ فیلترِ کاربر -- برایِ داشبوردِ مدیریتی (Phase 7):
-    «وصولِ این ماه» یا «وصولِ فلان ویزیتور در این بازه». route_detail_account_id
-    (طبقِ R189) با یک زیرکوئریِ جداگانه رویِ journal_entry_id اعمال
-    می‌شود (نه joinِ مستقیم روی خطِ جمع‌زده‌شده) تا خطِ نقد/بانکِ سند که
-    خودش تفصیلیِ مسیر ندارد، ردیفِ جمع را چندبرابر نکند."""
+    """هم‌الگو با sum_voucher_amount_for_user_on_date ولی برای بازهٔ
+    تاریخ و بدون الزام فیلتر کاربر — برای داشبورد مدیریتی (Phase 7):
+    «وصول این ماه» یا «وصول فلان ویزیتور در این بازه». route_detail_account_id
+    (طبق R189) با یک زیرکوئری جداگانه روی journal_entry_id اعمال
+    می‌شود (نه join مستقیم روی خط جمع‌زده‌شده) تا خط نقد/بانک سند که
+    خودش تفصیلی مسیر ندارد، ردیف جمع را چندبرابر نکند."""
     with new_session() as session:
         stmt = (
             select(func.coalesce(func.sum(JournalEntryLine.debit_amount_fc), 0))
@@ -1391,10 +1391,10 @@ def sum_voucher_amount_for_company(
 
 @dataclass
 class MethodLine:
-    """یک ردیفِ فرمِ دریافت/پرداخت — روش + مبلغ + فیلدهایِ مخصوصِ همان روش.
-    detail_account_id: برایِ نقد (کدام صندوق/تنخواه) یا بانک (کدام حسابِ
-    بانکی) — فقط اگر حسابِ نگاشت‌شده نیازِ تفصیلی داشته باشد و بیش از یک
-    گزینه موجود باشد؛ در غیرِ این صورت None."""
+    """یک ردیف فرم دریافت/پرداخت — روش + مبلغ + فیلدهای مخصوص همان روش.
+    detail_account_id: برای نقد (کدام صندوق/تنخواه) یا بانک (کدام حساب
+    بانکی) — فقط اگر حساب نگاشت‌شده نیاز تفصیلی داشته باشد و بیش از یک
+    گزینه موجود باشد؛ در غیر این صورت None."""
 
     method: str
     amount: decimal.Decimal
@@ -1477,20 +1477,20 @@ def create_treasury_voucher(
     as_draft: bool = False,
     entry_type_code: str | None = None,
 ) -> je_service.JournalEntryResult:
-    """طبقِ طرحِ تاییدشده: یک طرف‌حساب (بستانکار در دریافت، بدهکار در
-    پرداخت) و چند ردیفِ روش (نقد/بانک/چک/تخفیف) که هرکدام طبقِ نگاشتِ
-    تنظیماتِ خزانه‌داری به حسابِ کلِ خودش می‌رود — همه در یک سندِ حسابداریِ
-    واحد، رویِ همان create_journal_entry موجود.
+    """طبق طرح تاییدشده: یک طرف‌حساب (بستانکار در دریافت، بدهکار در
+    پرداخت) و چند ردیف روش (نقد/بانک/چک/تخفیف) که هرکدام طبق نگاشت
+    تنظیمات خزانه‌داری به حساب کل خودش می‌رود — همه در یک سند حسابداری
+    واحد، روی همان create_journal_entry موجود.
 
-    currency_id/exchange_rate: طبقِ درخواستِ صریح («دریافتِ ارزی هم داشته
-    باشیم»)؛ None یعنی ارزِ پایه‌یِ شرکت (رفتارِ قبلی، بدونِ تغییر). اگر
-    پر باشند، همه‌یِ ردیف‌هایِ همین سند (طرفِ‌حساب + هر روش) با همان یک
-    ارز/نرخ ثبت می‌شوند — create_journal_entry خودش تبدیل به ارزِ پایه و
-    تراز کردن را انجام می‌دهد (هم‌الگو با ارزِ سندِ حسابداریِ عمومی)."""
+    currency_id/exchange_rate: طبق درخواست صریح («دریافت ارزی هم داشته
+    باشیم»)؛ None یعنی ارز پایهٔ شرکت (رفتار قبلی، بدون تغییر). اگر
+    پر باشند، همهٔ ردیف‌های همین سند (طرف‌حساب + هر روش) با همان یک
+    ارز/نرخ ثبت می‌شوند — create_journal_entry خودش تبدیل به ارز پایه و
+    تراز کردن را انجام می‌دهد (هم‌الگو با ارز سند حسابداری عمومی)."""
     if direction not in ("RECEIPT", "PAYMENT"):
-        raise ValueError("جهتِ سند نامعتبر است.")
+        raise ValueError("جهت سند نامعتبر است.")
     if not method_lines:
-        raise ValueError("حداقل یک ردیفِ روش (نقد/بانک/چک/تخفیف) لازم است.")
+        raise ValueError("حداقل یک ردیف روش (نقد/بانک/چک/تخفیف) لازم است.")
     # طبقِ آیتمِ ۷: روش‌هایِ سفارشیِ همین شرکت/جهت هم (کدشان با CUSTOM_
     # شروع می‌شود) کنارِ روش‌هایِ ثابتِ بالا مجازند — فعال‌بودنشان همین‌جا
     # بررسی می‌شود تا روشی که بعداً غیرفعال/حذف شده دیگر قابلِ ثبت نباشد.
@@ -1499,23 +1499,23 @@ def create_treasury_voucher(
     }
     for ml in method_lines:
         if ml.method not in METHOD_CODES and ml.method not in active_custom_codes:
-            raise ValueError("روشِ ردیف نامعتبر است.")
+            raise ValueError("روش ردیف نامعتبر است.")
         if ml.amount <= 0:
-            raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
+            raise ValueError("مبلغ هر ردیف باید مثبت باشد.")
         if ml.method == "INSTALLMENT":
             # طبقِ موردِ ۵: installment_document_id دیگر الزامی نیست --
             # نبودنش یعنی طرحِ اقساطِ آزاد (بدونِ فاکتور)، که در ادامه
             # (پس از تعیینِ counterparty_person_detail_id) اعتبارسنجی می‌شود.
             if ml.installment_count is None or ml.installment_first_due_date is None:
-                raise ValueError("برایِ روشِ اقساط، تعدادِ اقساط و تاریخِ سررسیدِ اولین قسط را مشخص کنید.")
+                raise ValueError("برای روش اقساط، تعداد اقساط و تاریخ سررسید اولین قسط را مشخص کنید.")
             if ml.installment_count < 2:
-                raise ValueError("تعدادِ اقساط باید حداقل ۲ باشد.")
+                raise ValueError("تعداد اقساط باید حداقل ۲ باشد.")
             if ml.installment_interest_rate_percent is not None and ml.installment_interest_rate_percent < 0:
-                raise ValueError("درصدِ بهرهٔ اقساط نمی‌تواند منفی باشد.")
+                raise ValueError("درصد بهرهٔ اقساط نمی‌تواند منفی باشد.")
             if ml.installment_misc_fee_amount is not None and ml.installment_misc_fee_amount < 0:
                 raise ValueError("هزینهٔ متفرقهٔ اقساط نمی‌تواند منفی باشد.")
             if ml.installment_due_interval_days is not None and ml.installment_due_interval_days < 1:
-                raise ValueError("فاصلهٔ سررسیدِ اقساط باید حداقل ۱ روز باشد.")
+                raise ValueError("فاصلهٔ سررسید اقساط باید حداقل ۱ روز باشد.")
 
     total = sum((ml.amount for ml in method_lines), decimal.Decimal(0))
 
@@ -1583,14 +1583,14 @@ def create_treasury_voucher(
                 continue
             check_ids = ml.received_check_ids or ([ml.received_check_id] if ml.received_check_id is not None else [])
             if not check_ids:
-                raise ValueError("چکِ دریافتی‌ای که خرج می‌شود را انتخاب کنید.")
+                raise ValueError("چک دریافتی‌ای که خرج می‌شود را انتخاب کنید.")
             for received_check_id in check_ids:
                 check = session.get(ReceivedCheck, received_check_id)
                 if check is None or check.company_id != company_id:
-                    raise ValueError("چکِ دریافتیِ انتخاب‌شده نامعتبر است.")
+                    raise ValueError("چک دریافتی انتخاب‌شده نامعتبر است.")
                 current_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
                 if current_code not in ("IN_HAND", "DEPOSITED"):
-                    raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
+                    raise ValueError(f"چک شماره‌ی {check.check_no} دیگر قابل خرج‌کردن نیست.")
 
         # اعتبارسنجیِ روشِ اقساط (INSTALLMENT) -- اگر فاکتور انتخاب شده،
         # باید متعلق به همین شرکت، ثبتِ‌نهایی‌شده، از نوعِ فروش/خرید، و
@@ -1603,17 +1603,17 @@ def create_treasury_voucher(
                 continue
             if ml.installment_document_id is None:
                 if counterparty_person_detail_id is None:
-                    raise ValueError("برایِ طرحِ اقساطِ بدونِ فاکتور، طرفِ‌حسابِ سند باید دارایِ تفصیلیِ شخص باشد.")
+                    raise ValueError("برای طرح اقساط بدون فاکتور، طرف‌حساب سند باید دارای تفصیلی شخص باشد.")
                 continue
             doc = session.get(CommercialDocument, ml.installment_document_id)
             if doc is None or doc.company_id != company_id:
-                raise ValueError("فاکتورِ انتخاب‌شده برایِ اقساط نامعتبر است.")
+                raise ValueError("فاکتور انتخاب‌شده برای اقساط نامعتبر است.")
             if doc.document_type_code not in ("SALES_INVOICE", "PURCHASE_INVOICE"):
-                raise ValueError("اقساط فقط برایِ فاکتورِ فروش/خرید ممکن است.")
+                raise ValueError("اقساط فقط برای فاکتور فروش/خرید ممکن است.")
             if doc.status_code != "POSTED":
-                raise ValueError("فقط فاکتورِ ثبتِ‌نهایی‌شده قابلِ‌تقسیط است.")
+                raise ValueError("فقط فاکتور ثبت‌نهایی‌شده قابل‌تقسیط است.")
             if doc.counterparty_detail_account_id != counterparty_account_id:
-                raise ValueError("طرفِ‌حسابِ فاکتورِ انتخاب‌شده با طرفِ‌حسابِ این سند یکی نیست.")
+                raise ValueError("طرف‌حساب فاکتور انتخاب‌شده با طرف‌حساب این سند یکی نیست.")
 
         # اعتبارسنجیِ وصولِ قسط (هر روشِ دیگری که collect_installment_line_id
         # داشته باشد) -- قسط باید معتبر، متعلق به همین شرکت، و هنوز
@@ -1623,9 +1623,9 @@ def create_treasury_voucher(
                 continue
             line = installments_service.get_installment_line(ml.collect_installment_line_id)
             if line is None:
-                raise ValueError("قسطِ انتخاب‌شده نامعتبر است.")
+                raise ValueError("قسط انتخاب‌شده نامعتبر است.")
             if line.status_code == "PAID":
-                raise ValueError("این قسط قبلاً به‌طورِ کامل دریافت/پرداخت شده است.")
+                raise ValueError("این قسط قبلاً به‌طور کامل دریافت/پرداخت شده است.")
             # طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): مبلغِ
             # این ردیف نباید از ماندهٔ واقعیِ قسط (کل منهایِ وصولی‌هایِ
             # قبلی) بیشتر باشد -- این بررسی باید همین‌جا، پیش از ساختِ
@@ -1633,16 +1633,16 @@ def create_treasury_voucher(
             # تا خطا هرگز یک سندِ ازقبل‌ثبت‌شده و بدونِ تخصیص برجای نگذارد.
             remaining = installments_service.get_installment_remaining_amount(ml.collect_installment_line_id)
             if ml.amount > remaining:
-                raise ValueError(f"مبلغِ این ردیف از ماندهٔ قسطِ انتخاب‌شده ({remaining}) بیشتر است.")
+                raise ValueError(f"مبلغ این ردیف از ماندهٔ قسط انتخاب‌شده ({remaining}) بیشتر است.")
             plan = installments_service.get_installment_plan(line.plan_id)
             if plan is None:
-                raise ValueError("طرحِ اقساطِ مربوط به این قسط یافت نشد.")
+                raise ValueError("طرح اقساط مربوط به این قسط یافت نشد.")
             if plan.document_id is not None:
                 plan_doc = session.get(CommercialDocument, plan.document_id)
                 if plan_doc is None or plan_doc.company_id != company_id:
-                    raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
+                    raise ValueError("قسط انتخاب‌شده متعلق به این شرکت نیست.")
             elif plan.company_id != company_id:
-                raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
+                raise ValueError("قسط انتخاب‌شده متعلق به این شرکت نیست.")
 
         # طبقِ همین دلیل، commit این تخصیص‌ها پیش از ساختِ خودِ سند انجام
         # می‌شود (create_journal_entry خودش new_session جداگانه باز می‌کند)
@@ -1893,7 +1893,7 @@ def create_treasury_voucher(
             if plan.document_id is not None:
                 settlements_service.allocate_settlement(
                     company_id, plan.document_id, result.journal_entry_id, document_date, ml.amount, created_by_user_id,
-                    description=f"وصولِ قسطِ #{line.installment_no}",
+                    description=f"وصول قسط #{line.installment_no}",
                 )
 
     return result
@@ -1932,7 +1932,7 @@ class IssuedCheckRow:
 def _status_id(session, code: str, applies_to: str) -> int:
     status = session.scalar(select(CheckStatus).where(CheckStatus.code == code, CheckStatus.applies_to == applies_to))
     if status is None:
-        raise ValueError("وضعیتِ چک نامعتبر است.")
+        raise ValueError("وضعیت چک نامعتبر است.")
     return status.status_id
 
 
@@ -2020,17 +2020,17 @@ def list_issued_checks(
 
 
 def _first_line_account_and_details(session, journal_entry_id: int) -> tuple[int, dict[int, int]]:
-    """حساب و ابعادِ ردیفِ اولِ سند (طرف‌حساب، طبقِ ترتیبِ ساختِ
-    create_treasury_voucher همیشه line_no=1) — برایِ ساختِ سندِ برگشتیِ
-    برگشت‌خوردن/ابطالِ چک، بدونِ نیاز به ستونِ تازه‌یِ «حسابِ طرف‌حساب» رویِ
-    خودِ چک."""
+    """حساب و ابعاد ردیف اول سند (طرف‌حساب، طبق ترتیب ساخت
+    create_treasury_voucher همیشه line_no=1) — برای ساخت سند برگشتی
+    برگشت‌خوردن/ابطال چک، بدون نیاز به ستون تازهٔ «حساب طرف‌حساب» روی
+    خود چک."""
     line = session.scalar(
         select(JournalEntryLine).where(
             JournalEntryLine.journal_entry_id == journal_entry_id, JournalEntryLine.line_no == 1
         )
     )
     if line is None:
-        raise ValueError("سندِ اصلیِ این چک یافت نشد.")
+        raise ValueError("سند اصلی این چک یافت نشد.")
     details = dict(
         session.execute(
             select(JournalEntryLineDetail.dimension_type_id, JournalEntryLineDetail.detail_account_id).where(
@@ -2048,12 +2048,12 @@ def _load_checks_for_stage(
         raise ValueError("هیچ چکی انتخاب نشده است.")
     checks = session.scalars(select(ReceivedCheck).where(ReceivedCheck.received_check_id.in_(check_ids))).all()
     if len(checks) != len(set(check_ids)):
-        raise ValueError("چکِ انتخاب‌شده نامعتبر است.")
+        raise ValueError("چک انتخاب‌شده نامعتبر است.")
     for check in checks:
         if check.company_id != company_id:
             raise ValueError("چک نامعتبر است.")
         if session.get(CheckStatus, check.status_id).code not in eligible_status_codes:
-            raise ValueError(f"چکِ شماره‌ی {check.check_no} در این مرحله قابلِ‌پردازش نیست.")
+            raise ValueError(f"چک شماره‌ی {check.check_no} در این مرحله قابل‌پردازش نیست.")
     return checks
 
 
@@ -2069,10 +2069,10 @@ def _detail_dict(session, detail_id: int | None) -> dict[int, int]:
 def _group_received_checks_by_source(
     session, checks: list[ReceivedCheck], company_id: int
 ) -> dict[tuple[int, int | None], list[ReceivedCheck]]:
-    """چک‌هایِ انتخاب‌شده را بر اساسِ محلِ فعلیِ نگه‌داری‌شان (حساب+تفصیلی)
-    گروه‌بندی می‌کند — هر گروه یک خطِ جداگانه در سندِ bulk می‌شود. چکِ
-    بدونِ محلِ ثبت‌شده (داده‌یِ قدیمی، پیش‌ازِ این ویژگی) با حسابِ نگاشتِ
-    RECEIPT_CHECK و بدونِ تفصیلی جایگزین می‌شود."""
+    """چک‌های انتخاب‌شده را بر اساس محل فعلی نگه‌داری‌شان (حساب+تفصیلی)
+    گروه‌بندی می‌کند — هر گروه یک خط جداگانه در سند bulk می‌شود. چک
+    بدون محل ثبت‌شده (دادهٔ قدیمی، پیش‌از این ویژگی) با حساب نگاشت
+    RECEIPT_CHECK و بدون تفصیلی جایگزین می‌شود."""
     fallback_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
     groups: dict[tuple[int, int | None], list[ReceivedCheck]] = {}
     for check in checks:
@@ -2084,23 +2084,23 @@ def _group_received_checks_by_source(
 def _validate_detail_account(session, detail_account_id: int, company_id: int) -> DetailAccount:
     detail = session.get(DetailAccount, detail_account_id)
     if detail is None or detail.company_id != company_id:
-        raise ValueError("تفصیلیِ انتخاب‌شده نامعتبر است.")
+        raise ValueError("تفصیلی انتخاب‌شده نامعتبر است.")
     return detail
 
 
 def transfer_received_checks_between_funds(
     check_ids: list[int], company_id: int, created_by_user_id: int, target_fund_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحله‌ی ۱ — انتقالِ چکِ نزدِ صندوق بینِ صندوق‌ها: بدهکارِ حسابِ نگاشتِ
-    CHECK_RECEIVED_FUND_TRANSFER با تفصیلیِ صندوقِ مقصد / بستانکارِ همان
-    حساب با تفصیلیِ صندوق(هایِ) مبدأِ هرکدام."""
+    """مرحلهٔ ۱ — انتقال چک نزد صندوق بین صندوق‌ها: بدهکار حساب نگاشت
+    CHECK_RECEIVED_FUND_TRANSFER با تفصیلی صندوق مقصد / بستانکار همان
+    حساب با تفصیلی صندوق(های) مبدأ هرکدام."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
         account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_FUND_TRANSFER")
         _validate_detail_account(session, target_fund_detail_id, company_id)
         groups = _group_received_checks_by_source(session, checks, company_id)
         total = sum((c.amount for c in checks), decimal.Decimal(0))
-        description = "انتقالِ چکِ دریافتی بینِ صندوق‌ها"
+        description = "انتقال چک دریافتی بین صندوق‌ها"
         lines = [
             je_service.LineInput(
                 account_id=account_id, description=description, debit=total, credit=decimal.Decimal(0),
@@ -2129,7 +2129,7 @@ def transfer_received_checks_between_funds(
     # می‌کند.
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "انتقالِ چکِ دریافتی بینِ صندوق‌ها", lines,
+        company_id, created_by_user_id, event_date, "انتقال چک دریافتی بین صندوق‌ها", lines,
         entry_type_code="RECEIPT",
     )
     with new_session() as session:
@@ -2153,16 +2153,16 @@ def transfer_received_checks_between_funds(
 def collect_received_checks_cash(
     check_ids: list[int], company_id: int, created_by_user_id: int, cash_box_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحله‌ی ۲ — وصولِ نقدیِ چکِ نزدِ صندوق: بدهکارِ حسابِ نگاشتِ
-    CHECK_RECEIVED_CASH_COLLECT با تفصیلیِ صندوقِ نقدیِ مقصد / بستانکارِ
-    محلِ فعلیِ هرچک."""
+    """مرحلهٔ ۲ — وصول نقدی چک نزد صندوق: بدهکار حساب نگاشت
+    CHECK_RECEIVED_CASH_COLLECT با تفصیلی صندوق نقدی مقصد / بستانکار
+    محل فعلی هرچک."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
         target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_CASH_COLLECT")
         _validate_detail_account(session, cash_box_detail_id, company_id)
         groups = _group_received_checks_by_source(session, checks, company_id)
         total = sum((c.amount for c in checks), decimal.Decimal(0))
-        description = "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق"
+        description = "وصول نقدی چک دریافتی نزد صندوق"
         lines = [
             je_service.LineInput(
                 account_id=target_account_id, description=description, debit=total, credit=decimal.Decimal(0),
@@ -2186,7 +2186,7 @@ def collect_received_checks_cash(
     # وضعیتِ چک تغییر می‌کند (نه برعکس).
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق", lines,
+        company_id, created_by_user_id, event_date, "وصول نقدی چک دریافتی نزد صندوق", lines,
         entry_type_code="RECEIPT",
     )
     with new_session() as session:
@@ -2209,16 +2209,16 @@ def collect_received_checks_cash(
 def deposit_received_checks_to_bank(
     check_ids: list[int], company_id: int, created_by_user_id: int, bank_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحله‌ی ۳ — واگذاریِ چکِ نزدِ صندوق به بانک: بدهکارِ حسابِ نگاشتِ
-    CHECK_RECEIVED_BANK_DEPOSIT با تفصیلیِ بانکِ مقصد / بستانکارِ محلِ
-    فعلیِ هرچک."""
+    """مرحلهٔ ۳ — واگذاری چک نزد صندوق به بانک: بدهکار حساب نگاشت
+    CHECK_RECEIVED_BANK_DEPOSIT با تفصیلی بانک مقصد / بستانکار محل
+    فعلی هرچک."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
         target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_BANK_DEPOSIT")
         _validate_detail_account(session, bank_detail_id, company_id)
         groups = _group_received_checks_by_source(session, checks, company_id)
         total = sum((c.amount for c in checks), decimal.Decimal(0))
-        description = "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک"
+        description = "واگذاری چک دریافتی نزد صندوق به بانک"
         lines = [
             je_service.LineInput(
                 account_id=target_account_id, description=description, debit=total, credit=decimal.Decimal(0),
@@ -2247,7 +2247,7 @@ def deposit_received_checks_to_bank(
     # شد، وضعیت/محلِ چک تغییر می‌کند.
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک", lines,
+        company_id, created_by_user_id, event_date, "واگذاری چک دریافتی نزد صندوق به بانک", lines,
         entry_type_code="RECEIPT",
     )
     with new_session() as session:
@@ -2272,15 +2272,15 @@ def deposit_received_checks_to_bank(
 def clear_deposited_received_checks(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحله‌ی ۴ — اعلامِ وصولِ چکِ نزدِ بانک: بدهکارِ حسابِ نگاشتِ
-    CHECK_RECEIVED_BANK_CLEAR / بستانکارِ محلِ فعلیِ هرچک (همان بانکی که
-    در مرحله‌ی ۳ انتخاب شده بود) — بدونِ نیازِ انتخابِ مقصد، چون بانک از
-    رویِ خودِ چک معلوم است."""
+    """مرحلهٔ ۴ — اعلام وصول چک نزد بانک: بدهکار حساب نگاشت
+    CHECK_RECEIVED_BANK_CLEAR / بستانکار محل فعلی هرچک (همان بانکی که
+    در مرحلهٔ ۳ انتخاب شده بود) — بدون نیاز انتخاب مقصد، چون بانک از
+    روی خود چک معلوم است."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("DEPOSITED",))
         target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_BANK_CLEAR")
         groups = _group_received_checks_by_source(session, checks, company_id)
-        description = "اعلامِ وصولِ چکِ دریافتیِ نزدِ بانک"
+        description = "اعلام وصول چک دریافتی نزد بانک"
         lines: list[je_service.LineInput] = []
         for (src_account_id, src_detail_id), group_checks in groups.items():
             group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
@@ -2306,7 +2306,7 @@ def clear_deposited_received_checks(
     # وضعیتِ چک تغییر می‌کند.
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "اعلامِ وصولِ چکِ دریافتیِ نزدِ بانک", lines,
+        company_id, created_by_user_id, event_date, "اعلام وصول چک دریافتی نزد بانک", lines,
         entry_type_code="RECEIPT",
     )
     with new_session() as session:
@@ -2329,16 +2329,16 @@ def clear_deposited_received_checks(
 def return_deposited_received_checks_to_fund(
     check_ids: list[int], company_id: int, created_by_user_id: int, target_fund_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحله‌ی ۵ — برگشتِ چکِ نزدِ بانک به صندوق: بدهکارِ حسابِ نگاشتِ
-    CHECK_RECEIVED_BANK_RETURN با تفصیلیِ صندوقِ مقصد / بستانکارِ محلِ
-    فعلیِ هرچک (بانکِ مبدأ)."""
+    """مرحلهٔ ۵ — برگشت چک نزد بانک به صندوق: بدهکار حساب نگاشت
+    CHECK_RECEIVED_BANK_RETURN با تفصیلی صندوق مقصد / بستانکار محل
+    فعلی هرچک (بانک مبدأ)."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("DEPOSITED",))
         target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_BANK_RETURN")
         _validate_detail_account(session, target_fund_detail_id, company_id)
         groups = _group_received_checks_by_source(session, checks, company_id)
         total = sum((c.amount for c in checks), decimal.Decimal(0))
-        description = "برگشتِ چکِ دریافتیِ نزدِ بانک به صندوق"
+        description = "برگشت چک دریافتی نزد بانک به صندوق"
         lines = [
             je_service.LineInput(
                 account_id=target_account_id, description=description, debit=total, credit=decimal.Decimal(0),
@@ -2362,7 +2362,7 @@ def return_deposited_received_checks_to_fund(
     # وضعیت/محلِ چک تغییر می‌کند.
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "برگشتِ چکِ دریافتیِ نزدِ بانک به صندوق", lines,
+        company_id, created_by_user_id, event_date, "برگشت چک دریافتی نزد بانک به صندوق", lines,
         entry_type_code="RECEIPT",
     )
     with new_session() as session:
@@ -2387,12 +2387,12 @@ def return_deposited_received_checks_to_fund(
 def bounce_received_checks(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحله‌ی ۶ — برگشتِ چکِ نزدِ صندوق به طرفِ‌حساب: بدهکارِ همان
-    حساب/تفصیلیِ طرف‌حسابِ سندِ اصلیِ هرچک (دوباره بدهکار می‌شود) /
-    بستانکارِ محلِ فعلیِ همان چک."""
+    """مرحلهٔ ۶ — برگشت چک نزد صندوق به طرف‌حساب: بدهکار همان
+    حساب/تفصیلی طرف‌حساب سند اصلی هرچک (دوباره بدهکار می‌شود) /
+    بستانکار محل فعلی همان چک."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
-        description = "برگشتِ چکِ دریافتی به طرفِ‌حساب"
+        description = "برگشت چک دریافتی به طرف‌حساب"
         lines: list[je_service.LineInput] = []
         for check in checks:
             counterparty_account_id, counterparty_details = _first_line_account_and_details(
@@ -2401,7 +2401,7 @@ def bounce_received_checks(
             lines.append(
                 je_service.LineInput(
                     account_id=counterparty_account_id,
-                    description=f"{description} — چکِ شماره‌ی {check.check_no}",
+                    description=f"{description} — چک شماره‌ی {check.check_no}",
                     debit=check.amount, credit=decimal.Decimal(0), details=dict(counterparty_details),
                 )
             )
@@ -2445,11 +2445,11 @@ def bounce_received_checks(
 def unendorse_received_checks_to_fund(
     check_ids: list[int], company_id: int, target_fund_detail_id: int, created_by_user_id: int
 ) -> None:
-    """مرحله‌ی ۷ — برگشتِ چکِ خرجی به صندوق: فقط تغییرِ وضعیت/محل، بدونِ
-    سندِ حسابداری — چون این نسخه ردی از «کدام سندِ CHECK_DISBURSEMENT این
-    چک را واقعاً خرج کرد» ندارد؛ اگر این چک واقعاً در یک سندِ پرداخت خرج
-    شده، آن سند باید جداگانه در دفترِ روزنامه اصلاح شود (این تابع فقط
-    برایِ چکی است که «خرج‌شده» علامت خورده ولی عملاً برنگشته)."""
+    """مرحلهٔ ۷ — برگشت چک خرجی به صندوق: فقط تغییر وضعیت/محل، بدون
+    سند حسابداری — چون این نسخه ردی از «کدام سند CHECK_DISBURSEMENT این
+    چک را واقعاً خرج کرد» ندارد؛ اگر این چک واقعاً در یک سند پرداخت خرج
+    شده، آن سند باید جداگانه در دفتر روزنامه اصلاح شود (این تابع فقط
+    برای چکی است که «خرج‌شده» علامت خورده ولی عملاً برنگشته)."""
     with new_session() as session:
         checks = _load_checks_for_stage(session, check_ids, company_id, ("ENDORSED",))
         _validate_detail_account(session, target_fund_detail_id, company_id)
@@ -2472,22 +2472,22 @@ def unendorse_received_checks_to_fund(
 def clear_issued_checks(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """وصولِ چکِ پرداختی از بانک: بدهکارِ حسابِ نگاشتِ CHECK_ISSUED_BANK_CLEAR
-    / بستانکارِ همان حسابِ بانکی‌ای که موقعِ صدورِ هرچک مشخص شده بود."""
+    """وصول چک پرداختی از بانک: بدهکار حساب نگاشت CHECK_ISSUED_BANK_CLEAR
+    / بستانکار همان حساب بانکی‌ای که موقع صدور هرچک مشخص شده بود."""
     with new_session() as session:
         if not check_ids:
             raise ValueError("هیچ چکی انتخاب نشده است.")
         checks = session.scalars(select(IssuedCheck).where(IssuedCheck.issued_check_id.in_(check_ids))).all()
         if len(checks) != len(set(check_ids)):
-            raise ValueError("چکِ انتخاب‌شده نامعتبر است.")
+            raise ValueError("چک انتخاب‌شده نامعتبر است.")
         for check in checks:
             if check.company_id != company_id:
                 raise ValueError("چک نامعتبر است.")
             if session.get(CheckStatus, check.status_id).code != "ISSUED":
-                raise ValueError(f"چکِ شماره‌ی {check.check_no} در این مرحله قابلِ‌پردازش نیست.")
+                raise ValueError(f"چک شماره‌ی {check.check_no} در این مرحله قابل‌پردازش نیست.")
         debit_account_id = _get_mapped_account_id(session, company_id, "CHECK_ISSUED_BANK_CLEAR")
         bank_account_id = _get_mapped_account_id(session, company_id, "PAYMENT_BANK")
-        description = "وصولِ چکِ پرداختی از بانک"
+        description = "وصول چک پرداختی از بانک"
         total = sum((c.amount for c in checks), decimal.Decimal(0))
         lines = [
             je_service.LineInput(
@@ -2512,7 +2512,7 @@ def clear_issued_checks(
     # وضعیتِ چک تغییر می‌کند.
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "وصولِ چکِ پرداختی از بانک", lines,
+        company_id, created_by_user_id, event_date, "وصول چک پرداختی از بانک", lines,
         entry_type_code="PAYMENT",
     )
     with new_session() as session:
@@ -2533,22 +2533,22 @@ def clear_issued_checks(
 def return_issued_checks_to_fund(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """چکِ پرداختیِ وصول‌نشده جهتِ برگشت (ابطال): بدهکارِ حسابِ نگاشتِ
-    CHECK_ISSUED_RETURN_TO_FUND / بستانکارِ همان حساب/تفصیلیِ طرف‌حسابِ
-    سندِ اصلیِ هرچک (بدهیِ ما به او دوباره برمی‌گردد)."""
+    """چک پرداختی وصول‌نشده جهت برگشت (ابطال): بدهکار حساب نگاشت
+    CHECK_ISSUED_RETURN_TO_FUND / بستانکار همان حساب/تفصیلی طرف‌حساب
+    سند اصلی هرچک (بدهی ما به او دوباره برمی‌گردد)."""
     with new_session() as session:
         if not check_ids:
             raise ValueError("هیچ چکی انتخاب نشده است.")
         checks = session.scalars(select(IssuedCheck).where(IssuedCheck.issued_check_id.in_(check_ids))).all()
         if len(checks) != len(set(check_ids)):
-            raise ValueError("چکِ انتخاب‌شده نامعتبر است.")
+            raise ValueError("چک انتخاب‌شده نامعتبر است.")
         for check in checks:
             if check.company_id != company_id:
                 raise ValueError("چک نامعتبر است.")
             if session.get(CheckStatus, check.status_id).code not in ("ISSUED", "BOUNCED"):
-                raise ValueError(f"چکِ شماره‌ی {check.check_no} در این مرحله قابلِ‌پردازش نیست.")
+                raise ValueError(f"چک شماره‌ی {check.check_no} در این مرحله قابل‌پردازش نیست.")
         debit_account_id = _get_mapped_account_id(session, company_id, "CHECK_ISSUED_RETURN_TO_FUND")
-        description = "برگشتِ چکِ پرداختیِ وصول‌نشده"
+        description = "برگشت چک پرداختی وصول‌نشده"
         total = sum((c.amount for c in checks), decimal.Decimal(0))
         lines = [
             je_service.LineInput(
@@ -2562,7 +2562,7 @@ def return_issued_checks_to_fund(
             lines.append(
                 je_service.LineInput(
                     account_id=counterparty_account_id,
-                    description=f"{description} — چکِ شماره‌ی {check.check_no}",
+                    description=f"{description} — چک شماره‌ی {check.check_no}",
                     debit=decimal.Decimal(0), credit=check.amount, details=dict(counterparty_details),
                 )
             )
@@ -2574,7 +2574,7 @@ def return_issued_checks_to_fund(
     # وضعیتِ چک تغییر می‌کند.
     event_date = datetime.date.today()
     result = je_service.create_journal_entry(
-        company_id, created_by_user_id, event_date, "برگشتِ چکِ پرداختیِ وصول‌نشده", lines,
+        company_id, created_by_user_id, event_date, "برگشت چک پرداختی وصول‌نشده", lines,
         entry_type_code="PAYMENT",
     )
     with new_session() as session:

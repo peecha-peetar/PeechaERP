@@ -62,7 +62,7 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
     try {
       setAddresses(await apiClient.listCustomerAddresses(detailAccountId));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ آدرس‌ها ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت آدرس‌ها ناموفق بود.");
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,7 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
 
   const save = async () => {
     if (!line1.trim()) {
-      toast.show("متنِ آدرس الزامی است.", "danger");
+      toast.show("متن آدرس الزامی است.", "danger");
       return;
     }
     setSaving(true);
@@ -118,7 +118,7 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
       resetForm();
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "ثبتِ آدرس ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "ثبت آدرس ناموفق بود.", "danger");
     } finally {
       setSaving(false);
     }
@@ -130,14 +130,14 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
       toast.show("آدرس حذف شد.", "success");
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "حذفِ آدرس ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "حذف آدرس ناموفق بود.", "danger");
     }
   };
 
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, backgroundColor: colors.background }}>
       <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>آدرس‌هایِ مشتری</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>آدرس‌های مشتری</Text>
 
       {loading ? (
         <SkeletonList count={3} />
@@ -146,7 +146,7 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
       ) : (
         <>
           {addresses.length === 0 ? (
-            <EmptyState title="آدرسی ثبت نشده" description="اولین آدرس را از دکمه‌یِ پایین اضافه کنید." />
+            <EmptyState title="آدرسی ثبت نشده" description="اولین آدرس را از دکمهٔ پایین اضافه کنید." />
           ) : (
             addresses.map((a) => (
               <Card key={a.address_id}>
@@ -158,7 +158,7 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
                 {a.city ? <Text style={[typography.caption, { color: colors.textSecondary }]}>{a.city}</Text> : null}
                 {a.gps_latitude && a.gps_longitude ? (
                   <Text style={[typography.caption, { color: colors.textSecondary }]}>
-                    موقعیتِ مکانی ثبت‌شده{a.geofence_radius_meters ? ` · شعاعِ مجاز: ${a.geofence_radius_meters} متر` : ""}
+                    موقعیت مکانی ثبت‌شده{a.geofence_radius_meters ? ` · شعاع مجاز: ${a.geofence_radius_meters} متر` : ""}
                   </Text>
                 ) : null}
                 <Button label="حذف" size="md" variant="ghost" fullWidth={false} onPress={() => remove(a.address_id)} style={{ marginTop: spacing.sm }} />
@@ -168,32 +168,32 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
 
           {showForm ? (
             <Card>
-              <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>نوعِ آدرس</Text>
+              <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>نوع آدرس</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: spacing.sm }}>
                 {ADDRESS_TYPE_OPTIONS.map((o) => (
                   <TypeChip key={o.code} label={o.label} selected={typeCode === o.code} onPress={() => setTypeCode(o.code)} />
                 ))}
               </View>
-              <Input label="متنِ آدرس *" value={line1} onChangeText={setLine1} multiline />
+              <Input label="متن آدرس *" value={line1} onChangeText={setLine1} multiline />
               <Input label="شهر" value={city} onChangeText={setCity} />
               <Input
-                label="شعاعِ GeoFend به متر (اختیاری -- محدودیتِ ثبتِ ویزیت)"
+                label="شعاع GeoFend به متر (اختیاری — محدودیت ثبت ویزیت)"
                 value={geofenceRadius}
                 onChangeText={setGeofenceRadius}
                 keyboardType="number-pad"
               />
               <Text style={[typography.body, { color: gpsCaptured ? colors.success : colors.textSecondary, marginBottom: spacing.sm }]}>
-                {gpsCaptured ? "موقعیتِ مکانی ثبت شد" : "موقعیتِ مکانی ثبت نشده"}
+                {gpsCaptured ? "موقعیت مکانی ثبت شد" : "موقعیت مکانی ثبت نشده"}
               </Text>
               <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm }}>
-                <Button label="ثبتِ موقعیتِ فعلی" variant="secondary" onPress={captureGps} loading={capturingGps} style={{ flex: 1 }} />
-                <Button label="انتخاب رویِ نقشه" variant="secondary" onPress={() => setShowMapPicker(true)} style={{ flex: 1 }} />
+                <Button label="ثبت موقعیت فعلی" variant="secondary" onPress={captureGps} loading={capturingGps} style={{ flex: 1 }} />
+                <Button label="انتخاب روی نقشه" variant="secondary" onPress={() => setShowMapPicker(true)} style={{ flex: 1 }} />
               </View>
-              <Button label="ذخیره‌یِ آدرس" onPress={save} loading={saving} disabled={!line1.trim()} />
+              <Button label="ذخیرهٔ آدرس" onPress={save} loading={saving} disabled={!line1.trim()} />
               <Button label="انصراف" variant="ghost" onPress={resetForm} style={{ marginTop: spacing.sm }} />
             </Card>
           ) : (
-            <Button label="افزودنِ آدرس" variant="secondary" onPress={() => setShowForm(true)} />
+            <Button label="افزودن آدرس" variant="secondary" onPress={() => setShowForm(true)} />
           )}
         </>
       )}

@@ -1,8 +1,8 @@
-"""مدیریتِ رجیستریِ گزارش‌هایِ حرفه‌ایِ قابلِ‌تخصیص برایِ هر فرم -- طبقِ
-درخواستِ صریح («برایِ کاردکس/فاکتور بتوان چند گزارشِ نام‌گذاری‌شده
-تعریف/ویرایش/اجرا کرد»). خودِ jrxml هرکدام یک کپیِ مستقل (از قالبِ پایه‌یِ
-همان فرم) است که زیرِ پوشه‌یِ دادهٔ برنامه (نه گیت) نگه‌داری می‌شود -- طبقِ
-تصمیمِ 098_report_template_registry.sql / reporting/registry.py."""
+"""مدیریت رجیستری گزارش‌های حرفه‌ای قابل‌تخصیص برای هر فرم — طبق
+درخواست صریح («برای کاردکس/فاکتور بتوان چند گزارش نام‌گذاری‌شده
+تعریف/ویرایش/اجرا کرد»). خود jrxml هرکدام یک کپی مستقل (از قالب پایهٔ
+همان فرم) است که زیر پوشهٔ دادهٔ برنامه (نه گیت) نگه‌داری می‌شود — طبق
+تصمیم 098_report_template_registry.sql / reporting/registry.py."""
 
 from __future__ import annotations
 
@@ -42,9 +42,9 @@ def _to_row(r: ReportTemplate) -> ReportTemplateRow:
 
 
 def list_all_templates(company_id: int) -> list[ReportTemplateRow]:
-    """همه‌یِ گزارش‌هایِ این شرکت، رویِ همه‌یِ فرم‌ها -- برایِ نمایشِ یک
-    لیستِ واحد در تنظیمات (به‌جایِ یک پنلِ جدا به‌ازایِ هر فرم که با
-    زیادشدنِ فرم‌ها فضا می‌گیرد)."""
+    """همهٔ گزارش‌های این شرکت، روی همهٔ فرم‌ها — برای نمایش یک
+    لیست واحد در تنظیمات (به‌جای یک پنل جدا به‌ازای هر فرم که با
+    زیادشدن فرم‌ها فضا می‌گیرد)."""
     with new_session() as session:
         rows = session.scalars(
             select(ReportTemplate)
@@ -89,7 +89,7 @@ def get_default_template_path(company_id: int, form_code: str) -> Path | None:
 def create_template(company_id: int, form_code: str, name: str) -> ReportTemplateRow:
     definition = FORM_DEFINITIONS.get(form_code)
     if definition is None:
-        raise ValueError("فرمِ نامعتبر.")
+        raise ValueError("فرم نامعتبر.")
     name = name.strip()
     if not name:
         raise ValueError("نام الزامی است.")
@@ -103,7 +103,7 @@ def create_template(company_id: int, form_code: str, name: str) -> ReportTemplat
             )
         )
         if existing is not None:
-            raise ValueError("گزارشی با همین نام از قبل برایِ این فرم وجود دارد.")
+            raise ValueError("گزارشی با همین نام از قبل برای این فرم وجود دارد.")
 
         # همیشه از رویِ قالبِ پایه‌یِ همان فرم شروع می‌کنیم -- طبقِ
         # تصمیمِ معماریِ Jasper: هیچ‌وقت طراحِ گزارش با فایلِ خالی
@@ -143,7 +143,7 @@ def rename_template(report_template_id: int, company_id: int, new_name: str) -> 
             )
         )
         if duplicate is not None:
-            raise ValueError("گزارشی با همین نام از قبل برایِ این فرم وجود دارد.")
+            raise ValueError("گزارشی با همین نام از قبل برای این فرم وجود دارد.")
         row.name = new_name
         session.commit()
 

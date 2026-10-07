@@ -1,4 +1,4 @@
-"""پستِ خودکار در تلگرام/بله + تقویمِ محتوایی (طبقِ درخواستِ صریحِ کاربر)."""
+"""پست خودکار در تلگرام/بله + تقویم محتوایی (طبق درخواست صریح کاربر)."""
 
 from __future__ import annotations
 
@@ -44,26 +44,26 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("پستِ خودکار و تقویمِ محتوا")
+        title = QLabel("پست خودکار و تقویم محتوا")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_connections_tab(), "اتصالاتِ تلگرام/بله")
-        tabs.addTab(self._build_calendar_tab(), "تقویمِ محتوا")
+        tabs.addTab(self._build_connections_tab(), "اتصالات تلگرام/بله")
+        tabs.addTab(self._build_calendar_tab(), "تقویم محتوا")
         outer.addWidget(tabs, stretch=1)
 
         self.set_field_help([
             (self.social_platform_combo, "پیام‌رسانی که به آن وصل می‌شوید."),
-            (self.social_name_field, "نامِ نمایشیِ این اتصال، فقط برایِ تشخیصِ خودتان."),
+            (self.social_name_field, "نام نمایشی این اتصال، فقط برای تشخیص خودتان."),
             (self.social_chat_id_field, "شناسهٔ کانال/چتی که پست‌ها در آن ارسال می‌شوند."),
-            (self.social_token_field, "توکنِ باتِ تلگرام/بله -- رمزنگاری‌شده ذخیره می‌شود."),
-            (self.ai_api_key_field, "کلیدِ APIِ Gemini -- برایِ تولیدِ خودکارِ متنِ پست از رویِ عنوان."),
+            (self.social_token_field, "توکن بات تلگرام/بله — رمزنگاری‌شده ذخیره می‌شود."),
+            (self.ai_api_key_field, "کلید API Gemini — برای تولید خودکار متن پست از روی عنوان."),
             (self.post_connection_combo, "اتصالی که این پست در آن منتشر می‌شود."),
-            (self.post_date_field, "تاریخِ زمان‌بندی‌شده برایِ ارسالِ پست."),
-            (self.post_time_field, "ساعتِ زمان‌بندی‌شده برایِ ارسالِ پست."),
-            (self.post_title_field, "عنوانِ پست -- هم برایِ نمایش، هم به‌عنوانِ موضوعِ تولیدِ خودکار."),
-            (self.post_body_field, "متنِ کاملِ پست -- می‌توانید با دکمهٔ ✨ از رویِ عنوان خودکار تولید کنید."),
+            (self.post_date_field, "تاریخ زمان‌بندی‌شده برای ارسال پست."),
+            (self.post_time_field, "ساعت زمان‌بندی‌شده برای ارسال پست."),
+            (self.post_title_field, "عنوان پست — هم برای نمایش، هم به‌عنوان موضوع تولید خودکار."),
+            (self.post_body_field, "متن کامل پست — می‌توانید با دکمهٔ ✨ از روی عنوان خودکار تولید کنید."),
         ])
 
     def _company_id(self) -> int | None:
@@ -75,7 +75,7 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer = QVBoxLayout(page)
 
         self.connections_table = QTableWidget(0, 3)
-        self.connections_table.setHorizontalHeaderLabels(["پلتفرم", "نام", "شناسه‌یِ چت"])
+        self.connections_table.setHorizontalHeaderLabels(["پلتفرم", "نام", "شناسهٔ چت"])
         self.connections_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.connections_table.verticalHeader().setVisible(False)
         self.connections_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -88,29 +88,29 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.social_platform_combo.addItem(label, code)
         form.addWidget(self.social_platform_combo)
         self.social_name_field = QLineEdit()
-        self.social_name_field.setPlaceholderText("نامِ نمایشی (مثلاً «کانالِ فروشگاه»)")
+        self.social_name_field.setPlaceholderText("نام نمایشی (مثلاً «کانال فروشگاه»)")
         form.addWidget(self.social_name_field, stretch=1)
         self.social_chat_id_field = QLineEdit()
-        self.social_chat_id_field.setPlaceholderText("شناسه‌یِ چت/کانال")
+        self.social_chat_id_field.setPlaceholderText("شناسهٔ چت/کانال")
         form.addWidget(self.social_chat_id_field)
         self.social_token_field = QLineEdit()
-        self.social_token_field.setPlaceholderText("توکنِ بات")
+        self.social_token_field.setPlaceholderText("توکن بات")
         self.social_token_field.setEchoMode(QLineEdit.Password)
         form.addWidget(self.social_token_field)
         add_connection_button = QPushButton("➕")
         add_connection_button.setObjectName("primaryIconButton")
         add_connection_button.setFixedWidth(44)
-        add_connection_button.setToolTip("افزودنِ اتصال")
+        add_connection_button.setToolTip("افزودن اتصال")
         add_connection_button.clicked.connect(self._add_connection)
         form.addWidget(add_connection_button)
         test_connection_button = QPushButton("🔎")
         test_connection_button.setObjectName("iconButton")
         test_connection_button.setFixedWidth(44)
-        test_connection_button.setToolTip("آزمایشِ اتصالِ انتخاب‌شده")
+        test_connection_button.setToolTip("آزمایش اتصال انتخاب‌شده")
         test_connection_button.clicked.connect(self._test_connection)
         form.addWidget(test_connection_button)
         # R276: حذفِ اتصالِ انتخاب‌شده
-        delete_connection_button = delete_button("حذفِ اتصالِ انتخاب‌شده")
+        delete_connection_button = delete_button("حذف اتصال انتخاب‌شده")
         delete_connection_button.clicked.connect(self._delete_connection)
         form.addWidget(delete_connection_button)
         outer.addLayout(form)
@@ -123,15 +123,15 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # APIِ Gemini یک‌بار این‌جا ذخیره می‌شود؛ تبِ تقویمِ محتوا از همین
         # کلید برایِ تولیدِ متنِ پست استفاده می‌کند.
         ai_form = QHBoxLayout()
-        ai_form.addWidget(QLabel("کلیدِ APIِ Gemini (برایِ تولیدِ خودکارِ متنِ پست):"))
+        ai_form.addWidget(QLabel("کلید API Gemini (برای تولید خودکار متن پست):"))
         self.ai_api_key_field = QLineEdit()
-        self.ai_api_key_field.setPlaceholderText("کلیدِ API")
+        self.ai_api_key_field.setPlaceholderText("کلید API")
         self.ai_api_key_field.setEchoMode(QLineEdit.Password)
         ai_form.addWidget(self.ai_api_key_field, stretch=1)
         save_ai_key_button = QPushButton("🔑")
         save_ai_key_button.setObjectName("iconButton")
         save_ai_key_button.setFixedWidth(44)
-        save_ai_key_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
+        save_ai_key_button.setToolTip("ذخیرهٔ کلید API (رمزنگاری‌شده)")
         save_ai_key_button.clicked.connect(self._save_ai_api_key)
         ai_form.addWidget(save_ai_key_button)
         outer.addLayout(ai_form)
@@ -147,7 +147,7 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.social_status_label.setText(str(exc))
             return
         self.ai_api_key_field.clear()
-        theme.set_status_label(self.social_status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
+        theme.set_status_label(self.social_status_label, "کلید API رمزنگاری و ذخیره شد.", ok=True)
 
     def refresh(self) -> None:
         company_id = self._company_id()
@@ -225,24 +225,24 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_post_button = QPushButton("➕")
         add_post_button.setObjectName("primaryIconButton")
         add_post_button.setFixedWidth(44)
-        add_post_button.setToolTip("افزودنِ پست به تقویم")
+        add_post_button.setToolTip("افزودن پست به تقویم")
         add_post_button.clicked.connect(self._add_post)
         form.addWidget(add_post_button)
         outer.addLayout(form)
 
         title_row = QHBoxLayout()
         self.post_title_field = QLineEdit()
-        self.post_title_field.setPlaceholderText("عنوانِ پست (هم برایِ نمایش، هم موضوعِ تولیدِ خودکار)")
+        self.post_title_field.setPlaceholderText("عنوان پست (هم برای نمایش، هم موضوع تولید خودکار)")
         title_row.addWidget(self.post_title_field, stretch=1)
         generate_ai_button = QPushButton("✨")
         generate_ai_button.setObjectName("iconButton")
         generate_ai_button.setFixedWidth(44)
-        generate_ai_button.setToolTip("تولیدِ متنِ پست با هوش مصنوعی از رویِ عنوان")
+        generate_ai_button.setToolTip("تولید متن پست با هوش مصنوعی از روی عنوان")
         generate_ai_button.clicked.connect(self._generate_ai_text)
         title_row.addWidget(generate_ai_button)
         outer.addLayout(title_row)
         self.post_body_field = QPlainTextEdit()
-        self.post_body_field.setPlaceholderText("متنِ پست")
+        self.post_body_field.setPlaceholderText("متن پست")
         self.post_body_field.setFixedHeight(80)
         outer.addWidget(self.post_body_field)
 
@@ -271,10 +271,10 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             if post.status_code == "SCHEDULED":
                 send_now_button = QPushButton("📤")
                 send_now_button.setObjectName("primaryIconButton")
-                send_now_button.setToolTip("ارسالِ الان")
+                send_now_button.setToolTip("ارسال الان")
                 send_now_button.clicked.connect(lambda _checked=False, post_id=post.post_id: self._send_post_now(post_id))
                 actions.append(send_now_button)
-            remove = delete_button("حذفِ پست از تقویم")
+            remove = delete_button("حذف پست از تقویم")
             remove.clicked.connect(lambda _checked=False, p=post: confirm_and_delete(
                 self, "پست", p.title or "", ContentCalendarPost, p.post_id, self._company_id(), self._refresh_calendar))
             actions.append(remove)
@@ -283,7 +283,7 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete_connection(self) -> None:
         connection_id = getattr(self, "_selected_connection_id", None)
         connection = next((c for c in self._connections if c.connection_id == connection_id), None)
-        if confirm_and_delete(self, "اتصالِ شبکهٔ اجتماعی", connection.display_name if connection else "", SocialConnection,
+        if confirm_and_delete(self, "اتصال شبکهٔ اجتماعی", connection.display_name if connection else "", SocialConnection,
                               connection_id, self._company_id()):
             self._selected_connection_id = None
             self.refresh()
@@ -319,7 +319,7 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.calendar_status_label.setText(str(exc))
             return
         self.post_body_field.setPlainText(generated_text)
-        theme.set_status_label(self.calendar_status_label, "متنِ پست با هوش مصنوعی تولید شد -- قبل از افزودن ویرایش کنید.", ok=True)
+        theme.set_status_label(self.calendar_status_label, "متن پست با هوش مصنوعی تولید شد — قبل از افزودن ویرایش کنید.", ok=True)
 
     def _send_post_now(self, post_id: int) -> None:
         try:

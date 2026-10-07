@@ -1,9 +1,9 @@
-"""تعیینِ قیمتِ معتبر برایِ یک ردیفِ سفارش از موبایل -- طبقِ محدودیتِ
-شناخته‌شده‌یِ R131/R132 (که /sync/pull قیمت برنمی‌گرداند)، این‌جا دقیقاً
-همان زنجیره‌یِ پنج‌گامیِ services/commercial_pricing.resolve_price
-(قرارداد→فهرستِ قیمتِ پلکانی→تخفیف) صدا زده می‌شود -- بدونِ بازنویسیِ
-منطق. فقط وقتی موبایل آنلاین است قابلِ‌استفاده است؛ در حالتِ آفلاین
-همچنان ورودیِ دستیِ قیمت (طبقِ طراحیِ R132) به‌عنوانِ Fallback باقی
+"""تعیین قیمت معتبر برای یک ردیف سفارش از موبایل — طبق محدودیت
+شناخته‌شدهٔ R131/R132 (که /sync/pull قیمت برنمی‌گرداند)، این‌جا دقیقاً
+همان زنجیرهٔ پنج‌گامی services/commercial_pricing.resolve_price
+(قرارداد→فهرست قیمت پلکانی→تخفیف) صدا زده می‌شود — بدون بازنویسی
+منطق. فقط وقتی موبایل آنلاین است قابل‌استفاده است؛ در حالت آفلاین
+همچنان ورودی دستی قیمت (طبق طراحی R132) به‌عنوان Fallback باقی
 می‌ماند."""
 
 from __future__ import annotations
@@ -73,11 +73,11 @@ def list_channels(
     channel_type_code: str | None = Query(None),
     ctx: AuthContext = Depends(get_current_context),
 ) -> list[dict]:
-    """طبقِ باگِ واقعیِ کشف‌شده (R196): اپِ موبایل قبلاً مقدارِ channel_type_code
-    («VAN_SALES») را به‌جایِ یک channel_codeِ واقعی مستقیم به سرور
-    می‌فرستاد -- چون comm.channels.channel_code یک ستونِ جداست (مثلِ
-    «VAN-1»)، نه همان کدِ نوع، این باعثِ شکستِ محدودیتِ کلیدِ خارجی
-    می‌شد و سند اصلاً ساخته نمی‌شد. این اندپوینت کدهایِ واقعیِ کانالِ
+    """طبق باگ واقعی کشف‌شده (R196): برنامهٔ موبایل قبلاً مقدار channel_type_code
+    («VAN_SALES») را به‌جای یک channel_code واقعی مستقیم به سرور
+    می‌فرستاد — چون comm.channels.channel_code یک ستون جداست (مثل
+    «VAN-1»)، نه همان کد نوع، این باعث شکست محدودیت کلید خارجی
+    می‌شد و سند اصلاً ساخته نمی‌شد. این اندپوینت کدهای واقعی کانال
     تعریف‌شده در همین شرکت را برمی‌گرداند تا موبایل یکی را انتخاب کند."""
     channels = pricing_service.list_channels(ctx.company_id)
     if channel_type_code is not None:
@@ -98,9 +98,9 @@ def list_channels(
 
 @router.get("/settlement-methods")
 def list_settlement_methods(ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
-    انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
-    موبایل خاموش کنیم»): فقط روش‌هایِ فعال‌شده‌یِ موبایل برمی‌گردد."""
+    """طبق درخواست صریح کاربر («نوع تسویه در پخش گرم باید همانند
+    انواع تسویه در دسکتاپ باشد — فقط جایی باشد که برخی را برای
+    موبایل خاموش کنیم»): فقط روش‌های فعال‌شدهٔ موبایل برمی‌گردد."""
     result = []
     for m in settlements_service.list_mobile_settlement_methods(ctx.company_id):
         if not m.is_enabled:
@@ -123,6 +123,6 @@ def list_settlement_methods(ctx: AuthContext = Depends(get_current_context)) -> 
 
 @router.get("/banks")
 def list_banks(ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """فهرستِ بانک‌ها برایِ فیلدِ «بانک» در ثبتِ چکِ دریافتی -- همان
-    فهرستِ دسکتاپ (تنظیماتِ خزانه‌داری)."""
+    """فهرست بانک‌ها برای فیلد «بانک» در ثبت چک دریافتی — همان
+    فهرست دسکتاپ (تنظیمات خزانه‌داری)."""
     return [{"bank_id": b.bank_id, "name": b.name} for b in treasury_service.list_banks(ctx.company_id, active_only=True)]

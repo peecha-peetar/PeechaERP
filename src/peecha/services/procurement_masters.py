@@ -1,7 +1,7 @@
-"""اطلاعاتِ پایهٔ تدارکات -- R240: انواعِ خرید، علت‌هایِ لغو، سیاستِ سفارشِ کالا.
+"""اطلاعات پایهٔ تدارکات — R240: انواع خرید، علت‌های لغو، سیاست سفارش کالا.
 
 جدول‌ها: comm.purchase_types، comm.cancellation_reasons (migration 177) و
-inv.reorder_policies (از قبل موجود، تا کنون بدونِ فرمِ ورود)."""
+inv.reorder_policies (از قبل موجود، تا کنون بدون فرم ورود)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from peecha.db.models.inventory import ReorderPolicy
 
 _DEFAULT_PURCHASE_TYPES = (("PLANNED", "برنامه‌ریزی‌شده", False), ("EMERGENCY", "اضطراری", True))
 _DEFAULT_CANCEL_REASONS = (
-    ("SUPPLIER", "انصرافِ تامین‌کننده"), ("PRICE", "قیمتِ نامناسب"), ("NO_NEED", "رفعِ نیاز"),
-    ("DUPLICATE", "سندِ تکراری"), ("ERROR", "خطایِ ثبت"), ("OTHER", "سایر"),
+    ("SUPPLIER", "انصراف تامین‌کننده"), ("PRICE", "قیمت نامناسب"), ("NO_NEED", "رفع نیاز"),
+    ("DUPLICATE", "سند تکراری"), ("ERROR", "خطای ثبت"), ("OTHER", "سایر"),
 )
 
 
@@ -37,14 +37,14 @@ def save_purchase_type(company_id: int, code: str, name: str, is_emergency: bool
                        purchase_type_id: int | None = None) -> int:
     code, name = (code or "").strip().upper(), (name or "").strip()
     if not code or not name:
-        raise ValueError("کد و نامِ نوعِ خرید الزامی است.")
+        raise ValueError("کد و نام نوع خرید الزامی است.")
     with new_session() as session:
         clash = session.scalar(select(PurchaseType).where(PurchaseType.company_id == company_id, PurchaseType.code == code))
         if clash is not None and clash.purchase_type_id != purchase_type_id:
             raise ValueError("این کد قبلاً تعریف شده است.")
         row = session.get(PurchaseType, purchase_type_id) if purchase_type_id else PurchaseType(company_id=company_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("نوعِ خرید نامعتبر است.")
+            raise ValueError("نوع خرید نامعتبر است.")
         row.code, row.name, row.is_emergency, row.is_active = code, name, is_emergency, is_active
         session.add(row)
         session.commit()
@@ -68,7 +68,7 @@ def list_cancellation_reasons(company_id: int, active_only: bool = False) -> lis
 def save_cancellation_reason(company_id: int, code: str, name: str, is_active: bool = True, reason_id: int | None = None) -> int:
     code, name = (code or "").strip().upper(), (name or "").strip()
     if not code or not name:
-        raise ValueError("کد و عنوانِ علت الزامی است.")
+        raise ValueError("کد و عنوان علت الزامی است.")
     with new_session() as session:
         clash = session.scalar(select(CancellationReason).where(
             CancellationReason.company_id == company_id, CancellationReason.code == code))
@@ -76,7 +76,7 @@ def save_cancellation_reason(company_id: int, code: str, name: str, is_active: b
             raise ValueError("این کد قبلاً تعریف شده است.")
         row = session.get(CancellationReason, reason_id) if reason_id else CancellationReason(company_id=company_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("علتِ لغو نامعتبر است.")
+            raise ValueError("علت لغو نامعتبر است.")
         row.code, row.name, row.is_active = code, name, is_active
         session.add(row)
         session.commit()
@@ -110,20 +110,20 @@ def list_reorder_policies(company_id: int) -> list[ReorderPolicy]:
 def save_reorder_policy(company_id: int, fields: PolicyFields, policy_id: int | None = None) -> int:
     for value in (fields.min_qty, fields.max_qty, fields.reorder_point_qty, fields.reorder_qty):
         if value is not None and value < 0:
-            raise ValueError("مقادیرِ سیاستِ سفارش نمی‌توانند منفی باشند.")
+            raise ValueError("مقادیر سیاست سفارش نمی‌توانند منفی باشند.")
     if fields.min_qty is not None and fields.reorder_point_qty is not None and fields.reorder_point_qty < fields.min_qty:
-        raise ValueError("نقطهٔ سفارش نباید کمتر از حداقلِ موجودی باشد.")
+        raise ValueError("نقطهٔ سفارش نباید کمتر از حداقل موجودی باشد.")
     if fields.max_qty is not None and fields.reorder_point_qty is not None and fields.max_qty <= fields.reorder_point_qty:
-        raise ValueError("حداکثرِ موجودی باید بیشتر از نقطهٔ سفارش باشد.")
+        raise ValueError("حداکثر موجودی باید بیشتر از نقطهٔ سفارش باشد.")
     with new_session() as session:
         clash = session.scalar(select(ReorderPolicy).where(
             ReorderPolicy.company_id == company_id, ReorderPolicy.item_id == fields.item_id,
             ReorderPolicy.warehouse_id.is_(None) if fields.warehouse_id is None else ReorderPolicy.warehouse_id == fields.warehouse_id))
         if clash is not None and clash.policy_id != policy_id:
-            raise ValueError("برایِ این کالا در این انبار قبلاً سیاستِ سفارش تعریف شده است.")
+            raise ValueError("برای این کالا در این انبار قبلاً سیاست سفارش تعریف شده است.")
         row = session.get(ReorderPolicy, policy_id) if policy_id else ReorderPolicy(company_id=company_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("سیاستِ سفارش نامعتبر است.")
+            raise ValueError("سیاست سفارش نامعتبر است.")
         for name in ("item_id", "warehouse_id", "min_qty", "max_qty", "reorder_point_qty", "reorder_qty", "lead_time_days", "is_active"):
             setattr(row, name, getattr(fields, name))
         session.add(row)
@@ -135,7 +135,7 @@ def delete_reorder_policy(company_id: int, policy_id: int) -> None:
     with new_session() as session:
         row = session.get(ReorderPolicy, policy_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("سیاستِ سفارش نامعتبر است.")
+            raise ValueError("سیاست سفارش نامعتبر است.")
         session.delete(row)
         session.commit()
 
@@ -155,11 +155,11 @@ def save_branch(company_id: int, code: str, name: str, address: str | None = Non
 
     code, name = (code or "").strip().upper(), (name or "").strip()
     if not code or not name:
-        raise ValueError("کد و نامِ شعبه الزامی است.")
+        raise ValueError("کد و نام شعبه الزامی است.")
     with new_session() as session:
         clash = session.scalar(select(Branch).where(Branch.company_id == company_id, Branch.code == code))
         if clash is not None and clash.branch_id != branch_id:
-            raise ValueError("این کدِ شعبه قبلاً تعریف شده است.")
+            raise ValueError("این کد شعبه قبلاً تعریف شده است.")
         row = session.get(Branch, branch_id) if branch_id else Branch(company_id=company_id)
         if row is None or row.company_id != company_id:
             raise ValueError("شعبه نامعتبر است.")
@@ -170,7 +170,7 @@ def save_branch(company_id: int, code: str, name: str, address: str | None = Non
 
 
 def set_warehouse_branch(company_id: int, warehouse_id: int, branch_id: int | None) -> None:
-    """انبار به شعبه تعلق می‌گیرد؛ سندِ تازهٔ بدونِ شعبه، شعبهٔ انبارش را می‌گیرد (اسنادِ قبلی دست نمی‌خورند)."""
+    """انبار به شعبه تعلق می‌گیرد؛ سند تازهٔ بدون شعبه، شعبهٔ انبارش را می‌گیرد (اسناد قبلی دست نمی‌خورند)."""
     from peecha.db.models.inventory import Warehouse
 
     with new_session() as session:
@@ -182,7 +182,7 @@ def set_warehouse_branch(company_id: int, warehouse_id: int, branch_id: int | No
 
 
 def list_departments(company_id: int):
-    """دپارتمان‌ها = واحدهایِ سازمانیِ منابعِ انسانی (hr.organizational_units)."""
+    """دپارتمان‌ها = واحدهای سازمانی منابع انسانی (hr.organizational_units)."""
     from peecha.db.models.hr import OrganizationalUnit
 
     with new_session() as session:

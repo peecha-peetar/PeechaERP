@@ -1,4 +1,4 @@
-"""شمارشِ فیزیکیِ دارایی (دستی/بارکد/QR/موبایل)، گارانتی و بیمه، هشدارها -- R264."""
+"""شمارش فیزیکی دارایی (دستی/بارکد/QR/موبایل)، گارانتی و بیمه، هشدارها — R264."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from peecha.services.fixed_assets import assets as fa
 from peecha.services.fixed_assets import common as c
 
 RESULT_LABELS = {"PENDING": "شمرده‌نشده", "FOUND": "یافت شد", "MISSING": "مفقود", "MOVED": "جابه‌جاشده", "DAMAGED": "آسیب‌دیده",
-                 "WRONG_LOCATION": "محلِ نادرست", "WRONG_CUSTODIAN": "تحویل‌گیرندهٔ نادرست", "UNEXPECTED": "خارج از فهرست"}
+                 "WRONG_LOCATION": "محل نادرست", "WRONG_CUSTODIAN": "تحویل‌گیرندهٔ نادرست", "UNEXPECTED": "خارج از فهرست"}
 
 
 def _subtree(session, company_id: int, location_id: int) -> set[int]:
@@ -35,11 +35,11 @@ def _subtree(session, company_id: int, location_id: int) -> set[int]:
 
 def create_count(company_id: int, user_id: int | None, code: str, count_date: datetime.date, location_id: int | None = None,
                  notes: str | None = None) -> int:
-    """شمارش برایِ یک محل (با زیرمحل‌ها) یا کلِ دارایی‌هایِ فعال؛ فهرستِ مورد انتظار از شناسنامه‌ها."""
+    """شمارش برای یک محل (با زیرمحل‌ها) یا کل دارایی‌های فعال؛ فهرست مورد انتظار از شناسنامه‌ها."""
     with new_session() as session:
         if session.scalar(select(PhysicalCount.count_id).where(PhysicalCount.company_id == company_id,
                                                                PhysicalCount.code == code.strip())):
-            raise ValueError("کدِ شمارش تکراری است.")
+            raise ValueError("کد شمارش تکراری است.")
         count = PhysicalCount(company_id=company_id, code=code.strip(), count_date=count_date, location_id=location_id,
                               status_code="OPEN", notes=notes, created_by_user_id=user_id)
         session.add(count)
@@ -68,10 +68,10 @@ def _open(session, company_id: int, count_id: int) -> PhysicalCount:
 def scan(company_id: int, count_id: int, code: str, found_location_id: int | None = None,
          found_custodian_employee_id: int | None = None, damaged: bool = False, method: str = "QR",
          note: str | None = None) -> SimpleNamespace:
-    """ثبتِ یافتنِ دارایی با کد/بارکد/QR؛ نتیجه: یافت شد/محلِ نادرست/تحویل‌گیرندهٔ نادرست/آسیب‌دیده/جابه‌جاشده."""
+    """ثبت یافتن دارایی با کد/بارکد/QR؛ نتیجه: یافت شد/محل نادرست/تحویل‌گیرندهٔ نادرست/آسیب‌دیده/جابه‌جاشده."""
     asset = fa.find_by_code(company_id, code)
     if asset is None:
-        raise ValueError(f"دارایی با کدِ «{code}» یافت نشد.")
+        raise ValueError(f"دارایی با کد «{code}» یافت نشد.")
     with new_session() as session:
         count = _open(session, company_id, count_id)
         found_location_id = found_location_id or count.location_id
@@ -100,7 +100,7 @@ def scan(company_id: int, count_id: int, code: str, found_location_id: int | Non
 
 
 def close_count(company_id: int, user_id: int, count_id: int, apply_moves: bool = False) -> dict[str, int]:
-    """بستنِ شمارش: شمرده‌نشده‌ها «مفقود»؛ با apply_moves، محلِ یافت‌شده با «انتقال» در شناسنامه ثبت می‌شود."""
+    """بستن شمارش: شمرده‌نشده‌ها «مفقود»؛ با apply_moves، محل یافت‌شده با «انتقال» در شناسنامه ثبت می‌شود."""
     with new_session() as session:
         count = _open(session, company_id, count_id)
         moves = []
@@ -117,7 +117,7 @@ def close_count(company_id: int, user_id: int, count_id: int, apply_moves: bool 
         session.commit()
     if apply_moves:
         for asset_id, location_id in moves:
-            fa.transfer(company_id, user_id, asset_id, datetime.date.today(), reason=f"نتیجهٔ شمارشِ فیزیکی #{count_id}",
+            fa.transfer(company_id, user_id, asset_id, datetime.date.today(), reason=f"نتیجهٔ شمارش فیزیکی #{count_id}",
                         location_id=location_id, idempotency_key=f"COUNT-{count_id}-{asset_id}")
     return summary
 
@@ -151,7 +151,7 @@ def list_counts(company_id: int) -> list[PhysicalCount]:
 def add_warranty(company_id: int, asset_id: int, start_date: datetime.date, end_date: datetime.date, warranty_type: str | None = None,
                  supplier_detail_account_id: int | None = None, contract_no: str | None = None, note: str | None = None) -> int:
     if end_date < start_date:
-        raise ValueError("پایانِ گارانتی پیش از شروعِ آن است.")
+        raise ValueError("پایان گارانتی پیش از شروع آن است.")
     fa.get_asset(company_id, asset_id)
     with new_session() as session:
         row = AssetWarranty(asset_id=asset_id, warranty_type=warranty_type, supplier_detail_account_id=supplier_detail_account_id,
@@ -164,7 +164,7 @@ def add_warranty(company_id: int, asset_id: int, start_date: datetime.date, end_
 def add_insurance(company_id: int, asset_id: int, insurer_name: str, start_date: datetime.date, end_date: datetime.date,
                   policy_no: str | None = None, premium=None, coverage: str | None = None, insured_value=None) -> int:
     if end_date < start_date:
-        raise ValueError("پایانِ بیمه پیش از شروعِ آن است.")
+        raise ValueError("پایان بیمه پیش از شروع آن است.")
     fa.get_asset(company_id, asset_id)
     with new_session() as session:
         row = AssetInsurance(asset_id=asset_id, insurer_name=insurer_name, policy_no=policy_no, start_date=start_date,
@@ -205,7 +205,7 @@ EXPIRY_LABELS = {"EXPIRED": "منقضی شده", "DAYS_7": "۷ روز مانده
 
 
 def alerts(company_id: int, today: datetime.date | None = None) -> list[SimpleNamespace]:
-    """هشدارها: انقضایِ گارانتی/بیمه (۳۰/۷ روز/منقضی)، پایانِ استهلاک، مفقودی، کاهشِ ارزش، در انتظارِ تأیید."""
+    """هشدارها: انقضای گارانتی/بیمه (۳۰/۷ روز/منقضی)، پایان استهلاک، مفقودی، کاهش ارزش، در انتظار تایید."""
     from peecha.services.fixed_assets import depreciation as fd
 
     today = today or datetime.date.today()
@@ -227,7 +227,7 @@ def alerts(company_id: int, today: datetime.date | None = None) -> list[SimpleNa
                 out.append(SimpleNamespace(kind="INSURANCE", level=level, asset_id=asset_id, date=end,
                                            text=f"بیمه: {EXPIRY_LABELS[level]}"))
         for a in session.scalars(select(Asset).where(Asset.company_id == company_id, Asset.status_code.in_(("IMPAIRED",)))):
-            out.append(SimpleNamespace(kind="IMPAIRMENT", level="INFO", asset_id=a.asset_id, date=None, text="کاهشِ ارزش"))
+            out.append(SimpleNamespace(kind="IMPAIRMENT", level="INFO", asset_id=a.asset_id, date=None, text="کاهش ارزش"))
         last_count = session.scalar(select(PhysicalCount.count_id).where(PhysicalCount.company_id == company_id,
                                                                         PhysicalCount.status_code == "CLOSED")
                                     .order_by(PhysicalCount.closed_at.desc()).limit(1))
@@ -238,12 +238,12 @@ def alerts(company_id: int, today: datetime.date | None = None) -> list[SimpleNa
         for ev in session.scalars(select(AssetEvent).where(AssetEvent.company_id == company_id,
                                                            AssetEvent.status_code == "PENDING_APPROVAL")):
             out.append(SimpleNamespace(kind="APPROVAL", level="INFO", asset_id=ev.asset_id, date=ev.event_date,
-                                       text="در انتظارِ تأیید", event_id=ev.event_id))
+                                       text="در انتظار تایید", event_id=ev.event_id))
         depreciating = list(session.scalars(select(Asset.asset_id).where(
             Asset.company_id == company_id, Asset.status_code.in_(c.DEPRECIABLE_STATUSES), Asset.depreciation_method != "NONE")))
     for asset_id in depreciating:
         left = fd.forecast(company_id, asset_id, months=4)
         if left and len(left) <= 3 and left[-1].book_value <= 0:
             out.append(SimpleNamespace(kind="DEPRECIATION_END", level="INFO", asset_id=asset_id, date=None,
-                                       text=f"پایانِ استهلاک تا {len(left)} ماهِ دیگر"))
+                                       text=f"پایان استهلاک تا {len(left)} ماه دیگر"))
     return out

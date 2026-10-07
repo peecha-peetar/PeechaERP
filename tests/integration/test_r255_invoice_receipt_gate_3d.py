@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -187,54 +187,54 @@ def status(d):
 
 # ۱) Toggle خاموش: رفتارِ قبلی
 check(any(f.feature_code == "PURCHASE_INVOICE_WAREHOUSE_APPROVAL" for f in csettings_service.list_features(company_id)),
-      "گزینهٔ «تاییدِ رسیدِ انباردار برایِ فاکتورِ خریدِ مستقیم» در تنظیمات تعریف شده")
+      "گزینهٔ «تایید رسید انباردار برای فاکتور خرید مستقیم» در تنظیمات تعریف شده")
 inv0, _ = invoice(milk, 2, pick2)
-check(not documents_service.invoice_requires_warehouse_approval(inv0, company_id), "بدونِ گزینه، تاییدِ انبار لازم نیست")
+check(not documents_service.invoice_requires_warehouse_approval(inv0, company_id), "بدون گزینه، تایید انبار لازم نیست")
 documents_service.post_document(inv0, company_id, user.user_id)
-check(status(inv0).status_code == "POSTED", "بدونِ گزینه، فاکتور مثلِ قبل مستقیم ثبتِ نهایی می‌شود")
+check(status(inv0).status_code == "POSTED", "بدون گزینه، فاکتور مثل قبل مستقیم ثبت نهایی می‌شود")
 
 # ۲) Toggle روشن: بدونِ تاییدِ انبار ثبتِ نهایی نمی‌شود
 csettings_service.set_feature_enabled(company_id, "PURCHASE_INVOICE_WAREHOUSE_APPROVAL", True)
 inv1, ln1 = invoice(milk, 5)
-check(documents_service.invoice_requires_warehouse_approval(inv1, company_id), "فاکتورِ مستقیم تاییدِ انبار لازم دارد")
-check(raises(lambda: documents_service.post_document(inv1, company_id, user.user_id)), "ثبتِ نهایی بدونِ تاییدِ رسیدِ انباردار رد شد")
+check(documents_service.invoice_requires_warehouse_approval(inv1, company_id), "فاکتور مستقیم تایید انبار لازم دارد")
+check(raises(lambda: documents_service.post_document(inv1, company_id, user.user_id)), "ثبت نهایی بدون تایید رسید انباردار رد شد")
 check(status(inv1).status_code != "POSTED", "فاکتور ثبت نشد و هیچ سندی نخورد")
 queue = [d.document_id for d in documents_service.list_purchase_order_goods_receipt_queue(company_id)]
-check(inv1 in queue and inv0 not in queue, "فاکتور در صفِ «تاییدِ انبار» آمد (فاکتورِ ثبت‌شده نه)")
+check(inv1 in queue and inv0 not in queue, "فاکتور در صف «تایید انبار» آمد (فاکتور ثبت‌شده نه)")
 
 from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
 lst = CommercialDocumentsListScreen(None)
 row = next(d for d in documents_service.list_documents(company_id, document_type_code="PURCHASE_INVOICE") if d.document_id == inv1)
 step = lst._next_step(row, None, None)
-check(step is not None and step[0] == "تاییدِ انبار", f"فهرستِ اسناد: مرحلهٔ بعد «تاییدِ انبار» (got {step and step[0]})")
+check(step is not None and step[0] == "تایید انبار", f"فهرست اسناد: مرحلهٔ بعد «تایید انبار» (got {step and step[0]})")
 
 # دیالوگِ انباردار: مقدار و انبار ثابت، مکان الزامی
 from peecha.ui.screens.purchase_goods_receipt import _GoodsReceiptDialog, _BIN_COL, _status_label
 dlg = _GoodsReceiptDialog(None, inv1, company_id)
 check(not dlg._qty_fields[ln1].isEnabled() and not dlg._line_warehouse_combos[ln1].isEnabled(),
-      "در فاکتور، مقدار و انبار همانِ فاکتور است (انباردار فقط تایید می‌کند)")
-check(not dlg.lines_table.isColumnHidden(_BIN_COL), "ستونِ مکان در تاییدِ رسیدِ فاکتور دیده می‌شود")
-check("فاکتورِ خرید" in _status_label(status(inv1)), "عنوانِ «فاکتورِ خرید» در صفِ تاییدِ انبار")
+      "در فاکتور، مقدار و انبار همان فاکتور است (انباردار فقط تایید می‌کند)")
+check(not dlg.lines_table.isColumnHidden(_BIN_COL), "ستون مکان در تایید رسید فاکتور دیده می‌شود")
+check("فاکتور خرید" in _status_label(status(inv1)), "عنوان «فاکتور خرید» در صف تایید انبار")
 dlg._toggle_receipt()
 check(status(inv1).warehouse_approved_at is None and "مکان" in dlg.status_label.text(), "بی‌مکان تایید نمی‌شود")
 dlg._line_bin_combos[ln1].setCurrentIndex(dlg._line_bin_combos[ln1].findData(bulk2))
 dlg._toggle_receipt()
-check(status(inv1).warehouse_approved_at is not None, "انباردار رسیدِ فاکتور را با مکان تایید کرد")
-check(raises(lambda: documents_service.revert_to_draft(inv1, company_id)), "پس از تاییدِ انبار، فاکتور به پیش‌نویس برنمی‌گردد (ابتدا انباردار برگرداند)")
+check(status(inv1).warehouse_approved_at is not None, "انباردار رسید فاکتور را با مکان تایید کرد")
+check(raises(lambda: documents_service.revert_to_draft(inv1, company_id)), "پس از تایید انبار، فاکتور به پیش‌نویس برنمی‌گردد (ابتدا انباردار برگرداند)")
 dlg.close()
 documents_service.post_document(inv1, company_id, user.user_id)
-check(status(inv1).status_code == "POSTED", "پس از تاییدِ انبار، ثبتِ نهایی انجام شد")
-check(qty_at(milk, bulk2) == 5, "کالا در مکانِ تعیین‌شدهٔ انباردار نشست")
-check(raises(lambda: documents_service.revert_warehouse_approval(inv1, company_id)), "تاییدِ رسیدِ فاکتورِ ثبت‌شده برنمی‌گردد")
+check(status(inv1).status_code == "POSTED", "پس از تایید انبار، ثبت نهایی انجام شد")
+check(qty_at(milk, bulk2) == 5, "کالا در مکان تعیین‌شدهٔ انباردار نشست")
+check(raises(lambda: documents_service.revert_warehouse_approval(inv1, company_id)), "تایید رسید فاکتور ثبت‌شده برنمی‌گردد")
 check(inv1 not in [d.document_id for d in documents_service.list_purchase_order_goods_receipt_queue(company_id)],
-      "فاکتورِ ثبت‌شده از صفِ انبار خارج شد")
+      "فاکتور ثبت‌شده از صف انبار خارج شد")
 
 # بازگشتِ تایید پیش از ثبت
 inv2, ln2 = invoice(acid, 1)
 documents_service.approve_warehouse(inv2, company_id, user.user_id, line_bins={ln2: bulk1})
 documents_service.revert_warehouse_approval(inv2, company_id)
 check(status(inv2).warehouse_approved_at is None and raises(lambda: documents_service.post_document(inv2, company_id, user.user_id)),
-      "با برگشتِ تاییدِ انباردار، ثبتِ نهایی دوباره بسته شد")
+      "با برگشت تایید انباردار، ثبت نهایی دوباره بسته شد")
 
 # ۳) فاکتورِ تبدیل‌شده از سفارشِ رسیده: تاییدِ دوباره لازم نیست
 csettings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
@@ -244,11 +244,11 @@ documents_service.confirm_document(po, company_id, user.user_id)
 documents_service.post_document(po, company_id, user.user_id)
 documents_service.approve_warehouse(po, company_id, user.user_id, warehouse_id=wh, line_bins={pl: pick1})
 inv3 = documents_service.convert_to_invoice(po, company_id, user.user_id, today)
-check(not documents_service.invoice_requires_warehouse_approval(inv3, company_id), "فاکتورِ سفارشِ رسیده، تاییدِ دوبارهٔ انبار نمی‌خواهد")
+check(not documents_service.invoice_requires_warehouse_approval(inv3, company_id), "فاکتور سفارش رسیده، تایید دوبارهٔ انبار نمی‌خواهد")
 documents_service.confirm_document(inv3, company_id, user.user_id)
 settlements_service.auto_approve_settlement_plan(inv3, company_id, user.user_id, [])
 documents_service.post_document(inv3, company_id, user.user_id)
-check(status(inv3).status_code == "POSTED" and qty_at(acid, pick1) == 3, "فاکتورِ سفارشِ رسیده مستقیم ثبت شد")
+check(status(inv3).status_code == "POSTED" and qty_at(acid, pick1) == 3, "فاکتور سفارش رسیده مستقیم ثبت شد")
 
 # ۴) سه‌بعدی: برچسبِ قفسه/منطقه و نمایشِ اطلاعات با ماوس
 from peecha.ui.screens.warehouse_map import WarehouseMapScreen
@@ -256,30 +256,30 @@ ms = WarehouseMapScreen(None); ms.refresh(); ms.load_warehouse(wh)
 ms.view3d_check.setChecked(True)
 v3 = ms.view3d
 texts = [i.text() for i in v3.scene.items() if isinstance(i, QGraphicsSimpleTextItem)]
-check(any(P("R01") in t for t in texts) and any(P("Z01") in t for t in texts), f"برچسبِ قفسه و منطقه در سه‌بعدی (got {texts[:6]})")
-check("طبقه" in v3.info[rb] and "قفسه" in v3.info[rb], "اطلاعاتِ قفسه (نوع و تعدادِ طبقه/محل) برایِ نمایش با ماوس")
+check(any(P("R01") in t for t in texts) and any(P("Z01") in t for t in texts), f"برچسب قفسه و منطقه در سه‌بعدی (got {texts[:6]})")
+check("طبقه" in v3.info[rb] and "قفسه" in v3.info[rb], "اطلاعات قفسه (نوع و تعداد طبقه/محل) برای نمایش با ماوس")
 v3.hover(bulk1, None)
-check(P("B01") in v3.hover_label.text() and v3._hovered == bulk1, "با بردنِ ماوس رویِ Bin، کد و اطلاعاتش نمایش داده شد")
-check(any(p.pen().widthF() >= 2.5 for p in v3.polygons[bulk1]), "محلِ زیرِ ماوس پررنگ می‌شود")
+check(P("B01") in v3.hover_label.text() and v3._hovered == bulk1, "با بردن ماوس روی خانه، کد و اطلاعاتش نمایش داده شد")
+check(any(p.pen().widthF() >= 2.5 for p in v3.polygons[bulk1]), "محل زیر ماوس پررنگ می‌شود")
 v3.hover(None, None)
 v3.labels_check.setChecked(False)
-check(not any(isinstance(i, QGraphicsSimpleTextItem) for i in v3.scene.items()), "برچسب‌ها قابلِ‌خاموش‌کردن")
+check(not any(isinstance(i, QGraphicsSimpleTextItem) for i in v3.scene.items()), "برچسب‌ها قابل‌خاموش‌کردن")
 
 # ۵) پنلِ سمتِ راستِ نقشه: دکمه‌ها با ارتفاعِ کافی، اسکرول، اطلاعاتِ قفسه
-check(all(b.minimumHeight() >= 34 for b in ms.op_buttons.values()), "دکمه‌هایِ عملیات ارتفاعِ کافی دارند")
-check(isinstance(ms.side_tabs.widget(0), QScrollArea), "پنلِ جزئیات اسکرول دارد (هیچ بخشی پنهان/فشرده نمی‌شود)")
+check(all(b.minimumHeight() >= 34 for b in ms.op_buttons.values()), "دکمه‌های عملیات ارتفاع کافی دارند")
+check(isinstance(ms.side_tabs.widget(0), QScrollArea), "پنل جزئیات اسکرول دارد (هیچ بخشی پنهان/فشرده نمی‌شود)")
 rack_d = wl.create_location(company_id, wh, "RACK", "R05", zb, LF(width_m=D(1), length_m=D(4), height_m=D(2)))
 sh = wl.create_location(company_id, wh, "SHELF", "L01", rack_d, LF(height_m=D("0.8")))
 bn = wl.create_location(company_id, wh, "BIN", "B01", sh, LF(width_m=D(1)))
 ms.load_warehouse(wh)
 ms.select_location(bn, focus=False)
 check(P("R05") in ms.rack_title.text() and "طبقه" in ms.rack_info.text() and "عرض" in ms.rack_info.text(),
-      f"اطلاعاتِ قفسه (ابعاد، تعدادِ طبقه/محل) نمایش داده می‌شود (got {ms.rack_info.text()[:80]})")
+      f"اطلاعات قفسه (ابعاد، تعداد طبقه/محل) نمایش داده می‌شود (got {ms.rack_info.text()[:80]})")
 check(P("0.8") in ms.elevation_table.verticalHeaderItem(0).text(),
-      "ارتفاعِ طبقه در نمایِ قفسه")
-check("ابعاد" in ms.detail_info.text(), "ابعادِ محل در جزئیات")
+      "ارتفاع طبقه در نمای قفسه")
+check("ابعاد" in ms.detail_info.text(), "ابعاد محل در جزئیات")
 ms.select_location(zb, focus=False)
-check("انتخاب کنید" in ms.rack_info.text(), "بدونِ قفسه، راهنمایِ انتخاب نمایش داده می‌شود")
+check("انتخاب کنید" in ms.rack_info.text(), "بدون قفسه، راهنمای انتخاب نمایش داده می‌شود")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

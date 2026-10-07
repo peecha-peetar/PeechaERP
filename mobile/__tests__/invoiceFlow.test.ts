@@ -24,7 +24,7 @@ const ITEM = {
 
 const PRINT: InvoicePrintData = {
   document_id: 4, document_type_code: "SALES_INVOICE", document_no: 123, document_date: "2026-09-25", status_code: "POSTED",
-  company: { name: "شرکتِ <نمونه>", economic_code: "411", national_id: null },
+  company: { name: "شرکت <نمونه>", economic_code: "411", national_id: null },
   seller_name: "صفایی",
   customer: { detail_account_id: 5, code: "C-1", name: "فروشگاه & شرکا", phone: null, address: null },
   lines: [{ line_no: 1, item_code: "9101", item_name: "آب‌معدنی", uom_code: "PCS", quantity: "3.000000", unit_price: "10000", discount_amount: "0", tax_amount: "0", line_total: "30000" }],
@@ -34,10 +34,10 @@ const PRINT: InvoicePrintData = {
   settled_amount: "15000", remaining_amount: "15000",
 };
 
-describe("چاپِ فاکتور", () => {
+describe("چاپ فاکتور", () => {
   it("متن‌ها escape می‌شوند، ارقام فارسی و تاریخ شمسی است، نسیه و چک نمایش داده می‌شود", () => {
     const html = buildInvoiceHtml(PRINT);
-    expect(html).toContain("شرکتِ &lt;نمونه&gt;");
+    expect(html).toContain("شرکت &lt;نمونه&gt;");
     expect(html).toContain("فروشگاه &amp; شرکا");
     expect(html).not.toContain("<نمونه>");
     expect(html).toContain("شماره: ۱۲۳");
@@ -47,25 +47,25 @@ describe("چاپِ فاکتور", () => {
     expect(html).toContain("۱۴۰۵/۰۸/۱۰");
     expect(html).toContain('dir="rtl"');
     expect(html).toContain('font-family: "Vazirmatn"');
-    expect(html).not.toContain("پیش‌نمایش --");
+    expect(html).not.toContain("پیش‌نمایش —");
   });
 
-  it("فاکتورِ همگام‌نشده برچسبِ پیش‌نمایش دارد و شماره ندارد", () => {
+  it("فاکتور همگام‌نشده برچسب پیش‌نمایش دارد و شماره ندارد", () => {
     const html = buildInvoiceHtml({ ...PRINT, document_no: null });
-    expect(html).toContain("پیش‌نمایش --");
+    expect(html).toContain("پیش‌نمایش —");
     expect(html).toContain("پس از همگام‌سازی");
   });
 });
 
-describe("ورودی‌هایِ فارسی", () => {
-  it("ارقامِ فارسی/عربی و جداکننده‌ها تبدیل می‌شوند", () => {
+describe("ورودی‌های فارسی", () => {
+  it("ارقام فارسی/عربی و جداکننده‌ها تبدیل می‌شوند", () => {
     expect(toAsciiDigits("۱۲٬۳۴۵")).toBe("12345");
     expect(toAsciiDigits("٤٥٦")).toBe("456");
     expect(parseAmount("۱۵۰۰۰")).toBe(15000);
     expect(parseAmount("abc")).toBe(0);
   });
 
-  it("تاریخِ سررسیدِ شمسی به ISO تبدیل می‌شود و تاریخِ نامعتبر رد می‌شود", () => {
+  it("تاریخ سررسید شمسی به ISO تبدیل می‌شود و تاریخ نامعتبر رد می‌شود", () => {
     expect(parseJalaliDate("۱۴۰۵/۰۸/۱۵")).toBe("2026-11-06");
     expect(parseJalaliDate("1405-8-15")).toBe("2026-11-06");
     expect(parseJalaliDate("1405/13/01")).toBeNull();
@@ -74,8 +74,8 @@ describe("ورودی‌هایِ فارسی", () => {
   });
 });
 
-describe("سبد و پیش‌نمایشِ محلی", () => {
-  it("جمع، اقلامِ بی‌قیمت و ماندهٔ نسیه درست است", () => {
+describe("سبد و پیش‌نمایش محلی", () => {
+  it("جمع، اقلام بی‌قیمت و ماندهٔ نسیه درست است", () => {
     const cart = {
       1: { item: ITEM, quantity: 3, unitPrice: 10000, discountAmount: 0, taxPercent: 0 },
       2: { item: { ...ITEM, item_id: 2 }, quantity: 1, unitPrice: null, discountAmount: 0, taxPercent: 0 },
@@ -93,7 +93,7 @@ describe("سبد و پیش‌نمایشِ محلی", () => {
 
   // طبقِ باگِ واقعیِ کشف‌شده (R210): تخفیفِ resolve_price و مالياتِ
   // ارزش‌افزوده قبلاً هیچ‌جایِ سبد/پیش‌نمایش/مبلغِ نسیه لحاظ نمی‌شدند.
-  it("تخفیف و مالياتِ ارزش‌افزوده در جمعِ سبد و مبلغِ هر ردیف لحاظ می‌شود", () => {
+  it("تخفیف و ماليات ارزش‌افزوده در جمع سبد و مبلغ هر ردیف لحاظ می‌شود", () => {
     const line = { item: ITEM, quantity: 3, unitPrice: 10000, discountAmount: 3000, taxPercent: 9 };
     // خالص = ۳×۱۰۰۰۰ − ۳۰۰۰ = ۲۷۰۰۰ -- مالیات = ۲۷۰۰۰×۹٪ = ۲۴۳۰ -- جمع = ۲۹۴۳۰
     expect(lineTotalAmount(line)).toBe(29430);
@@ -103,14 +103,14 @@ describe("سبد و پیش‌نمایشِ محلی", () => {
     expect(cartTotal(cart)).toBe(29430);
   });
 
-  it("قیمتِ دستیِ ویزیتور تخفیف را صفر می‌کند ولی مالیات همچنان لحاظ می‌شود", () => {
+  it("قیمت دستی ویزیتور تخفیف را صفر می‌کند ولی مالیات همچنان لحاظ می‌شود", () => {
     const line = { item: ITEM, quantity: 2, unitPrice: 5000, discountAmount: 0, manualPrice: true, taxPercent: 9 };
     expect(lineTotalAmount(line)).toBe(10900);
   });
 });
 
-describe("کشِ کاتالوگ", () => {
-  it("پس از فروشِ آفلاین موجودیِ محلیِ خودرو کم می‌شود و منفی نمی‌شود", async () => {
+describe("کش کاتالوگ", () => {
+  it("پس از فروش آفلاین موجودی محلی خودرو کم می‌شود و منفی نمی‌شود", async () => {
     const cache = new CatalogCache(new InMemoryKeyValueStore());
     const catalog: CatalogResponse = { items: [ITEM, { ...ITEM, item_id: 2, stock_quantity: null }], categories: [], brands: [] };
     await cache.saveCatalog(7, catalog);
@@ -123,7 +123,7 @@ describe("کشِ کاتالوگ", () => {
   });
 });
 
-describe("SyncEngine و فاکتورِ پخشِ گرم", () => {
+describe("SyncEngine و فاکتور پخش گرم", () => {
   async function build(fetcher: Fetcher) {
     const kv = new InMemoryKeyValueStore();
     const tokens = new TokenStore(kv);
@@ -139,18 +139,18 @@ describe("SyncEngine و فاکتورِ پخشِ گرم", () => {
     currency_id: 1, lines: [{ item_id: 1, uom_id: 1, quantity: "1", unit_price: "1000", discount_amount: "0" }], post_immediately: true,
   };
 
-  it("شماره و هشدارِ تسویهٔ سرور برایِ صفحهٔ چاپ ذخیره می‌شود", async () => {
+  it("شماره و هشدار تسویهٔ سرور برای صفحهٔ چاپ ذخیره می‌شود", async () => {
     const fetcher = jest.fn(async (url: any) => {
-      if (String(url).endsWith("/orders")) return jsonResponse(200, { document_id: 42, line_ids: [7], document_no: 15, settlement_warning: "بدونِ سندِ دریافت" });
+      if (String(url).endsWith("/orders")) return jsonResponse(200, { document_id: 42, line_ids: [7], document_no: 15, settlement_warning: "بدون سند دریافت" });
       return jsonResponse(200, { delivery_confirmation_id: 1 });
     }) as unknown as Fetcher;
     const { queue, results, engine } = await build(fetcher);
     const action = await queue.enqueue({ type: "CREATE_VAN_SALE_DELIVERY", payload: { order: ORDER, delivery: { notes: null } } });
     await engine.pushQueue();
-    expect(await results.get(action.idempotencyKey)).toEqual({ documentId: 42, documentNo: 15, settlementWarning: "بدونِ سندِ دریافت" });
+    expect(await results.get(action.idempotencyKey)).toEqual({ documentId: 42, documentNo: 15, settlementWarning: "بدون سند دریافت" });
   });
 
-  it("دو فراخوانِ هم‌زمانِ pushQueue فاکتور را دوبار نمی‌فرستند", async () => {
+  it("دو فراخوان هم‌زمان pushQueue فاکتور را دوبار نمی‌فرستند", async () => {
     let orderCalls = 0;
     const fetcher = jest.fn(async (url: any) => {
       if (String(url).endsWith("/orders")) {

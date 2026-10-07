@@ -1,14 +1,14 @@
 """سرویس صدور سند حسابداری (دفتر روزنامه).
 
-هر سند در این مرحله با شماره‌ی موقت (temporary_no) و وضعیت TEMPORARY ثبت
-می‌شود؛ تخصیص شماره‌ی دائم (permanent_no) طبق طراحی دیتابیس فقط از طریق
-approve_journal_entry انجام می‌شود — یا مستقیم (بدونِ گردشِ کارِ تعریف‌شده)
-یا از طریقِ کارتابل (services/cartable.py؛ در پایینِ همین فایل به‌عنوانِ
-handlerِ form_code="journal_entry" ثبت‌نام شده) — و بعد از آن دیگر قابل
+هر سند در این مرحله با شمارهٔ موقت (temporary_no) و وضعیت TEMPORARY ثبت
+می‌شود؛ تخصیص شمارهٔ دائم (permanent_no) طبق طراحی دیتابیس فقط از طریق
+approve_journal_entry انجام می‌شود — یا مستقیم (بدون گردش کار تعریف‌شده)
+یا از طریق کارتابل (services/cartable.py؛ در پایین همین فایل به‌عنوان
+handler form_code="journal_entry" ثبت‌نام شده) — و بعد از آن دیگر قابل
 تغییر نیست (تریگر tr_journal_entries_prevent_permanent_no_change).
 
 سال مالی هم به‌صورت خودکار از روی fiscal_year_start_month/day شرکت و
-تاریخِ سند محاسبه و در صورت نبود ساخته می‌شود — چون هنوز صفحه‌ی مدیریت سال
+تاریخ سند محاسبه و در صورت نبود ساخته می‌شود — چون هنوز صفحهٔ مدیریت سال
 مالی وجود ندارد و بدون آن هیچ سندی قابل ثبت نیست.
 """
 
@@ -47,9 +47,9 @@ _BASE_QUANT = decimal.Decimal("0.01")
 
 
 def company_has_any_entries(company_id: int) -> bool:
-    """آیا این شرکت حتی یک سند ثبت‌شده دارد — برایِ قفل‌کردنِ تنظیماتِ
-    کدینگ (تعدادِ رقم/بازه‌ی حساب‌ها و گروه‌هایِ تفصیلی) بعدِ اولین سند،
-    طبقِ درخواستِ صریح."""
+    """آیا این شرکت حتی یک سند ثبت‌شده دارد — برای قفل‌کردن تنظیمات
+    کدینگ (تعداد رقم/بازهٔ حساب‌ها و گروه‌های تفصیلی) بعد اولین سند،
+    طبق درخواست صریح."""
     with new_session() as session:
         return (
             session.scalar(
@@ -60,7 +60,7 @@ def company_has_any_entries(company_id: int) -> bool:
 
 
 def _lines_snapshot(lines) -> list[dict]:
-    """نسخه‌ی قابلِ‌سریالایز (JSON) از ردیف‌های سند — برایِ ردِ حسابرسی."""
+    """نسخهٔ قابل‌سریالایز (JSON) از ردیف‌های سند — برای رد حسابرسی."""
     return [
         {
             "account_id": ln.account_id,
@@ -76,8 +76,8 @@ def _lines_snapshot(lines) -> list[dict]:
 
 
 def _snapshot_existing_entry(session, journal_entry_id: int) -> dict:
-    """نسخه‌ی قابلِ‌سریالایزِ سند و ردیف‌هایش، خوانده‌شده از همان
-    session — برایِ ثبتِ «قبل» در ردِ حسابرسیِ ویرایش/حذف."""
+    """نسخهٔ قابل‌سریالایز سند و ردیف‌هایش، خوانده‌شده از همان
+    session — برای ثبت «قبل» در رد حسابرسی ویرایش/حذف."""
     entry = session.get(JournalEntry, journal_entry_id)
     lines = session.scalars(
         select(JournalEntryLine)
@@ -167,12 +167,12 @@ class _ResolvedLine:
 def _resolve_lines(
     session, company: Company, real_lines: list[LineInput], *, require_balance: bool = True
 ) -> list[_ResolvedLine]:
-    """اعتبارسنجیِ حساب‌ها/ابعادِ تفصیلی + تعیینِ ارز و نرخِ هر ردیف — ارزِ
-    مشخص‌نشده یعنی ارزِ پایه (نرخ ۱)؛ ارزِ غیرِپایه باید هم برای شرکت فعال
-    باشد و هم (اگر حساب به ارزِ خاصی محدود شده) با ارزِ حساب یکی باشد.
-    require_balance=False برای سندِ پیش‌نویس: حساب/بُعد/ارز هنوز اعتبارسنجی
-    می‌شوند (چون مقادیرِ نامعتبر هیچ‌وقت نباید ذخیره شوند)، فقط شرطِ تساویِ
-    جمعِ بدهکار/بستانکار موقتاً نادیده گرفته می‌شود."""
+    """اعتبارسنجی حساب‌ها/ابعاد تفصیلی + تعیین ارز و نرخ هر ردیف — ارز
+    مشخص‌نشده یعنی ارز پایه (نرخ ۱)؛ ارز غیرپایه باید هم برای شرکت فعال
+    باشد و هم (اگر حساب به ارز خاصی محدود شده) با ارز حساب یکی باشد.
+    require_balance=False برای سند پیش‌نویس: حساب/بُعد/ارز هنوز اعتبارسنجی
+    می‌شوند (چون مقادیر نامعتبر هیچ‌وقت نباید ذخیره شوند)، فقط شرط تساوی
+    جمع بدهکار/بستانکار موقتاً نادیده گرفته می‌شود."""
     account_ids = [ln.account_id for ln in real_lines]
     accounts = session.scalars(select(ChartOfAccount).where(ChartOfAccount.account_id.in_(account_ids))).all()
     accounts_by_id = {a.account_id: a for a in accounts}
@@ -272,7 +272,7 @@ def _resolve_lines(
                 sorted(dimension_labels_by_id.get(d, str(d)) for d in missing)
             )
             raise ValueError(
-                f"برای حساب «{account.full_code}» انتخابِ «{missing_labels}» الزامی است و فراموش شده است."
+                f"برای حساب «{account.full_code}» انتخاب «{missing_labels}» الزامی است و فراموش شده است."
             )
 
         required_person_groups = required_person_groups_by_account.get(ln.account_id)
@@ -285,20 +285,20 @@ def _resolve_lines(
                 or person_row.person_group_id not in required_person_groups
             ):
                 raise ValueError(
-                    f"برایِ حساب «{account.full_code}» انتخابِ یک تفصیلیِ اشخاص از گروهِ مجازِ همین حساب الزامی است."
+                    f"برای حساب «{account.full_code}» انتخاب یک تفصیلی اشخاص از گروه مجاز همین حساب الزامی است."
                 )
 
         currency_id = ln.currency_id or company.base_currency_id
         if account.currency_id is not None and account.currency_id != currency_id:
-            raise ValueError(f"حساب «{account.full_code}» فقط با ارزِ مشخص‌شده‌ی خودش قابل ثبت است.")
+            raise ValueError(f"حساب «{account.full_code}» فقط با ارز مشخص‌شدهٔ خودش قابل ثبت است.")
         if currency_id not in enabled_currency_ids:
-            raise ValueError(f"ارزِ انتخاب‌شده برای ردیفِ حساب «{account.full_code}» برای این شرکت فعال نیست.")
+            raise ValueError(f"ارز انتخاب‌شده برای ردیف حساب «{account.full_code}» برای این شرکت فعال نیست.")
 
         if currency_id == company.base_currency_id:
             exchange_rate = decimal.Decimal(1)
         else:
             if not ln.exchange_rate or ln.exchange_rate <= 0:
-                raise ValueError(f"نرخِ ارز برای ردیفِ حساب «{account.full_code}» مشخص نشده است.")
+                raise ValueError(f"نرخ ارز برای ردیف حساب «{account.full_code}» مشخص نشده است.")
             exchange_rate = ln.exchange_rate
 
         resolved.append(_ResolvedLine(line=ln, currency_id=currency_id, exchange_rate=exchange_rate))
@@ -311,7 +311,7 @@ def _resolve_lines(
             )
         ).all()
         if set(valid_detail_accounts) != detail_account_ids:
-            raise ValueError("یکی از حساب‌های تفصیلیِ انتخاب‌شده نامعتبر است.")
+            raise ValueError("یکی از حساب‌های تفصیلی انتخاب‌شده نامعتبر است.")
 
     if require_balance:
         total_debit = sum((_base_amount(r.line.debit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
@@ -325,7 +325,7 @@ def _resolve_lines(
                 or 0
             )
             raise ValueError(
-                f"سند تراز نیست: جمع بدهکار (معادلِ ارزِ پایه) "
+                f"سند تراز نیست: جمع بدهکار (معادل ارز پایه) "
                 f"{numerals.format_money(total_debit, base_decimal_places)} "
                 f"با جمع بستانکار {numerals.format_money(total_credit, base_decimal_places)} برابر نیست."
             )
@@ -346,12 +346,12 @@ def fiscal_year_bounds(
 
 
 def peek_next_temporary_no(company_id: int, document_date: datetime.date) -> int:
-    """پیش‌نمایشِ شماره‌یِ موقتی که سندِ تازه (اگر همین حالا ذخیره شود)
-    خواهد گرفت — طبقِ درخواستِ صریح، بالایِ فرمِ سندِ جدید نمایش داده
-    می‌شود، پیش از ذخیره. کاملاً read-only است (برخلافِ
-    _get_or_create_fiscal_year که در مسیرِ ذخیره‌یِ واقعی صدا زده می‌شود،
-    این تابع سالِ مالیِ تازه نمی‌سازد — اگر سالِ مالیِ این تاریخ هنوز
-    وجود نداشته باشد، یعنی این اولین سندِ آن سال خواهد بود، پس ۱ برمی‌گردد)."""
+    """پیش‌نمایش شمارهٔ موقتی که سند تازه (اگر همین حالا ذخیره شود)
+    خواهد گرفت — طبق درخواست صریح، بالای فرم سند جدید نمایش داده
+    می‌شود، پیش از ذخیره. کاملاً read-only است (برخلاف
+    _get_or_create_fiscal_year که در مسیر ذخیرهٔ واقعی صدا زده می‌شود،
+    این تابع سال مالی تازه نمی‌سازد — اگر سال مالی این تاریخ هنوز
+    وجود نداشته باشد، یعنی این اولین سند آن سال خواهد بود، پس ۱ برمی‌گردد)."""
     with new_session() as session:
         company = session.get(Company, company_id)
         if company is None:
@@ -388,25 +388,25 @@ def _get_or_create_fiscal_year(session, company: Company, on_date: datetime.date
 
 
 def _ensure_fiscal_year_open(fiscal_year: FiscalYear) -> None:
-    """باگِ پیداشده در حسابرسی: صفحه‌ی سال‌هایِ مالی به کاربر اجازه‌یِ
-    «بستن» سالِ مالی را می‌دهد (fiscal_years.set_closed) و انتظارِ منطقیِ
-    هر کاربرِ حسابداری این است که بعدِ بستن، دیگر نتوان در آن سال سند ثبت/
+    """باگ پیداشده در حسابرسی: صفحهٔ سال‌های مالی به کاربر اجازهٔ
+    «بستن» سال مالی را می‌دهد (fiscal_years.set_closed) و انتظار منطقی
+    هر کاربر حسابداری این است که بعد بستن، دیگر نتوان در آن سال سند ثبت/
     ویرایش کرد؛ ولی قبل از این تابع، create/update_journal_entry اصلاً
-    is_closed را نگاه نمی‌کردند — یعنی «بستن سالِ مالی» در عمل هیچ اثری
-    نداشت. این تابع همان قیدِ ازپیش‌مستندشده در docs/accounting-module.md
-    («باز بودنِ دوره‌ی مالیِ تاریخِ سند») را واقعاً اعمال می‌کند."""
+    is_closed را نگاه نمی‌کردند — یعنی «بستن سال مالی» در عمل هیچ اثری
+    نداشت. این تابع همان قید ازپیش‌مستندشده در docs/accounting-module.md
+    («باز بودن دورهٔ مالی تاریخ سند») را واقعاً اعمال می‌کند."""
     if fiscal_year.is_closed:
         raise ValueError(
-            f"سالِ مالیِ «{fiscal_year.code}» بسته است؛ ثبت یا ویرایشِ سند در این سال ممکن نیست."
+            f"سال مالی «{fiscal_year.code}» بسته است؛ ثبت یا ویرایش سند در این سال ممکن نیست."
         )
 
 
 def _ensure_fiscal_period_open(session, fiscal_year_id: int, document_date: datetime.date) -> None:
-    """طبقِ حسابرسیِ صریح: جدولِ FiscalPeriod (دوره‌هایِ ماهانه‌یِ هر سالِ
-    مالی) ساخته می‌شد ولی هیچ‌جای برنامه چک نمی‌شد — یعنی بستنِ یک دوره‌ی
-    ماهانه در عمل هیچ اثری نداشت. اگر برایِ این سالِ مالی اصلاً دوره‌ای
-    تعریف نشده باشد (مثلاً سالِ مالی به‌صورتِ خودکار از رویِ اولین سند ساخته
-    شده، نه از صفحه‌ی «سال‌های مالی»)، این چک بی‌اثر می‌ماند — دوره‌بندی
+    """طبق حسابرسی صریح: جدول FiscalPeriod (دوره‌های ماهانهٔ هر سال
+    مالی) ساخته می‌شد ولی هیچ‌جای برنامه چک نمی‌شد — یعنی بستن یک دوره‌ی
+    ماهانه در عمل هیچ اثری نداشت. اگر برای این سال مالی اصلاً دوره‌ای
+    تعریف نشده باشد (مثلاً سال مالی به‌صورت خودکار از روی اولین سند ساخته
+    شده، نه از صفحهٔ «سال‌های مالی»)، این چک بی‌اثر می‌ماند — دوره‌بندی
     اختیاری است، نه اجباری."""
     period = session.scalar(
         select(FiscalPeriod).where(
@@ -417,8 +417,8 @@ def _ensure_fiscal_period_open(session, fiscal_year_id: int, document_date: date
     )
     if period is not None and period.is_closed:
         raise ValueError(
-            f"دوره‌ی مالیِ شامل تاریخِ {numerals.format_jalali_date(document_date)} بسته است؛ "
-            "ثبت یا ویرایشِ سند در این دوره ممکن نیست."
+            f"دورهٔ مالی شامل تاریخ {numerals.format_jalali_date(document_date)} بسته است؛ "
+            "ثبت یا ویرایش سند در این دوره ممکن نیست."
         )
 
 
@@ -433,7 +433,7 @@ def create_journal_entry(
     entry_type_code: str = "NORMAL",
     session=None,
 ) -> JournalEntryResult:
-    """R262: با session، سند در همان تراکنشِ فراخوان ساخته می‌شود (بدونِ commit) -- ثبتِ اتمیکِ ماژول‌ها مثلِ دارایی."""
+    """R262: با session، سند در همان تراکنش فراخوان ساخته می‌شود (بدون commit) — ثبت اتمیک ماژول‌ها مثل دارایی."""
     require_balance = not as_draft
     real_lines = _validate_lines(lines, require_balance=require_balance)
     if session is not None:
@@ -459,7 +459,7 @@ def _create_journal_entry_in(session, company_id, created_by_user_id, document_d
     entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == entry_type_code))
     status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
     if entry_type is None or status is None:
-        raise ValueError("داده‌ی پایه‌ی نوع/وضعیت سند در دیتابیس یافت نشد.")
+        raise ValueError("دادهٔ پایهٔ نوع/وضعیت سند در دیتابیس یافت نشد.")
 
     fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
     _ensure_fiscal_year_open(fiscal_year)
@@ -604,8 +604,8 @@ def list_journal_entries(company_id: int, entry_type_codes: list[str] | None = N
 
 
 def list_recent_line_descriptions(company_id: int, limit: int = 300) -> list[str]:
-    """فهرستِ متمایزِ شرح‌های قبلاً واردشده برای ردیف‌های سند — برای
-    پیشنهادِ زنده هنگامِ تایپ در فیلدِ «شرح ردیف» (طبق درخواستِ صریح)."""
+    """فهرست متمایز شرح‌های قبلاً واردشده برای ردیف‌های سند — برای
+    پیشنهاد زنده هنگام تایپ در فیلد «شرح ردیف» (طبق درخواست صریح)."""
     with new_session() as session:
         rows = session.execute(
             select(JournalEntryLine.description)
@@ -623,8 +623,8 @@ def list_recent_line_descriptions(company_id: int, limit: int = 300) -> list[str
 
 
 def list_recent_entry_descriptions(company_id: int, limit: int = 300) -> list[str]:
-    """فهرستِ متمایزِ شرح‌هایِ قبلاً واردشده برایِ سرِ سند (نه ردیف‌ها) —
-    طبقِ درخواستِ صریح، برایِ پیشنهادِ زنده هنگامِ تایپِ «شرحِ سند»."""
+    """فهرست متمایز شرح‌های قبلاً واردشده برای سر سند (نه ردیف‌ها) —
+    طبق درخواست صریح، برای پیشنهاد زنده هنگام تایپ «شرح سند»."""
     with new_session() as session:
         rows = session.execute(
             select(JournalEntry.description)
@@ -718,7 +718,7 @@ def update_journal_entry(
         status_code = "DRAFT" if as_draft else "TEMPORARY"
         new_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
         if new_status is None:
-            raise ValueError("داده‌ی پایه‌ی وضعیتِ سند در دیتابیس یافت نشد.")
+            raise ValueError("دادهٔ پایهٔ وضعیت سند در دیتابیس یافت نشد.")
 
         entry.document_date = document_date
         entry.description = description or None
@@ -854,7 +854,7 @@ def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user
         except IntegrityError as exc:
             session.rollback()
             raise ValueError(
-                "این سند توسطِ رکوردِ دیگری (مثلاً تنخواه‌گردان یا دسته‌یِ پرداختِ حقوق) هنوز استفاده می‌شود "
+                "این سند توسط رکورد دیگری (مثلاً تنخواه‌گردان یا دستهٔ پرداخت حقوق) هنوز استفاده می‌شود "
                 "و نمی‌توان مستقیماً حذفش کرد. ابتدا آن رکورد را حذف/جدا کنید."
             ) from exc
 
@@ -872,15 +872,15 @@ def _next_permanent_no(session, company_id: int, fiscal_year_id: int) -> int:
 
 
 def approve_journal_entry(journal_entry_id: int, company_id: int, posted_by_user_id: int) -> int:
-    """طبقِ حسابرسیِ صریح: طراحیِ دیتابیس از اول یک گردشِ کارِ «تاییدِ
-    کارتابل» را پیش‌بینی کرده بود (ستون‌هایِ posted_by_user_id/posted_at
-    و تریگرِ tr_journal_entries_prevent_permanent_no_change) ولی هیچ
-    سرویسی این گردشِ کار را پیاده نمی‌کرد — یعنی هر سندی برایِ همیشه
+    """طبق حسابرسی صریح: طراحی دیتابیس از اول یک گردش کار «تایید
+    کارتابل» را پیش‌بینی کرده بود (ستون‌های posted_by_user_id/posted_at
+    و تریگر tr_journal_entries_prevent_permanent_no_change) ولی هیچ
+    سرویسی این گردش کار را پیاده نمی‌کرد — یعنی هر سندی برای همیشه
     TEMPORARY می‌ماند و permanent_no همیشه NULL بود. این تابع همان
-    تاییدِ کارتابل است: سندِ TEMPORARY را به PERMANENT ارتقا می‌دهد و
-    شماره‌یِ دائمِ واقعی می‌گیرد (بعد از این، طبقِ تریگرِ دیتابیس دیگر
-    قابلِ‌تغییر نیست؛ create/update/delete هم همین حالا فقط
-    TEMPORARY/DRAFT را می‌پذیرند، پس سندِ دائم به‌طورِ طبیعی غیرقابلِ‌
+    تایید کارتابل است: سند TEMPORARY را به PERMANENT ارتقا می‌دهد و
+    شمارهٔ دائم واقعی می‌گیرد (بعد از این، طبق تریگر دیتابیس دیگر
+    قابل‌تغییر نیست؛ create/update/delete هم همین حالا فقط
+    TEMPORARY/DRAFT را می‌پذیرند، پس سند دائم به‌طور طبیعی غیرقابل‌
     ویرایش/حذف می‌شود)."""
     with new_session() as session:
         entry = session.get(JournalEntry, journal_entry_id)
@@ -888,7 +888,7 @@ def approve_journal_entry(journal_entry_id: int, company_id: int, posted_by_user
             raise ValueError("سند نامعتبر است.")
         status = session.get(JournalEntryStatus, entry.status_id)
         if status is None or status.code != "TEMPORARY":
-            raise ValueError("فقط سندهایِ موقت قابلِ تایید (ارتقا به دائم) هستند.")
+            raise ValueError("فقط سندهای موقت قابل تایید (ارتقا به دائم) هستند.")
         fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
         if fiscal_year is not None:
             _ensure_fiscal_year_open(fiscal_year)
@@ -896,7 +896,7 @@ def approve_journal_entry(journal_entry_id: int, company_id: int, posted_by_user
 
         permanent_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "PERMANENT"))
         if permanent_status is None:
-            raise ValueError("داده‌ی پایه‌ی وضعیتِ «دائم» در دیتابیس یافت نشد.")
+            raise ValueError("دادهٔ پایهٔ وضعیت «دائم» در دیتابیس یافت نشد.")
 
         next_no = _next_permanent_no(session, company_id, entry.fiscal_year_id)
         entry.permanent_no = next_no
@@ -919,12 +919,12 @@ def approve_journal_entry(journal_entry_id: int, company_id: int, posted_by_user
 
 
 def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_user_id: int) -> JournalEntryResult:
-    """سندِ برگشتی (اصلاحیه) برایِ یک سندِ دائم. طبقِ طراحیِ دیتابیس، سندِ
-    دائم دیگر قابلِ‌ویرایش/حذف نیست، پس تنها راهِ خنثی‌کردنِ اثرش، سندی
-    تازه با بدهکار/بستانکارِ معکوسِ همان ردیف‌هاست (ستونِ خودِ مدل هم
-    reversed_entry_id دارد، دقیقاً برایِ همین). سندِ برگشتی بلافاصله
-    خودش هم دائم می‌شود (نه موقتِ منتظرِ تاییدِ جداگانه) چون هدفش خنثی‌
-    کردنِ فوریِ اثرِ یک سندِ ازپیش‌دائم در دفاتر است."""
+    """سند برگشتی (اصلاحیه) برای یک سند دائم. طبق طراحی دیتابیس، سند
+    دائم دیگر قابل‌ویرایش/حذف نیست، پس تنها راه خنثی‌کردن اثرش، سندی
+    تازه با بدهکار/بستانکار معکوس همان ردیف‌هاست (ستون خود مدل هم
+    reversed_entry_id دارد، دقیقاً برای همین). سند برگشتی بلافاصله
+    خودش هم دائم می‌شود (نه موقت منتظر تایید جداگانه) چون هدفش خنثی‌
+    کردن فوری اثر یک سند ازپیش‌دائم در دفاتر است."""
     with new_session() as session:
         original = session.get(JournalEntry, journal_entry_id)
         if original is None or original.company_id != company_id:
@@ -935,7 +935,7 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         # PERMANENT -- برگشت‌زدنِ آن هم دقیقاً همان مکانیزم را لازم دارد،
         # پس این محدودیت به TEMPORARY هم تعمیم داده شد.
         if original_status is None or original_status.code not in ("TEMPORARY", "PERMANENT"):
-            raise ValueError("فقط سندهایِ موقت یا دائم قابلِ برگشت‌زدن‌اند.")
+            raise ValueError("فقط سندهای موقت یا دائم قابل برگشت‌زدن‌اند.")
 
         company = session.get(Company, company_id)
         if company is None:
@@ -960,7 +960,7 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         permanent_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "PERMANENT"))
         reversed_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "REVERSED"))
         if entry_type is None or permanent_status is None or reversed_status is None:
-            raise ValueError("داده‌ی پایه‌ی نوع/وضعیتِ سند در دیتابیس یافت نشد.")
+            raise ValueError("دادهٔ پایهٔ نوع/وضعیت سند در دیتابیس یافت نشد.")
 
         next_temp_no = (
             session.scalar(
@@ -974,7 +974,7 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         next_permanent_no = _next_permanent_no(session, company_id, fiscal_year.fiscal_year_id)
 
         original_no = original.permanent_no if original.permanent_no is not None else original.temporary_no
-        original_no_label = "دائمِ" if original.permanent_no is not None else "موقتِ"
+        original_no_label = "دائم" if original.permanent_no is not None else "موقت"
         reversal = JournalEntry(
             company_id=company_id,
             fiscal_year_id=fiscal_year.fiscal_year_id,
@@ -983,7 +983,7 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
             document_date=document_date,
             entry_type_id=entry_type.entry_type_id,
             status_id=permanent_status.status_id,
-            description=f"سندِ برگشتیِ سندِ {original_no_label} شماره‌ی {original_no}",
+            description=f"سند برگشتی سند {original_no_label} شماره‌ی {original_no}",
             is_system_generated=True,
             reversed_entry_id=original.journal_entry_id,
             created_by_user_id=created_by_user_id,
@@ -1051,30 +1051,30 @@ def merge_journal_entries(
     *,
     description: str | None = None,
 ) -> JournalEntryResult:
-    """طبقِ درخواستِ صریح («امکانِ ادغامِ اسناد در یک سندِ واحدِ جدید»):
-    چند سندِ *موقت* را در یک سندِ تازه ادغام می‌کند — ردیف‌هایِ هم‌حساب/
-    هم‌ارز/هم‌تفصیلی با هم جمع می‌شوند (سندِ نهایی کوتاه‌تر می‌شود)،
-    اسنادِ اصلی به‌جایِ حذف، طبقِ همان قراردادِ مستندشده در schema
-    (acc.journal_entry_statuses.CANCELLED: «ابطال‌شده/ادغام‌شده در سندِ
-    موقتِ دیگر») به وضعیتِ ابطال‌شده تغییر می‌کنند — برایِ حفظِ ردِ
-    حسابرسی. فقط اسنادِ TEMPORARY قابلِ ادغام‌اند (طبقِ همان قراردادِ
-    schema: «موقت: قابلِ ویرایش/ادغام»)."""
+    """طبق درخواست صریح («امکان ادغام اسناد در یک سند واحد جدید»):
+    چند سند *موقت* را در یک سند تازه ادغام می‌کند — ردیف‌های هم‌حساب/
+    هم‌ارز/هم‌تفصیلی با هم جمع می‌شوند (سند نهایی کوتاه‌تر می‌شود)،
+    اسناد اصلی به‌جای حذف، طبق همان قرارداد مستندشده در schema
+    (acc.journal_entry_statuses.CANCELLED: «ابطال‌شده/ادغام‌شده در سند
+    موقت دیگر») به وضعیت ابطال‌شده تغییر می‌کنند — برای حفظ رد
+    حسابرسی. فقط اسناد TEMPORARY قابل ادغام‌اند (طبق همان قرارداد
+    schema: «موقت: قابل ویرایش/ادغام»)."""
     if len(journal_entry_ids) < 2:
-        raise ValueError("برایِ ادغام، حداقل باید دو سند انتخاب شوند.")
+        raise ValueError("برای ادغام، حداقل باید دو سند انتخاب شوند.")
 
     with new_session() as session:
         originals = [session.get(JournalEntry, jid) for jid in journal_entry_ids]
         if any(o is None or o.company_id != company_id for o in originals):
-            raise ValueError("یکی از اسنادِ انتخاب‌شده نامعتبر است.")
+            raise ValueError("یکی از اسناد انتخاب‌شده نامعتبر است.")
         temporary_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "TEMPORARY"))
         cancelled_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "CANCELLED"))
         if temporary_status is None or cancelled_status is None:
-            raise ValueError("داده‌ی پایه‌ی وضعیتِ سند در دیتابیس یافت نشد.")
+            raise ValueError("دادهٔ پایهٔ وضعیت سند در دیتابیس یافت نشد.")
         if any(o.status_id != temporary_status.status_id for o in originals):
-            raise ValueError("فقط اسنادِ موقت قابلِ ادغام‌اند.")
+            raise ValueError("فقط اسناد موقت قابل ادغام‌اند.")
         entry_type_ids = {o.entry_type_id for o in originals}
         if len(entry_type_ids) > 1:
-            raise ValueError("اسنادِ انتخاب‌شده باید همه از یک نوعِ سند باشند.")
+            raise ValueError("اسناد انتخاب‌شده باید همه از یک نوع سند باشند.")
         entry_type = session.get(JournalEntryType, originals[0].entry_type_id)
 
         temporary_numbers = sorted(o.temporary_no for o in originals)
@@ -1113,7 +1113,7 @@ def merge_journal_entries(
         ln.debit = net if net > 0 else decimal.Decimal(0)
         ln.credit = -net if net < 0 else decimal.Decimal(0)
 
-    merged_description = description or f"سندِ ادغامیِ اسنادِ موقتِ شماره‌یِ {'، '.join(str(n) for n in temporary_numbers)}"
+    merged_description = description or f"سند ادغامی اسناد موقت شمارهٔ {'، '.join(str(n) for n in temporary_numbers)}"
     result = create_journal_entry(
         company_id,
         created_by_user_id,
@@ -1155,7 +1155,7 @@ def _cartable_on_approved(company_id: int, source_record_id: int, approved_by_us
 
 
 def _cartable_on_rejected(company_id: int, source_record_id: int, rejected_by_user_id: int, reason: str) -> None:
-    """سندِ ردشده به پیش‌نویس برمی‌گردد تا صادرکننده اصلاح و دوباره ارسال کند."""
+    """سند ردشده به پیش‌نویس برمی‌گردد تا صادرکننده اصلاح و دوباره ارسال کند."""
     with new_session() as session:
         entry = session.get(JournalEntry, source_record_id)
         if entry is None or entry.company_id != company_id:
@@ -1178,8 +1178,8 @@ def _cartable_describe(company_id: int, source_record_id: int) -> str:
     with new_session() as session:
         entry = session.get(JournalEntry, source_record_id)
         if entry is None or entry.company_id != company_id:
-            return f"سندِ حسابداری #{source_record_id}"
-        return f"سندِ حسابداری موقتِ شماره‌ی {numerals.to_persian_digits(str(entry.temporary_no))} — {entry.description or 'بدونِ شرح'}"
+            return f"سند حسابداری #{source_record_id}"
+        return f"سند حسابداری موقت شماره‌ی {numerals.to_persian_digits(str(entry.temporary_no))} — {entry.description or 'بدون شرح'}"
 
 
 def _register_cartable_handler() -> None:

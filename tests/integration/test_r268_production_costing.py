@@ -17,7 +17,7 @@ receive(r1, 5000, 10000)
 # مرکزِ کاری و مسیر: هر واحد ۰٫۱ ساعت کار (۶ دقیقه) و ۰٫۲ ساعت ماشین
 WCF, RO, BF, BL = pm.WorkCenterFields, pm.RoutingOpFields, pm.BomFields, pm.BomLineFields
 wc = pm.save_work_center(company_id, WCF(code="CUT", name="برش", labor_rate=D(500000), machine_rate=D(800000), overhead_rate=D(200000)))
-px = item("PX", "محصولِ X", "FINISHED_GOOD")
+px = item("PX", "محصول X", "FINISHED_GOOD")
 rt = pm.create_routing(company_id, px, "مسیر", [RO(10, "برش", wc, run_minutes=D(6), machine_minutes=D(12))])
 bom = pm.create_bom_version(company_id, px, BF(batch_size_qty=D(1), routing_id=rt))
 pm.add_bom_component(company_id, bom, BL(r1, D(1)))
@@ -104,7 +104,7 @@ for o in (oc, od):
 pk_.record_machine(company_id, uid, oc, pk_.MachineInput(hours=D(20)))
 pk_.record_machine(company_id, uid, od, pk_.MachineInput(hours=D(30)))
 period = fa_common.period_of(today)[0]
-pool = pk_.save_pool(company_id, "FOH", "سربارِ کارخانه", period, D(500000000), "MACHINE_HOURS", category="OVERHEAD", user_id=uid)
+pool = pk_.save_pool(company_id, "FOH", "سربار کارخانه", period, D(500000000), "MACHINE_HOURS", category="OVERHEAD", user_id=uid)
 prev = {p.order_id: p.amount for p in pk_.preview_pool(company_id, pool)}
 check(prev == {oc: D(200000000), od: D(300000000)}, "pool preview: 500M by machine hours 20/30")
 out = pk_.allocate_pool(company_id, uid, pool)
@@ -119,9 +119,9 @@ with new_session() as s:
 check(gl_balance(overhead_gl.account_id) == D(-2400000 - 1000000 - 500001000), "overhead applied credited")
 
 # ===== Scenario: Co-Products ============================================================================
-ca = item("CO-A", "محصولِ مشترکِ A", "FINISHED_GOOD")
-cb_ = item("CO-B", "محصولِ مشترکِ B", "FINISHED_GOOD")
-cc = item("CO-C", "محصولِ مشترکِ C", "FINISHED_GOOD")
+ca = item("CO-A", "محصول مشترک A", "FINISHED_GOOD")
+cb_ = item("CO-B", "محصول مشترک B", "FINISHED_GOOD")
+cc = item("CO-C", "محصول مشترک C", "FINISHED_GOOD")
 bj = pm.create_bom_version(company_id, ca, BF(batch_size_qty=D(500)))
 pm.add_bom_component(company_id, bj, BL(r1, D(1000)))
 pm.save_bom_output(company_id, bj, pm.BomOutputFields(cb_, "CO_PRODUCT", D(300)))
@@ -147,7 +147,7 @@ check(po.allocate_joint(D(1000), [D(1), D(1), D(1)]) == [D("333.33"), D("333.33"
 check(po.allocate_joint(D(1000), [D(600), D(400)], "MANUAL") == [D(600), D(400)], "manual joint amounts")
 
 # ===== کالایِ با روشِ STANDARD: انحرافِ رسید به حسابِ انحرافِ تولید ======================================
-ps = catalog_service.create_item(company_id, "PS", "محصولِ استاندارد", catalog_service.ItemFields(
+ps = catalog_service.create_item(company_id, "PS", "محصول استاندارد", catalog_service.ItemFields(
     item_kind_code="FINISHED_GOOD", base_uom_id=pcs, costing_method_code="STANDARD"))
 bs = pm.create_bom_version(company_id, ps, BF(batch_size_qty=D(1)))
 pm.add_bom_component(company_id, bs, BL(r1, D(1)))
@@ -181,7 +181,7 @@ cid = pk_.close_period(company_id, uid, period)
 check(cid > 0 and pk_.list_closings(company_id)[0].status_code == "FINALIZED", "period finalized")
 check(raises(lambda: pk_.record_labor(company_id, uid, oc, pk_.LaborInput(hours=D(1))), "بسته"), "closed period blocks new production postings")
 check(raises(lambda: pk_.close_period(company_id, uid, period), "قبلاً"), "period cannot close twice")
-pk_.reopen_period(company_id, uid, period, "اصلاحِ سربار")
+pk_.reopen_period(company_id, uid, period, "اصلاح سربار")
 pk_.record_labor(company_id, uid, oc, pk_.LaborInput(hours=D(1), rate=D(100)))
 check(True, "reopened period accepts postings")
 

@@ -66,7 +66,7 @@ function ToastView({ message, opacity }: { message: ToastMessage; opacity: Anima
 
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast باید داخلِ ToastProvider استفاده شود.");
+  if (!ctx) throw new Error("useToast باید داخل ToastProvider استفاده شود.");
   return ctx;
 }
 

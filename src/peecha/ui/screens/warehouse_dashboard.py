@@ -1,4 +1,4 @@
-"""داشبوردِ انبار -- R246: ۲۳ شاخص و ۱۵ نمودار؛ کلیک رویِ هر کارت/نمودار گزارشِ مبدا را با همان بازه باز می‌کند."""
+"""داشبورد انبار — R246: ۲۳ شاخص و ۱۵ نمودار؛ کلیک روی هر کارت/نمودار گزارش مبدا را با همان بازه باز می‌کند."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ _SERIES_COLORS = ("ACCENT", "CHART_ORANGE", "CHART_TEAL", "CHART_PURPLE")
 
 
 def render_series_chart(chart_view, labels: list[str], series: dict[str, list]) -> None:
-    """نمودارِ میله‌ایِ چندسری (ورود/خروج، آزاد/نقطهٔ سفارش، ...)."""
+    """نمودار میله‌ای چندسری (ورود/خروج، آزاد/نقطهٔ سفارش، ...)."""
     chart = _themed_chart()
     bar_series = QBarSeries()
     bar_series.setBarWidth(0.6)
@@ -60,7 +60,7 @@ def render_series_chart(chart_view, labels: list[str], series: dict[str, list]) 
 
 
 class WarehouseDashboard(_ProcurementDashboardBase):
-    TITLE = "داشبوردِ انبار"
+    TITLE = "داشبورد انبار"
 
     def __init__(self, main_window=None) -> None:
         super().__init__(main_window)
@@ -124,7 +124,7 @@ class WarehouseDashboard(_ProcurementDashboardBase):
         if generation != getattr(self, "_generation", 0):
             return
         if error is not None:
-            QMessageBox.warning(self, self.TITLE, f"بارگذاریِ داشبورد ناموفق بود:\n{error}")
+            QMessageBox.warning(self, self.TITLE, f"بارگذاری داشبورد ناموفق بود:\n{error}")
             return
         self._apply(*result)
 
@@ -135,7 +135,7 @@ class WarehouseDashboard(_ProcurementDashboardBase):
             card = self.cards[code]
             card._title_label.setText(kpi.title)
             card.set_value(format_kpi(kpi.value, kpi.kind, self._decimal_places))
-            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارشِ مبدا")
+            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارش مبدا")
         for key, data in self.chart_data.items():
             view = self.chart_views[key]
             if data["kind"] == "donut":

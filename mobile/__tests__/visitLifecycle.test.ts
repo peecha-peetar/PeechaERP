@@ -15,7 +15,7 @@ function jsonResponse(status: number, body: unknown): Response {
  * می‌فرستادند (چون شناسهٔ واقعی فقط بعدِ Syncِ موفقِ START_VISIT معلوم
  * می‌شود). این تست دقیقاً همان مسیر را (نه یک شبیه‌سازیِ ساده‌شده) از
  * طریقِ VisitCorrelationStore بازتولید می‌کند. */
-describe("Visit lifecycle correlation (رفعِ باگِ customer_visit_id)", () => {
+describe("Visit lifecycle correlation (رفع باگ customer_visit_id)", () => {
   async function buildEngine(fetcher: Fetcher) {
     const kv = new InMemoryKeyValueStore();
     const store = new TokenStore(kv);
@@ -27,7 +27,7 @@ describe("Visit lifecycle correlation (رفعِ باگِ customer_visit_id)", ()
     return { api, queue, cache, correlation, engine: new SyncEngine(api, queue, cache, correlation) };
   }
 
-  it("COMPLETE_VISIT با startActionKey، شناسهٔ واقعیِ برگشته از START_VISIT را می‌فرستد (نه visit_plan_id)", async () => {
+  it("COMPLETE_VISIT با startActionKey، شناسهٔ واقعی برگشته از START_VISIT را می‌فرستد (نه visit_plan_id)", async () => {
     const calls: { url: string }[] = [];
     const fetcher: Fetcher = jest.fn(async (url: string) => {
       calls.push({ url: String(url) });
@@ -53,7 +53,7 @@ describe("Visit lifecycle correlation (رفعِ باگِ customer_visit_id)", ()
     expect(completeCall?.url).not.toContain("/visits/999/");
   });
 
-  it("اگر START_VISیTِ مرتبط هنوز resolve نشده باشد، COMPLETE_VISIT به‌جایِ ارسالِ شناسهٔ غلط failedButKept می‌شود", async () => {
+  it("اگر START_VISیT مرتبط هنوز resolve نشده باشد، COMPLETE_VISIT به‌جای ارسال شناسهٔ غلط failedButKept می‌شود", async () => {
     const fetcher: Fetcher = jest.fn(async () => jsonResponse(204, undefined)) as unknown as Fetcher;
     const { engine, queue } = await buildEngine(fetcher);
 
@@ -69,7 +69,7 @@ describe("Visit lifecycle correlation (رفعِ باگِ customer_visit_id)", ()
     expect(await queue.size()).toBe(0);
   });
 
-  it("VisitCorrelationStore ماندگار است -- بعدِ حذفِ START_VISIT از صف هم جواب را نگه می‌دارد", async () => {
+  it("VisitCorrelationStore ماندگار است — بعد حذف START_VISIT از صف هم جواب را نگه می‌دارد", async () => {
     const kv = new InMemoryKeyValueStore();
     const correlation = new VisitCorrelationStore(kv);
     await correlation.resolve("key-1", 777);

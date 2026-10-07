@@ -1,11 +1,11 @@
-"""موتورِ بهایِ تمام‌شده -- تنها نقطهٔ ساخت/مصرفِ لایه و ثبتِ تخصیصِ بهایِ خروج (R257).
+"""موتور بهای تمام‌شده -- تنها نقطهٔ ساخت/مصرف لایه و ثبت تخصیص بهای خروج (R257).
 
-همهٔ توابع درونِ session و تراکنشِ خودِ inventory_engine.post_stock_document اجرا می‌شوند (نه تراکنشِ جدا)،
-تا ثبتِ دفترِ انبار، لایه‌ها، تخصیص و سندِ حسابداری با هم موفق یا با هم برگشت بخورند.
+همهٔ توابع درون session و تراکنش خود inventory_engine.post_stock_document اجرا می‌شوند (نه تراکنش جدا)،
+تا ثبت دفتر انبار، لایه‌ها، تخصیص و سند حسابداری با هم موفق یا با هم برگشت بخورند.
 
-هم‌زمانی: پیش از مصرف، یک قفلِ تراکنشیِ PostgreSQL رویِ (کالا، انبار) گرفته می‌شود و لایه‌ها هم
-FOR UPDATE خوانده می‌شوند؛ قیدِ دیتابیسیِ remaining_quantity BETWEEN 0 AND original_quantity
-هم آخرین سدِ مصرفِ بیش از موجودیِ لایه است.
+هم‌زمانی: پیش از مصرف، یک قفل تراکنشی PostgreSQL روی (کالا، انبار) گرفته می‌شود و لایه‌ها هم
+FOR UPDATE خوانده می‌شوند؛ قید دیتابیسی remaining_quantity BETWEEN 0 AND original_quantity
+هم آخرین سد مصرف بیش از موجودی لایه است.
 """
 
 from __future__ import annotations
@@ -25,15 +25,15 @@ from peecha.services.costing import strategies
 
 _ZERO = decimal.Decimal(0)
 NEGATIVE_POLICIES = {
-    "WAREHOUSE": "پیروی از تنظیمِ هر انبار (رفتارِ قبلی)",
-    "BLOCK": "مسدود -- خروجِ بیش از موجودی مجاز نیست",
-    "PENDING": "مجاز، بهایِ نهایی «در انتظار» تا محاسبهٔ مجدد",
-    "FALLBACK": "مجاز با آخرین بهایِ معتبر",
+    "WAREHOUSE": "پیروی از تنظیم هر انبار (رفتار قبلی)",
+    "BLOCK": "مسدود — خروج بیش از موجودی مجاز نیست",
+    "PENDING": "مجاز، بهای نهایی «در انتظار» تا محاسبهٔ مجدد",
+    "FALLBACK": "مجاز با آخرین بهای معتبر",
 }
 # روش‌هایی که جدولشان آماده است ولی موتورشان در تحویلِ بعد فعال می‌شود
 NOT_YET_AVAILABLE: dict[str, str] = {}
 STATUS_LABELS = {
-    "CALCULATED": "محاسبه‌شده", "PENDING": "در انتظار", "RECALCULATION_REQUIRED": "نیازمندِ محاسبهٔ مجدد", "ERROR": "خطا",
+    "CALCULATED": "محاسبه‌شده", "PENDING": "در انتظار", "RECALCULATION_REQUIRED": "نیازمند محاسبهٔ مجدد", "ERROR": "خطا",
 }
 
 
@@ -56,7 +56,7 @@ def effective_method(item: Item, company_method: str | None) -> str:
 
 
 def lock_item_warehouse(session, item_id: int, warehouse_id: int) -> None:
-    """قفلِ تراکنشی (تا پایانِ همین تراکنش) -- دو خروجِ هم‌زمانِ همان کالا/انبار پشتِ‌سرِهم اجرا می‌شوند."""
+    """قفل تراکنشی (تا پایان همین تراکنش) — دو خروج هم‌زمان همان کالا/انبار پشت‌سرهم اجرا می‌شوند."""
     session.execute(text("SELECT pg_advisory_xact_lock(:i, :w)"), {"i": int(item_id), "w": int(warehouse_id)})
 
 
@@ -83,8 +83,8 @@ def _open_layers(session, item_id: int, warehouse_id: int) -> list[CostLayer]:
 
 
 def ensure_opening_layer(session, company_id: int, item_id: int, warehouse_id: int) -> CostLayer | None:
-    """موجودیِ فعلی که لایه ندارد (مثلاً پیش از انتخابِ روشِ لایه‌ای) → یک لایهٔ OPENING_BALANCE با میانگینِ فعلی،
-    با قدیمی‌ترین تاریخ تا در FIFO اول مصرف شود. قابلِ ردیابی: source_type_code و ردیفِ دفترِ انبارِ مرجع."""
+    """موجودی فعلی که لایه ندارد (مثلاً پیش از انتخاب روش لایه‌ای) → یک لایهٔ OPENING_BALANCE با میانگین فعلی،
+    با قدیمی‌ترین تاریخ تا در FIFO اول مصرف شود. قابل ردیابی: source_type_code و ردیف دفتر انبار مرجع."""
     on_hand, value = session.execute(
         select(func.coalesce(func.sum(StockBalance.quantity_on_hand), 0),
                func.coalesce(func.sum(StockBalance.quantity_on_hand * StockBalance.average_unit_cost), 0))
@@ -108,7 +108,7 @@ def ensure_opening_layer(session, company_id: int, item_id: int, warehouse_id: i
 
 
 def line_lots(session, company_id: int, item_id: int, stock_line) -> list[tuple[int | None, int | None, decimal.Decimal]]:
-    """(batch_id, serial_id, مقدار)ِ مشخص‌شده برایِ ردیف پیش از ثبت (ورودیِ ردیابیِ خودِ ردیف یا ردیفِ بازرگانی)."""
+    """(batch_id, serial_id, مقدار) مشخص‌شده برای ردیف پیش از ثبت (ورودی ردیابی خود ردیف یا ردیف بازرگانی)."""
     from peecha.services import lot_tracking
 
     out = []
@@ -131,9 +131,9 @@ def consume_layers(session, *, company_id: int, item_id: int, warehouse_id: int,
                    preferred_source_line_id: int | None = None,
                    lots: list[tuple[int | None, int | None, decimal.Decimal]] | None = None,
                    ) -> tuple[list[strategies.Pick], decimal.Decimal]:
-    """مصرفِ لایه‌ها طبقِ راهبردِ روش؛ preferred_source_line_id (برگشت به تامین‌کننده) لایهٔ همان رسید را اول مصرف می‌کند.
-    lots (شناساییِ ویژه): لایه‌هایِ همان سریال/بچ اول -- به ترتیبِ راهبرد درونِ همان بچ.
-    خروجی: (انتخاب‌ها، مقدارِ تأمین‌نشده -- کمبود)."""
+    """مصرف لایه‌ها طبق راهبرد روش؛ preferred_source_line_id (برگشت به تامین‌کننده) لایهٔ همان رسید را اول مصرف می‌کند.
+    lots (شناسایی ویژه): لایه‌های همان سریال/بچ اول — به ترتیب راهبرد درون همان بچ.
+    خروجی: (انتخاب‌ها، مقدار تامین‌نشده — کمبود)."""
     lock_item_warehouse(session, item_id, warehouse_id)
     ensure_opening_layer(session, company_id, item_id, warehouse_id)
     layers = _open_layers(session, item_id, warehouse_id)
@@ -181,7 +181,7 @@ def consume_layers(session, *, company_id: int, item_id: int, warehouse_id: int,
 
 
 def sync_balance_average(session, item_id: int, warehouse_id: int) -> None:
-    """روش‌هایِ لایه‌ای: میانگینِ ماندهٔ انبار = ارزشِ لایه‌هایِ باز / مقدارشان، تا ارزشِ مانده با حسابداری یکی بماند."""
+    """روش‌های لایه‌ای: میانگین ماندهٔ انبار = ارزش لایه‌های باز / مقدارشان، تا ارزش مانده با حسابداری یکی بماند."""
     qty, value = session.execute(
         select(func.coalesce(func.sum(CostLayer.remaining_quantity), 0),
                func.coalesce(func.sum(CostLayer.remaining_quantity * CostLayer.unit_cost), 0))
@@ -194,7 +194,7 @@ def sync_balance_average(session, item_id: int, warehouse_id: int) -> None:
 
 
 def negative_outcome(policy: str, warehouse_allows_negative: bool, shortage: decimal.Decimal) -> str | None:
-    """None = مجاز نیست (خطا)؛ وگرنه وضعیتِ بهایِ بخشِ کمبود."""
+    """None = مجاز نیست (خطا)؛ وگرنه وضعیت بهای بخش کمبود."""
     if shortage <= 0:
         return "CALCULATED"
     if policy == "BLOCK":
@@ -223,7 +223,7 @@ ORDER_SENSITIVE_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO", "WEIGHTED_AVERAGE")
 
 def flag_backdated(session, company_id: int, pairs: set[tuple[int, int]], movement_date: datetime.date,
                    own_line_ids: set[int]) -> int:
-    """R260: سندِ عقب‌دار -- خروج‌هایِ بعدیِ همان کالا/انبار «نیازمندِ بازمحاسبه» علامت می‌خورند (بها خودکار عوض نمی‌شود)."""
+    """R260: سند عقب‌دار — خروج‌های بعدی همان کالا/انبار «نیازمند بازمحاسبه» علامت می‌خورند (بها خودکار عوض نمی‌شود)."""
     flagged = 0
     for item_id, warehouse_id in pairs:
         for alloc in session.scalars(select(CostAllocation).where(
@@ -233,14 +233,14 @@ def flag_backdated(session, company_id: int, pairs: set[tuple[int, int]], moveme
                 CostAllocation.costing_method_code.in_(ORDER_SENSITIVE_METHODS),
                 CostAllocation.stock_document_line_id.not_in(own_line_ids or {-1}))):
             alloc.costing_status_code = "RECALCULATION_REQUIRED"
-            alloc.note = f"سندِ عقب‌دار به تاریخِ {format_jalali_date(movement_date)} پس از این خروج ثبت شد"
+            alloc.note = f"سند عقب‌دار به تاریخ {format_jalali_date(movement_date)} پس از این خروج ثبت شد"
             flagged += 1
     return flagged
 
 
 def split_layers_by_lot(stock_document_id: int) -> int:
-    """پس از ثبتِ ردیابی (apply_after_post): لایهٔ تازهٔ بی‌بچ/سریالِ هر ردیفِ ورودی به تفکیکِ بچ/سریالِ واقعی شکسته
-    می‌شود (هنوز مصرف‌نشده، پس بها و مقدارِ کل عوض نمی‌شود) -- پایهٔ شناساییِ ویژه و بهایِ هر بچ/سریال."""
+    """پس از ثبت ردیابی (apply_after_post): لایهٔ تازهٔ بی‌بچ/سریال هر ردیف ورودی به تفکیک بچ/سریال واقعی شکسته
+    می‌شود (هنوز مصرف‌نشده، پس بها و مقدار کل عوض نمی‌شود) — پایهٔ شناسایی ویژه و بهای هر بچ/سریال."""
     from peecha.db.base import new_session
 
     with new_session() as session:
@@ -250,7 +250,7 @@ def split_layers_by_lot(stock_document_id: int) -> int:
 
 
 def split_layers_by_lot_in(session, stock_document_id: int) -> int:
-    """R266: همان منطق در تراکنشِ فراخواننده (بدونِ commit)."""
+    """R266: همان منطق در تراکنش فراخواننده (بدون commit)."""
     from peecha.db.models.inventory import StockDocumentLine
 
     split = 0
@@ -290,7 +290,7 @@ def split_layers_by_lot_in(session, stock_document_id: int) -> int:
     return split
 
 def lot_issue_cost(session, source_line_id: int, serial_ids: list[int], batch_ids: list[int]) -> decimal.Decimal | None:
-    """بهایِ واقعیِ همان سریال/بچی که در خروجِ مرجع مصرف شده بود (برگشت از فروشِ کالایِ ردیابی‌شده)."""
+    """بهای واقعی همان سریال/بچی که در خروج مرجع مصرف شده بود (برگشت از فروش کالای ردیابی‌شده)."""
     q = (select(func.sum(CostAllocation.quantity_base * CostAllocation.unit_cost), func.sum(CostAllocation.quantity_base))
          .join(CostLayer, CostLayer.cost_layer_id == CostAllocation.cost_layer_id)
          .where(CostAllocation.stock_document_line_id == source_line_id))

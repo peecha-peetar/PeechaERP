@@ -1,10 +1,10 @@
-"""مرکزِ رسانه -- طبقِ ادامه‌یِ اولویتِ بخشِ محتوا/بازاریابی: یک کتابخانه‌یِ
-عکس/فایلِ مشترکِ شرکت (نه متصل به یک سندِ خاص) برایِ استفاده‌یِ دوباره
-در مقالات/پست‌ها/محصولات. معماری هم‌الگو با گالریِ عکسِ حسابِ تفصیلی
-(detail_dimensions.py) است: از همان جدولِ عمومیِ doc.attachments استفاده
-می‌شود -- فقط source_record_id این‌جا company_id است (یعنی «رکورد»
-همان کتابخانه‌یِ سراسریِ شرکت است، نه یک حسابِ خاص) -- پس نیازی به
-جدولِ تازه نیست."""
+"""مرکز رسانه — طبق ادامهٔ اولویت بخش محتوا/بازاریابی: یک کتابخانهٔ
+عکس/فایل مشترک شرکت (نه متصل به یک سند خاص) برای استفادهٔ دوباره
+در مقالات/پست‌ها/محصولات. معماری هم‌الگو با گالری عکس حساب تفصیلی
+(detail_dimensions.py) است: از همان جدول عمومی doc.attachments استفاده
+می‌شود — فقط source_record_id این‌جا company_id است (یعنی «رکورد»
+همان کتابخانهٔ سراسری شرکت است، نه یک حساب خاص) — پس نیازی به
+جدول تازه نیست."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _get_form_id(session) -> int:
     roles_service.ensure_catalog()
     form = session.scalar(select(Form).where(Form.code == _FORM_CODE))
     if form is None:
-        raise ValueError("فرمِ «مرکزِ رسانه» هنوز در فهرستِ فرم‌ها ثبت نشده است.")
+        raise ValueError("فرم «مرکز رسانه» هنوز در فهرست فرم‌ها ثبت نشده است.")
     return form.form_id
 
 
@@ -42,7 +42,7 @@ def upload_media(company_id: int, user_id: int, file_path: str) -> int:
     try:
         _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise ValueError(f"پوشهٔ مرکزِ رسانه («{_MEDIA_DIR}») در دسترس نیست: {exc}") from exc
+        raise ValueError(f"پوشهٔ مرکز رسانه («{_MEDIA_DIR}») در دسترس نیست: {exc}") from exc
     content = source.read_bytes()
     digest = hashlib.sha256(content).digest()
     extension = source.suffix.lstrip(".")

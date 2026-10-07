@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -177,15 +177,15 @@ b3 = wl.create_location(company_id, wh, "BIN", "B03", s1)
 geo = wl.geometry(company_id, wh)
 U = wl.UNITS_PER_M
 rx, ry, rw, rh, _ = geo[rr]
-check((rw, rh) == (1 * U, 10 * U), f"قفسه با ابعادِ واقعی ۱×۱۰ متر (got {rw / U}×{rh / U})")
-check(abs(geo[b1][3] - 2 * U) < 0.01 and abs(geo[b2][3] - 3 * U) < 0.01, "Binها با عرضِ واقعیِ خود (۲ و ۳ متر)، نه سهمِ مساوی")
-check(abs(geo[b3][3] - 5 * U) < 0.01, "Binِ بی‌اندازه باقی‌ماندهٔ طولِ قفسه (۵ متر) را گرفت")
-check(abs(geo[b2][1] - (ry + 2 * U)) < 0.01 and abs(geo[b3][1] - (ry + 5 * U)) < 0.01, "Binها پشتِ‌سرِهم بدونِ هم‌پوشانی چیده شدند")
-check(abs(geo[b2][2] - 0.5 * U) < 0.01 and abs(geo[b1][2] - rw) < 0.01, "عمقِ Bin: واقعی (۰٫۵ متر) یا عمقِ قفسه")
+check((rw, rh) == (1 * U, 10 * U), f"قفسه با ابعاد واقعی ۱×۱۰ متر (got {rw / U}×{rh / U})")
+check(abs(geo[b1][3] - 2 * U) < 0.01 and abs(geo[b2][3] - 3 * U) < 0.01, "خانه‌ها با عرض واقعی خود (۲ و ۳ متر)، نه سهم مساوی")
+check(abs(geo[b3][3] - 5 * U) < 0.01, "خانه بی‌اندازه باقی‌ماندهٔ طول قفسه (۵ متر) را گرفت")
+check(abs(geo[b2][1] - (ry + 2 * U)) < 0.01 and abs(geo[b3][1] - (ry + 5 * U)) < 0.01, "خانه‌ها پشت‌سرهم بدون هم‌پوشانی چیده شدند")
+check(abs(geo[b2][2] - 0.5 * U) < 0.01 and abs(geo[b1][2] - rw) < 0.01, "عمق خانه: واقعی (۰٫۵ متر) یا عمق قفسه")
 boxes = {b.location_id: b for b in wl.scene_3d(company_id, wh)}
 check(abs(boxes[s1].h - 1 * U) < 0.01 and abs(boxes[s2].h - 2 * U) < 0.01 and abs(boxes[s2].z - (boxes[s1].z + 1 * U)) < 0.01,
-      "سه‌بعدی: ارتفاعِ واقعیِ طبقه (۱ متر) و باقی‌مانده (۲ متر) برایِ طبقهٔ بی‌ارتفاع")
-check(wl._split_real(10, [None, None]) == [(0, 5), (5, 5)], "بی‌اندازه‌ها مساوی تقسیم می‌شوند (رفتارِ قبلی حفظ شد)")
+      "سه‌بعدی: ارتفاع واقعی طبقه (۱ متر) و باقی‌مانده (۲ متر) برای طبقهٔ بی‌ارتفاع")
+check(wl._split_real(10, [None, None]) == [(0, 5), (5, 5)], "بی‌اندازه‌ها مساوی تقسیم می‌شوند (رفتار قبلی حفظ شد)")
 
 # ۲) تاییدِ رسید: مکان الزامی
 from peecha.services import treasury as treasury_service
@@ -203,38 +203,38 @@ def posted_po(w, lines):
     return po, ids
 po, (l1, l2) = posted_po(wh, [(milk, 4), (g2, 6)])
 check(raises(lambda: documents_service.approve_warehouse(po, company_id, user.user_id, warehouse_id=wh)),
-      "تاییدِ رسید بدونِ مکان در انبارِ مکان‌بندی‌شده رد شد")
+      "تایید رسید بدون مکان در انبار مکان‌بندی‌شده رد شد")
 wh2 = locations_service.create_warehouse(company_id, "WH02", "فرعی", locations_service.WarehouseFields(allow_negative_stock=True))
 other = wl.create_location(company_id, wh2, "AREA", "Y01")
 check(raises(lambda: documents_service.approve_warehouse(po, company_id, user.user_id, warehouse_id=wh, line_bins={l1: other, l2: b1})),
-      "مکانِ انبارِ دیگر رد شد")
+      "مکان انبار دیگر رد شد")
 dead = wl.create_location(company_id, wh, "BIN", "B09", s2)
 with new_session() as s:
     s.get(BinLocation, dead).is_active = False
     s.commit()
 check(raises(lambda: documents_service.approve_warehouse(po, company_id, user.user_id, warehouse_id=wh, line_bins={l1: dead, l2: b1})),
-      "مکانِ غیرفعال رد شد")
+      "مکان غیرفعال رد شد")
 check(raises(lambda: documents_service.approve_warehouse(po, company_id, user.user_id, warehouse_id=wh, line_bins={l1: b2})),
       "اگر فقط یکی از ردیف‌ها مکان داشته باشد هم رد می‌شود")
-check(documents_service.get_document(po, company_id)[0].warehouse_approved_at is None, "تاییدِ ردشده هیچ اثری نگذاشت")
+check(documents_service.get_document(po, company_id)[0].warehouse_approved_at is None, "تایید ردشده هیچ اثری نگذاشت")
 
 # ۳) دیالوگِ تاییدِ رسید: ستونِ «مکان» + نقشه
 from peecha.ui.screens.purchase_goods_receipt import _GoodsReceiptDialog, _LINE_COLUMNS as GR_COLS, _BIN_COL
 from PySide6.QtWidgets import QComboBox, QPushButton
 dlg = _GoodsReceiptDialog(None, po, company_id)
-check(GR_COLS[_BIN_COL] == "مکان" and not dlg.lines_table.isColumnHidden(_BIN_COL), "ستونِ «مکان» در تاییدِ رسید دیده می‌شود")
+check(GR_COLS[_BIN_COL] == "مکان" and not dlg.lines_table.isColumnHidden(_BIN_COL), "ستون «مکان» در تایید رسید دیده می‌شود")
 cell = dlg.lines_table.cellWidget(0, _BIN_COL)
 combo = cell.findChild(QComboBox)
-check(combo.findData(b1) > 0 and combo.findData(rr) < 0 and combo.findData(other) < 0, "فهرستِ مکان فقط محل‌هایِ برگِ همان انبار")
-check(any(b.text() == "نقشه" for b in cell.findChildren(QPushButton)), "دکمهٔ «نقشه» کنارِ هر ردیف")
+check(combo.findData(b1) > 0 and combo.findData(rr) < 0 and combo.findData(other) < 0, "فهرست مکان فقط محل‌های برگ همان انبار")
+check(any(b.text() == "نقشه" for b in cell.findChildren(QPushButton)), "دکمهٔ «نقشه» کنار هر ردیف")
 dlg._toggle_receipt()
-check("مکانِ ردیفِ" in dlg.status_label.text(), f"دیالوگ بی‌مکان تایید نمی‌کند (got {dlg.status_label.text()})")
+check("مکان ردیف" in dlg.status_label.text(), f"دیالوگ بی‌مکان تایید نمی‌کند (got {dlg.status_label.text()})")
 dlg._line_bin_combos[l1].setCurrentIndex(dlg._line_bin_combos[l1].findData(b2))
 dlg._line_bin_combos[l2].setCurrentIndex(dlg._line_bin_combos[l2].findData(b3))
 dlg._toggle_receipt()
 doc, plines = documents_service.get_document(po, company_id)
 check(doc.warehouse_approved_at is not None, "رسید با مکان تایید شد")
-check({ln.line_id: ln.bin_location_id for ln in plines} == {l1: b2, l2: b3}, "مکانِ هر ردیف ذخیره شد")
+check({ln.line_id: ln.bin_location_id for ln in plines} == {l1: b2, l2: b3}, "مکان هر ردیف ذخیره شد")
 check(not dlg._line_bin_combos[l1].isEnabled(), "پس از تایید، مکان قفل است")
 dlg.close()
 
@@ -243,55 +243,55 @@ from peecha.ui.screens.warehouse_map import LocationPickerDialog
 from PySide6.QtWidgets import QDialogButtonBox
 pick = LocationPickerDialog(None, wh, None, milk, D(1))
 pick.map.select_location(rr, focus=False)
-check(pick.selected_location_id is None and not pick.buttons.button(QDialogButtonBox.Ok).isEnabled(), "قفسهٔ دارایِ زیرمحل قابلِ‌انتخاب نیست")
+check(pick.selected_location_id is None and not pick.buttons.button(QDialogButtonBox.Ok).isEnabled(), "قفسهٔ دارای زیرمحل قابل‌انتخاب نیست")
 pick.map.select_location(b1, focus=False)
-check(pick.selected_location_id == b1 and pick.buttons.button(QDialogButtonBox.Ok).isEnabled(), "Bin رویِ نقشه انتخاب شد")
+check(pick.selected_location_id == b1 and pick.buttons.button(QDialogButtonBox.Ok).isEnabled(), "خانه روی نقشه انتخاب شد")
 pick.map.select_location(dead, focus=False)
-check(pick.selected_location_id is None, "محلِ غیرفعال قابلِ‌انتخاب نیست")
+check(pick.selected_location_id is None, "محل غیرفعال قابل‌انتخاب نیست")
 check(not pick.map.edit_check.isVisible() and not pick.map.warehouse_combo.isEnabled(), "نقشهٔ انتخاب، فقط‌خواندنی و روی همان انبار")
 pick.close()
 
 # ۴) فاکتورِ تبدیلی: مکانِ انباردار منتقل و قفل؛ ثبت → موجودی در همان مکان‌ها
 inv = documents_service.convert_to_invoice(po, company_id, user.user_id, today)
 ilines = documents_service.get_document(inv, company_id)[1]
-check(sorted(ln.bin_location_id for ln in ilines) == sorted([b2, b3]), "مکان‌هایِ رسید به فاکتور منتقل شد")
-check(raises(lambda: documents_service.set_line_bin(company_id, ilines[0].line_id, b1)), "در فاکتور، مکانِ تعیین‌شدهٔ انباردار قفل است")
+check(sorted(ln.bin_location_id for ln in ilines) == sorted([b2, b3]), "مکان‌های رسید به فاکتور منتقل شد")
+check(raises(lambda: documents_service.set_line_bin(company_id, ilines[0].line_id, b1)), "در فاکتور، مکان تعیین‌شدهٔ انباردار قفل است")
 from peecha.ui.screens.commercial_document import CommercialDocumentScreen, _BIN_COL as INV_BIN_COL
 scr = CommercialDocumentScreen("PURCHASE_INVOICE", None)
 scr.edit_document(inv)
 w0 = scr.lines_table.cellWidget(0, INV_BIN_COL)
-check(isinstance(w0, QComboBox) and not w0.isEnabled(), "کمبویِ مکان در فاکتور برایِ ردیفِ رسیده غیرفعال است")
+check(isinstance(w0, QComboBox) and not w0.isEnabled(), "فهرست مکان در فاکتور برای ردیف رسیده غیرفعال است")
 documents_service.confirm_document(inv, company_id, user.user_id)
 settlements_service.auto_approve_settlement_plan(inv, company_id, user.user_id, [])
 documents_service.post_document(inv, company_id, user.user_id)
-check(qty_at(milk, b2) == 4 and qty_at(g2, b3) == 6, "موجودی دقیقاً در مکان‌هایِ تاییدشدهٔ انباردار نشست")
+check(qty_at(milk, b2) == 4 and qty_at(g2, b3) == 6, "موجودی دقیقاً در مکان‌های تاییدشدهٔ انباردار نشست")
 
 # ۵) انبارِ بی‌مکان‌بندی: الزام ندارد (فقط GENERAL)
 wh3 = locations_service.create_warehouse(company_id, "WH03", "بی‌نقشه", locations_service.WarehouseFields(allow_negative_stock=True))
 po3, _ = posted_po(wh3, [(milk, 1)])
 documents_service.approve_warehouse(po3, company_id, user.user_id, warehouse_id=wh3)
-check(documents_service.get_document(po3, company_id)[0].warehouse_approved_at is not None, "انبارِ بدونِ مکان‌بندی بدونِ مکان تایید می‌شود")
+check(documents_service.get_document(po3, company_id)[0].warehouse_approved_at is not None, "انبار بدون مکان‌بندی بدون مکان تایید می‌شود")
 
 # ۶) سفارشِ فروش: ستونِ مکان در حواله پنهان
 from peecha.ui.screens import purchase_goods_receipt as gr
 check({"PURCHASE_ORDER", "CONSIGNMENT_IN"} <= set(gr._IN_TYPES) and not set(gr._OUT_TYPES) & set(gr._IN_TYPES),
-      "مکان فقط برایِ رسیدهایِ ورودی (R255: فاکتورِ خریدِ مستقیم هم)")
+      "مکان فقط برای رسیدهای ورودی (R255: فاکتور خرید مستقیم هم)")
 
 # ۷) فرمِ انبار: روشِ قدیمیِ تعریفِ مکان حذف شد، بقیهٔ فرم سالم
 from peecha.ui.screens import inventory_warehouses as iw
 from peecha.ui.screens.inventory_warehouses import InventoryWarehousesScreen
 ws = InventoryWarehousesScreen()
 ws.refresh()
-check(not hasattr(ws, "bins_panel") and not hasattr(iw, "_BinLocationDialog"), "پنلِ قدیمیِ «مکان‌هایِ انبار» از فرمِ انبار حذف شد")
+check(not hasattr(ws, "bins_panel") and not hasattr(iw, "_BinLocationDialog"), "پنل قدیمی «مکان‌های انبار» از فرم انبار حذف شد")
 row = next(r for r in ws._rows if r.warehouse_id == wh)
 ws._load_into_form(row)
-ws.name_field.setText("مرکزیِ اصلی")
+ws.name_field.setText("مرکزی اصلی")
 ws._save()
-check(next(r for r in ws._rows if r.warehouse_id == wh).name == "مرکزیِ اصلی", "ویرایش و ذخیرهٔ انبار بدونِ پنلِ قدیمی کار می‌کند")
+check(next(r for r in ws._rows if r.warehouse_id == wh).name == "مرکزی اصلی", "ویرایش و ذخیرهٔ انبار بدون پنل قدیمی کار می‌کند")
 ws._reset_form()
-check(ws.default_bin_combo.count() == 1, "فرمِ انبارِ جدید سالم است")
+check(ws.default_bin_combo.count() == 1, "فرم انبار جدید سالم است")
 check(any(n.full_code.endswith("GENERAL") or n.code == "GENERAL" for n in wl.tree(company_id, wh)),
-      "مکان‌هایِ قدیمی (مثلِ GENERAL) همچنان در درختِ نقشه هستند")
+      "مکان‌های قدیمی (مثل GENERAL) همچنان در درخت نقشه هستند")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

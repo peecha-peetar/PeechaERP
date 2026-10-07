@@ -1,13 +1,13 @@
-"""تولید/رمزگذاریِ بارکدِ EAN-13 — برایِ بارکدِ خودکارِ کالا و «بارکدِ
-ترکیبیِ» متغیرها (ویژگی‌ها/متغیرهایِ کالا، طبقِ درخواستِ صریح).
+"""تولید/رمزگذاری بارکد EAN-13 — برای بارکد خودکار کالا و «بارکد
+ترکیبی» متغیرها (ویژگی‌ها/متغیرهای کالا، طبق درخواست صریح).
 
-پیشوندِ «۲۰» بازه‌یِ رزروشده‌یِ GS1 برایِ استفاده‌یِ داخلی/فروشگاهی است
-(نیازی به ثبتِ رسمی ندارد) — دقیقاً همان قراردادی که اغلبِ سامانه‌هایِ
-فروشگاهی برایِ بارکدهایِ خودتولید استفاده می‌کنند.
+پیشوند «۲۰» بازهٔ رزروشدهٔ GS1 برای استفادهٔ داخلی/فروشگاهی است
+(نیازی به ثبت رسمی ندارد) — دقیقاً همان قراردادی که اغلب سامانه‌های
+فروشگاهی برای بارکدهای خودتولید استفاده می‌کنند.
 
-هیچ کتابخانه‌یِ بیرونی لازم نیست — رمزگذاری/رمزگشاییِ الگویِ نواری هم
-همین‌جا (خالص‌پایتون) پیاده شده تا هم برایِ رسم با QPainter استفاده شود،
-هم به‌عنوانِ آزمونِ رفت‌وبرگشت (encode→decode) صحتِ جدول‌ها راستی‌آزمایی شود."""
+هیچ کتابخانهٔ بیرونی لازم نیست — رمزگذاری/رمزگشایی الگوی نواری هم
+همین‌جا (خالص‌پایتون) پیاده شده تا هم برای رسم با QPainter استفاده شود،
+هم به‌عنوان آزمون رفت‌وبرگشت (encode→decode) صحت جدول‌ها راستی‌آزمایی شود."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ INTERNAL_USE_PREFIX = "20"
 
 def compute_check_digit(payload12: str) -> str:
     if len(payload12) != 12 or not payload12.isdigit():
-        raise ValueError("بارِ محموله برایِ محاسبهٔ رقمِ کنترلی باید دقیقاً ۱۲ رقم باشد.")
+        raise ValueError("بار محموله برای محاسبهٔ رقم کنترلی باید دقیقاً ۱۲ رقم باشد.")
     total = 0
     for index, ch in enumerate(payload12):
         digit = int(ch)
@@ -46,29 +46,29 @@ def compute_check_digit(payload12: str) -> str:
 
 
 def generate_main_barcode(item_id: int) -> str:
-    """بارکدِ اختصاصیِ خودِ کالایِ اصلی (نه متغیر) -- طبقِ درخواستِ صریح
-    («برایِ کالایِ اصلی بارکدِ مجزا»)."""
+    """بارکد اختصاصی خود کالای اصلی (نه متغیر) — طبق درخواست صریح
+    («برای کالای اصلی بارکد مجزا»)."""
     payload = f"{INTERNAL_USE_PREFIX}{item_id:010d}"
     return payload + compute_check_digit(payload)
 
 
 def generate_variant_barcode(parent_item_id: int, variant_sequence: int) -> str:
-    """«بارکدِ ترکیبی» — طبقِ درخواستِ صریح: رقم‌هایِ خودِ بارکد از ترکیبِ
-    شناسهٔ کالایِ اصلی (۷ رقم) با شمارهٔ ترتیبیِ همین متغیر در میانِ
-    متغیرهایِ همان کالا (۳ رقم) ساخته می‌شود — یعنی دو بارکدِ متغیرِ یک
-    کالا در ۷ رقمِ میانی مشترک‌اند و فقط در ۳ رقمِ آخر فرق دارند."""
+    """«بارکد ترکیبی» — طبق درخواست صریح: رقم‌های خود بارکد از ترکیب
+    شناسهٔ کالای اصلی (۷ رقم) با شمارهٔ ترتیبی همین متغیر در میان
+    متغیرهای همان کالا (۳ رقم) ساخته می‌شود — یعنی دو بارکد متغیر یک
+    کالا در ۷ رقم میانی مشترک‌اند و فقط در ۳ رقم آخر فرق دارند."""
     if not (0 <= variant_sequence <= 999):
-        raise ValueError("شمارهٔ ترتیبیِ متغیر باید بینِ ۰ تا ۹۹۹ باشد.")
+        raise ValueError("شمارهٔ ترتیبی متغیر باید بین ۰ تا ۹۹۹ باشد.")
     payload = f"{INTERNAL_USE_PREFIX}{parent_item_id:07d}{variant_sequence:03d}"
     return payload + compute_check_digit(payload)
 
 
 def encode(digits13: str) -> str:
-    """رشتهٔ ۹۵بیتیِ الگویِ میله‌ایِ EAN-13 ('۰'=فاصلهٔ سفید، '۱'=میله)."""
+    """رشتهٔ ۹۵بیتی الگوی میله‌ای EAN-13 ('۰'=فاصلهٔ سفید، '۱'=میله)."""
     if len(digits13) != 13 or not digits13.isdigit():
         raise ValueError("بارکد باید دقیقاً ۱۳ رقم باشد.")
     if compute_check_digit(digits13[:12]) != digits13[12]:
-        raise ValueError("رقمِ کنترلیِ بارکد نادرست است.")
+        raise ValueError("رقم کنترلی بارکد نادرست است.")
     first_digit = digits13[0]
     left_digits = digits13[1:7]
     right_digits = digits13[7:13]
@@ -79,11 +79,11 @@ def encode(digits13: str) -> str:
 
 
 def decode(bits95: str) -> str:
-    """رمزگشاییِ الگویِ نواری به ۱۳ رقمِ اصلی -- برایِ آزمونِ رفت‌وبرگشت."""
+    """رمزگشایی الگوی نواری به ۱۳ رقم اصلی — برای آزمون رفت‌وبرگشت."""
     if len(bits95) != 95:
-        raise ValueError("طولِ الگویِ بارکد باید ۹۵ باشد.")
+        raise ValueError("طول الگوی بارکد باید ۹۵ باشد.")
     if bits95[:3] != "101" or bits95[45:50] != "01010" or bits95[-3:] != "101":
-        raise ValueError("نگهبان‌هایِ بارکد نامعتبرند.")
+        raise ValueError("نگهبان‌های بارکد نامعتبرند.")
     left_bits = bits95[3:45]
     right_bits = bits95[50:92]
     left_chunks = [left_bits[i:i + 7] for i in range(0, 42, 7)]
@@ -99,9 +99,9 @@ def decode(bits95: str) -> str:
             left_digits += _REVERSE_G[chunk]
             parity_pattern += "G"
         else:
-            raise ValueError("الگویِ نیمهٔ چپِ بارکد قابلِ‌رمزگشایی نیست.")
+            raise ValueError("الگوی نیمهٔ چپ بارکد قابل‌رمزگشایی نیست.")
     first_digit = _REVERSE_PARITY.get(parity_pattern)
     if first_digit is None:
-        raise ValueError("الگویِ توازنِ بارکد قابلِ‌شناسایی نیست.")
+        raise ValueError("الگوی توازن بارکد قابل‌شناسایی نیست.")
     right_digits = "".join(_REVERSE_R[chunk] for chunk in right_chunks)
     return first_digit + left_digits + right_digits

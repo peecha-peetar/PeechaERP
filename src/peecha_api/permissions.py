@@ -1,8 +1,8 @@
-"""فعال‌سازیِ RBACِ موجود (sec.role_form_permissions) رویِ APIِ موبایل --
-طبقِ کشفِ حسابرسی: این جدول‌ها از اول بودند ولی هیچ‌جایِ برنامه enforce
-نمی‌شدند (roles_service.user_has_permission تازه برایِ همین اضافه شد).
-هیچ سیستمِ دسترسیِ جداگانه‌ای برایِ موبایل ساخته نمی‌شود -- همان کدهایِ
-فرمِ دسکتاپ (nav_catalog.py) این‌جا هم استفاده می‌شوند."""
+"""فعال‌سازی RBAC موجود (sec.role_form_permissions) روی API موبایل --
+طبق کشف حسابرسی: این جدول‌ها از اول بودند ولی هیچ‌جای برنامه enforce
+نمی‌شدند (roles_service.user_has_permission تازه برای همین اضافه شد).
+هیچ سیستم دسترسی جداگانه‌ای برای موبایل ساخته نمی‌شود — همان کدهای
+فرم دسکتاپ (nav_catalog.py) این‌جا هم استفاده می‌شوند."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def require_permission(form_code: str, action_code: str):
         if not roles_service.user_has_permission(ctx.user_id, ctx.company_id, form_code, action_code):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"دسترسیِ لازم ({form_code}/{action_code}) برایِ این عملیات وجود ندارد.",
+                detail=f"دسترسی لازم ({form_code}/{action_code}) برای این عملیات وجود ندارد.",
             )
         return ctx
 

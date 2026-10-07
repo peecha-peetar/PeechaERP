@@ -6,9 +6,9 @@
               columnWidth="535" leftMargin="30" rightMargin="30" topMargin="20" bottomMargin="20"
               whenNoDataType="AllSectionsNoDetail">
 
-    <!-- طبقِ رفعِ باگِ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
-         کافی است. طبقِ رفعِ باگِ ارتفاعِ متنِ Bold: تایتلِ ۱۶pt حداقل به
-         ارتفاعِ ۳۰ نیاز دارد وگرنه کاملاً نامرئی رندر می‌شود. -->
+    <!-- طبق رفع باگ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
+         کافی است. طبق رفع باگ ارتفاع متن Bold: تایتل ۱۶pt حداقل به
+         ارتفاع ۳۰ نیاز دارد وگرنه کاملاً نامرئی رندر می‌شود. -->
     <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
     <style name="Title" fontName="Vazirmatn" fontSize="16" isBold="true"/>
     <style name="SubTitle" fontName="Vazirmatn" fontSize="10"/>
@@ -18,23 +18,23 @@
 
     <parameter name="companyName" class="java.lang.String">
 
-        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+        <parameterDescription><![CDATA[نام شرکت]]></parameterDescription>
 
     </parameter>
     <parameter name="dateLabel" class="java.lang.String">
         <parameterDescription><![CDATA[تاریخ]]></parameterDescription>
     </parameter>
     <parameter name="generatedAt" class="java.lang.String">
-        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+        <parameterDescription><![CDATA[تاریخ تولید گزارش]]></parameterDescription>
     </parameter>
     <parameter name="totalRightLine" class="java.lang.String">
-        <parameterDescription><![CDATA[جمعِ سطرِ راست]]></parameterDescription>
+        <parameterDescription><![CDATA[جمع سطر راست]]></parameterDescription>
     </parameter>
     <parameter name="totalLeftLine" class="java.lang.String">
-        <parameterDescription><![CDATA[جمعِ سطرِ چپ]]></parameterDescription>
+        <parameterDescription><![CDATA[جمع سطر چپ]]></parameterDescription>
     </parameter>
     <parameter name="balanceNote" class="java.lang.String">
-        <parameterDescription><![CDATA[یادداشتِ توازن]]></parameterDescription>
+        <parameterDescription><![CDATA[یادداشت توازن]]></parameterDescription>
     </parameter>
 
     <parameter name="companyLogoPath" class="java.lang.String">
@@ -47,12 +47,12 @@
 
         <property name="net.sf.jasperreports.json.field.expression" value="right_code"/>
 
-        <fieldDescription><![CDATA[کدِ حساب (راست)]]></fieldDescription>
+        <fieldDescription><![CDATA[کد حساب (راست)]]></fieldDescription>
 
     </field>
     <field name="right_name" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="right_name"/>
-        <fieldDescription><![CDATA[نامِ حساب (راست)]]></fieldDescription>
+        <fieldDescription><![CDATA[نام حساب (راست)]]></fieldDescription>
     </field>
     <field name="right_amount_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="right_amount_display"/>
@@ -60,11 +60,11 @@
     </field>
     <field name="left_code" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="left_code"/>
-        <fieldDescription><![CDATA[کدِ حساب (چپ)]]></fieldDescription>
+        <fieldDescription><![CDATA[کد حساب (چپ)]]></fieldDescription>
     </field>
     <field name="left_name" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="left_name"/>
-        <fieldDescription><![CDATA[نامِ حساب (چپ)]]></fieldDescription>
+        <fieldDescription><![CDATA[نام حساب (چپ)]]></fieldDescription>
     </field>
     <field name="left_amount_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="left_amount_display"/>
@@ -99,7 +99,7 @@
             <textField>
                 <reportElement style="Footer" x="0" y="54" width="535" height="16"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <textFieldExpression><![CDATA["تاریخِ تولیدِ گزارش: " + $P{generatedAt}]]></textFieldExpression>
+                <textFieldExpression><![CDATA["تاریخ تولید گزارش: " + $P{generatedAt}]]></textFieldExpression>
             </textField>
         </band>
     </pageHeader>
@@ -113,7 +113,7 @@
             <staticText><reportElement style="Header" x="40" y="0" width="150" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[دارایی‌ها]]></text></staticText>
             <staticText><reportElement style="Header" x="190" y="0" width="77" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مبلغ]]></text></staticText>
             <staticText><reportElement style="Header" x="267" y="0" width="40" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[کد]]></text></staticText>
-            <staticText><reportElement style="Header" x="307" y="0" width="150" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بدهی‌ها و حقوقِ صاحبانِ سهام]]></text></staticText>
+            <staticText><reportElement style="Header" x="307" y="0" width="150" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بدهی‌ها و حقوق صاحبان سهام]]></text></staticText>
             <staticText><reportElement style="Header" x="457" y="0" width="78" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مبلغ]]></text></staticText>
         </band>
     </columnHeader>
@@ -134,7 +134,7 @@
             <textField>
                 <reportElement style="Footer" x="0" y="0" width="535" height="18"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <textFieldExpression><![CDATA["صفحه‌یِ " + $V{PAGE_NUMBER}]]></textFieldExpression>
+                <textFieldExpression><![CDATA["صفحهٔ " + $V{PAGE_NUMBER}]]></textFieldExpression>
             </textField>
         </band>
     </pageFooter>

@@ -1,6 +1,6 @@
-"""پخشِ سرد/گرم -- R130: برنامهٔ مراجعهٔ هفتگیِ هر مشتری (کدام روز، چه
-ترتیبی، کدام ویزیتور) -- سرپرست از دسکتاپ تنظیم می‌کند؛ ثبتِ ویزیتِ
-واقعی (چک‌این/چک‌اوت) کارِ اپِ موبایل است (R132)، این‌جا فقط رصد می‌شود
+"""پخش سرد/گرم — R130: برنامهٔ مراجعهٔ هفتگی هر مشتری (کدام روز، چه
+ترتیبی، کدام ویزیتور) — سرپرست از دسکتاپ تنظیم می‌کند؛ ثبت ویزیت
+واقعی (چک‌این/چک‌اوت) کار برنامهٔ موبایل است (R132)، این‌جا فقط رصد می‌شود
 (customer_visits.py)."""
 
 from __future__ import annotations
@@ -83,18 +83,18 @@ class VisitPlansScreen(FieldHelpMixin, QWidget):
         self.customer_combo = QComboBox()
         layout.addWidget(self.customer_combo)
 
-        layout.addWidget(QLabel("روزِ هفته"))
+        layout.addWidget(QLabel("روز هفته"))
         self.day_combo = QComboBox()
         for index, label in enumerate(_DAY_LABELS):
             self.day_combo.addItem(label, index)
         layout.addWidget(self.day_combo)
 
-        layout.addWidget(QLabel("ترتیبِ توقف در مسیر"))
+        layout.addWidget(QLabel("ترتیب توقف در مسیر"))
         self.sequence_field = QSpinBox()
         self.sequence_field.setRange(0, 999)
         layout.addWidget(self.sequence_field)
 
-        layout.addWidget(QLabel("ویزیتورِ مسئول"))
+        layout.addWidget(QLabel("ویزیتور مسئول"))
         self.visitor_combo = QComboBox()
         layout.addWidget(self.visitor_combo)
 
@@ -130,11 +130,11 @@ class VisitPlansScreen(FieldHelpMixin, QWidget):
         layout.addWidget(build_action_footer([save_button, cancel_button, self.delete_button]))
 
         self.set_field_help([
-            (self.customer_combo, "مشتری‌ای که این برنامهٔ مراجعه برایِ اوست -- بعدِ ذخیره قابلِ‌تغییر نیست."),
-            (self.day_combo, "روزِ هفته‌ای که ویزیتور باید به این مشتری سر بزند -- بعدِ ذخیره قابلِ‌تغییر نیست."),
-            (self.sequence_field, "ترتیبِ توقف نزدِ این مشتری در مسیرِ همان روز -- عددِ کوچک‌تر زودتر ویزیت می‌شود."),
-            (self.visitor_combo, "کاربری که مسئولِ ویزیتِ این مشتری در این روز است."),
-            (self.is_active_checkbox, "برنامه‌هایِ غیرِفعال دیگر در مسیرِ روزانهٔ ویزیتور نمایش داده نمی‌شوند."),
+            (self.customer_combo, "مشتری‌ای که این برنامهٔ مراجعه برای اوست — بعد ذخیره قابل‌تغییر نیست."),
+            (self.day_combo, "روز هفته‌ای که ویزیتور باید به این مشتری سر بزند — بعد ذخیره قابل‌تغییر نیست."),
+            (self.sequence_field, "ترتیب توقف نزد این مشتری در مسیر همان روز — عدد کوچک‌تر زودتر ویزیت می‌شود."),
+            (self.visitor_combo, "کاربری که مسئول ویزیت این مشتری در این روز است."),
+            (self.is_active_checkbox, "برنامه‌های غیرفعال دیگر در مسیر روزانهٔ ویزیتور نمایش داده نمی‌شوند."),
         ])
         return wrap_scrollable(panel)
 
@@ -182,7 +182,7 @@ class VisitPlansScreen(FieldHelpMixin, QWidget):
 
     def _load_into_form(self, plan: field_sales_service.VisitPlanRow) -> None:
         self._editing_id = plan.visit_plan_id
-        self.form_title.setText("ویرایشِ برنامهٔ مراجعه")
+        self.form_title.setText("ویرایش برنامهٔ مراجعه")
         self.status_label.setText("")
         index = self.customer_combo.findData(plan.customer_detail_account_id)
         self.customer_combo.setCurrentIndex(max(0, index))
@@ -231,7 +231,7 @@ class VisitPlansScreen(FieldHelpMixin, QWidget):
     def _delete(self) -> None:
         if self._editing_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ برنامه", "این برنامهٔ مراجعه حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف برنامه", "این برنامهٔ مراجعه حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         company_id = self._company_id()

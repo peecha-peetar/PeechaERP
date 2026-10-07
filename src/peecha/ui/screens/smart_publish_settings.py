@@ -1,7 +1,7 @@
-"""تنظیماتِ Smart Publish -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ
-PeechaSync -- پردازشِ خودکارِ تصویرِ محصول»): واترمارک، حکِ کدِ/نامِ
-کالا، و کیفیتِ WebP -- اِعمالِ واقعی از دکمه‌یِ «پردازشِ هوشمند» در
-تبِ مرکزِ رسانه انجام می‌شود."""
+"""تنظیمات انتشار هوشمند — طبق بازخورد صریح کاربر («امکانات حیاتی
+PeechaSync — پردازش خودکار تصویر محصول»): واترمارک، حک کد/نام
+کالا، و کیفیت WebP — اعمال واقعی از دکمهٔ «پردازش هوشمند» در
+تب مرکز رسانه انجام می‌شود."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ _POSITION_LABELS = {
     "bottom-right": "پایین راست", "bottom-left": "پایین چپ",
     "top-right": "بالا راست", "top-left": "بالا چپ", "center": "وسط",
 }
-_SOURCE_LABELS = {"item_code": "کدِ کالا", "item_name": "نامِ کالا"}
+_SOURCE_LABELS = {"item_code": "کد کالا", "item_name": "نام کالا"}
 
 
 class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -41,32 +41,32 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("تنظیماتِ Smart Publish")
+        title = QLabel("تنظیمات انتشار هوشمند")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
-        info = QLabel("این تنظیمات هنگامِ زدنِ دکمهٔ «✨ پردازشِ هوشمند» رویِ هر عکسِ تبِ «مرکزِ رسانه» اِعمال می‌شود.")
+        info = QLabel("این تنظیمات هنگام زدن دکمهٔ «✨ پردازش هوشمند» روی هر عکس تب «مرکز رسانه» اعمال می‌شود.")
         info.setWordWrap(True)
         outer.addWidget(info)
 
         watermark_row = QHBoxLayout()
-        self.watermark_preview = QLabel("بدونِ واترمارک")
+        self.watermark_preview = QLabel("بدون واترمارک")
         self.watermark_preview.setFixedSize(64, 64)
         self.watermark_preview.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px;")
         watermark_row.addWidget(self.watermark_preview)
-        watermark_button = QPushButton("🖼️ انتخابِ عکسِ واترمارک")
+        watermark_button = QPushButton("🖼️ انتخاب عکس واترمارک")
         watermark_button.clicked.connect(self._choose_watermark)
         watermark_row.addWidget(watermark_button)
         watermark_row.addStretch(1)
         outer.addLayout(watermark_row)
 
         opacity_row = QHBoxLayout()
-        opacity_row.addWidget(QLabel("شفافیتِ واترمارک:"))
+        opacity_row.addWidget(QLabel("شفافیت واترمارک:"))
         self.opacity_field = QDoubleSpinBox()
         self.opacity_field.setRange(0.0, 1.0)
         self.opacity_field.setSingleStep(0.05)
         opacity_row.addWidget(self.opacity_field)
-        opacity_row.addWidget(QLabel("اندازه (نسبت به عرضِ عکس):"))
+        opacity_row.addWidget(QLabel("اندازه (نسبت به عرض عکس):"))
         self.scale_field = QDoubleSpinBox()
         self.scale_field.setRange(0.02, 1.0)
         self.scale_field.setSingleStep(0.02)
@@ -75,7 +75,7 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addLayout(opacity_row)
 
         position_row = QHBoxLayout()
-        position_row.addWidget(QLabel("موقعیتِ واترمارک:"))
+        position_row.addWidget(QLabel("موقعیت واترمارک:"))
         self.position_combo = QComboBox()
         for code, label in _POSITION_LABELS.items():
             self.position_combo.addItem(label, code)
@@ -84,7 +84,7 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addLayout(position_row)
 
         stamp_row = QHBoxLayout()
-        self.stamp_checkbox = QCheckBox("حکِ کدِ/نامِ کالا رویِ عکس")
+        self.stamp_checkbox = QCheckBox("حک کد/نام کالا روی عکس")
         stamp_row.addWidget(self.stamp_checkbox)
         self.stamp_source_combo = QComboBox()
         for code, label in _SOURCE_LABELS.items():
@@ -94,7 +94,7 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addLayout(stamp_row)
 
         quality_row = QHBoxLayout()
-        quality_row.addWidget(QLabel("کیفیتِ WebP:"))
+        quality_row.addWidget(QLabel("کیفیت WebP:"))
         self.quality_field = QSpinBox()
         self.quality_field.setRange(10, 100)
         quality_row.addWidget(self.quality_field)
@@ -112,12 +112,12 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addStretch(1)
 
         self.set_field_help([
-            (self.opacity_field, "شفافیتِ واترمارک -- ۰ یعنی نامرئی، ۱ یعنی کاملاً کدر."),
-            (self.scale_field, "اندازهٔ واترمارک نسبت به عرضِ خودِ عکس."),
+            (self.opacity_field, "شفافیت واترمارک — ۰ یعنی نامرئی، ۱ یعنی کاملاً کدر."),
+            (self.scale_field, "اندازهٔ واترمارک نسبت به عرض خود عکس."),
             (self.position_combo, "گوشه/جایگاهی از عکس که واترمارک رویش قرار می‌گیرد."),
-            (self.stamp_checkbox, "کد یا نامِ کالا به‌صورتِ متن رویِ خودِ عکس حک شود."),
-            (self.stamp_source_combo, "کدامین اطلاعاتِ کالا (کد یا نام) رویِ عکس حک شود."),
-            (self.quality_field, "کیفیتِ فشرده‌سازیِ خروجیِ WebP -- عددِ بالاتر یعنی کیفیتِ بهتر و حجمِ بزرگ‌تر."),
+            (self.stamp_checkbox, "کد یا نام کالا به‌صورت متن روی خود عکس حک شود."),
+            (self.stamp_source_combo, "کدامین اطلاعات کالا (کد یا نام) روی عکس حک شود."),
+            (self.quality_field, "کیفیت فشرده‌سازی خروجی WebP — عدد بالاتر یعنی کیفیت بهتر و حجم بزرگ‌تر."),
         ])
 
     def _company_id(self) -> int | None:
@@ -145,13 +145,13 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 self.watermark_preview.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 self.watermark_preview.setText("")
         else:
-            self.watermark_preview.setText("بدونِ واترمارک")
+            self.watermark_preview.setText("بدون واترمارک")
 
     def _choose_watermark(self) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
-        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ عکسِ واترمارک", "", "تصاویر (*.png *.jpg *.jpeg *.webp)")
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخاب عکس واترمارک", "", "تصاویر (*.png *.jpg *.jpeg *.webp)")
         if not path:
             return
         try:
@@ -178,4 +178,4 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
-        theme.set_status_label(self.status_label, "تنظیماتِ Smart Publish ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "تنظیمات انتشار هوشمند ذخیره شد.", ok=True)

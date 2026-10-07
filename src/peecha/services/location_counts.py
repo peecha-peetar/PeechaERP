@@ -1,11 +1,11 @@
-"""شمارشِ دوره‌ایِ محل‌محور -- R250.
+"""شمارش دوره‌ای محل‌محور — R250.
 
-از همان جدول‌هایِ انبارگردانی (inv.cycle_count_sessions با scope_type_code = 'BY_BIN' و inv.cycle_count_lines
-که bin_location_id دارد) استفاده می‌کند؛ موجودیِ دفتری از inv.stock_balance به تفکیکِ محل گرفته می‌شود و اختلاف
-با سندِ اصلاحِ عادیِ انبار (ADJUSTMENT) رویِ همان محل ثبت می‌شود.
-R251: کالایِ بچ‌دار به تفکیکِ بچ در هر محل شمرده می‌شود (از ستونِ محلِ inv.lot_movements).
-R252: کالایِ سریال‌دار با اسکنِ سریال‌ها شمرده می‌شود: سریالِ گم‌شده کسری، سریالِ موجود در محلِ دیگرِ همین انبار
-با سندِ انتقال به این محل، و سریالِ بیرون از موجودی مازاد ثبت می‌شود.
+از همان جدول‌های انبارگردانی (inv.cycle_count_sessions با scope_type_code = 'BY_BIN' و inv.cycle_count_lines
+که bin_location_id دارد) استفاده می‌کند؛ موجودی دفتری از inv.stock_balance به تفکیک محل گرفته می‌شود و اختلاف
+با سند اصلاح عادی انبار (ADJUSTMENT) روی همان محل ثبت می‌شود.
+R251: کالای بچ‌دار به تفکیک بچ در هر محل شمرده می‌شود (از ستون محل inv.lot_movements).
+R252: کالای سریال‌دار با اسکن سریال‌ها شمرده می‌شود: سریال گم‌شده کسری، سریال موجود در محل دیگر همین انبار
+با سند انتقال به این محل، و سریال بیرون از موجودی مازاد ثبت می‌شود.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ SCOPE = "BY_BIN"
 
 
 def _has_cost(session, item_id: int) -> bool:
-    """R252: مازاد فقط وقتی ثبت می‌شود که کالا بهایی دارد (همان شرطِ موتورِ انبار برایِ افزایشِ بی‌بها)."""
+    """R252: مازاد فقط وقتی ثبت می‌شود که کالا بهایی دارد (همان شرط موتور انبار برای افزایش بی‌بها)."""
     from peecha.services.inventory_engine import _last_known_unit_cost
 
     if session.scalar(select(func.count()).select_from(StockBalance).where(
@@ -42,21 +42,21 @@ def _label(session, item) -> str:
     return lot_tracking._item_name(session, item)
 
 
-_NO_COST = "کالایِ «{}» هنوز هیچ بهایِ ثبت‌شده‌ای ندارد؛ مازادِ آن در شمارش ثبت نمی‌شود. ابتدا رسیدِ با بها ثبت کنید."
+_NO_COST = "کالای «{}» هنوز هیچ بهای ثبت‌شده‌ای ندارد؛ مازاد آن در شمارش ثبت نمی‌شود. ابتدا رسید با بها ثبت کنید."
 
 
 def _session(session, company_id: int, session_id: int) -> CycleCountSession:
     row = session.get(CycleCountSession, session_id)
     if row is None or row.company_id != company_id or row.scope_type_code != SCOPE:
-        raise ValueError("شمارشِ محل نامعتبر است.")
+        raise ValueError("شمارش محل نامعتبر است.")
     return row
 
 
 def create_location_count(company_id: int, warehouse_id: int, location_ids: list[int], user_id: int,
                           blind: bool = True) -> int:
-    """جلسهٔ شمارش برایِ محل‌ها (و همهٔ زیرمحل‌هایشان)؛ موجودیِ دفتریِ هر (محل، کالا) همین لحظه ثبت می‌شود."""
+    """جلسهٔ شمارش برای محل‌ها (و همهٔ زیرمحل‌هایشان)؛ موجودی دفتری هر (محل، کالا) همین لحظه ثبت می‌شود."""
     if not location_ids:
-        raise ValueError("حداقل یک محل برایِ شمارش انتخاب کنید.")
+        raise ValueError("حداقل یک محل برای شمارش انتخاب کنید.")
     nodes = wl.tree(company_id, warehouse_id)
     by_id = {n.location_id: n for n in nodes}
     scope: set[int] = set()
@@ -69,14 +69,14 @@ def create_location_count(company_id: int, warehouse_id: int, location_ids: list
         if wh is None or wh.company_id != company_id:
             raise ValueError("انبار نامعتبر است.")
         if not wh.allow_cycle_count:
-            raise ValueError("انبارگردانی برایِ این انبار مجاز نشده است (تنظیماتِ انبار).")
+            raise ValueError("انبارگردانی برای این انبار مجاز نشده است (تنظیمات انبار).")
         open_ids = set()
         for s in session.scalars(select(CycleCountSession).where(
                 CycleCountSession.warehouse_id == warehouse_id, CycleCountSession.scope_type_code == SCOPE,
                 CycleCountSession.status_code == "COUNTING")):
             open_ids |= set((s.scope_filter or {}).get("bins", []))
         if open_ids & scope:
-            raise ValueError("بعضی از این محل‌ها در شمارشِ بازِ دیگری هستند.")
+            raise ValueError("بعضی از این محل‌ها در شمارش باز دیگری هستند.")
         flags = {i: (tb, ts) for i, tb, ts in session.execute(select(Item.item_id, Item.track_batch, Item.track_serial).where(
             Item.company_id == company_id))}
         count = session.scalar(select(func.count()).select_from(CycleCountSession).where(
@@ -146,10 +146,10 @@ def count_lines(company_id: int, session_id: int) -> list[SimpleNamespace]:
 
 def record_location_count(company_id: int, session_id: int, location_id: int, item_id: int, counted: decimal.Decimal,
                           user_id: int | None = None, batch_no: str | None = None, _serial_call: bool = False) -> int:
-    """ثبت/جایگزینیِ شمارشِ یک کالا در یک محل (واحدِ پایه)؛ کالایِ پیدا‌شدهٔ بی‌سابقه هم ثبت می‌شود."""
+    """ثبت/جایگزینی شمارش یک کالا در یک محل (واحد پایه)؛ کالای پیدا‌شدهٔ بی‌سابقه هم ثبت می‌شود."""
     counted = decimal.Decimal(counted)
     if counted < 0:
-        raise ValueError("مقدارِ شمارش‌شده نمی‌تواند منفی باشد.")
+        raise ValueError("مقدار شمارش‌شده نمی‌تواند منفی باشد.")
     with new_session() as session:
         s = _session(session, company_id, session_id)
         if s.status_code != "COUNTING":
@@ -160,12 +160,12 @@ def record_location_count(company_id: int, session_id: int, location_id: int, it
         if item is None or item.company_id != company_id:
             raise ValueError("کالا نامعتبر است.")
         if item.track_serial and not _serial_call:
-            raise ValueError("کالایِ سریال‌دار با اسکنِ سریال‌ها شمرده می‌شود.")
+            raise ValueError("کالای سریال‌دار با اسکن سریال‌ها شمرده می‌شود.")
         batch_id = None
         if item.track_batch and batch_no and not item.track_serial:
             batch_id = session.scalar(select(Batch.batch_id).where(Batch.item_id == item_id, Batch.batch_no == batch_no.strip()))
             if batch_id is None:
-                raise ValueError(f"بچِ «{batch_no}» برایِ این کالا تعریف نشده است.")
+                raise ValueError(f"بچ «{batch_no}» برای این کالا تعریف نشده است.")
         elif item.track_batch and not item.track_serial and not session.scalar(select(func.count()).select_from(CycleCountLine).where(
                 CycleCountLine.session_id == session_id, CycleCountLine.item_id == item_id,
                 CycleCountLine.bin_location_id == location_id, CycleCountLine.batch_id.is_(None))):
@@ -198,7 +198,7 @@ def expected_serials(company_id: int, location_id: int, item_id: int) -> list[st
 
 def record_serial_count(company_id: int, session_id: int, location_id: int, item_id: int, serial_nos: list[str],
                         user_id: int | None = None) -> int:
-    """R252: سریال‌هایِ اسکن‌شده در یک محل (جایگزینِ اسکنِ قبلی)."""
+    """R252: سریال‌های اسکن‌شده در یک محل (جایگزین اسکن قبلی)."""
     from peecha.services import lot_tracking
 
     serials = sorted({(x or "").strip() for x in serial_nos if (x or "").strip()})
@@ -214,7 +214,7 @@ def record_serial_count(company_id: int, session_id: int, location_id: int, item
         if unknown and not _has_cost(session, item_id):
             raise ValueError(_NO_COST.format(_label(session, item)))
         if unknown and item.track_batch:
-            raise ValueError(f"سریالِ ناشناختهٔ کالایِ بچ‌دار ({unknown[0]}) را با انبارگردانیِ عادی و شمارهٔ بچ ثبت کنید.")
+            raise ValueError(f"سریال ناشناختهٔ کالای بچ‌دار ({unknown[0]}) را با انبارگردانی عادی و شمارهٔ بچ ثبت کنید.")
     line_id = record_location_count(company_id, session_id, location_id, item_id, decimal.Decimal(len(serials)), user_id,
                                     _serial_call=True)
     entries = []
@@ -227,7 +227,7 @@ def record_serial_count(company_id: int, session_id: int, location_id: int, item
 
 
 def mark_location_empty(company_id: int, session_id: int, location_id: int, user_id: int | None = None) -> int:
-    """«محل خالی است»: همهٔ ردیف‌هایِ شمرده‌نشدهٔ این محل صفر ثبت می‌شوند."""
+    """«محل خالی است»: همهٔ ردیف‌های شمرده‌نشدهٔ این محل صفر ثبت می‌شوند."""
     n = 0
     for ln in count_lines(company_id, session_id):
         if ln.location_id == location_id and ln.counted is None:
@@ -240,7 +240,7 @@ def mark_location_empty(company_id: int, session_id: int, location_id: int, user
 
 
 def finalize_location_count(company_id: int, session_id: int, user_id: int) -> list[int]:
-    """اختلافِ ردیف‌هایِ شمرده‌شده با سندِ اصلاحِ انبار رویِ همان محل (مازاد و کسری جدا)."""
+    """اختلاف ردیف‌های شمرده‌شده با سند اصلاح انبار روی همان محل (مازاد و کسری جدا)."""
     from peecha.services import inventory_documents as inv_documents_service
     from peecha.services import lot_tracking
     from peecha.services import stock_count
@@ -261,14 +261,14 @@ def finalize_location_count(company_id: int, session_id: int, user_id: int) -> l
                          (losses, inv_documents_service.DocumentHeaderFields(source_warehouse_id=warehouse_id))):
         if not rows:
             continue
-        header.reference_no, header.description = code, f"اختلافِ شمارشِ محلِ {code}"
+        header.reference_no, header.description = code, f"اختلاف شمارش محل {code}"
         doc_id = inv_documents_service.create_stock_document(company_id, user_id, "ADJUSTMENT", datetime.date.today(), header)
         for ln in rows:
             qty = abs(ln.variance)
             line_id = inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(
                 item_id=ln.item_id, uom_id=base_uom[ln.item_id], quantity=qty, quantity_base=qty, conversion_factor=decimal.Decimal(1),
                 reason_code_id=reason, bin_location_id=ln.location_id,
-                description=f"شمارشِ محلِ {ln.location_code}: دفتری {ln.expected.normalize()}، شمارش {ln.counted.normalize()}"
+                description=f"شمارش محل {ln.location_code}: دفتری {ln.expected.normalize()}، شمارش {ln.counted.normalize()}"
                             + (f" -- بچ {ln.batch_no}" if ln.batch_no else "")))
             if ln.batch_no:
                 lot_tracking.set_line_tracking(company_id, [lot_tracking.TrackingEntry(
@@ -286,7 +286,7 @@ def finalize_location_count(company_id: int, session_id: int, user_id: int) -> l
 
 def _finalize_serials(company_id: int, user_id: int, warehouse_id: int, code: str, lines: list, base_uom: dict,
                       reason: int | None) -> list[int]:
-    """سریال‌ها: گم‌شده → کسری؛ موجود در محلِ دیگرِ همین انبار → انتقال به این محل؛ بیرون از موجودی → مازاد."""
+    """سریال‌ها: گم‌شده → کسری؛ موجود در محل دیگر همین انبار → انتقال به این محل؛ بیرون از موجودی → مازاد."""
     from peecha.services import inventory_documents as inv_documents_service
     from peecha.services import lot_tracking
 
@@ -313,7 +313,7 @@ def _finalize_serials(company_id: int, user_id: int, warehouse_id: int, code: st
     doc_ids = []
 
     def post(doc_type, header, rows, src_bin=None, dst_bin=None):
-        header.reference_no, header.description = code, f"سریال‌هایِ شمارشِ محلِ {code}"
+        header.reference_no, header.description = code, f"سریال‌های شمارش محل {code}"
         doc_id = inv_documents_service.create_stock_document(company_id, user_id, doc_type, datetime.date.today(), header)
         by_item: dict[tuple, list] = {}
         for ln, x in rows:
@@ -348,6 +348,6 @@ def cancel_location_count(company_id: int, session_id: int) -> None:
     with new_session() as session:
         s = _session(session, company_id, session_id)
         if s.status_code != "COUNTING":
-            raise ValueError("فقط شمارشِ باز لغو می‌شود.")
+            raise ValueError("فقط شمارش باز لغو می‌شود.")
         s.status_code = "CANCELLED"
         session.commit()

@@ -1,11 +1,11 @@
-"""داشبوردِ مدیریتِ فروش (Phase 7) -- فقط برایِ کاربرانِ مدیر
-(roles_service.is_manager، همان قاعده‌یِ توابعِ مدیریتیِ دیگرِ این API).
-رویِ همان توابعِ تجمیعیِ سرویس‌هایِ موجود (field_sales/commercial_documents/
-treasury/commercial_partners) -- بدونِ منطقِ حسابداری/گزارش‌گیریِ تازه.
+"""داشبورد مدیریت فروش (Phase 7) — فقط برای کاربران مدیر
+(roles_service.is_manager، همان قاعدهٔ توابع مدیریتی دیگر این API).
+روی همان توابع تجمیعی سرویس‌های موجود (field_sales/commercial_documents/
+treasury/commercial_partners) — بدون منطق حسابداری/گزارش‌گیری تازه.
 
-طبقِ R189: فیلترِ منطقه/مسیر (route_detail_account_id) اضافه شد -- هر
-سه منبع (ویزیت/سفارش/وصول) با joinِ CustomerProfile.distribution_route_detail_account_id
-فیلتر می‌شوند (پیاده‌سازیِ واقعی در field_sales/commercial_documents/treasury)."""
+طبق R189: فیلتر منطقه/مسیر (route_detail_account_id) اضافه شد — هر
+سه منبع (ویزیت/سفارش/وصول) با join CustomerProfile.distribution_route_detail_account_id
+فیلتر می‌شوند (پیاده‌سازی واقعی در field_sales/commercial_documents/treasury)."""
 
 from __future__ import annotations
 
@@ -29,13 +29,13 @@ _ORDER_TYPE_CODES = ("SALES_ORDER", "SALES_INVOICE")
 
 def _require_manager(ctx: AuthContext) -> None:
     if not roles_service.is_manager(ctx.user_id, ctx.company_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="این گزارش فقط برایِ مدیر در دسترس است.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="این گزارش فقط برای مدیر در دسترس است.")
 
 
 @router.get("/routes")
 def list_routes(ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """فهرستِ مسیرهایِ توزیعِ تعریف‌شده -- برایِ پرکردنِ فیلترِ منطقه/مسیرِ
-    داشبورد در اپِ موبایل."""
+    """فهرست مسیرهای توزیع تعریف‌شده — برای پرکردن فیلتر منطقه/مسیر
+    داشبورد در برنامهٔ موبایل."""
     _require_manager(ctx)
     dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
         ctx.company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE,
@@ -57,7 +57,7 @@ def get_dashboard(
     date_from = date_from or today
     date_to = date_to or today
     if date_from > date_to:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="date_from نمی‌تواند بعدِ date_to باشد.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="date_from نمی‌تواند بعد date_to باشد.")
 
     visits = field_sales_service.list_customer_visits(
         ctx.company_id, visitor_user_id=visitor_user_id, date_from=date_from, date_to=date_to,
@@ -102,7 +102,7 @@ def get_dashboard(
             by_visitor.append(
                 {
                     "user_id": uid,
-                    "full_name": names_by_id.get(uid, f"کاربرِ #{uid}"),
+                    "full_name": names_by_id.get(uid, f"کاربر #{uid}"),
                     "visit_count": len(user_visits),
                     "visit_completed_count": sum(1 for v in user_visits if v.status_code == "COMPLETED"),
                     "order_count": user_order_summary.document_count,

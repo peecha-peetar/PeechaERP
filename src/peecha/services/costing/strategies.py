@@ -1,6 +1,6 @@
-"""راهبردهایِ انتخابِ لایه (Strategy) -- بدونِ وابستگی به دیتابیس تا مستقیم تست شوند.
+"""راهبردهای انتخاب لایه (Strategy) — بدون وابستگی به دیتابیس تا مستقیم تست شوند.
 
-هر راهبرد فقط «ترتیبِ مصرفِ لایه‌ها» را تعیین می‌کند؛ مصرف/قفل/ثبت در costing.engine است.
+هر راهبرد فقط «ترتیب مصرف لایه‌ها» را تعیین می‌کند؛ مصرف/قفل/ثبت در costing.engine است.
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ METHOD_LABELS = {
     "LIFO": "اولین صادره از آخرین وارده (LIFO)",
     "HIFO": "اول گران‌ترین (HIFO)",
     "LOFO": "اول ارزان‌ترین (LOFO)",
-    "WEIGHTED_AVERAGE": "میانگینِ متحرک (موزون)",
-    "SPECIFIC": "شناساییِ ویژه (سریال/بچ)",
-    "NIFO": "بهایِ جایگزینی (NIFO)",
-    "STANDARD": "بهایِ استاندارد",
+    "WEIGHTED_AVERAGE": "میانگین متحرک (موزون)",
+    "SPECIFIC": "شناسایی ویژه (سریال/بچ)",
+    "NIFO": "بهای جایگزینی (NIFO)",
+    "STANDARD": "بهای استاندارد",
 }
 
 
@@ -44,7 +44,7 @@ class CostingStrategy:
         raise NotImplementedError
 
     def pick(self, layers: Sequence[LayerLike], quantity: decimal.Decimal) -> tuple[list[Pick], decimal.Decimal]:
-        """(لایه‌هایِ انتخاب‌شده، مقدارِ تأمین‌نشده)."""
+        """(لایه‌های انتخاب‌شده، مقدار تامین‌نشده)."""
         picks, remaining = [], quantity
         for layer in self.order([lyr for lyr in layers if lyr.remaining_quantity > 0]):
             if remaining <= 0:
@@ -88,7 +88,7 @@ class Lofo(CostingStrategy):
 
 
 class Specific(Fifo):
-    """شناساییِ ویژه: لایهٔ همان سریال/بچ اول (در engine فیلتر می‌شود)، باقی مثلِ FIFO."""
+    """شناسایی ویژه: لایهٔ همان سریال/بچ اول (در engine فیلتر می‌شود)، باقی مثل FIFO."""
 
     code = "SPECIFIC"
 
@@ -105,12 +105,12 @@ def get_strategy(code: str) -> CostingStrategy:
     try:
         return _LAYER_STRATEGIES[code]
     except KeyError as exc:
-        raise ValueError(f"روشِ لایه‌ایِ «{code}» شناخته‌شده نیست.") from exc
+        raise ValueError(f"روش لایه‌ای «{code}» شناخته‌شده نیست.") from exc
 
 
 def moving_average(on_hand: decimal.Decimal, average: decimal.Decimal, in_quantity: decimal.Decimal,
                    in_unit_cost: decimal.Decimal) -> decimal.Decimal:
-    """میانگینِ متحرکِ پس از ورود -- همان فرمولِ apply_in (موجودیِ منفی: بهایِ ورودیِ تازه)."""
+    """میانگین متحرک پس از ورود — همان فرمول apply_in (موجودی منفی: بهای ورودی تازه)."""
     if on_hand < 0:
         return in_unit_cost
     denom = on_hand + in_quantity

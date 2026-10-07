@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -172,10 +172,10 @@ check(picked("FIFO", [L(1, 100), L(2, 200)], 150) == ([(100, 100), (50, 200)], 0
 check(picked("LIFO", [L(1, 100), L(2, 200)], 150) == ([(100, 200), (50, 100)], 0), "LIFO: 100@200 + 50@100")
 check(picked("HIFO", [L(1, 100), L(2, 200), L(3, 150)], 150) == ([(100, 200), (50, 150)], 0), "HIFO: 100@200 + 50@150")
 check(picked("LOFO", [L(1, 100), L(2, 200), L(3, 150)], 150) == ([(100, 100), (50, 150)], 0), "LOFO: 100@100 + 50@150")
-check(picked("FIFO", [L(1, 100)], 130)[1] == 30, "کمبود: مقدارِ تأمین‌نشده برگشت داده می‌شود")
-check(cs.moving_average(D(100), D(100), D(100), D(200)) == 150, "میانگینِ متحرک: ۱۰۰@۱۰۰ + ۱۰۰@۲۰۰ = ۱۵۰")
+check(picked("FIFO", [L(1, 100)], 130)[1] == 30, "کمبود: مقدار تامین‌نشده برگشت داده می‌شود")
+check(cs.moving_average(D(100), D(100), D(100), D(200)) == 150, "میانگین متحرک: ۱۰۰@۱۰۰ + ۱۰۰@۲۰۰ = ۱۵۰")
 check(cs.is_layer_method("LIFO") and not cs.is_layer_method("WEIGHTED_AVERAGE") and not cs.is_layer_method("NIFO"),
-      "تشخیصِ روش‌هایِ لایه‌ای")
+      "تشخیص روش‌های لایه‌ای")
 
 # --- کمک‌ها -----------------------------------------------------------------------
 def new_item(code, method, **kw):
@@ -225,7 +225,7 @@ for code, exp in expected.items():
         mk("RECEIPT", it, 100, 150, dst=wh)
     _, ln = mk("ISSUE", it, 150, src=wh)
     got = out_costs(ln)
-    check(got == [(D(q), D(c)) for q, c in exp], f"{code}: خروجِ ۱۵۰ → {exp} (got {got})")
+    check(got == [(D(q), D(c)) for q, c in exp], f"{code}: خروج ۱۵۰ → {exp} (got {got})")
     al = allocs(ln)
     check(len(al) == 2 and all(a[2] is not None and a[3] == "CALCULATED" and a[4] == code for a in al),
           f"{code}: تخصیص به دو لایه ثبت شد")
@@ -234,20 +234,20 @@ for code, exp in expected.items():
           f"{code}: لایه حذف نمی‌شود، فقط مانده کم می‌شود")
     if code == "FIFO":
         check(lyr[0].remaining_quantity == 0 and lyr[0].status_code == "CONSUMED" and lyr[1].remaining_quantity == 50,
-              "FIFO: مصرفِ کاملِ لایهٔ اول و جزئیِ لایهٔ دوم")
+              "FIFO: مصرف کامل لایهٔ اول و جزئی لایهٔ دوم")
         fifo_item = it
 check(all(l.receipt_date == today and l.source_type_code == "RECEIPT" and l.company_id == company_id for l in layers(fifo_item)),
-      "لایه: تاریخِ دریافت = تاریخِ سند، منبع و شرکت ثبت شد")
+      "لایه: تاریخ دریافت = تاریخ سند، منبع و شرکت ثبت شد")
 
 # --- ۳) میانگینِ متحرک ------------------------------------------------------------
 ma = new_item("C-MA", "WEIGHTED_AVERAGE")
 mk("RECEIPT", ma, 100, 100, dst=wh)
 mk("RECEIPT", ma, 100, 200, dst=wh)
 _, ln = mk("ISSUE", ma, 50, src=wh)
-check(out_costs(ln) == [(D(50), D(150))], "میانگین: خروجِ ۵۰ به بهایِ ۱۵۰")
+check(out_costs(ln) == [(D(50), D(150))], "میانگین: خروج ۵۰ به بهای ۱۵۰")
 q, v = bal(ma, wh)
-check(q == 150 and v == D(22500), "میانگین: مانده ۱۵۰ با بهایِ ۱۵۰")
-check(allocs(ln) == [(D(50), D(150), None, "CALCULATED", "WEIGHTED_AVERAGE")], "میانگین: تخصیصِ بدونِ لایه ثبت شد")
+check(q == 150 and v == D(22500), "میانگین: مانده ۱۵۰ با بهای ۱۵۰")
+check(allocs(ln) == [(D(50), D(150), None, "CALCULATED", "WEIGHTED_AVERAGE")], "میانگین: تخصیص بدون لایه ثبت شد")
 check(not layers(ma), "میانگین لایه نمی‌سازد")
 
 # --- ۴) چند انبار، انتقال، برگشت ------------------------------------------------------
@@ -256,13 +256,13 @@ mw = new_item("C-MW", "FIFO")
 mk("RECEIPT", mw, 10, 50, dst=wh, date=today - datetime.timedelta(days=5))
 mk("RECEIPT", mw, 10, 70, dst=wh2)
 _, ln = mk("ISSUE", mw, 4, src=wh2)
-check(out_costs(ln) == [(D(4), D(70))], "چند انبار: خروج از انبارِ ۲ فقط لایهٔ همان انبار را مصرف می‌کند")
+check(out_costs(ln) == [(D(4), D(70))], "چند انبار: خروج از انبار ۲ فقط لایهٔ همان انبار را مصرف می‌کند")
 _, tl = mk("TRANSFER", mw, 3, src=wh, dst=wh2)
 dest = [l for l in layers(mw, wh2) if l.source_type_code == "TRANSFER"]
 check(len(dest) == 1 and dest[0].unit_cost == 50 and dest[0].receipt_date == today - datetime.timedelta(days=5),
-      "انتقال: لایهٔ مقصد با همان بها و تاریخِ دریافتِ مبدأ")
+      "انتقال: لایهٔ مقصد با همان بها و تاریخ دریافت مبدأ")
 _, ln = mk("ISSUE", mw, 3, src=wh2)
-check(out_costs(ln) == [(D(3), D(50))], "انتقال: FIFOِ انبارِ مقصد لایهٔ قدیمی‌ترِ منتقل‌شده را اول مصرف کرد")
+check(out_costs(ln) == [(D(3), D(50))], "انتقال: FIFO انبار مقصد لایهٔ قدیمی‌تر منتقل‌شده را اول مصرف کرد")
 pr = new_item("C-PR", "FIFO")
 mk("RECEIPT", pr, 100, 100, dst=wh)
 _, rl2 = mk("RECEIPT", pr, 100, 120, dst=wh)
@@ -275,42 +275,42 @@ _, rin = mk("RETURN_IN", pr, 10, dst=wh, source_line=sl)
 with new_session() as s:
     rin_cost = s.scalar(select(StockLedger.unit_cost).where(StockLedger.stock_document_line_id == rin))
 expected_avg = (D(100) * 100 + D(50) * 120) / 150
-check(abs(rin_cost - expected_avg) < D("0.000001"), f"برگشت از فروش: بهایِ همان فروش ({rin_cost})")
+check(abs(rin_cost - expected_avg) < D("0.000001"), f"برگشت از فروش: بهای همان فروش ({rin_cost})")
 check(any(l.source_type_code == "RETURN_IN" and abs(l.unit_cost - expected_avg) < D("0.000001") for l in layers(pr)),
-      "برگشت از فروش: لایهٔ تازه با بهایِ فروش")
+      "برگشت از فروش: لایهٔ تازه با بهای فروش")
 
 # --- ۵) تبدیلِ واحد و دقتِ اعشاری ------------------------------------------------------
 uc_item = new_item("C-UC", "FIFO")
 mk("RECEIPT", uc_item, 2, D("100"), dst=wh, qty_base=24)  # ۲ کارتن = ۲۴ عدد، بهایِ هر عدد ۱۰۰
-check(layers(uc_item)[0].original_quantity == 24 and layers(uc_item)[0].unit_cost == 100, "تبدیلِ واحد: لایه به واحدِ پایه")
+check(layers(uc_item)[0].original_quantity == 24 and layers(uc_item)[0].unit_cost == 100, "تبدیل واحد: لایه به واحد پایه")
 dp = new_item("C-DP", "FIFO")
 mk("RECEIPT", dp, 3, D("10.333333"), dst=wh)
 _, ln = mk("ISSUE", dp, D("1.5"), src=wh)
-check(out_costs(ln) == [(D("1.5"), D("10.333333"))] and isinstance(allocs(ln)[0][1], decimal.Decimal), "دقتِ اعشاری با Decimal")
+check(out_costs(ln) == [(D("1.5"), D("10.333333"))] and isinstance(allocs(ln)[0][1], decimal.Decimal), "دقت اعشاری با Decimal")
 
 # --- ۶) سیاستِ موجودیِ منفی -----------------------------------------------------------
 ng = new_item("C-NG", "FIFO")
 mk("RECEIPT", ng, 5, 100, dst=wh)              # انبارِ ۱ موجودیِ منفی را مجاز می‌داند
 _, ln = mk("ISSUE", ng, 7, src=wh)            # پیش‌فرض WAREHOUSE: مثلِ قبل
-check(out_costs(ln)[0] == (D(5), D(100)) and allocs(ln)[-1][3] == "CALCULATED", "سیاستِ پیش‌فرض: رفتارِ قبلی (تنظیمِ انبار)")
+check(out_costs(ln)[0] == (D(5), D(100)) and allocs(ln)[-1][3] == "CALCULATED", "سیاست پیش‌فرض: رفتار قبلی (تنظیم انبار)")
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, negative_stock_policy="BLOCK", user_id=user.user_id, reason="آزمون")
 doc, _ = mk("ISSUE", ng, 1, src=wh, post_it=False)
-check(raises(lambda: post(doc)), "BLOCK: خروجِ بیش از موجودی رد شد (حتی در انبارِ مجاز به منفی)")
+check(raises(lambda: post(doc)), "BLOCK: خروج بیش از موجودی رد شد (حتی در انبار مجاز به منفی)")
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, negative_stock_policy="PENDING", user_id=user.user_id)
 _, ln = mk("ISSUE", ng, 1, src=wh)
-check(allocs(ln)[-1][3] == "PENDING", "PENDING: خروج مجاز، بهایِ کمبود «در انتظار»")
+check(allocs(ln)[-1][3] == "PENDING", "PENDING: خروج مجاز، بهای کمبود «در انتظار»")
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, negative_stock_policy="FALLBACK", user_id=user.user_id)
 fb = new_item("C-FB", "FIFO")
 mk("RECEIPT", fb, 1, 80, dst=wh2)
 _, ln = mk("ISSUE", fb, 3, src=wh2)          # انبارِ ۲ منفی را مجاز نمی‌داند ولی سیاستِ شرکت FALLBACK است
-check(out_costs(ln) == [(D(1), D(80)), (D(2), D(80))] and allocs(ln)[-1][3] == "CALCULATED", "FALLBACK: با آخرین بهایِ معتبر")
+check(out_costs(ln) == [(D(1), D(80)), (D(2), D(80))] and allocs(ln)[-1][3] == "CALCULATED", "FALLBACK: با آخرین بهای معتبر")
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, negative_stock_policy="WAREHOUSE", user_id=user.user_id)
 doc, _ = mk("ISSUE", fb, 1, src=wh2, post_it=False)
-check(raises(lambda: post(doc)), "WAREHOUSE: انبارِ غیرمجاز به منفی، مثلِ قبل رد می‌کند")
+check(raises(lambda: post(doc)), "WAREHOUSE: انبار غیرمجاز به منفی، مثل قبل رد می‌کند")
 with new_session() as s:
     logs = s.scalars(select(ActivityLog).where(ActivityLog.entity_type == "CostingSettings")).all()
-check(len(logs) >= 3 and any("آزمون" in str(l.changes) for l in logs), "تغییرِ تنظیمات با علت در Audit ثبت شد")
-check(raises(lambda: engine_service.set_costing_settings(company_id, "XYZ", True)), "روشِ ناشناخته رد شد")
+check(len(logs) >= 3 and any("آزمون" in str(l.changes) for l in logs), "تغییر تنظیمات با علت در Audit ثبت شد")
+check(raises(lambda: engine_service.set_costing_settings(company_id, "XYZ", True)), "روش ناشناخته رد شد")
 check({"FIFO", "LIFO", "HIFO", "LOFO", "WEIGHTED_AVERAGE", "SPECIFIC", "NIFO", "STANDARD"} <= {m.code for m in catalog_service.list_costing_methods()},
       "همهٔ روش‌ها در فهرست (R258: NIFO هم)")
 
@@ -322,9 +322,9 @@ with new_session() as s:
     s.commit()
 _, ln = mk("ISSUE", item, 10, src=wh)
 op = [l for l in layers(item, wh) if l.source_type_code == "OPENING_BALANCE"]
-check(len(op) == 1 and op[0].original_quantity == on_hand_before, f"لایهٔ آغازین با کلِ موجودیِ قبلی ({on_hand_before})")
+check(len(op) == 1 and op[0].original_quantity == on_hand_before, f"لایهٔ آغازین با کل موجودی قبلی ({on_hand_before})")
 check(abs(op[0].unit_cost - value_before / on_hand_before) < D("0.01") and op[0].remaining_quantity == on_hand_before - 10,
-      "لایهٔ آغازین با میانگینِ قبلی، و خروج از آن")
+      "لایهٔ آغازین با میانگین قبلی، و خروج از آن")
 _, ln = mk("ISSUE", item, 1, src=wh)
 check(len([l for l in layers(item, wh) if l.source_type_code == "OPENING_BALANCE"]) == 1, "لایهٔ آغازین تکرار نمی‌شود")
 
@@ -338,7 +338,7 @@ with new_session() as s:
     je_id = s.get(SD, d).journal_entry_id
     cogs_debit = s.scalar(select(sa_func.sum(JournalEntryLine.debit_amount_base)).where(
         JournalEntryLine.journal_entry_id == je_id, JournalEntryLine.account_id == cogs_gl.account_id))
-check(cogs_debit == sum(D(q) * D(c) for q, c, *_ in allocs(ln)) == D(10 * 130 + 5 * 100), f"بهایِ تمام‌شدهٔ سند = جمعِ تخصیص‌ها ({cogs_debit})")
+check(cogs_debit == sum(D(q) * D(c) for q, c, *_ in allocs(ln)) == D(10 * 130 + 5 * 100), f"بهای تمام‌شدهٔ سند = جمع تخصیص‌ها ({cogs_debit})")
 
 # --- ۹) هم‌زمانی: دو خروجِ هم‌زمان از یک لایه -------------------------------------------------
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, negative_stock_policy="BLOCK", user_id=user.user_id)
@@ -355,7 +355,7 @@ def worker(doc_id):
 threads = [threading.Thread(target=worker, args=(d,)) for d in docs]
 [t.start() for t in threads]
 [t.join() for t in threads]
-check(len(ok) == 1 and len(errors) == 1, f"هم‌زمانی: فقط یکی از دو خروجِ ۶۰تایی موفق شد (ok={len(ok)})")
+check(len(ok) == 1 and len(errors) == 1, f"هم‌زمانی: فقط یکی از دو خروج ۶۰تایی موفق شد (ok={len(ok)})")
 check(layers(cc)[0].remaining_quantity == 40, "هم‌زمانی: لایه بیش از موجودی مصرف نشد")
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, negative_stock_policy="WAREHOUSE", user_id=user.user_id)
 

@@ -152,7 +152,7 @@ export class SyncEngine {
     // تلاشِ دوباره حل نمی‌شود (شروعِ ویزیتِ مرتبط یا هنوز Sync نشده یا
     // خودش قطعاً شکست خورده) -- پس به‌جایِ توقفِ کلِ صف، به‌عنوانِ
     // failedButKept ثبت و از صف حذف می‌شود.
-    throw new ApiError(400, "شروعِ ویزیتِ مرتبط هنوز همگام‌سازی نشده است.");
+    throw new ApiError(400, "شروع ویزیت مرتبط هنوز همگام‌سازی نشده است.");
   }
 
   private async sendVanSaleDelivery(action: Extract<PendingAction, { type: "CREATE_VAN_SALE_DELIVERY" }>): Promise<void> {

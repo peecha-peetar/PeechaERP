@@ -1,9 +1,9 @@
-"""پخشِ سرد/گرم -- R129، بخشِ بارگیریِ خودرو. یک Pick Listِ صبح -- طبقِ
-درخواستِ صریح («سیستم پیشنهاد بدهد چقدر کارتن نیاز داری، چقدر موجودیِ
-خودرو داری، چقدر کسری داری») -- که بعدِ تاییدِ راننده، یک سندِ TRANSFERِ
-واقعی از انبارِ مرکزی به انبارِ خودرو می‌سازد. منطقِ واقعیِ جابه‌جاییِ
+"""پخش سرد/گرم — R129، بخش بارگیری خودرو. یک Pick List صبح — طبق
+درخواست صریح («سیستم پیشنهاد بدهد چقدر کارتن نیاز داری، چقدر موجودی
+خودرو داری، چقدر کسری داری») — که بعد تایید راننده، یک سند TRANSFER
+واقعی از انبار مرکزی به انبار خودرو می‌سازد. منطق واقعی جابه‌جایی
 موجودی این‌جا دوباره نوشته نمی‌شود؛ همان inventory_documents.py/
-inventory_engine.py صدا زده می‌شود -- دقیقاً هم‌الگو با هر سندِ دیگرِ
+inventory_engine.py صدا زده می‌شود — دقیقاً هم‌الگو با هر سند دیگر
 انبار در این پروژه."""
 
 from __future__ import annotations
@@ -56,9 +56,9 @@ def create_vehicle_loading(
     loading_date: datetime.date, lines: list[VehicleLoadingLineFields], notes: str | None = None,
 ) -> int:
     if vehicle_warehouse_id == source_warehouse_id:
-        raise ValueError("انبارِ خودرو و انبارِ مبدا نمی‌توانند یکی باشند.")
+        raise ValueError("انبار خودرو و انبار مبدا نمی‌توانند یکی باشند.")
     if not lines:
-        raise ValueError("حداقل یک ردیف برایِ بارگیری لازم است.")
+        raise ValueError("حداقل یک ردیف برای بارگیری لازم است.")
     # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
     # مرحله انتخاب و مقدار بگیره»): تاییدِ راننده هم این را از طریقِ
     # inventory_engine رد می‌کند، ولی این‌جا هم -- در همان لحظهٔ
@@ -73,7 +73,7 @@ def create_vehicle_loading(
         )
     for line_fields in lines:
         if line_fields.item_id in variant_parent_ids:
-            raise ValueError("این کالا خودِ کالای اصلیِ دارایِ متغیر است -- یکی از متغیرهایش را انتخاب کنید.")
+            raise ValueError("این کالا خود کالای اصلی دارای متغیر است — یکی از متغیرهایش را انتخاب کنید.")
 
     # هر ردیفِ list_balances یک مکان (bin) است -- موجودیِ کلِ انبار جمعِ همه است.
     balances_by_item: dict[int, decimal.Decimal] = {}
@@ -94,14 +94,14 @@ def create_vehicle_loading(
         base_by_line[index] = uc.convert_to_base(line_fields.item_id, line_fields.planned_quantity, line_fields.uom_id)[0]
     source_warehouse = locations_service.get_warehouse(source_warehouse_id, company_id)
     if source_warehouse is None:
-        raise ValueError("انبارِ مبدا نامعتبر است.")
+        raise ValueError("انبار مبدا نامعتبر است.")
     if not source_warehouse.fields.allow_negative_stock:
         for index, line_fields in enumerate(lines):
             available = balances_by_item.get(line_fields.item_id, decimal.Decimal(0))
             if base_by_line[index] > available:
                 raise ValueError(
-                    f"موجودیِ انبارِ مبدا برایِ این کالا کافی نیست (موجود: {available}، "
-                    f"درخواستی: {line_fields.planned_quantity}) -- این انبار اجازهٔ موجودیِ منفی ندارد."
+                    f"موجودی انبار مبدا برای این کالا کافی نیست (موجود: {available}، "
+                    f"درخواستی: {line_fields.planned_quantity}) — این انبار اجازهٔ موجودی منفی ندارد."
                 )
     with new_session() as session:
         loading = VehicleLoading(
@@ -112,7 +112,7 @@ def create_vehicle_loading(
         session.flush()
         for index, line_fields in enumerate(lines):
             if line_fields.planned_quantity <= 0:
-                raise ValueError("مقدارِ برنامه‌ریزی‌شده باید بزرگ‌تر از صفر باشد.")
+                raise ValueError("مقدار برنامه‌ریزی‌شده باید بزرگ‌تر از صفر باشد.")
             session.add(
                 VehicleLoadingLine(
                     vehicle_loading_id=loading.vehicle_loading_id, item_id=line_fields.item_id, uom_id=line_fields.uom_id,
@@ -128,7 +128,7 @@ def get_vehicle_loading(vehicle_loading_id: int, company_id: int) -> VehicleLoad
     with new_session() as session:
         loading = session.get(VehicleLoading, vehicle_loading_id)
         if loading is None or loading.company_id != company_id:
-            raise ValueError("سندِ بارگیری نامعتبر است.")
+            raise ValueError("سند بارگیری نامعتبر است.")
         line_rows = session.scalars(
             select(VehicleLoadingLine).where(VehicleLoadingLine.vehicle_loading_id == vehicle_loading_id)
         ).all()
@@ -166,14 +166,14 @@ def list_vehicle_loadings(
 
 
 def confirm_vehicle_loading(vehicle_loading_id: int, company_id: int, driver_user_id: int) -> int:
-    """طبقِ رفعِ باگِ واقعی: بارگیری باید واقعاً موجودی را جابه‌جا کند --
-    نه فقط یک برنامهٔ کاغذی بماند. سندِ TRANSFERِ واقعی از همان سرویسِ
-    عمومیِ انبار ساخته/تایید/پست می‌شود تا کاردکس/موجودیِ خودرو درست
-    به‌روز شود، دقیقاً هم‌الگو با هر انتقالِ دیگر."""
+    """طبق رفع باگ واقعی: بارگیری باید واقعاً موجودی را جابه‌جا کند --
+    نه فقط یک برنامهٔ کاغذی بماند. سند TRANSFER واقعی از همان سرویس
+    عمومی انبار ساخته/تایید/پست می‌شود تا کاردکس/موجودی خودرو درست
+    به‌روز شود، دقیقاً هم‌الگو با هر انتقال دیگر."""
     with new_session() as session:
         loading = session.get(VehicleLoading, vehicle_loading_id)
         if loading is None or loading.company_id != company_id:
-            raise ValueError("سندِ بارگیری نامعتبر است.")
+            raise ValueError("سند بارگیری نامعتبر است.")
         if loading.status_code != "DRAFT":
             raise ValueError("این بارگیری قبلاً تایید شده است.")
         source_warehouse_id, vehicle_warehouse_id, loading_date = (

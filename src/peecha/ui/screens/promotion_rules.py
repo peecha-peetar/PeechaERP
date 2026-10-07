@@ -1,6 +1,6 @@
-"""پخشِ سرد/گرم -- R130: مدیریتِ پروموشن‌ها از دسکتاپ («بخر-ببر»/
-تخفیفِ پلکانی). طبقِ طرحِ تاییدشده، در این فاز فقط تعریف/CRUD است --
-اتصالِ زندهٔ این پروموشن‌ها به محاسبهٔ فاکتور یک گامِ جداگانه‌یِ آینده
+"""پخش سرد/گرم — R130: مدیریت پروموشن‌ها از دسکتاپ («بخر-ببر»/
+تخفیف پلکانی). طبق طرح تاییدشده، در این فاز فقط تعریف/CRUD است --
+اتصال زندهٔ این پروموشن‌ها به محاسبهٔ فاکتور یک گام جداگانهٔ آینده
 است (services/promotions.py، R129)."""
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ from peecha.services import promotions as promotions_service
 from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "کد", "نام", "نوع"]
-_TYPE_LABELS = {"BUY_X_GET_Y": "بخر و ببر", "THRESHOLD_DISCOUNT": "تخفیفِ پلکانی"}
+_TYPE_LABELS = {"BUY_X_GET_Y": "بخر و ببر", "THRESHOLD_DISCOUNT": "تخفیف پلکانی"}
 _CHANNEL_LABELS = {
     "POS": "حضوری", "WHOLESALE": "عمده", "ONLINE": "اینترنتی", "AGENT": "نماینده", "MARKETPLACE": "مارکت‌پلیس",
-    "VAN_SALES": "پخشِ گرم", "PRE_SALES": "پخشِ سرد",
+    "VAN_SALES": "پخش گرم", "PRE_SALES": "پخش سرد",
 }
 
 
@@ -53,7 +53,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         form_panel = self._build_form_panel()
         outer.addWidget(form_panel, stretch=3)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="پروموشنِ جدید")
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="پروموشن جدید")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -82,7 +82,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("پروموشنِ جدید")
+        self.form_title = QLabel("پروموشن جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -101,7 +101,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         self.type_combo.currentIndexChanged.connect(self._on_type_changed)
         layout.addWidget(self.type_combo)
 
-        layout.addWidget(QLabel("کانال (اختیاری -- خالی یعنی همهٔ کانال‌ها)"))
+        layout.addWidget(QLabel("کانال (اختیاری — خالی یعنی همهٔ کانال‌ها)"))
         self.channel_combo = QComboBox()
         self.channel_combo.addItem("(همهٔ کانال‌ها)", None)
         for code, label in _CHANNEL_LABELS.items():
@@ -111,34 +111,34 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         self.buy_get_row = QWidget()
         buy_get_layout = QVBoxLayout(self.buy_get_row)
         buy_get_layout.setContentsMargins(0, 0, 0, 0)
-        buy_get_layout.addWidget(QLabel("کالایِ مشمولِ خرید"))
+        buy_get_layout.addWidget(QLabel("کالای مشمول خرید"))
         self.applies_item_combo = QComboBox()
         buy_get_layout.addWidget(self.applies_item_combo)
-        buy_get_layout.addWidget(QLabel("تعدادِ خرید"))
+        buy_get_layout.addWidget(QLabel("تعداد خرید"))
         self.buy_quantity_field = QDoubleSpinBox()
         self.buy_quantity_field.setRange(0.001, 999_999)
         self.buy_quantity_field.setDecimals(3)
         buy_get_layout.addWidget(self.buy_quantity_field)
-        buy_get_layout.addWidget(QLabel("تعدادِ هدیه"))
+        buy_get_layout.addWidget(QLabel("تعداد هدیه"))
         self.get_quantity_field = QDoubleSpinBox()
         self.get_quantity_field.setRange(0.001, 999_999)
         self.get_quantity_field.setDecimals(3)
         buy_get_layout.addWidget(self.get_quantity_field)
-        buy_get_layout.addWidget(QLabel("کالایِ هدیه (اختیاری -- خالی یعنی همان کالا)"))
+        buy_get_layout.addWidget(QLabel("کالای هدیه (اختیاری — خالی یعنی همان کالا)"))
         self.get_item_combo = QComboBox()
-        self.get_item_combo.addItem("(همان کالایِ خرید)", None)
+        self.get_item_combo.addItem("(همان کالای خرید)", None)
         buy_get_layout.addWidget(self.get_item_combo)
         layout.addWidget(self.buy_get_row)
 
         self.threshold_row = QWidget()
         threshold_layout = QVBoxLayout(self.threshold_row)
         threshold_layout.setContentsMargins(0, 0, 0, 0)
-        threshold_layout.addWidget(QLabel("سقفِ مبلغِ سند"))
+        threshold_layout.addWidget(QLabel("سقف مبلغ سند"))
         self.threshold_amount_field = QDoubleSpinBox()
         self.threshold_amount_field.setRange(0, 999_999_999_999)
         self.threshold_amount_field.setDecimals(0)
         threshold_layout.addWidget(self.threshold_amount_field)
-        threshold_layout.addWidget(QLabel("درصدِ تخفیف"))
+        threshold_layout.addWidget(QLabel("درصد تخفیف"))
         self.discount_percent_field = QDoubleSpinBox()
         self.discount_percent_field.setRange(0.01, 100)
         self.discount_percent_field.setDecimals(2)
@@ -186,19 +186,19 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         layout.addWidget(build_action_footer([save_button, cancel_button, self.delete_button]))
 
         self.set_field_help([
-            (self.code_field, "کدِ یکتایِ این پروموشن -- بعدِ ذخیره قابلِ‌ویرایش نیست."),
-            (self.name_field, "نامِ نمایشیِ پروموشن."),
-            (self.type_combo, "نوعِ پروموشن -- بخر-ببر (کالایِ هدیه) یا تخفیفِ پلکانی (بر اساسِ سقفِ مبلغِ سند)."),
-            (self.channel_combo, "این پروموشن فقط برایِ همین کانالِ فروش اعمال شود -- خالی یعنی همه‌یِ کانال‌ها."),
-            (self.applies_item_combo, "کالایی که خریدنش شرطِ فعال‌شدنِ این پروموشن است."),
-            (self.buy_quantity_field, "حداقلِ تعدادی که از کالایِ بالا باید خریداری شود."),
-            (self.get_quantity_field, "تعدادِ کالایِ هدیه‌ای که به‌ازایِ رسیدن به تعدادِ خرید داده می‌شود."),
-            (self.get_item_combo, "کالایِ هدیه -- خالی یعنی همان کالایِ خریداری‌شده رایگان داده می‌شود."),
-            (self.threshold_amount_field, "حداقلِ مبلغِ سند که تخفیفِ پلکانی از آن به بعد اعمال می‌شود."),
-            (self.discount_percent_field, "درصدِ تخفیفی که به سندهایِ بالایِ سقفِ مبلغ اعمال می‌شود."),
-            (self.valid_from_field, "تاریخِ شروعِ اعتبارِ این پروموشن."),
-            (self.valid_to_field, "تاریخِ پایانِ اعتبارِ این پروموشن."),
-            (self.is_active_checkbox, "پروموشن‌هایِ غیرِفعال دیگر در محاسبهٔ فاکتور اعمال نمی‌شوند."),
+            (self.code_field, "کد یکتای این پروموشن — بعد ذخیره قابل‌ویرایش نیست."),
+            (self.name_field, "نام نمایشی پروموشن."),
+            (self.type_combo, "نوع پروموشن — بخر-ببر (کالای هدیه) یا تخفیف پلکانی (بر اساس سقف مبلغ سند)."),
+            (self.channel_combo, "این پروموشن فقط برای همین کانال فروش اعمال شود — خالی یعنی همهٔ کانال‌ها."),
+            (self.applies_item_combo, "کالایی که خریدنش شرط فعال‌شدن این پروموشن است."),
+            (self.buy_quantity_field, "حداقل تعدادی که از کالای بالا باید خریداری شود."),
+            (self.get_quantity_field, "تعداد کالای هدیه‌ای که به‌ازای رسیدن به تعداد خرید داده می‌شود."),
+            (self.get_item_combo, "کالای هدیه — خالی یعنی همان کالای خریداری‌شده رایگان داده می‌شود."),
+            (self.threshold_amount_field, "حداقل مبلغ سند که تخفیف پلکانی از آن به بعد اعمال می‌شود."),
+            (self.discount_percent_field, "درصد تخفیفی که به سندهای بالای سقف مبلغ اعمال می‌شود."),
+            (self.valid_from_field, "تاریخ شروع اعتبار این پروموشن."),
+            (self.valid_to_field, "تاریخ پایان اعتبار این پروموشن."),
+            (self.is_active_checkbox, "پروموشن‌های غیرفعال دیگر در محاسبهٔ فاکتور اعمال نمی‌شوند."),
         ])
         return wrap_scrollable(panel)
 
@@ -218,7 +218,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         self._items = catalog_service.list_items(company_id, active_only=True)
         self.applies_item_combo.clear()
         self.get_item_combo.clear()
-        self.get_item_combo.addItem("(همان کالایِ خرید)", None)
+        self.get_item_combo.addItem("(همان کالای خرید)", None)
         for it in self._items:
             label = f"{it.code} — {it.name or ''}"
             self.applies_item_combo.addItem(label, it.item_id)
@@ -242,7 +242,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
     def _load_into_form(self, rule: promotions_service.PromotionRuleRow) -> None:
         self._editing_id = rule.promotion_rule_id
         f = rule.fields
-        self.form_title.setText(f"ویرایشِ {rule.name}")
+        self.form_title.setText(f"ویرایش {rule.name}")
         self.status_label.setText("")
         self.code_field.setText(rule.code)
         self.code_field.setEnabled(False)
@@ -263,7 +263,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("پروموشنِ جدید")
+        self.form_title.setText("پروموشن جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -320,7 +320,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
     def _delete(self) -> None:
         if self._editing_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ پروموشن", "این پروموشن حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف پروموشن", "این پروموشن حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         company_id = self._company_id()

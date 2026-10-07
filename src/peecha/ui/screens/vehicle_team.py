@@ -1,5 +1,5 @@
-"""تیمِ خودرو (فازِ ۲ از پخشِ گرم) -- طبقِ درخواستِ صریحِ کاربر: هر خودرو
-سه نقشِ مستقل دارد (راننده/ویزیتور/موزع)؛ ممکن است هر سه رویِ یک نفر
+"""تیم خودرو (فاز ۲ از پخش گرم) — طبق درخواست صریح کاربر: هر خودرو
+سه نقش مستقل دارد (راننده/ویزیتور/موزع)؛ ممکن است هر سه روی یک نفر
 باشد."""
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ class VehicleTeamScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("تیمِ خودرو")
+        title = QLabel("تیم خودرو")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "هر خودرو تا سه نقشِ مستقل می‌تواند داشته باشد: راننده (مسئولِ کلی/تحویلِ کلی/برگشتِ کالا)، "
-            "ویزیتور (ثبتِ سفارش/فاکتور + تسویه‌حساب)، موزع (تحویلِ فیزیکیِ کالا بر اساسِ فاکتور + تسویه‌حساب). "
+            "هر خودرو تا سه نقش مستقل می‌تواند داشته باشد: راننده (مسئول کلی/تحویل کلی/برگشت کالا)، "
+            "ویزیتور (ثبت سفارش/فاکتور + تسویه‌حساب)، موزع (تحویل فیزیکی کالا بر اساس فاکتور + تسویه‌حساب). "
             "اگر یک نفر هر سه کار را انجام می‌دهد، همان فرد را در هر سه انتخاب کنید."
         )
         hint.setObjectName("sectionHint")
@@ -93,7 +93,7 @@ class VehicleTeamScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 combo.addItem(u.full_name, u.user_id)
 
         if not vehicles:
-            self.status_label.setText("هنوز هیچ انبارِ نوعِ «خودرو»ای تعریف نشده -- ابتدا از تنظیماتِ انبار بسازید.")
+            self.status_label.setText("هنوز هیچ انبار نوع «خودرو»ای تعریف نشده — ابتدا از تنظیمات انبار بسازید.")
             return
         self._load_team()
 
@@ -122,4 +122,4 @@ class VehicleTeamScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
-        self.status_label.setText("تیمِ این خودرو ذخیره شد.")
+        self.status_label.setText("تیم این خودرو ذخیره شد.")

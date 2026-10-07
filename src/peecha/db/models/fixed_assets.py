@@ -1,4 +1,4 @@
-"""مدل‌هایِ دارایی‌هایِ ثابت (schema fa) -- R262. معادلِ db/schema/195_fixed_assets.sql."""
+"""مدل‌های دارایی‌های ثابت (schema fa) — R262. معادل db/schema/195_fixed_assets.sql."""
 
 from __future__ import annotations
 

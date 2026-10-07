@@ -1,6 +1,6 @@
-"""مدل‌هایِ ماژولِ تولید (schema prd) -- R266 به بعد. معادلِ db/schema/198..201_production_*.sql.
+"""مدل‌های ماژول تولید (schema prd) — R266 به بعد. معادل db/schema/198..201_production_*.sql.
 
-BOM همان inv.bom_headers / inv.bom_lines است (مدل در inventory.py)؛ این‌جا فقط جدول‌هایِ تازه.
+فهرست مواد همان inv.bom_headers / inv.bom_lines است (مدل در inventory.py)؛ این‌جا فقط جدول‌های تازه.
 """
 
 from __future__ import annotations

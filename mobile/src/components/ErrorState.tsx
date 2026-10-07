@@ -15,7 +15,7 @@ interface ErrorStateProps {
 export function ErrorState({
   title = "مشکلی پیش آمد",
   description = "اتصال را بررسی کنید و دوباره تلاش کنید.",
-  retryLabel = "تلاشِ دوباره",
+  retryLabel = "تلاش دوباره",
   onRetry,
 }: ErrorStateProps) {
   const { colors, spacing, typography } = useTheme();

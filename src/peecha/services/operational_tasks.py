@@ -1,9 +1,9 @@
-"""کارهایِ عملیاتیِ در انتظارِ کاربر -- R226.
+"""کارهای عملیاتی در انتظار کاربر — R226.
 
-کارتابلِ گردشِ کار (services/cartable.py) فقط آیتم‌هایِ ثبت‌شده در موتورِ
-گردشِ کار را دارد؛ مراحلِ اسنادِ بازرگانی (تصویبِ مدیر، رسیدِ کالا، تاییدِ
-نحوهٔ تسویه، تبدیلِ سفارشِ رسیده به فاکتور) هیچ‌وقت آن‌جا نمی‌رسیدند. این
-سرویس همان صف‌هایِ موجود را (بدونِ منطقِ تازه) برایِ همین کاربر جمع می‌کند.
+کارتابل گردش کار (services/cartable.py) فقط آیتم‌های ثبت‌شده در موتور
+گردش کار را دارد؛ مراحل اسناد بازرگانی (تصویب مدیر، رسید کالا، تایید
+نحوهٔ تسویه، تبدیل سفارش رسیده به فاکتور) هیچ‌وقت آن‌جا نمی‌رسیدند. این
+سرویس همان صف‌های موجود را (بدون منطق تازه) برای همین کاربر جمع می‌کند.
 """
 
 from __future__ import annotations
@@ -21,21 +21,21 @@ from peecha.services import commercial_settings as settings_service
 from peecha.services import roles as roles_service
 
 _DOC_TYPE_TITLES = {
-    "SALES_ORDER": "سفارشِ فروش", "SALES_PROFORMA": "پیش‌فاکتورِ فروش", "SALES_INVOICE": "فاکتورِ فروش",
-    "SALES_RETURN": "برگشت از فروش", "PURCHASE_ORDER": "سفارشِ خرید", "PURCHASE_PROFORMA": "پیش‌فاکتورِ خرید",
-    "PURCHASE_INVOICE": "فاکتورِ خرید", "PURCHASE_RETURN": "برگشت به تامین‌کننده",
-    "CONSIGNMENT_IN": "امانیِ ورودی", "CONSIGNMENT_OUT": "امانیِ خروجی",
+    "SALES_ORDER": "سفارش فروش", "SALES_PROFORMA": "پیش‌فاکتور فروش", "SALES_INVOICE": "فاکتور فروش",
+    "SALES_RETURN": "برگشت از فروش", "PURCHASE_ORDER": "سفارش خرید", "PURCHASE_PROFORMA": "پیش‌فاکتور خرید",
+    "PURCHASE_INVOICE": "فاکتور خرید", "PURCHASE_RETURN": "برگشت به تامین‌کننده",
+    "CONSIGNMENT_IN": "امانی ورودی", "CONSIGNMENT_OUT": "امانی خروجی",
 }
 
 # نوعِ کار -> برچسب
 KIND_LABELS = {
-    "MANAGER_APPROVAL": "تصویبِ مدیر",
-    "GOODS_RECEIPT": "تاییدِ انبار (رسید/حواله)",
-    "PRE_SALES_WAREHOUSE": "تاییدِ انبارِ سفارش",
-    "SETTLEMENT_APPROVAL": "تاییدِ نحوهٔ تسویه",
+    "MANAGER_APPROVAL": "تصویب مدیر",
+    "GOODS_RECEIPT": "تایید انبار (رسید/حواله)",
+    "PRE_SALES_WAREHOUSE": "تایید انبار سفارش",
+    "SETTLEMENT_APPROVAL": "تایید نحوهٔ تسویه",
     "CONVERT_TO_INVOICE": "تبدیل به فاکتور",
-    "POST_ORDER": "ثبتِ نهاییِ سفارش (پیش از رسید)",
-    "INVENTORY_RESIDUAL": "اصلاحِ ماندهٔ ریالیِ موجودیِ صفر",
+    "POST_ORDER": "ثبت نهایی سفارش (پیش از رسید)",
+    "INVENTORY_RESIDUAL": "اصلاح ماندهٔ ریالی موجودی صفر",
 }
 
 
@@ -144,6 +144,6 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
         if residuals:
             tasks.append(OperationalTask(
                 "INVENTORY_RESIDUAL", KIND_LABELS["INVENTORY_RESIDUAL"], 0, "",
-                f"{len(residuals)} کالا با موجودیِ صفر و ماندهٔ ریالی -- پیشنهادِ سندِ تسعیر", "", None, "",
+                f"{len(residuals)} کالا با موجودی صفر و ماندهٔ ریالی — پیشنهاد سند تسعیر", "", None, "",
             ))
     return tasks

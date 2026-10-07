@@ -37,19 +37,19 @@ client = TestClient(app)
 # ۵ تلاشِ اول (رمزِ غلط) باید عادی ۴۰۱ بدهند (نه ۴۲۹)
 for i in range(5):
     resp = client.post("/auth/login", json={"username": "admin", "password": "wrong"})
-    check(resp.status_code == 401, f"تلاشِ #{i+1} با رمزِ غلط، ۴۰۱ عادی (status={resp.status_code})")
+    check(resp.status_code == 401, f"تلاش #{i+1} با رمز غلط، ۴۰۱ عادی (status={resp.status_code})")
 
 # تلاشِ ششم رویِ همان (IP، نامِ‌کاربری) باید ۴۲۹ بدهد
 resp = client.post("/auth/login", json={"username": "admin", "password": "wrong"})
-check(resp.status_code == 429, f"تلاشِ ششم مسدود شد (status={resp.status_code})")
+check(resp.status_code == 429, f"تلاش ششم مسدود شد (status={resp.status_code})")
 
 # حتی با رمزِ درست هم دیگر رد نمی‌شود (شمارش رویِ هر تلاش است، نه فقط شکست)
 resp = client.post("/auth/login", json={"username": "admin", "password": "secret123"})
-check(resp.status_code == 429, f"حتی با رمزِ درست هم رد شد چون سقفِ ۶۰ثانیه پر است (status={resp.status_code})")
+check(resp.status_code == 429, f"حتی با رمز درست هم رد شد چون سقف ۶۰ثانیه پر است (status={resp.status_code})")
 
 # یک نامِ‌کاربریِ دیگر (هرچند نامعتبر) رویِ همان IP هنوز مسدود نیست -- کلید جداست
 resp = client.post("/auth/login", json={"username": "someone-else", "password": "x"})
-check(resp.status_code == 401, f"نامِ‌کاربریِ دیگر رویِ همان IP هنوز مسدود نیست (status={resp.status_code})")
+check(resp.status_code == 401, f"نام‌کاربری دیگر روی همان IP هنوز مسدود نیست (status={resp.status_code})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

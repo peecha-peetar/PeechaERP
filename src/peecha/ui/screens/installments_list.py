@@ -1,11 +1,11 @@
-"""مدیریتِ اقساط -- طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»):
-فهرستِ همه‌یِ اقساطِ برنامه‌ریزی‌شده (از طریقِ روشِ «اقساط» در فرمِ
-دریافت/پرداخت) با وضعیتِ هرکدام. طبقِ درخواستِ بعدی («وصولِ اقساط بتونه
-مستقل هم کار بکنه»)، دکمه‌یِ «وصول» در همین صفحه مستقیماً فرمِ دریافت/
-پرداخت را با طرفِ‌حساب/مبلغِ همان قسط باز می‌کند -- دیگر نیازی به رفتنِ
-دستی به treasury_voucher.py و جستجویِ قسط از دکمه‌یِ 🔗 نیست (آن راه هم
-هم‌چنان کار می‌کند). وصول می‌تواند جزئی هم باشد -- مانده و مبلغِ
-وصول‌شده‌یِ هر قسط جداگانه نمایش داده می‌شود."""
+"""مدیریت اقساط — طبق درخواست صریح («روش دریافت/پرداخت اقساطی»):
+فهرست همهٔ اقساط برنامه‌ریزی‌شده (از طریق روش «اقساط» در فرم
+دریافت/پرداخت) با وضعیت هرکدام. طبق درخواست بعدی («وصول اقساط بتونه
+مستقل هم کار بکنه»)، دکمهٔ «وصول» در همین صفحه مستقیماً فرم دریافت/
+پرداخت را با طرف‌حساب/مبلغ همان قسط باز می‌کند — دیگر نیازی به رفتن
+دستی به treasury_voucher.py و جستجوی قسط از دکمهٔ 🔗 نیست (آن راه هم
+هم‌چنان کار می‌کند). وصول می‌تواند جزئی هم باشد — مانده و مبلغ
+وصول‌شدهٔ هر قسط جداگانه نمایش داده می‌شود."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_comb
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _STATUS_LABELS = {"PENDING": "درانتظار", "OVERDUE": "معوقه", "PAID": "دریافت/پرداخت‌شده"}
-_COLUMNS = ["نوع", "شماره‌یِ فاکتور", "طرفِ‌حساب", "قسط", "سررسید", "مبلغِ کل", "وصول‌شده", "مانده", "وضعیت", "وصول"]
+_COLUMNS = ["نوع", "شمارهٔ فاکتور", "طرف‌حساب", "قسط", "سررسید", "مبلغ کل", "وصول‌شده", "مانده", "وضعیت", "وصول"]
 
 
 class InstallmentsListScreen(FieldHelpMixin, QWidget):
@@ -50,13 +50,13 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("مدیریتِ اقساط")
+        title = QLabel("مدیریت اقساط")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         layout.addWidget(QLabel(
-            "با کلیکِ «وصول» رویِ هر ردیف، فرمِ دریافت/پرداخت با طرفِ‌حساب و ماندهٔ همان قسط باز می‌شود -- وصولِ جزئی "
-            "هم ممکن است. برایِ وصولِ هم‌زمانِ چند قسطِ یک طرفِ‌حساب زیرِ یک سند، چند ردیف را انتخاب (با Ctrl/Shift) و "
-            "دکمهٔ «وصولِ گروهی» را بزنید."
+            "با کلیک «وصول» روی هر ردیف، فرم دریافت/پرداخت با طرف‌حساب و ماندهٔ همان قسط باز می‌شود — وصول جزئی "
+            "هم ممکن است. برای وصول هم‌زمان چند قسط یک طرف‌حساب زیر یک سند، چند ردیف را انتخاب (با Ctrl/Shift) و "
+            "دکمهٔ «وصول گروهی» را بزنید."
         ))
 
         # --- فیلترها: طبقِ درخواستِ صریح («بالای فرم افرادی که اقساط
@@ -70,14 +70,14 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         self.status_filter.currentIndexChanged.connect(self.refresh)
         filters.addWidget(self.status_filter)
 
-        filters.addWidget(QLabel("طرفِ‌حساب"))
+        filters.addWidget(QLabel("طرف‌حساب"))
         self.counterparty_filter_combo = _make_searchable_combo([])
         self.counterparty_filter_combo.setMinimumWidth(180)
         self.counterparty_filter_combo.lineEdit().setPlaceholderText("(همه)")
         self.counterparty_filter_combo.currentIndexChanged.connect(self.refresh)
         filters.addWidget(self.counterparty_filter_combo)
 
-        self.date_filter_checkbox = QCheckBox("فیلترِ سررسید")
+        self.date_filter_checkbox = QCheckBox("فیلتر سررسید")
         self.date_filter_checkbox.toggled.connect(self._on_date_filter_toggled)
         filters.addWidget(self.date_filter_checkbox)
         filters.addWidget(QLabel("از"))
@@ -94,7 +94,7 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         clear_filters_button = QPushButton("✕")
         clear_filters_button.setObjectName("iconButton")
         clear_filters_button.setFixedWidth(36)
-        clear_filters_button.setToolTip("پاک‌کردنِ فیلترها")
+        clear_filters_button.setToolTip("پاک‌کردن فیلترها")
         clear_filters_button.clicked.connect(self._clear_filters)
         filters.addWidget(clear_filters_button)
         filters.addStretch(1)
@@ -112,10 +112,10 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         batch_row = QHBoxLayout()
-        batch_collect_button = QPushButton("💰 وصولِ گروهی (ردیف‌هایِ انتخاب‌شده)")
+        batch_collect_button = QPushButton("💰 وصول گروهی (ردیف‌های انتخاب‌شده)")
         batch_collect_button.setToolTip(
-            "ردیف‌هایِ انتخاب‌شده باید همه متعلق به یک طرفِ‌حساب و یک جهت (دریافت یا پرداخت) باشند -- "
-            "همه با هم، زیرِ یک سندِ واحد، وصول می‌شوند."
+            "ردیف‌های انتخاب‌شده باید همه متعلق به یک طرف‌حساب و یک جهت (دریافت یا پرداخت) باشند -- "
+            "همه با هم، زیر یک سند واحد، وصول می‌شوند."
         )
         batch_collect_button.clicked.connect(self._collect_selected)
         batch_row.addWidget(batch_collect_button)
@@ -123,11 +123,11 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         layout.addLayout(batch_row)
 
         self.set_field_help([
-            (self.status_filter, "فقط اقساطِ همین وضعیت نشان داده شوند."),
-            (self.counterparty_filter_combo, "فقط اقساطِ همین طرفِ‌حساب نشان داده شوند."),
-            (self.date_filter_checkbox, "فیلترِ بازه‌یِ سررسید را فعال/غیرِفعال می‌کند."),
-            (self.date_from_field, "ابتدایِ بازه‌یِ سررسید."),
-            (self.date_to_field, "انتهایِ بازه‌یِ سررسید."),
+            (self.status_filter, "فقط اقساط همین وضعیت نشان داده شوند."),
+            (self.counterparty_filter_combo, "فقط اقساط همین طرف‌حساب نشان داده شوند."),
+            (self.date_filter_checkbox, "فیلتر بازهٔ سررسید را فعال/غیرفعال می‌کند."),
+            (self.date_from_field, "ابتدای بازهٔ سررسید."),
+            (self.date_to_field, "انتهای بازهٔ سررسید."),
         ])
 
     def _company_id(self) -> int | None:
@@ -183,7 +183,7 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
             overdue = line.status_code == "OVERDUE" or (line.status_code == "PENDING" and line.due_date < today)
             status_label = _STATUS_LABELS.get(line.status_code, line.status_code)
             if line.status_code != "PAID" and line.collected_amount > 0:
-                status_label = f"{status_label} (وصولِ جزئی)"
+                status_label = f"{status_label} (وصول جزئی)"
             values = [
                 DOC_TYPE_TITLES.get(line.document_type_code, line.document_type_code) if line.document_type_code else "—",
                 numerals.to_persian_digits(str(line.document_no)) if line.document_no else "—",
@@ -204,9 +204,9 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
             collect_button = QPushButton("💰 وصول")
             collect_button.setEnabled(line.status_code != "PAID" and line.direction in ("RECEIPT", "PAYMENT"))
             collect_button.setToolTip(
-                "بازکردنِ فرمِ دریافت/پرداخت با طرفِ‌حساب و ماندهٔ همین قسط -- وصولِ جزئی (کمتر از مانده) هم ممکن است."
+                "بازکردن فرم دریافت/پرداخت با طرف‌حساب و ماندهٔ همین قسط — وصول جزئی (کمتر از مانده) هم ممکن است."
                 if line.direction in ("RECEIPT", "PAYMENT")
-                else "جهتِ این قسط (دریافت/پرداخت) مشخص نیست."
+                else "جهت این قسط (دریافت/پرداخت) مشخص نیست."
             )
             collect_button.clicked.connect(lambda _checked=False, line=line: self._collect(line))
             self.table.setCellWidget(row_index, 9, collect_button)
@@ -216,8 +216,8 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         if line.direction not in ("RECEIPT", "PAYMENT"):
             return
         nav_code = "TREASURY_RECEIPT" if line.direction == "RECEIPT" else "TREASURY_PAYMENT"
-        doc_part = f"فاکتورِ #{numerals.to_persian_digits(str(line.document_no))} — " if line.document_no else ""
-        description = f"{doc_part}وصولِ قسطِ #{numerals.to_persian_digits(str(line.installment_no))}"
+        doc_part = f"فاکتور #{numerals.to_persian_digits(str(line.document_no))} — " if line.document_no else ""
+        description = f"{doc_part}وصول قسط #{numerals.to_persian_digits(str(line.installment_no))}"
         self._main_window.open_screen(
             nav_code,
             then=lambda screen: screen.prefill_for_installment_collection(
@@ -226,15 +226,15 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         )
 
     def _collect_selected(self) -> None:
-        """طبقِ درخواستِ صریح («هم‌زمان جمعِ دو یا چند قسط هم دریافت
-        بشه»): همه‌یِ ردیف‌هایِ انتخاب‌شده (که هنوز کاملاً وصول نشده‌اند)
-        باید یک طرفِ‌حساب و یک جهت داشته باشند -- در آن صورت، یک فرمِ
-        دریافت/پرداختِ واحد با یک ردیفِ روش به‌ازایِ هرکدام (هرکدام از
-        قبل به همان قسط متصل، با مبلغِ ماندهٔ خودش) باز می‌شود."""
+        """طبق درخواست صریح («هم‌زمان جمع دو یا چند قسط هم دریافت
+        بشه»): همهٔ ردیف‌های انتخاب‌شده (که هنوز کاملاً وصول نشده‌اند)
+        باید یک طرف‌حساب و یک جهت داشته باشند — در آن صورت، یک فرم
+        دریافت/پرداخت واحد با یک ردیف روش به‌ازای هرکدام (هرکدام از
+        قبل به همان قسط متصل، با مبلغ ماندهٔ خودش) باز می‌شود."""
         selected_row_indexes = sorted({index.row() for index in self.table.selectedIndexes()})
         lines = [self._rows[r] for r in selected_row_indexes if 0 <= r < len(self._rows) and self._rows[r].status_code != "PAID"]
         if not lines:
-            QMessageBox.warning(self, "خطا", "ابتدا یک یا چند قسطِ هنوز-وصول‌نشده را از جدول انتخاب کنید.")
+            QMessageBox.warning(self, "خطا", "ابتدا یک یا چند قسط هنوز-وصول‌نشده را از جدول انتخاب کنید.")
             return
         if len(lines) == 1:
             self._collect(lines[0])
@@ -246,14 +246,14 @@ class InstallmentsListScreen(FieldHelpMixin, QWidget):
         ):
             QMessageBox.warning(
                 self, "خطا",
-                "ردیف‌هایِ انتخاب‌شده باید همه متعلق به یک طرفِ‌حساب و یک جهت (دریافت یا پرداخت) باشند.",
+                "ردیف‌های انتخاب‌شده باید همه متعلق به یک طرف‌حساب و یک جهت (دریافت یا پرداخت) باشند.",
             )
             return
         if first.direction not in ("RECEIPT", "PAYMENT"):
-            QMessageBox.warning(self, "خطا", "جهتِ اقساطِ انتخاب‌شده (دریافت/پرداخت) مشخص نیست.")
+            QMessageBox.warning(self, "خطا", "جهت اقساط انتخاب‌شده (دریافت/پرداخت) مشخص نیست.")
             return
         nav_code = "TREASURY_RECEIPT" if first.direction == "RECEIPT" else "TREASURY_PAYMENT"
-        description = f"وصولِ گروهیِ {numerals.to_persian_digits(str(len(lines)))} قسط"
+        description = f"وصول گروهی {numerals.to_persian_digits(str(len(lines)))} قسط"
         self._main_window.open_screen(
             nav_code,
             then=lambda screen: screen.prefill_for_installment_collections(

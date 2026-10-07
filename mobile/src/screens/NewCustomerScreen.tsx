@@ -24,7 +24,7 @@ interface Props {
 const CUSTOMER_TYPE_OPTIONS: { code: string; label: string }[] = [
   { code: "INDIVIDUAL", label: "شخص" }, { code: "COMPANY", label: "شرکت" }, { code: "STORE", label: "فروشگاه" },
   { code: "ORGANIZATION", label: "سازمان" }, { code: "WHOLESALER", label: "عمده‌فروش" },
-  { code: "RETAILER", label: "خرده‌فروش" }, { code: "AGENT", label: "نماینده" }, { code: "ONLINE", label: "مشتریِ آنلاین" },
+  { code: "RETAILER", label: "خرده‌فروش" }, { code: "AGENT", label: "نماینده" }, { code: "ONLINE", label: "مشتری آنلاین" },
 ];
 const CUSTOMER_CLASS_OPTIONS = ["A", "B", "C", "D"];
 
@@ -156,7 +156,7 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
           parent_detail_account_id: parentDetailAccountId,
         },
       });
-      toast.show("مشتری ثبت شد و برایِ تاییدِ سرپرست ارسال می‌شود.", "success");
+      toast.show("مشتری ثبت شد و برای تایید سرپرست ارسال می‌شود.", "success");
       onDone();
     } finally {
       setSubmitting(false);
@@ -171,11 +171,11 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
    * کار کند»). */
   const submit = async () => {
     if (!name.trim()) {
-      toast.show("نامِ مشتری الزامی است.", "danger");
+      toast.show("نام مشتری الزامی است.", "danger");
       return;
     }
     if (maxLevelNo > 1 && parentDetailAccountId === null) {
-      toast.show("ابتدا سطحِ بالاترِ مشتری را انتخاب کنید.", "danger");
+      toast.show("ابتدا سطح بالاتر مشتری را انتخاب کنید.", "danger");
       return;
     }
     setCheckingDuplicates(true);
@@ -203,19 +203,19 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, backgroundColor: colors.background }}>
       <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onDone} />
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>ثبتِ مشتریِ جدید</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>ثبت مشتری جدید</Text>
       {suggestedCode ? (
-        <Text style={[typography.caption, { color: colors.textSecondary }]}>کدِ پیشنهادی: {suggestedCode}</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>کد پیشنهادی: {suggestedCode}</Text>
       ) : null}
 
       {maxLevelNo > 1 ? (
         <View>
           <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
-            سطحِ بالاترِ مشتری *
+            سطح بالاتر مشتری *
           </Text>
           {parentOptions.length === 0 ? (
             <Text style={[typography.caption, { color: colors.danger }]}>
-              هیچ سطحِ بالاتری تعریف نشده -- ابتدا از دسکتاپ ساختارِ گروهِ مشتری را بسازید.
+              هیچ سطح بالاتری تعریف نشده — ابتدا از دسکتاپ ساختار گروه مشتری را بسازید.
             </Text>
           ) : (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
@@ -232,14 +232,14 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
         </View>
       ) : null}
 
-      <Input label="نامِ مشتری *" value={name} onChangeText={setName} placeholder="نامِ فروشگاه/مشتری" />
+      <Input label="نام مشتری *" value={name} onChangeText={setName} placeholder="نام فروشگاه/مشتری" />
       <Input label="موبایل" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
       <Input label="تلفن" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
       <Input label="آدرس" value={address} onChangeText={setAddress} multiline />
       <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} multiline />
 
       <View>
-        <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>نوعِ مشتری</Text>
+        <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>نوع مشتری</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
           {CUSTOMER_TYPE_OPTIONS.map((o) => (
             <GroupChip key={o.code} label={o.label} selected={customerTypeCode === o.code} onPress={() => setCustomerTypeCode(customerTypeCode === o.code ? null : o.code)} />
@@ -248,7 +248,7 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
       </View>
 
       <View>
-        <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>طبقه‌یِ مشتری</Text>
+        <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>طبقهٔ مشتری</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
           {CUSTOMER_CLASS_OPTIONS.map((c) => (
             <GroupChip key={c} label={c} selected={customerClass === c} onPress={() => setCustomerClass(customerClass === c ? null : c)} />
@@ -258,7 +258,7 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
 
       {groups.length > 0 ? (
         <View>
-          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>گروهِ مشتری</Text>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>گروه مشتری</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
             {groups.map((g) => (
               <GroupChip key={g.group_id} label={g.name} selected={groupId === g.group_id} onPress={() => setGroupId(groupId === g.group_id ? null : g.group_id)} />
@@ -269,13 +269,13 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
 
       <Card>
         <Text style={[typography.body, { color: gpsCaptured ? colors.success : colors.textSecondary }]}>
-          {gpsCaptured ? "موقعیتِ مکانی ثبت شد" : "موقعیتِ مکانی ثبت نشده"}
+          {gpsCaptured ? "موقعیت مکانی ثبت شد" : "موقعیت مکانی ثبت نشده"}
         </Text>
-        <Button label="ثبتِ موقعیتِ مکانی" variant="secondary" onPress={captureGps} loading={capturingGps} style={{ marginTop: spacing.sm }} />
+        <Button label="ثبت موقعیت مکانی" variant="secondary" onPress={captureGps} loading={capturingGps} style={{ marginTop: spacing.sm }} />
       </Card>
 
       <Button
-        label={photoBase64 ? "عکس گرفته شد (دوباره بگیر)" : "گرفتنِ عکس (اختیاری)"}
+        label={photoBase64 ? "عکس گرفته شد (دوباره بگیر)" : "گرفتن عکس (اختیاری)"}
         variant="secondary"
         onPress={capturePhoto}
         loading={capturingPhoto}
@@ -283,7 +283,7 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
 
       {duplicates.length > 0 ? (
         <Card>
-          <Text style={[typography.captionBold, { color: colors.danger, marginBottom: spacing.sm }]}>مشتریِ مشابه پیدا شد</Text>
+          <Text style={[typography.captionBold, { color: colors.danger, marginBottom: spacing.sm }]}>مشتری مشابه پیدا شد</Text>
           {duplicates.map((d) => (
             <View key={d.detail_account_id} style={{ marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm }}>
               <Text style={[typography.body, { color: colors.textPrimary }]}>{d.name} ({d.code})</Text>
@@ -291,14 +291,14 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
                 {[d.mobile, d.phone, d.address].filter(Boolean).join(" · ")}
               </Text>
               <Text style={[typography.caption, { color: colors.textSecondary }]}>{d.match_reasons.join("، ")}</Text>
-              <Button label="مشاهده‌یِ مشتری" size="md" variant="ghost" fullWidth={false} onPress={() => onOpenCustomer(d.detail_account_id)} style={{ marginTop: spacing.xs }} />
+              <Button label="مشاهدهٔ مشتری" size="md" variant="ghost" fullWidth={false} onPress={() => onOpenCustomer(d.detail_account_id)} style={{ marginTop: spacing.xs }} />
             </View>
           ))}
-          <Button label="ادامه و ثبتِ مشتریِ جدید" variant="secondary" onPress={submitDespiteDuplicates} loading={submitting} />
+          <Button label="ادامه و ثبت مشتری جدید" variant="secondary" onPress={submitDespiteDuplicates} loading={submitting} />
         </Card>
       ) : (
         <Button
-          label="ثبتِ مشتری"
+          label="ثبت مشتری"
           onPress={submit}
           loading={submitting || checkingDuplicates}
           disabled={!name.trim() || (maxLevelNo > 1 && parentDetailAccountId === null)}

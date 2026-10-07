@@ -1,6 +1,6 @@
-"""لوگو و سربرگِ گزارش‌ها -- R245: بارگذاریِ لوگویِ شرکت و انتخابِ محلِ آن (راست/چپ/بدونِ لوگو).
+"""لوگو و سربرگ گزارش‌ها — R245: بارگذاری لوگوی شرکت و انتخاب محل آن (راست/چپ/بدون لوگو).
 
-لوگو در سربرگِ چاپ/PDF/اکسلِ همهٔ گزارش‌ها و در قالب‌هایِ حرفه‌ای (Jasper) استفاده می‌شود."""
+لوگو در سربرگ چاپ/PDF/اکسل همهٔ گزارش‌ها و در قالب‌های حرفه‌ای (Jasper) استفاده می‌شود."""
 
 from __future__ import annotations
 
@@ -23,31 +23,31 @@ class ReportBrandingScreen(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(14)
-        title = QLabel("لوگو و سربرگِ گزارش‌ها")
+        title = QLabel("لوگو و سربرگ گزارش‌ها")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        hint = QLabel("لوگویِ شرکت در سربرگِ چاپ، PDF و اکسلِ همهٔ گزارش‌ها و در گزارش‌هایِ حرفه‌ای نمایش داده می‌شود. "
-                      "تصویرِ PNG یا JPG تا ۲ مگابایت؛ تصویرِ با زمینهٔ شفاف بهتر است.")
+        hint = QLabel("لوگوی شرکت در سربرگ چاپ، PDF و اکسل همهٔ گزارش‌ها و در گزارش‌های حرفه‌ای نمایش داده می‌شود. "
+                      "تصویر PNG یا JPG تا ۲ مگابایت؛ تصویر با زمینهٔ شفاف بهتر است.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.preview = QLabel("بدونِ لوگو")
+        self.preview = QLabel("بدون لوگو")
         self.preview.setAlignment(Qt.AlignCenter)
         self.preview.setFixedSize(220, 140)
         self.preview.setFrameShape(QFrame.StyledPanel)
         layout.addWidget(self.preview, alignment=Qt.AlignRight)
 
         row = QHBoxLayout()
-        self.upload_button = QPushButton("انتخابِ لوگو…")
+        self.upload_button = QPushButton("انتخاب لوگو…")
         self.upload_button.setObjectName("primaryButton")
         self.upload_button.clicked.connect(self.choose_logo)
-        self.remove_button = QPushButton("حذفِ لوگو")
+        self.remove_button = QPushButton("حذف لوگو")
         self.remove_button.clicked.connect(self.remove_logo)
         row.addWidget(self.upload_button)
         row.addWidget(self.remove_button)
         row.addSpacing(30)
-        row.addWidget(QLabel("محلِ لوگو در گزارش‌ها:"))
+        row.addWidget(QLabel("محل لوگو در گزارش‌ها:"))
         self.position_combo = QComboBox()
         for code, label in companies_service.LOGO_POSITIONS.items():
             self.position_combo.addItem(label, code)
@@ -86,7 +86,7 @@ class ReportBrandingScreen(QWidget):
             self.preview.setPixmap(pixmap.scaled(self.preview.size() * 0.9, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             self.preview.setPixmap(QPixmap())
-            self.preview.setText("بدونِ لوگو")
+            self.preview.setText("بدون لوگو")
         self.remove_button.setEnabled(bool(data))
 
     def set_logo_file(self, path: str) -> bool:
@@ -105,7 +105,7 @@ class ReportBrandingScreen(QWidget):
         return True
 
     def choose_logo(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "انتخابِ لوگو", "", "تصویر (*.png *.jpg *.jpeg *.bmp *.gif *.webp)")
+        path, _ = QFileDialog.getOpenFileName(self, "انتخاب لوگو", "", "تصویر (*.png *.jpg *.jpeg *.bmp *.gif *.webp)")
         if path:
             self.set_logo_file(path)
 
@@ -121,4 +121,4 @@ class ReportBrandingScreen(QWidget):
         company_id = self._company_id()
         if company_id is not None:
             companies_service.set_report_logo_position(company_id, self.position_combo.currentData())
-            theme.set_status_label(self.status_label, "محلِ لوگو ذخیره شد.", ok=True)
+            theme.set_status_label(self.status_label, "محل لوگو ذخیره شد.", ok=True)

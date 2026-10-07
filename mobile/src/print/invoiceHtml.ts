@@ -35,10 +35,10 @@ function qty(value: string): string {
  * document_no خالی است (برچسبِ «پیش‌نمایش» می‌خورد). */
 export function buildInvoiceHtml(data: InvoicePrintData): string {
   const isInvoice = data.document_type_code === "SALES_INVOICE";
-  const title = isInvoice ? "فاکتورِ فروش" : "سفارشِ فروش";
+  const title = isInvoice ? "فاکتور فروش" : "سفارش فروش";
   const numberLabel = data.document_no !== null ? fa(data.document_no) : "پس از همگام‌سازی";
   const companyIds = [
-    data.company.economic_code ? `کدِ اقتصادی: ${fa(escapeHtml(data.company.economic_code))}` : "",
+    data.company.economic_code ? `کد اقتصادی: ${fa(escapeHtml(data.company.economic_code))}` : "",
     data.company.national_id ? `شناسهٔ ملی: ${fa(escapeHtml(data.company.national_id))}` : "",
   ].filter(Boolean).join(" · ");
 
@@ -107,7 +107,7 @@ export function buildInvoiceHtml(data: InvoicePrintData): string {
       <div>تاریخ: ${formatJalaliDate(data.document_date)}</div>
     </div>
   </div>
-  ${data.document_no === null ? `<div class="preview">پیش‌نمایش -- این فاکتور هنوز همگام‌سازی نشده و شمارهٔ رسمی ندارد.</div>` : ""}
+  ${data.document_no === null ? `<div class="preview">پیش‌نمایش — این فاکتور هنوز همگام‌سازی نشده و شمارهٔ رسمی ندارد.</div>` : ""}
   <div class="box">
     <div class="row"><div>مشتری: <b>${escapeHtml(data.customer.name)}</b></div><div>${data.customer.code ? `کد: ${fa(escapeHtml(data.customer.code))}` : ""}</div></div>
     ${data.customer.phone || data.customer.address ? `<div class="muted">${fa(escapeHtml(data.customer.phone))} ${escapeHtml(data.customer.address)}</div>` : ""}
@@ -118,10 +118,10 @@ export function buildInvoiceHtml(data: InvoicePrintData): string {
     <tbody>${lineRows}</tbody>
   </table>
   <table class="totals">
-    <tr><td>جمعِ کل</td><td class="n">${money(data.gross_amount)}</td></tr>
+    <tr><td>جمع کل</td><td class="n">${money(data.gross_amount)}</td></tr>
     ${Number(data.discount_amount) ? `<tr><td>تخفیف</td><td class="n">${money(data.discount_amount)}</td></tr>` : ""}
     ${Number(data.tax_amount) ? `<tr><td>مالیات و عوارض</td><td class="n">${money(data.tax_amount)}</td></tr>` : ""}
-    <tr class="grand"><td>مبلغِ قابلِ پرداخت</td><td class="n">${money(data.total_amount)}</td></tr>
+    <tr class="grand"><td>مبلغ قابل پرداخت</td><td class="n">${money(data.total_amount)}</td></tr>
   </table>
   ${isInvoice ? `
   <table>
@@ -132,7 +132,7 @@ export function buildInvoiceHtml(data: InvoicePrintData): string {
     </tbody>
   </table>
   ${checkRows ? `<table><thead><tr><th>شمارهٔ چک</th><th>بانک</th><th>سررسید</th><th class="n">مبلغ</th></tr></thead><tbody>${checkRows}</tbody></table>` : ""}` : ""}
-  <div class="sign"><div>امضایِ فروشنده</div><div>امضایِ خریدار</div></div>
+  <div class="sign"><div>امضای فروشنده</div><div>امضای خریدار</div></div>
 </body>
 </html>`;
 }

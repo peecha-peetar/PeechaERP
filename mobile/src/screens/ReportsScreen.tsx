@@ -29,7 +29,7 @@ export function ReportsScreen({ apiClient, salesMode }: Props) {
       const data = await apiClient.getTodaySummary(salesMode);
       setSummary(data);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ گزارشِ امروز ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت گزارش امروز ناموفق بود.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -51,7 +51,7 @@ export function ReportsScreen({ apiClient, salesMode }: Props) {
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={[typography.h2, { color: colors.textPrimary }]}>گزارشِ امروز</Text>
+        <Text style={[typography.h2, { color: colors.textPrimary }]}>گزارش امروز</Text>
 
         {loading ? (
           <SkeletonList count={3} />
@@ -60,19 +60,19 @@ export function ReportsScreen({ apiClient, salesMode }: Props) {
         ) : summary ? (
           <View style={{ gap: spacing.md }}>
             <Card>
-              <Text style={[typography.caption, { color: colors.textSecondary }]}>تعدادِ فاکتورِ امروز</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>تعداد فاکتور امروز</Text>
               <Text style={[typography.numeric, { color: colors.textPrimary, fontSize: 24, marginTop: spacing.xxs }]}>
                 {summary.order_count}
               </Text>
             </Card>
             <Card style={{ backgroundColor: colors.successSoft, borderColor: colors.successSoft }}>
-              <Text style={[typography.caption, { color: colors.success }]}>جمعِ فروشِ امروز</Text>
+              <Text style={[typography.caption, { color: colors.success }]}>جمع فروش امروز</Text>
               <Text style={[typography.numeric, { color: colors.success, fontSize: 24, marginTop: spacing.xxs }]}>
                 {formatAmount(summary.sales_amount)}
               </Text>
             </Card>
             <Card style={{ backgroundColor: colors.infoSoft, borderColor: colors.infoSoft }}>
-              <Text style={[typography.caption, { color: colors.info }]}>جمعِ وصولِ امروز</Text>
+              <Text style={[typography.caption, { color: colors.info }]}>جمع وصول امروز</Text>
               <Text style={[typography.numeric, { color: colors.info, fontSize: 24, marginTop: spacing.xxs }]}>
                 {formatAmount(summary.collection_amount)}
               </Text>

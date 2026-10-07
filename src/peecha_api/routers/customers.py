@@ -1,12 +1,12 @@
-"""ثبتِ مشتریِ جدید از موبایل (پذیرشِ مشتری/Customer Acquisition، R134) --
-رویِ همان services/commercial_partners.py موجود سوار می‌شود که از قبل
-گردشِ کارِ تاییدِ اعتباری (PENDING_APPROVAL -> ACTIVE) را پیاده کرده --
-هیچ وضعیت/جدولِ تازه‌ای برایِ همین منظور ساخته نمی‌شود. ویزیتور همیشه
-fast_track=False می‌فرستد (مشتریِ ثبت‌شده از میدان تا تاییدِ مدیر
-PENDING_APPROVAL می‌ماند). دسترسیِ ثبت/تاییدِ مشتری از همان فرمِ
-دسکتاپیِ «تعریفِ تفصیلی» (GL_DIM) می‌آید -- برایِ این‌که یک نقش بتواند از
-موبایل مشتری ثبت/تایید کند، باید در تبِ «نقش‌ها»یِ دسکتاپ اکشنِ
-CREATE/EDIT رویِ فرمِ GL_DIM به آن نقش داده شده باشد (مدیرِ کلِ سیستم
+"""ثبت مشتری جدید از موبایل (پذیرش مشتری/Customer Acquisition، R134) --
+روی همان services/commercial_partners.py موجود سوار می‌شود که از قبل
+گردش کار تایید اعتباری (PENDING_APPROVAL -> ACTIVE) را پیاده کرده --
+هیچ وضعیت/جدول تازه‌ای برای همین منظور ساخته نمی‌شود. ویزیتور همیشه
+fast_track=False می‌فرستد (مشتری ثبت‌شده از میدان تا تایید مدیر
+PENDING_APPROVAL می‌ماند). دسترسی ثبت/تایید مشتری از همان فرم
+دسکتاپی «تعریف تفصیلی» (GL_DIM) می‌آید -- برای این‌که یک نقش بتواند از
+موبایل مشتری ثبت/تایید کند، باید در تب «نقش‌ها»ی دسکتاپ اکشن
+CREATE/EDIT روی فرم GL_DIM به آن نقش داده شده باشد (مدیر کل سیستم
 همیشه مجاز است)."""
 
 from __future__ import annotations
@@ -52,9 +52,9 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 
 @router.get("")
 def list_customers(q: str | None = None, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """طبقِ اصلِ «Search مشتری سریع باشد» (UI-2): فهرستِ کاملِ مشتریانِ
-    شرکت (نه فقط مشتریانِ برنامه‌ریزی‌شده‌یِ /sync/pull) با جستجویِ
-    کد/نام -- برایِ تبِ «مشتریان» که باید همه را ببیند، نه فقط مسیرِ
+    """طبق اصل «Search مشتری سریع باشد» (UI-2): فهرست کامل مشتریان
+    شرکت (نه فقط مشتریان برنامه‌ریزی‌شدهٔ /sync/pull) با جستجوی
+    کد/نام — برای تب «مشتریان» که باید همه را ببیند، نه فقط مسیر
     امروز."""
     customers = dimensions_service.list_customers(ctx.company_id)
     if q:
@@ -71,10 +71,10 @@ def duplicate_check(
     name: str | None = None, mobile: str | None = None, phone: str | None = None,
     ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "CREATE")),
 ) -> list[dict]:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۱۶): پیش از ثبتِ
-    نهاییِ فرمِ «مشتریِ جدید»یِ موبایل صدا زده می‌شود -- فقط وقتی آنلاین
-    است (خودِ اقدامِ ثبت هم‌چنان آفلاین کار می‌کند، این فقط یک هشدارِ
-    اختیاریِ پیش از ارسال است)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R216، بخش ۱۶): پیش از ثبت
+    نهایی فرم «مشتری جدید»ی موبایل صدا زده می‌شود — فقط وقتی آنلاین
+    است (خود اقدام ثبت هم‌چنان آفلاین کار می‌کند، این فقط یک هشدار
+    اختیاری پیش از ارسال است)."""
     matches = partners_service.find_duplicate_customers(ctx.company_id, name=name, mobile=mobile, phone=phone)
     return [
         {
@@ -88,16 +88,16 @@ def duplicate_check(
 
 @router.get("/new-form-options")
 def new_customer_form_options(ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "CREATE"))) -> dict:
-    """طبقِ درخواستِ صریحِ کاربر («Customer Acquisition»): گزینه‌هایِ
-    لازم برایِ فرمِ «مشتریِ جدید»یِ موبایل -- کدِ پیشنهادی (هم‌الگو با
-    suggest_next_codeِ دسکتاپ) و نوعِ مشتری (customer group). مسیر/کانال
+    """طبق درخواست صریح کاربر («Customer Acquisition»): گزینه‌های
+    لازم برای فرم «مشتری جدید»ی موبایل — کد پیشنهادی (هم‌الگو با
+    suggest_next_code دسکتاپ) و نوع مشتری (customer group). مسیر/کانال
     از همان GET /routes و GET /pricing/channels گرفته می‌شود (تکراری
     ساخته نشد).
 
-    طبقِ بازبینیِ صریحِ کاربر (R218): مشتری خودش یک تفصیلیِ چندسطحی‌ست --
-    اگر گروهِ مشتری بیش از یک سطح پیکربندی شده باشد (dimension_group_config.py)،
-    مشتریِ تازه همیشه باید فرزندِ سطحِ آخر باشد، پس کدِ پیشنهادی هم از
-    همان سطح (نه سطحِ ۱ِ هاردکدشده‌یِ قبلی -- که برایِ گروه‌هایِ چندسطحی
+    طبق بازبینی صریح کاربر (R218): مشتری خودش یک تفصیلی چندسطحی‌ست --
+    اگر گروه مشتری بیش از یک سطح پیکربندی شده باشد (dimension_group_config.py)،
+    مشتری تازه همیشه باید فرزند سطح آخر باشد، پس کد پیشنهادی هم از
+    همان سطح (نه سطح ۱ هاردکدشدهٔ قبلی — که برای گروه‌های چندسطحی
     اصلاً درست نبود) محاسبه می‌شود؛ parent_options فقط در همین حالت پر است."""
     dimension_type_id = dimensions_service.get_person_dimension_type_id(ctx.company_id)
     person_group_id = dimensions_service.get_person_group_id(ctx.company_id, dimensions_service.CUSTOMER_GROUP_CODE)
@@ -229,11 +229,11 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
         valid_parent_ids = {o["detail_account_id"] for o in hierarchy["parent_options"]}
         if payload.parent_detail_account_id is None:
             raise ValueError(
-                "گروهِ مشتری چندسطحی است -- ابتدا سطحِ بالاترِ مشتری را انتخاب کنید "
-                "(این کار نیازمندِ اتصالِ اینترنت است)."
+                "گروه مشتری چندسطحی است — ابتدا سطح بالاتر مشتری را انتخاب کنید "
+                "(این کار نیازمند اتصال اینترنت است)."
             )
         if payload.parent_detail_account_id not in valid_parent_ids:
-            raise ValueError("سطحِ بالاترِ انتخاب‌شده معتبر نیست.")
+            raise ValueError("سطح بالاتر انتخاب‌شده معتبر نیست.")
     # طبقِ درخواستِ صریحِ کاربر («Customer Acquisition باید آفلاین هم کار
     # کند»): اگر ویزیتورِ آفلاین کدی نفرستاده، همین‌جا (فقط لحظه‌یِ
     # همگام‌سازیِ واقعی -- نه در گوشی) کدِ بعدی پیشنهاد/اختصاص می‌شود.
@@ -280,7 +280,7 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
         # هنگامِ آفلاین‌بودن یک کد را پیشنهادی گرفته‌اند) نباید ۵۰۰ی خام
         # بدهد -- ویزیتور دوباره تلاش می‌کند (صفِ آفلاین همین اقدام را
         # نگه می‌دارد، کدِ کاملاً هرزمان دوباره محاسبه می‌شود).
-        raise ValueError("این کدِ مشتری از قبل استفاده شده است -- دوباره تلاش کنید.") from exc
+        raise ValueError("این کد مشتری از قبل استفاده شده است — دوباره تلاش کنید.") from exc
     # طبقِ درخواستِ صریحِ کاربر («عکسِ فروشگاه»): همان مکانیزمِ عکسِ
     # حساب‌هایِ تفصیلی (تبِ «عکس‌ها و فایل‌ها»یِ دسکتاپ) -- نه یک سیستمِ
     # موازیِ تازه.
@@ -296,7 +296,7 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
         {"source": "mobile", "code": code, "name": payload.name},
     )
     notifications_service.notify_managers(
-        ctx.company_id, "CUSTOMER_APPROVAL_NEEDED", f"مشتریِ جدید «{payload.name}» نیازِ تاییدِ اعتباری دارد",
+        ctx.company_id, "CUSTOMER_APPROVAL_NEEDED", f"مشتری جدید «{payload.name}» نیاز تایید اعتباری دارد",
         entity_type="CustomerProfile", entity_id=detail_account_id,
     )
     return detail_account_id, code
@@ -353,11 +353,11 @@ def _address_to_dict(a) -> dict:
 
 @router.get("/{detail_account_id}/addresses")
 def list_customer_addresses(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۲ -- چندآدرسیِ
-    واقعی + GeoFence): برخلافِ فیلدِ تکیِ address/gps_latitude رویِ خودِ
-    مشتری (که هم‌چنان برایِ سازگاریِ عقب‌رو باقی می‌ماند)، این‌جا آدرسِ
+    """طبق بازبینی ساختار «تعریف مشتری» (R216، بخش ۲ — چندآدرسی
+    واقعی + GeoFence): برخلاف فیلد تکی address/gps_latitude روی خود
+    مشتری (که هم‌چنان برای سازگاری عقب‌رو باقی می‌ماند)، این‌جا آدرس
     چندگانه با نوع (دفتر/فروشگاه/انبار/تحویل/صورتحساب/مرجوعی) و
-    GPS/شعاعِ GeoFendِ مستقلِ هر آدرس برمی‌گردد."""
+    GPS/شعاع GeoFend مستقل هر آدرس برمی‌گردد."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     return [_address_to_dict(a) for a in partners_service.list_party_addresses(detail_account_id)]
 
@@ -435,7 +435,7 @@ def _guarantee_to_dict(g) -> dict:
 
 @router.get("/{detail_account_id}/guarantees")
 def list_customer_guarantees(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۵)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۵)."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     return [_guarantee_to_dict(g) for g in partners_service.list_customer_guarantees(detail_account_id)]
 
@@ -492,7 +492,7 @@ def _contract_to_dict(c) -> dict:
 
 @router.get("/{detail_account_id}/contracts")
 def list_customer_contracts(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۷)."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     contracts = [
         c for c in contracts_service.list_contracts(ctx.company_id, detail_account_id)
@@ -543,7 +543,7 @@ def cancel_customer_contract(
 
 @router.get("/{detail_account_id}/merchandising")
 def get_customer_merchandising(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> dict:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۰)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۰)."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     row = partners_service.get_customer_merchandising(detail_account_id)
     if row is None:
@@ -596,7 +596,7 @@ def list_customer_activities(
     detail_account_id: int, activity_type_code: str | None = None, open_only: bool = False,
     ctx: AuthContext = Depends(get_current_context),
 ) -> list[dict]:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۱ -- CRMِ کامل)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۱ — CRM کامل)."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     activities = partners_service.list_customer_activities(detail_account_id, activity_type_code, open_only)
     return [_activity_to_dict(a) for a in activities]
@@ -654,8 +654,8 @@ def _segment_to_dict(segment) -> dict:
 
 @router.get("/{detail_account_id}/segment")
 def get_customer_segment(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> dict:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۳ -- امتیازدهی/
-    سگمنت‌بندی) -- همیشه محاسبه‌شده از دادهٔ واقعی، بدونِ فیلدِ ذخیره‌شده."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۳ — امتیازدهی/
+    سگمنت‌بندی) — همیشه محاسبه‌شده از دادهٔ واقعی، بدون فیلد ذخیره‌شده."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     segment = documents_service.compute_customer_segment(ctx.company_id, detail_account_id)
     return _segment_to_dict(segment)
@@ -666,11 +666,11 @@ def get_customer_statement(
     detail_account_id: int, date_from: str | None = None, date_to: str | None = None,
     full_history: bool = False, ctx: AuthContext = Depends(get_current_context),
 ) -> dict:
-    """طبقِ گزارشِ کاربر («معینِ حساب هم در داشبوردِ مشتری باشد»): همان
-    دفترِ معینِ ازپیش‌موجودِ دسکتاپ (reports.list_ledger_entries، طبقِ
-    detail_account_id) -- هیچ منطقِ حسابداریِ تازه‌ای ساخته نشده، فقط
-    از موبایل هم در دسترس شده. به‌طورِ پیش‌فرض فقط یک‌سالِ اخیر (برایِ
-    سبک‌ماندنِ پاسخ)؛ full_history=true کلِ سابقه را برمی‌گرداند."""
+    """طبق گزارش کاربر («معین حساب هم در داشبورد مشتری باشد»): همان
+    دفتر معین ازپیش‌موجود دسکتاپ (reports.list_ledger_entries، طبق
+    detail_account_id) — هیچ منطق حسابداری تازه‌ای ساخته نشده، فقط
+    از موبایل هم در دسترس شده. به‌طور پیش‌فرض فقط یک‌سال اخیر (برای
+    سبک‌ماندن پاسخ)؛ full_history=true کل سابقه را برمی‌گرداند."""
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     parsed_from = (
         datetime.date.fromisoformat(date_from) if date_from
@@ -700,10 +700,10 @@ def get_customer_statement(
 def get_customer_360(
     detail_account_id: int, mode: str | None = None, ctx: AuthContext = Depends(get_current_context),
 ) -> dict:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer
-    ۳۶۰): همه‌یِ ابعادِ مشتری از یک درخواستِ تکی -- هم‌الگو با
-    GET /dashboard/today (یک درخواست، نه ده تا) -- تا کاربر برایِ دیدنِ
-    وضعیتِ کاملِ مشتری مجبور به جابه‌جایی بینِ چند صفحه نباشد."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۲ — Customer
+    ۳۶۰): همهٔ ابعاد مشتری از یک درخواست تکی — هم‌الگو با
+    GET /dashboard/today (یک درخواست، نه ده تا) — تا کاربر برای دیدن
+    وضعیت کامل مشتری مجبور به جابه‌جایی بین چند صفحه نباشد."""
     detail = get_customer_detail(detail_account_id, mode, ctx)
     guarantees = [_guarantee_to_dict(g) for g in partners_service.list_customer_guarantees(detail_account_id)]
     contracts = [

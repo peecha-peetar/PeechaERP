@@ -1,4 +1,4 @@
-"""داشبوردِ بهایِ تمام‌شده -- R259: شاخص‌ها و نمودارها از همان سرویس‌هایِ costing (بدونِ محاسبهٔ موازی)."""
+"""داشبورد بهای تمام‌شده — R259: شاخص‌ها و نمودارها از همان سرویس‌های costing (بدون محاسبهٔ موازی)."""
 
 from __future__ import annotations
 
@@ -17,16 +17,16 @@ from peecha.services.purchase_dashboard import Kpi
 
 _ZERO = decimal.Decimal(0)
 CHART_TITLES = (
-    ("value_trend", "روندِ ارزشِ موجودی", "COST_VALUATION", {}),
-    ("cogs_trend", "روندِ بهایِ تمام‌شدهٔ فروش", "COST_COGS", {}),
-    ("cost_trend", "روندِ میانگینِ بهایِ خروج", "COST_HISTORY", {}),
-    ("purchase_vs_replacement", "بهایِ آخرین خرید در برابرِ بهایِ جایگزینی", "COST_REPLACEMENT", {}),
-    ("top_increase", "بیشترین افزایشِ بها (درصد)", "COST_HISTORY", {}),
+    ("value_trend", "روند ارزش موجودی", "COST_VALUATION", {}),
+    ("cogs_trend", "روند بهای تمام‌شدهٔ فروش", "COST_COGS", {}),
+    ("cost_trend", "روند میانگین بهای خروج", "COST_HISTORY", {}),
+    ("purchase_vs_replacement", "بهای آخرین خرید در برابر بهای جایگزینی", "COST_REPLACEMENT", {}),
+    ("top_increase", "بیشترین افزایش بها (درصد)", "COST_HISTORY", {}),
 )
 
 
 def _month_ends(date_from: datetime.date, date_to: datetime.date) -> list[tuple[str, datetime.date, datetime.date]]:
-    """(برچسبِ ماهِ شمسی، اولِ ماه، پایانِ ماه) بینِ دو تاریخ -- حداکثر ۱۲ ماهِ آخر."""
+    """(برچسب ماه شمسی، اول ماه، پایان ماه) بین دو تاریخ — حداکثر ۱۲ ماه آخر."""
     out = []
     j = jdatetime.date.fromgregorian(date=date_to).replace(day=1)
     while len(out) < 12:
@@ -62,13 +62,13 @@ def dashboard(company_id: int, date_from: datetime.date, date_to: datetime.date)
     total_variance = sum((r[7] or _ZERO for r in variance.rows), _ZERO)
     replacement_gap = sum((r[7] or _ZERO for r in replacement.rows), _ZERO)
     kpis = [
-        Kpi("VALUE", "ارزشِ موجودی", s.inventory_value, "MONEY", "COST_VALUATION", "Σ (ورود − خروج) با بهایِ ثبت‌شده تا پایانِ بازه"),
-        Kpi("COGS", "بهایِ تمام‌شدهٔ خروج‌ها", s.cogs, "MONEY", "COST_ALLOCATION", "Σ تخصیصِ بهایِ حواله‌ها در بازه"),
-        Kpi("AVG", "میانگینِ بهایِ واحد", s.average_cost, "MONEY", "COST_VALUATION", "ارزشِ موجودی ÷ مقدارِ موجودی"),
-        Kpi("VARIANCE", "مغایرتِ بها", total_variance, "MONEY", "COST_VARIANCE", "Σ (بهایِ واقعی − مورد انتظار) × مقدار"),
-        Kpi("REPLACEMENT", "اثرِ بهایِ جایگزینی", replacement_gap, "MONEY", "COST_REPLACEMENT", "Σ (جایگزینی − جاری) × موجودی"),
-        Kpi("LAYERS", "لایه‌هایِ باز", s.open_layers, "INT", "COST_LAYERS", "تعدادِ لایه‌هایِ دارایِ مانده"),
-        Kpi("PENDING", "بهایِ در انتظار", s.pending, "INT", "COST_PENDING", "تخصیص‌هایِ غیرِ «محاسبه‌شده»"),
+        Kpi("VALUE", "ارزش موجودی", s.inventory_value, "MONEY", "COST_VALUATION", "Σ (ورود − خروج) با بهای ثبت‌شده تا پایان بازه"),
+        Kpi("COGS", "بهای تمام‌شدهٔ خروج‌ها", s.cogs, "MONEY", "COST_ALLOCATION", "Σ تخصیص بهای حواله‌ها در بازه"),
+        Kpi("AVG", "میانگین بهای واحد", s.average_cost, "MONEY", "COST_VALUATION", "ارزش موجودی ÷ مقدار موجودی"),
+        Kpi("VARIANCE", "مغایرت بها", total_variance, "MONEY", "COST_VARIANCE", "Σ (بهای واقعی − مورد انتظار) × مقدار"),
+        Kpi("REPLACEMENT", "اثر بهای جایگزینی", replacement_gap, "MONEY", "COST_REPLACEMENT", "Σ (جایگزینی − جاری) × موجودی"),
+        Kpi("LAYERS", "لایه‌های باز", s.open_layers, "INT", "COST_LAYERS", "تعداد لایه‌های دارای مانده"),
+        Kpi("PENDING", "بهای در انتظار", s.pending, "INT", "COST_PENDING", "تخصیص‌های غیر «محاسبه‌شده»"),
     ]
     months = _month_ends(date_from, date_to)
     labels = [m[0] for m in months]
@@ -80,13 +80,13 @@ def dashboard(company_id: int, date_from: datetime.date, date_to: datetime.date)
         avg_cost.append((value / qty) if qty else _ZERO)
     chart_data = {
         "value_trend": {"kind": "bar", "labels": labels, "series": {"ارزش": values}},
-        "cogs_trend": {"kind": "bar", "labels": labels, "series": {"بهایِ تمام‌شده": cogs_series}},
-        "cost_trend": {"kind": "bar", "labels": labels, "series": {"میانگینِ بهایِ خروج": avg_cost}},
+        "cogs_trend": {"kind": "bar", "labels": labels, "series": {"بهای تمام‌شده": cogs_series}},
+        "cost_trend": {"kind": "bar", "labels": labels, "series": {"میانگین بهای خروج": avg_cost}},
     }
     top = sorted((r for r in replacement.rows if r[3] is not None), key=lambda r: -(abs(r[7] or 0)))[:8]
     chart_data["purchase_vs_replacement"] = {
         "kind": "bar", "labels": [r[0][:18] for r in top],
-        "series": {"بهایِ جاری": [r[2] or 0 for r in top], "بهایِ جایگزینی": [r[3] or 0 for r in top]}}
+        "series": {"بهای جاری": [r[2] or 0 for r in top], "بهای جایگزینی": [r[3] or 0 for r in top]}}
     first_last: dict[int, list] = defaultdict(lambda: [None, None])
     with new_session() as session:
         for item_id, cost in session.execute(

@@ -51,16 +51,16 @@ from peecha.services import inventory_engine as engine_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
-k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
@@ -69,15 +69,15 @@ csettings_service.set_account_mapping(company_id, "SALES_REVENUE", revenue_gl.ac
 
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی",
+    company_id, "9101", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 
 real_warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ اصلی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
+    company_id, "WH-1", "انبار اصلی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
 )
-real_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرمِ آزمایشی", "VAN_SALES")
-customer = partners_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی", fast_track=True)
+real_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخش گرم آزمایشی", "VAN_SALES")
+customer = partners_service.create_customer(company_id, "C-1", "مشتری آزمایشی", fast_track=True)
 
 from fastapi.testclient import TestClient
 from peecha_api.main import app
@@ -110,20 +110,20 @@ base_order = {
 # می‌گیرد -- که SyncEngine می‌تواند آن را از صف حذف کند.
 bad_warehouse = dict(base_order, warehouse_id=999999)
 resp = client.post("/orders", headers=auth(admin_token), json=bad_warehouse)
-check(resp.status_code == 400, f"warehouse_idِ نامعتبر -> ۴۰۰ِ تمیز (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 400, f"warehouse_id نامعتبر -> ۴۰۰ تمیز (status={resp.status_code}, body={resp.text})")
 
 bad_channel = dict(base_order, channel_code="NONEXISTENT")
 resp = client.post("/orders", headers=auth(admin_token), json=bad_channel)
-check(resp.status_code == 400, f"channel_codeِ نامعتبر -> ۴۰۰ِ تمیز (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 400, f"channel_code نامعتبر -> ۴۰۰ تمیز (status={resp.status_code}, body={resp.text})")
 
 bad_currency = dict(base_order, currency_id=999999)
 resp = client.post("/orders", headers=auth(admin_token), json=bad_currency)
-check(resp.status_code == 400, f"currency_idِ نامعتبر -> ۴۰۰ِ تمیز (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 400, f"currency_id نامعتبر -> ۴۰۰ تمیز (status={resp.status_code}, body={resp.text})")
 
 # طبقِ سلامتِ رگرسیون: سفارشِ کاملاً معتبر هنوز باید موفق شود (این چک
 # نباید سفارش‌هایِ درست را هم رد کند).
 resp = client.post("/orders", headers=auth(admin_token), json=base_order)
-check(resp.status_code == 200, f"سفارشِ معتبر هنوز موفق است (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"سفارش معتبر هنوز موفق است (status={resp.status_code}, body={resp.text})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

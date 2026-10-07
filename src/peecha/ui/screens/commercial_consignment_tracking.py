@@ -1,7 +1,7 @@
-"""پیگیریِ فاکتورهایِ امانی -- طبقِ درخواستِ صریح (سیستمِ امانیِ خروجی/
-ورودی، هردو جهت). تسویه (تبدیل به فاکتورِ واقعیِ فروش/خرید) از طریقِ همان
-دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند (commercial_document.py) انجام
-می‌شود -- این صفحه فقط دیدِ کلیِ مانده و بازگردانیِ کالایِ فروخته‌نشده/
+"""پیگیری فاکتورهای امانی — طبق درخواست صریح (سیستم امانی خروجی/
+ورودی، هردو جهت). تسویه (تبدیل به فاکتور واقعی فروش/خرید) از طریق همان
+دکمهٔ «تبدیل به فاکتور» در خود فرم سند (commercial_document.py) انجام
+می‌شود — این صفحه فقط دید کلی مانده و بازگردانی کالای فروخته‌نشده/
 مصرف‌نشده را اضافه می‌کند (services/commercial_consignment.py)."""
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES
 from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
-_DOCUMENT_COLUMNS = ["نوع", "شماره", "طرفِ‌حساب", "تاریخ"]
-_LINE_COLUMNS = ["کالا", "مقدار", "تسویه‌شده", "بازگشتی", "مانده", "مقدارِ بازگشت"]
+_DOCUMENT_COLUMNS = ["نوع", "شماره", "طرف‌حساب", "تاریخ"]
+_LINE_COLUMNS = ["کالا", "مقدار", "تسویه‌شده", "بازگشتی", "مانده", "مقدار بازگشت"]
 
 
 class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
@@ -46,13 +46,13 @@ class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("پیگیریِ فاکتورهایِ امانی")
+        title = QLabel("پیگیری فاکتورهای امانی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         layout.addWidget(QLabel(
-            "فقط اسنادِ امانیِ ثبتِ‌نهایی‌شده‌ای که هنوز به‌طورِ کامل تسویه/بازگشت نشده‌اند نمایش داده می‌شوند. "
-            "تسویه (تبدیل به فاکتورِ واقعیِ فروش/خرید) از طریقِ دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند انجام می‌شود؛ "
-            "این‌جا فقط بازگردانیِ کالایِ فروخته‌نشده/مصرف‌نشده ثبت می‌شود."
+            "فقط اسناد امانی ثبت‌نهایی‌شده‌ای که هنوز به‌طور کامل تسویه/بازگشت نشده‌اند نمایش داده می‌شوند. "
+            "تسویه (تبدیل به فاکتور واقعی فروش/خرید) از طریق دکمهٔ «تبدیل به فاکتور» در خود فرم سند انجام می‌شود؛ "
+            "این‌جا فقط بازگردانی کالای فروخته‌نشده/مصرف‌نشده ثبت می‌شود."
         ))
 
         self.document_table = QTableWidget(0, len(_DOCUMENT_COLUMNS))
@@ -64,7 +64,7 @@ class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
         self.document_table.itemSelectionChanged.connect(self._on_document_selected)
         layout.addWidget(self.document_table, stretch=1)
 
-        layout.addWidget(QLabel("ردیف‌هایِ سندِ انتخاب‌شده"))
+        layout.addWidget(QLabel("ردیف‌های سند انتخاب‌شده"))
         self.line_table = QTableWidget(0, len(_LINE_COLUMNS))
         self.line_table.setHorizontalHeaderLabels(_LINE_COLUMNS)
         self.line_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -73,10 +73,10 @@ class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.line_table, stretch=2)
 
         action_row = QHBoxLayout()
-        action_row.addWidget(QLabel("تاریخِ بازگشت"))
+        action_row.addWidget(QLabel("تاریخ بازگشت"))
         self.return_date_field = JalaliDateEdit()
         action_row.addWidget(self.return_date_field)
-        return_button = QPushButton("↩️ ثبتِ بازگشت")
+        return_button = QPushButton("↩️ ثبت بازگشت")
         return_button.setObjectName("primaryButton")
         return_button.clicked.connect(self._submit_return)
         action_row.addWidget(return_button)
@@ -89,7 +89,7 @@ class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.status_label)
 
         self.set_field_help([
-            (self.return_date_field, "تاریخی که کالایِ بازگشتی/مصرف‌نشده در سیستم ثبت می‌شود."),
+            (self.return_date_field, "تاریخی که کالای بازگشتی/مصرف‌نشده در سیستم ثبت می‌شود."),
         ])
 
     def _company_id(self) -> int | None:
@@ -164,14 +164,14 @@ class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
         company_id = self._company_id()
         if company_id is None or self._selected_document is None:
             self.status_label.setObjectName("statusError")
-            self.status_label.setText("ابتدا یک سندِ امانی را از فهرستِ بالا انتخاب کنید.")
+            self.status_label.setText("ابتدا یک سند امانی را از فهرست بالا انتخاب کنید.")
             return
         quantities = {
             line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items() if field.value() > 0
         }
         if not quantities:
             self.status_label.setObjectName("statusError")
-            self.status_label.setText("حداقل برایِ یک ردیف مقدارِ بازگشت وارد کنید.")
+            self.status_label.setText("حداقل برای یک ردیف مقدار بازگشت وارد کنید.")
             return
         try:
             if self._selected_document.document_type_code == "CONSIGNMENT_OUT":

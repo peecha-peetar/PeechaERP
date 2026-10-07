@@ -1,23 +1,23 @@
-"""فرمِ واقعیِ «تنخواه‌گردان» — طبقِ گزارشِ صریح:
-  ۱) طرفِ‌حساب (تنخواه‌دار) باید تفصیلیِ سطحِ آخرِ گروهِ «تنخواه» باشد.
-  ۲) هر تنخواه‌دار می‌تواند هم‌زمان چند تنخواهِ باز داشته باشد؛ هرکدام با
-     شماره‌یِ خودکارِ مستقلِ خودش (per custodian).
-  ۳) افتتاحِ تنخواه یک سندِ پرداختِ واقعیِ اولیه لازم دارد (واریزی به
-     تنخواه‌دار) — همان روش‌هایِ پرداختِ ازپیش‌تعریف‌شده.
-  ۴) ردیف‌هایی که در دورانِ بازبودنِ تنخواه ثبت می‌شوند هیچ سندِ
+"""فرم واقعی «تنخواه‌گردان» — طبق گزارش صریح:
+  ۱) طرف‌حساب (تنخواه‌دار) باید تفصیلی سطح آخر گروه «تنخواه» باشد.
+  ۲) هر تنخواه‌دار می‌تواند هم‌زمان چند تنخواه باز داشته باشد؛ هرکدام با
+     شمارهٔ خودکار مستقل خودش (per custodian).
+  ۳) افتتاح تنخواه یک سند پرداخت واقعی اولیه لازم دارد (واریزی به
+     تنخواه‌دار) — همان روش‌های پرداخت ازپیش‌تعریف‌شده.
+  ۴) ردیف‌هایی که در دوران بازبودن تنخواه ثبت می‌شوند هیچ سند
      حسابداری‌ای نمی‌سازند (نه حتی پیش‌نویس)؛ فقط وقتی تنخواه‌دار خودش
-     تنخواه را می‌بندد، یک سندِ موقتِ پیش‌نویس ساخته می‌شود که او را به‌
-     اندازه‌یِ جمعِ ردیف‌ها بستانکار می‌کند.
+     تنخواه را می‌بندد، یک سند موقت پیش‌نویس ساخته می‌شود که او را به‌
+     اندازهٔ جمع ردیف‌ها بستانکار می‌کند.
 
-طبقِ گزارشِ صریحِ بعدی («این فرم باید همانِ نظم/روش‌هایِ فرمِ دریافت و
-پرداخت را رعایت کند»): این فرم اکنون همان اجزایِ مشترکِ treasury_voucher.py
+طبق گزارش صریح بعدی («این فرم باید همان نظم/روش‌های فرم دریافت و
+پرداخت را رعایت کند»): این فرم اکنون همان اجزای مشترک treasury_voucher.py
 را دوباره‌استفاده می‌کند —
-  • _resolve_row_detail_source (تشخیصِ صحیحِ اینکه معینِ نگاشته‌شده‌یِ هر
-    روشِ پرداخت، اصلاً به تفصیلیِ الزامی نیاز دارد یا نه؛ رفعِ باگِ واقعی:
-    قبلاً فقط روشِ «بانک» تفصیلی می‌پرسید، درحالی‌که هر روشی — ازجمله
-    «نقد» — می‌تواند رویِ حسابی نشسته باشد که تفصیلی رویش الزامی است).
-  • _EnterComboBox و زنجیره‌ی Enterِ کاملِ فرم (هدر و هر ردیف).
-  • _AmountField (اعدادِ سه‌رقم‌سه‌رقم‌جداشده + ارقامِ فارسی + میان‌برِ «+»)."""
+  • _resolve_row_detail_source (تشخیص صحیح اینکه معین نگاشته‌شدهٔ هر
+    روش پرداخت، اصلاً به تفصیلی الزامی نیاز دارد یا نه؛ رفع باگ واقعی:
+    قبلاً فقط روش «بانک» تفصیلی می‌پرسید، درحالی‌که هر روشی — ازجمله
+    «نقد» — می‌تواند روی حسابی نشسته باشد که تفصیلی رویش الزامی است).
+  • _EnterComboBox و زنجیره‌ی Enter کامل فرم (هدر و هر ردیف).
+  • _AmountField (اعداد سه‌رقم‌سه‌رقم‌جداشده + ارقام فارسی + میان‌بر «+»)."""
 
 from __future__ import annotations
 
@@ -60,16 +60,16 @@ _FREE_SEARCH_DETAIL_LABEL = "تفصیلی"
 
 
 def _resolve_petty_cash_detail_options(company_id: int, method: str) -> tuple[list, bool]:
-    """طبقِ همان منطقِ فرمِ دریافت/پرداخت (_resolve_row_detail_source):
-    تفصیلیِ ردیفِ روشِ «method» — نه فقط برایِ روشِ بانک، برایِ هر روشی
-    (نقد/چک هم اگر رویِ چنین حسابی نشسته باشند). خروجی: (گزینه‌ها, آیا
+    """طبق همان منطق فرم دریافت/پرداخت (_resolve_row_detail_source):
+    تفصیلی ردیف روش «method» — نه فقط برای روش بانک، برای هر روشی
+    (نقد/چک هم اگر روی چنین حسابی نشسته باشند). خروجی: (گزینه‌ها, آیا
     انتخاب الزامی است). دو حالت ممکن است گزینه‌هایی برگردانند:
-    ۱) معینِ نگاشته‌شده واقعاً بُعدِ الزامی (نوع‌بُعد یا گروهِ شخص) دارد —
+    ۱) معین نگاشته‌شده واقعاً بُعد الزامی (نوع‌بُعد یا گروه شخص) دارد —
        انتخاب الزامی است.
-    ۲) هیچ الزامی نیست، ولی جستجویِ آزادِ همه‌ی تفصیلی‌هایِ شرکت پیشنهاد
-       می‌شود (برچسبِ عمومیِ «تفصیلی») — انتخاب اختیاری است؛ خودِ
-       _resolve_account_detail_options این دو حالت را فقط از رویِ همین
-       برچسب متمایز می‌کند (برچسبِ عمومی=اختیاری، برچسبِ اختصاصی=الزامی)."""
+    ۲) هیچ الزامی نیست، ولی جستجوی آزاد همهٔ تفصیلی‌های شرکت پیشنهاد
+       می‌شود (برچسب عمومی «تفصیلی») — انتخاب اختیاری است؛ خود
+       _resolve_account_detail_options این دو حالت را فقط از روی همین
+       برچسب متمایز می‌کند (برچسب عمومی=اختیاری، برچسب اختصاصی=الزامی)."""
     _account_id, preset, label, options = _resolve_row_detail_source(company_id, f"PAYMENT_{method}")
     if preset is not None or not options:
         return [], False
@@ -107,7 +107,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.header_grid.setContentsMargins(8, 5, 8, 5)
         self.header_grid.setSpacing(3)
 
-        self.header_grid.addWidget(QLabel("تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ تنخواه)"), 0, 0, 1, 2)
+        self.header_grid.addWidget(QLabel("تنخواه‌دار (تفصیلی سطح آخر گروه تنخواه)"), 0, 0, 1, 2)
         self.custodian_combo = _make_searchable_combo([])
         self.header_grid.addWidget(self.custodian_combo, 1, 0, 1, 2)
 
@@ -120,7 +120,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.fund_no_label.setObjectName("sectionHint")
         self.header_grid.addWidget(self.fund_no_label, 2, 0, 1, 4)
 
-        self.opening_date_label = QLabel("تاریخِ افتتاح")
+        self.opening_date_label = QLabel("تاریخ افتتاح")
         self.header_grid.addWidget(self.opening_date_label, 3, 0)
         self.opening_description_label = QLabel("شرح")
         self.header_grid.addWidget(self.opening_description_label, 3, 1)
@@ -179,7 +179,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         open_layout.setContentsMargins(0, 0, 0, 0)
         open_layout.setSpacing(3)
 
-        open_layout.addWidget(QLabel("واریزیِ اولیه (روشِ پرداخت)"))
+        open_layout.addWidget(QLabel("واریزی اولیه (روش پرداخت)"))
         self.opening_rows_container = QVBoxLayout()
         self.opening_rows_container.setSpacing(2)
         open_layout.addLayout(self.opening_rows_container)
@@ -187,14 +187,14 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         add_opening_row_button = QPushButton("➕")
         add_opening_row_button.setObjectName("iconButton")
         add_opening_row_button.setFixedWidth(44)
-        add_opening_row_button.setToolTip("ردیفِ واریزی")
+        add_opening_row_button.setToolTip("ردیف واریزی")
         add_opening_row_button.clicked.connect(lambda: self._add_opening_row(focus=True))
         open_layout.addWidget(add_opening_row_button)
 
         self.open_fund_button = QPushButton("🔓")
         self.open_fund_button.setObjectName("primaryIconButton")
         self.open_fund_button.setFixedWidth(48)
-        self.open_fund_button.setToolTip("افتتاحِ تنخواه")
+        self.open_fund_button.setToolTip("افتتاح تنخواه")
         self.open_fund_button.clicked.connect(self._open_fund)
         open_layout.addWidget(self.open_fund_button)
 
@@ -236,7 +236,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         add_line_row.addWidget(self.line_detail_combo)
 
         self.line_check_no_field = QLineEdit()
-        self.line_check_no_field.setPlaceholderText("شماره‌یِ چک")
+        self.line_check_no_field.setPlaceholderText("شمارهٔ چک")
         self.line_check_no_field.setMaximumWidth(110)
         self.line_check_no_field.setVisible(False)
         add_line_row.addWidget(self.line_check_no_field)
@@ -255,7 +255,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         add_line_button = QPushButton("➕")
         add_line_button.setObjectName("iconButton")
         add_line_button.setFixedWidth(44)
-        add_line_button.setToolTip("افزودنِ ردیف")
+        add_line_button.setToolTip("افزودن ردیف")
         add_line_button.clicked.connect(self._add_line)
         add_line_row.addWidget(add_line_button)
         manage_layout.addLayout(add_line_row)
@@ -271,7 +271,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.close_fund_button = QPushButton("🔒")
         self.close_fund_button.setObjectName("dangerIconButton")
         self.close_fund_button.setFixedWidth(44)
-        self.close_fund_button.setToolTip("بستنِ تنخواه")
+        self.close_fund_button.setToolTip("بستن تنخواه")
         self.close_fund_button.clicked.connect(self._close_fund)
         fund_actions_row.addWidget(self.close_fund_button)
 
@@ -283,7 +283,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.delete_fund_button = QPushButton("🗑️")
         self.delete_fund_button.setObjectName("dangerIconButton")
         self.delete_fund_button.setFixedWidth(44)
-        self.delete_fund_button.setToolTip("حذفِ کاملِ این تنخواه (سند(هایِ) حسابداری هم حذف می‌شود)")
+        self.delete_fund_button.setToolTip("حذف کامل این تنخواه (سند(های) حسابداری هم حذف می‌شود)")
         self.delete_fund_button.clicked.connect(self._delete_fund)
         fund_actions_row.addWidget(self.delete_fund_button)
         fund_actions_row.addStretch(1)
@@ -300,15 +300,15 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self._on_line_method_changed()
 
         self.set_field_help([
-            (self.custodian_combo, "تفصیلیِ سطحِ آخرِ گروهِ تنخواه که این تنخواه به او سپرده شده."),
+            (self.custodian_combo, "تفصیلی سطح آخر گروه تنخواه که این تنخواه به او سپرده شده."),
             (self.fund_combo, "تنخواهی که می‌خواهید افتتاح/مدیریت کنید."),
-            (self.opening_description_field, "شرحِ سندِ حسابداریِ افتتاحِ این تنخواه."),
-            (self.cost_center_combo, "مرکزِ هزینه‌ای که این تنخواه به آن نسبت داده می‌شود."),
+            (self.opening_description_field, "شرح سند حسابداری افتتاح این تنخواه."),
+            (self.cost_center_combo, "مرکز هزینه‌ای که این تنخواه به آن نسبت داده می‌شود."),
             (self.project_combo, "پروژه‌ای که این تنخواه به آن مربوط است."),
-            (self.line_method_combo, "روشِ پرداختِ همین ردیفِ واریزی/هزینه (نقد، چک، کارت، ...)."),
-            (self.line_detail_combo, "تفصیلیِ لازم برایِ همین روش -- مثلاً حسابِ بانکی برایِ روشِ چک/کارت."),
-            (self.line_check_no_field, "شماره‌یِ چک -- فقط وقتی روشِ ردیف چک باشد."),
-            (self.line_description_field, "شرحِ همین ردیف."),
+            (self.line_method_combo, "روش پرداخت همین ردیف واریزی/هزینه (نقد، چک، کارت، ...)."),
+            (self.line_detail_combo, "تفصیلی لازم برای همین روش — مثلاً حساب بانکی برای روش چک/کارت."),
+            (self.line_check_no_field, "شمارهٔ چک — فقط وقتی روش ردیف چک باشد."),
+            (self.line_description_field, "شرح همین ردیف."),
         ])
 
     # --- بارگذاری ----------------------------------------------------------
@@ -335,9 +335,9 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.refresh()
 
     def _refresh_shared_dimension_widgets(self) -> None:
-        """طبقِ درخواستِ صریح («مرکزِ هزینه و پروژه در یک خط با شرح»):
-        این دو، هم‌الگو با هدرِ فرمِ دریافت/پرداخت، همیشه ساخته می‌شوند و
-        فقط enable/disable می‌شوند (فعال اگر حسابِ پیش‌پرداختِ تنخواه
+        """طبق درخواست صریح («مرکز هزینه و پروژه در یک خط با شرح»):
+        این دو، هم‌الگو با هدر فرم دریافت/پرداخت، همیشه ساخته می‌شوند و
+        فقط enable/disable می‌شوند (فعال اگر حساب پیش‌پرداخت تنخواه
         واقعاً همان بُعد را الزامی کرده باشد)."""
         for code, _label, combo in self._shared_dimension_widgets:
             if self.company_id is None:
@@ -360,9 +360,9 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             self._focus_after_header()
 
     def _rebuild_advance_extra_widgets(self) -> None:
-        """طبقِ رفعِ باگِ واقعی: اگر حسابِ پیش‌پرداختِ تنخواه بُعد/گروهِ
-        شخصِ دیگری هم (غیر از بُعدِ تنخواه‌دار) الزامی کرده باشد، همین‌جا
-        (فقط وقتی واقعاً لازم باشد) کمبویِ متناظرش ساخته می‌شود."""
+        """طبق رفع باگ واقعی: اگر حساب پیش‌پرداخت تنخواه بُعد/گروه
+        شخص دیگری هم (غیر از بُعد تنخواه‌دار) الزامی کرده باشد، همین‌جا
+        (فقط وقتی واقعاً لازم باشد) فهرست متناظرش ساخته می‌شود."""
         for _dim_type_id, label, combo in self._advance_extra_widgets:
             self.header_grid.removeWidget(label)
             self.header_grid.removeWidget(combo)
@@ -390,22 +390,22 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             self._advance_extra_widgets[-1][2].lineEdit().returnPressed.connect(self._focus_first_opening_row)
 
     def _focus_after_header(self) -> None:
-        """زنجیره‌ی Enter بعدِ شرحِ افتتاح: اگر تفصیلیِ اضافه‌ای برایِ
-        حسابِ پیش‌پرداخت لازم باشد، اول به آن‌ها می‌رود، وگرنه مستقیم به
-        اولین ردیفِ واریزی."""
+        """زنجیره‌ی Enter بعد شرح افتتاح: اگر تفصیلی اضافه‌ای برای
+        حساب پیش‌پرداخت لازم باشد، اول به آن‌ها می‌رود، وگرنه مستقیم به
+        اولین ردیف واریزی."""
         if self._advance_extra_widgets:
             self._advance_extra_widgets[0][2].setFocus()
         else:
             self._focus_first_opening_row()
 
     def _method_combo_items(self) -> list[tuple[str, str]]:
-        """طبقِ درخواستِ صریح («همه‌یِ روش‌هایِ فرمِ پرداخت در تنخواه هم
-        باشد — نه فقط نقد/بانک»): فهرستِ کاملِ روش‌ها، هم برایِ ردیفِ
-        واریزیِ اولیه هم ردیفِ مدیریت — نقد/بانک/چک/تخفیف/تهاتر + روش‌هایِ
-        سفارشیِ فعالِ همین شرکت (جهتِ پرداخت)، دقیقاً هم‌الگو با
-        treasury_voucher.py. خرجِ چک (CHECK_DISBURSEMENT) عمداً این‌جا
-        نیست: منطقِ حسابداریِ آن (بازنشستگیِ یک چکِ دریافتیِ مشخص) با
-        ردیف‌هایِ سادهِ «مبلغ + تفصیلیِ اختیاری» تفاوتِ بنیادی دارد."""
+        """طبق درخواست صریح («همهٔ روش‌های فرم پرداخت در تنخواه هم
+        باشد — نه فقط نقد/بانک»): فهرست کامل روش‌ها، هم برای ردیف
+        واریزی اولیه هم ردیف مدیریت — نقد/بانک/چک/تخفیف/تهاتر + روش‌های
+        سفارشی فعال همین شرکت (جهت پرداخت)، دقیقاً هم‌الگو با
+        treasury_voucher.py. خرج چک (CHECK_DISBURSEMENT) عمداً این‌جا
+        نیست: منطق حسابداری آن (بازنشستگی یک چک دریافتی مشخص) با
+        ردیف‌های سادهٔ «مبلغ + تفصیلی اختیاری» تفاوت بنیادی دارد."""
         items = [(code, _METHOD_LABELS[code]) for code in _LINE_METHOD_CODES]
         if self.company_id is not None:
             for custom_method in treasury_service.list_custom_methods(self.company_id, "PAYMENT", active_only=True):
@@ -427,11 +427,11 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
     def _on_custodian_changed(self) -> None:
         custodian_id = self.custodian_combo.currentData()
         self.fund_combo.clear()
-        self.fund_combo.addItem("+ تنخواهِ تازه", _NEW_FUND_SENTINEL)
+        self.fund_combo.addItem("+ تنخواه تازه", _NEW_FUND_SENTINEL)
         if custodian_id is not None and self.company_id is not None:
             for fund in petty_cash_service.list_funds(self.company_id, custodian_id):
                 status_word = "باز" if fund.status == "OPEN" else "بسته"
-                self.fund_combo.addItem(f"شماره‌یِ {numerals.to_persian_digits(str(fund.fund_no))} ({status_word})", fund.fund_id)
+                self.fund_combo.addItem(f"شمارهٔ {numerals.to_persian_digits(str(fund.fund_no))} ({status_word})", fund.fund_id)
         self.fund_combo.setCurrentIndex(0)
         self._on_fund_changed()
 
@@ -457,8 +457,8 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.manage_section.setVisible(True)
         status_word = "باز" if fund.status == "OPEN" else "بسته"
         self.fund_no_label.setText(
-            f"تنخواهِ شماره‌یِ {numerals.to_persian_digits(str(fund.fund_no))} — وضعیت: {status_word} — "
-            f"مبلغِ افتتاح: {numerals.format_money(fund.opening_amount, 0)}"
+            f"تنخواه شمارهٔ {numerals.to_persian_digits(str(fund.fund_no))} — وضعیت: {status_word} — "
+            f"مبلغ افتتاح: {numerals.format_money(fund.opening_amount, 0)}"
         )
         self.close_fund_button.setEnabled(fund.status == "OPEN")
         self.line_method_combo.setEnabled(fund.status == "OPEN")
@@ -471,8 +471,8 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self._refresh_lines()
 
     def _on_fund_combo_return(self) -> None:
-        """زنجیره‌ی Enter: تنخواه -> (اگر تازه) تاریخِ افتتاح، (اگر موجود)
-        روشِ ردیفِ تازه."""
+        """زنجیره‌ی Enter: تنخواه -> (اگر تازه) تاریخ افتتاح، (اگر موجود)
+        روش ردیف تازه."""
         if self._current_fund_id is None:
             self.opening_date_field.setFocus()
         else:
@@ -527,19 +527,19 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             amount_field.setFocus()
 
     def _focus_opening_row_after(self, row_index: int) -> None:
-        """زنجیره‌ی Enter بعدِ شرحِ یک ردیفِ واریزی: اگر آخرین ردیف است،
-        ردیفِ تازه اضافه و فوکوس به روشِ همان ردیفِ تازه می‌رود؛ وگرنه به
-        روشِ ردیفِ بعدی."""
+        """زنجیره‌ی Enter بعد شرح یک ردیف واریزی: اگر آخرین ردیف است،
+        ردیف تازه اضافه و فوکوس به روش همان ردیف تازه می‌رود؛ وگرنه به
+        روش ردیف بعدی."""
         if row_index + 1 < len(self._opening_rows):
             self._opening_rows[row_index + 1][1].setFocus()
         else:
             self._add_opening_row(focus=True)
 
     def _add_opening_row(self, focus: bool = False) -> None:
-        """طبقِ درخواستِ صریح («همه‌یِ روش‌هایِ فرمِ پرداخت اینجا هم
-        باشه»): ردیفِ واریزیِ اولیه هم اکنون دقیقاً همان فهرستِ کاملِ
-        روش‌ها را دارد (نه فقط نقد/بانک)؛ چک هم فیلدهایِ تخصصیِ خودش
-        (شماره/تاریخِ سررسید) را دارد، هم‌الگو با ردیفِ مدیریت."""
+        """طبق درخواست صریح («همهٔ روش‌های فرم پرداخت اینجا هم
+        باشه»): ردیف واریزی اولیه هم اکنون دقیقاً همان فهرست کامل
+        روش‌ها را دارد (نه فقط نقد/بانک)؛ چک هم فیلدهای تخصصی خودش
+        (شماره/تاریخ سررسید) را دارد، هم‌الگو با ردیف مدیریت."""
         row_index = len(self._opening_rows)
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
@@ -555,7 +555,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         detail_combo.setVisible(False)
         row_layout.addWidget(detail_combo)
         check_no_field = QLineEdit()
-        check_no_field.setPlaceholderText("شماره‌یِ چک")
+        check_no_field.setPlaceholderText("شمارهٔ چک")
         check_no_field.setMaximumWidth(110)
         check_no_field.setVisible(False)
         row_layout.addWidget(check_no_field)
@@ -598,7 +598,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
                 continue
             if combo.currentData() is None:
                 theme.set_status_label(
-                    self.status_label, f"انتخابِ «{label.text()}» برایِ حسابِ پیش‌پرداختِ تنخواه الزامی است.", ok=False
+                    self.status_label, f"انتخاب «{label.text()}» برای حساب پیش‌پرداخت تنخواه الزامی است.", ok=False
                 )
                 combo.setFocus()
                 return
@@ -607,7 +607,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         for dim_type_id, label, combo in self._advance_extra_widgets:
             if combo.currentData() is None:
                 theme.set_status_label(
-                    self.status_label, f"انتخابِ «{label.text()}» برایِ حسابِ پیش‌پرداختِ تنخواه الزامی است.", ok=False
+                    self.status_label, f"انتخاب «{label.text()}» برای حساب پیش‌پرداخت تنخواه الزامی است.", ok=False
                 )
                 combo.setFocus()
                 return
@@ -626,7 +626,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             if method == "CHECK":
                 is_required = True
             if is_required and detail_combo.currentData() is None:
-                theme.set_status_label(self.status_label, "تفصیلیِ الزامیِ یکی از ردیف‌هایِ واریزی انتخاب نشده است.", ok=False)
+                theme.set_status_label(self.status_label, "تفصیلی الزامی یکی از ردیف‌های واریزی انتخاب نشده است.", ok=False)
                 detail_combo.setFocus()
                 return
         method_lines = [
@@ -643,7 +643,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             if amount_field.value() > 0
         ]
         if not method_lines:
-            theme.set_status_label(self.status_label, "حداقل یک ردیفِ واریزیِ اولیه (با مبلغِ مثبت) لازم است.", ok=False)
+            theme.set_status_label(self.status_label, "حداقل یک ردیف واریزی اولیه (با مبلغ مثبت) لازم است.", ok=False)
             return
         try:
             fund_id, _result = petty_cash_service.open_fund(
@@ -673,7 +673,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.line_detail_combo.setVisible(bool(options))
 
     def _on_line_method_return(self) -> None:
-        """زنجیره‌ی Enter: روش -> تفصیلی (اگر لازم) وگرنه شماره‌یِ چک
+        """زنجیره‌ی Enter: روش -> تفصیلی (اگر لازم) وگرنه شمارهٔ چک
         (اگر روش چک است) وگرنه مستقیم مبلغ."""
         if self.line_detail_combo.isVisible():
             self.line_detail_combo.setFocus()
@@ -708,7 +708,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             delete_button.setEnabled(self.close_fund_button.isEnabled())
             self.lines_table.setCellWidget(row_index, 3, delete_button)
         total = sum((l.amount for l in self._lines), decimal.Decimal(0))
-        self.lines_total_label.setText(f"جمعِ ردیف‌ها: {numerals.format_money(total, 0)}")
+        self.lines_total_label.setText(f"جمع ردیف‌ها: {numerals.format_money(total, 0)}")
 
     def _add_line(self) -> None:
         if self._current_fund_id is None:
@@ -716,11 +716,11 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         method = self.line_method_combo.currentData()
         amount = decimal.Decimal(str(self.line_amount_field.value()))
         if amount <= 0:
-            theme.set_status_label(self.status_label, "مبلغِ ردیف را وارد کنید.", ok=False)
+            theme.set_status_label(self.status_label, "مبلغ ردیف را وارد کنید.", ok=False)
             return
         _options, is_required = _resolve_petty_cash_detail_options(self.company_id, method) if self.company_id else ([], False)
         if is_required and self.line_detail_combo.currentData() is None:
-            theme.set_status_label(self.status_label, "تفصیلیِ الزامیِ این روش را انتخاب کنید.", ok=False)
+            theme.set_status_label(self.status_label, "تفصیلی الزامی این روش را انتخاب کنید.", ok=False)
             self.line_detail_combo.setFocus()
             return
         try:
@@ -741,7 +741,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.line_method_combo.setFocus()
 
     def _delete_line(self, line_id: int) -> None:
-        confirm = QMessageBox.question(self, "حذفِ ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -755,11 +755,11 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         if self._current_fund_id is None or session.current_user is None:
             return
         if not self._lines:
-            theme.set_status_label(self.status_label, "برایِ بستنِ تنخواه حداقل یک ردیف لازم است.", ok=False)
+            theme.set_status_label(self.status_label, "برای بستن تنخواه حداقل یک ردیف لازم است.", ok=False)
             return
         confirm = QMessageBox.question(
-            self, "بستنِ تنخواه",
-            "با بستنِ تنخواه، سندِ موقتِ پیش‌نویسِ تسویه ساخته می‌شود و دیگر امکانِ افزودنِ ردیفِ تازه نیست. ادامه می‌دهید؟",
+            self, "بستن تنخواه",
+            "با بستن تنخواه، سند موقت پیش‌نویس تسویه ساخته می‌شود و دیگر امکان افزودن ردیف تازه نیست. ادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -771,7 +771,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             return
         theme.set_status_label(
             self.status_label,
-            f"تنخواه بسته شد؛ سندِ موقتِ پیش‌نویس با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد.",
+            f"تنخواه بسته شد؛ سند موقت پیش‌نویس با شمارهٔ موقت {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد.",
             ok=True,
         )
         self._on_custodian_changed()
@@ -780,9 +780,9 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         if self._current_fund_id is None or session.current_user is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ تنخواه",
-            "این تنخواه، همه‌یِ ردیف‌هایش، و سند(هایِ) حسابداریِ افتتاح/بستنِ آن به‌طورِ کامل حذف می‌شود. "
-            "این عمل قابلِ بازگشت نیست. ادامه می‌دهید؟",
+            self, "حذف تنخواه",
+            "این تنخواه، همهٔ ردیف‌هایش، و سند(های) حسابداری افتتاح/بستن آن به‌طور کامل حذف می‌شود. "
+            "این عمل قابل بازگشت نیست. ادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:

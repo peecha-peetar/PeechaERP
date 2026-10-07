@@ -38,15 +38,15 @@ def create_contract(
     contract_category_code: str = "STANDARD", committed_amount: decimal.Decimal | None = None,
     commitments_text: str | None = None,
 ) -> int:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷ -- قراردادِ
-    نمایندگی/سازمانی + سهمیه‌یِ مبلغی + تعهدات): committed_amount
-    مستقل از committed_quantityِ قدیمی است -- یک قرارداد می‌تواند سهمیه‌یِ
-    مبلغی (بدونِ کالایِ خاص، item_id=None) یا سهمیه‌یِ تعدادیِ یک کالایِ
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۷ — قرارداد
+    نمایندگی/سازمانی + سهمیهٔ مبلغی + تعهدات): committed_amount
+    مستقل از committed_quantity قدیمی است — یک قرارداد می‌تواند سهمیهٔ
+    مبلغی (بدون کالای خاص، item_id=None) یا سهمیهٔ تعدادی یک کالای
     مشخص باشد، یا هردو."""
     if contract_type_code not in ("SALES", "PURCHASE"):
-        raise ValueError("نوعِ قرارداد نامعتبر است.")
+        raise ValueError("نوع قرارداد نامعتبر است.")
     if contract_category_code not in _CONTRACT_CATEGORIES:
-        raise ValueError("دسته‌یِ قرارداد نامعتبر است.")
+        raise ValueError("دستهٔ قرارداد نامعتبر است.")
     with new_session() as session:
         row = CommercialContract(
             company_id=company_id, contract_type_code=contract_type_code,
@@ -70,17 +70,17 @@ def cancel_contract(contract_id: int, company_id: int) -> None:
 
 
 def record_contract_consumption(contract_id: int, quantity: decimal.Decimal, amount: decimal.Decimal) -> None:
-    """طبقِ اصلِ «سهمیه بدونِ ردیابیِ مصرف بی‌معناست»: مصرفِ تعدادی/مبلغی
-    را رویِ قرارداد اضافه می‌کند -- عمداً فراخوانیِ دستی/جداگانه است (نه
-    قلابِ خودکارِ رویِ هر فاکتور)، چون تطبیقِ خودکارِ خط-به-خطِ فاکتور با
-    قراردادِ درست (کدام قرارداد از چند قراردادِ فعالِ هم‌کالا) یک تصمیمِ
-    کسب‌وکاریِ جداگانه است که بدونِ نمونه‌یِ واقعیِ کاربر نباید حدس زده شود."""
+    """طبق اصل «سهمیه بدون ردیابی مصرف بی‌معناست»: مصرف تعدادی/مبلغی
+    را روی قرارداد اضافه می‌کند — عمداً فراخوانی دستی/جداگانه است (نه
+    قلاب خودکار روی هر فاکتور)، چون تطبیق خودکار خط-به-خط فاکتور با
+    قرارداد درست (کدام قرارداد از چند قرارداد فعال هم‌کالا) یک تصمیم
+    کسب‌وکاری جداگانه است که بدون نمونهٔ واقعی کاربر نباید حدس زده شود."""
     with new_session() as session:
         row = session.get(CommercialContract, contract_id)
         if row is None:
             raise ValueError("قرارداد نامعتبر است.")
         if row.status_code != "ACTIVE":
-            raise ValueError("فقط قراردادِ فعال قابلِ‌مصرف است.")
+            raise ValueError("فقط قرارداد فعال قابل‌مصرف است.")
         row.consumed_quantity = (row.consumed_quantity or decimal.Decimal(0)) + quantity
         row.consumed_amount = (row.consumed_amount or decimal.Decimal(0)) + amount
         session.commit()
@@ -96,7 +96,7 @@ def list_commission_rules(company_id: int) -> list[CommissionRule]:
 
 def create_commission_rule(company_id: int, code: str, name: str, basis_code: str, rate_value: decimal.Decimal | None = None) -> int:
     if basis_code not in ("PERCENT_OF_TOTAL", "PERCENT_OF_MARGIN", "FLAT_PER_UNIT", "TIERED"):
-        raise ValueError("مبنایِ کمیسیون نامعتبر است.")
+        raise ValueError("مبنای کمیسیون نامعتبر است.")
     with new_session() as session:
         row = CommissionRule(company_id=company_id, code=code, name=name, basis_code=basis_code, rate_value=rate_value)
         session.add(row)
@@ -127,7 +127,7 @@ def create_commission_entry_for_line(
 
 
 def reverse_commission_entries_for_document(document_id: int) -> None:
-    """طبقِ مرحلهٔ ۵، بخشِ ۶: برگشتِ فاکتور، کمیسیونِ متناظر را REVERSED
+    """طبق مرحلهٔ ۵، بخش ۶: برگشت فاکتور، کمیسیون متناظر را REVERSED
     می‌کند."""
     with new_session() as session:
         entries = session.scalars(
@@ -158,7 +158,7 @@ def create_shipment(
     shipping_cost: decimal.Decimal = _ZERO, billed_to_customer: bool = False,
 ) -> int:
     if shipping_method_code not in ("PICKUP", "COURIER", "POST", "FREIGHT"):
-        raise ValueError("روشِ حمل نامعتبر است.")
+        raise ValueError("روش حمل نامعتبر است.")
     with new_session() as session:
         row = Shipment(
             document_id=document_id, carrier_name=carrier_name, tracking_no=tracking_no,

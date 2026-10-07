@@ -1,15 +1,15 @@
-"""کلاینتِ سبکِ AMI (Asterisk Manager Interface) برایِ Click-to-Call --
-طبقِ درخواستِ صریحِ کاربر («وصل بشه به سیستمِ سانترال یا وویپ ... با
-کلیک کردن روی اون تماس گرفت»). ایزابل بر پایه‌یِ آستریسک است و AMI
-یک پروتکلِ متنیِ ساده رویِ TCP است -- نیازی به هیچ کتابخانه‌یِ بیرونی
-نیست (برخلافِ REST APIِ خودِ ایزابل که JWT/نسخه‌بندیِ متغیر دارد و کمتر
-پایدار است بینِ نسخه‌ها).
+"""کلاینت سبک AMI (Asterisk Manager Interface) برای Click-to-Call --
+طبق درخواست صریح کاربر («وصل بشه به سیستم سانترال یا وویپ ... با
+کلیک کردن روی اون تماس گرفت»). ایزابل بر پایهٔ آستریسک است و AMI
+یک پروتکل متنی ساده روی TCP است — نیازی به هیچ کتابخانهٔ بیرونی
+نیست (برخلاف REST API خود ایزابل که JWT/نسخه‌بندی متغیر دارد و کمتر
+پایدار است بین نسخه‌ها).
 
-الگو: Login -> Originate (داخلیِ خودِ کاربر را زنگ می‌زند؛ با جواب‌دادنِ
+الگو: Login -> Originate (داخلی خود کاربر را زنگ می‌زند؛ با جواب‌دادن
 اپراتور، سانترال خودش شمارهٔ مشتری را هم می‌گیرد و دو طرف را پل
-می‌کند) -> Logoff. طبقِ اصلِ «تیکِ پس‌زمینه‌ای/عملیاتِ بیرونی هیچ‌وقت
-نباید برنامه را متوقف کند»، این تابع هیچ‌وقت raise نمی‌کند -- همیشه
-یک OriginateResult برمی‌گرداند، حتی در بدترین خطایِ شبکه."""
+می‌کند) -> Logoff. طبق اصل «تیک پس‌زمینه‌ای/عملیات بیرونی هیچ‌وقت
+نباید برنامه را متوقف کند»، این تابع هیچ‌وقت raise نمی‌کند — همیشه
+یک OriginateResult برمی‌گرداند، حتی در بدترین خطای شبکه."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def originate_call(
             _send_action(sock, {"Action": "Login", "Username": ami_username, "Secret": ami_secret})
             login_response = _read_response(sock, timeout)
             if "Response: Success" not in login_response:
-                return OriginateResult(False, "ورود به سانترال ناموفق بود -- نامِ‌کاربری/رمزِ AMI را در تنظیمات بررسی کنید.")
+                return OriginateResult(False, "ورود به سانترال ناموفق بود — نام‌کاربری/رمز AMI را در تنظیمات بررسی کنید.")
 
             channel = f"{channel_tech_prefix}/{agent_extension}"
             _send_action(
@@ -80,7 +80,7 @@ def originate_call(
             _send_action(sock, {"Action": "Logoff"})
 
             if "Response: Success" in originate_response:
-                return OriginateResult(True, "درخواستِ تماس برایِ سانترال ارسال شد -- گوشیِ داخلیِ شما زنگ می‌خورد.")
-            return OriginateResult(False, f"سانترال درخواستِ تماس را رد کرد: {originate_response.strip()[:200] or 'بدونِ پاسخ'}")
+                return OriginateResult(True, "درخواست تماس برای سانترال ارسال شد — گوشی داخلی شما زنگ می‌خورد.")
+            return OriginateResult(False, f"سانترال درخواست تماس را رد کرد: {originate_response.strip()[:200] or 'بدون پاسخ'}")
     except (OSError, socket.timeout, TimeoutError) as exc:
         return OriginateResult(False, f"اتصال به سانترال برقرار نشد: {exc}")

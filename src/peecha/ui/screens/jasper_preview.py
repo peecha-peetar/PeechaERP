@@ -1,10 +1,10 @@
-"""پیش‌نمایشِ چاپیِ گزارش‌هایِ حرفه‌ای (JasperReports).
+"""پیش‌نمایش چاپی گزارش‌های حرفه‌ای (JasperReports).
 
-به‌جایِ ذخیره‌یِ مستقیمِ PDF از طریقِ یک پنجره‌یِ Save، گزارش ابتدا این‌جا
-به‌صورتِ تمام‌صفحه پیش‌نمایش داده می‌شود؛ از همین پنجره می‌توان آن را به
-PDF یا Excel ذخیره کرد یا مستقیماً رویِ چاپگر چاپ کرد -- دقیقاً همان سه
-گزینه‌ای که پیش‌ازاین یک دیالوگِ Save با انتخابِ فرمت انجام می‌داد، ولی
-حالا کاربر قبل از تصمیم‌گیری، خودِ گزارش را می‌بیند."""
+به‌جای ذخیرهٔ مستقیم PDF از طریق یک پنجرهٔ Save، گزارش ابتدا این‌جا
+به‌صورت تمام‌صفحه پیش‌نمایش داده می‌شود؛ از همین پنجره می‌توان آن را به
+PDF یا Excel ذخیره کرد یا مستقیماً روی چاپگر چاپ کرد — دقیقاً همان سه
+گزینه‌ای که پیش‌ازاین یک دیالوگ Save با انتخاب قالب انجام می‌داد، ولی
+حالا کاربر قبل از تصمیم‌گیری، خود گزارش را می‌بیند."""
 
 from __future__ import annotations
 
@@ -29,13 +29,13 @@ from peecha.reporting import jasper_bridge
 class JasperReportPreviewDialog(QDialog):
     def __init__(
         self, parent, jrxml_path, rows: list[dict], params: dict, default_name: str,
-        title: str = "پیش‌نمایشِ گزارش", pdf_path: str | None = None,
+        title: str = "پیش‌نمایش گزارش", pdf_path: str | None = None,
     ):
         """اگر pdf_path داده شده باشد (فراخوان خودش از قبل رندر کرده --
-        معمولاً چون می‌خواهد در صورتِ خطا به پیش‌نمایشِ HTMLِ قدیمی برگردد
-        به‌جایِ نمایشِ این دیالوگِ خالی)، آن فایل مستقیماً بارگذاری می‌شود
-        و رندرِ دوباره‌ای انجام نمی‌شود؛ در غیرِ این صورت (کاربردِ معمولِ
-        صفحاتِ گزارش) خودِ دیالوگ رندر را انجام می‌دهد."""
+        معمولاً چون می‌خواهد در صورت خطا به پیش‌نمایش HTML قدیمی برگردد
+        به‌جای نمایش این دیالوگ خالی)، آن فایل مستقیماً بارگذاری می‌شود
+        و رندر دوباره‌ای انجام نمی‌شود؛ در غیر این صورت (کاربرد معمول
+        صفحات گزارش) خود دیالوگ رندر را انجام می‌دهد."""
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(950, 1050)
@@ -51,15 +51,15 @@ class JasperReportPreviewDialog(QDialog):
         layout = QVBoxLayout(self)
 
         toolbar = QHBoxLayout()
-        self.save_pdf_button = QPushButton("💾 ذخیره‌یِ PDF")
-        self.save_excel_button = QPushButton("📊 خروجیِ Excel")
+        self.save_pdf_button = QPushButton("💾 ذخیرهٔ PDF")
+        self.save_excel_button = QPushButton("📊 خروجی Excel")
         self.print_button = QPushButton("🖨 چاپ")
         self.zoom_out_button = QPushButton("🔍−")
         self.zoom_out_button.setToolTip("کوچک‌نمایی")
         self.zoom_label = QLabel()
         self.zoom_in_button = QPushButton("🔍+")
         self.zoom_in_button.setToolTip("بزرگ‌نمایی")
-        self.fit_width_button = QPushButton("عرضِ صفحه")
+        self.fit_width_button = QPushButton("عرض صفحه")
         self.close_button = QPushButton("بستن")
         for button in (self.save_pdf_button, self.save_excel_button, self.print_button):
             toolbar.addWidget(button)
@@ -116,7 +116,7 @@ class JasperReportPreviewDialog(QDialog):
             self._disable_all()
             return
         except Exception as exc:
-            QMessageBox.critical(self, "گزارش", f"تولیدِ گزارش ناموفق بود:\n{exc}")
+            QMessageBox.critical(self, "گزارش", f"تولید گزارش ناموفق بود:\n{exc}")
             self._disable_all()
             return
         self._document.load(self._pdf_path)
@@ -130,7 +130,7 @@ class JasperReportPreviewDialog(QDialog):
     def _save_pdf(self) -> None:
         if not self._pdf_path:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "ذخیره‌یِ PDF", f"{self._default_name}.pdf", "PDF (*.pdf)")
+        path, _ = QFileDialog.getSaveFileName(self, "ذخیرهٔ PDF", f"{self._default_name}.pdf", "PDF (*.pdf)")
         if not path:
             return
         if not path.lower().endswith(".pdf"):
@@ -138,14 +138,14 @@ class JasperReportPreviewDialog(QDialog):
         try:
             shutil.copy2(self._pdf_path, path)
         except Exception as exc:
-            QMessageBox.critical(self, "گزارش", f"ذخیره‌یِ فایل ناموفق بود:\n{exc}")
+            QMessageBox.critical(self, "گزارش", f"ذخیرهٔ فایل ناموفق بود:\n{exc}")
             return
         QMessageBox.information(self, "گزارش", "فایل با موفقیت ذخیره شد.")
 
     def _save_excel(self) -> None:
         if not self._pdf_path:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "ذخیره‌یِ Excel", f"{self._default_name}.xlsx", "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(self, "ذخیرهٔ Excel", f"{self._default_name}.xlsx", "Excel (*.xlsx)")
         if not path:
             return
         if not path.lower().endswith(".xlsx"):
@@ -156,9 +156,9 @@ class JasperReportPreviewDialog(QDialog):
             QMessageBox.warning(self, "گزارش", str(exc))
             return
         except Exception as exc:
-            QMessageBox.critical(self, "گزارش", f"تولیدِ خروجیِ Excel ناموفق بود:\n{exc}")
+            QMessageBox.critical(self, "گزارش", f"تولید خروجی Excel ناموفق بود:\n{exc}")
             return
-        QMessageBox.information(self, "گزارش", "فایلِ Excel با موفقیت ذخیره شد.")
+        QMessageBox.information(self, "گزارش", "فایل Excel با موفقیت ذخیره شد.")
 
     def _print(self) -> None:
         if not self._pdf_path:

@@ -1,10 +1,10 @@
-"""درخواستِ خرید (Purchase Request) -- R241.
+"""درخواست خرید (Purchase Request) — R241.
 
 گردش: DRAFT → SUBMITTED → APPROVED | REJECTED ؛ CANCELLED پیش از تبدیل.
-درخواستِ تصویب‌شده با convert_to_orders به سفارشِ خرید تبدیل می‌شود (یک سفارش برایِ هر
-تامین‌کننده) -- خودِ سفارش با همان create_document/add_line ساخته می‌شود، پس منطقِ سفارش،
-موجودی و حسابداری هیچ تغییری نمی‌کند. مقدارِ سفارش‌شدهٔ هر ردیف ذخیره نمی‌شود و همیشه از
-ردیف‌هایِ لغونشدهٔ سفارش‌هایِ مرتبط (purchase_request_line_id) محاسبه می‌شود.
+درخواست تصویب‌شده با convert_to_orders به سفارش خرید تبدیل می‌شود (یک سفارش برای هر
+تامین‌کننده) — خود سفارش با همان create_document/add_line ساخته می‌شود، پس منطق سفارش،
+موجودی و حسابداری هیچ تغییری نمی‌کند. مقدار سفارش‌شدهٔ هر ردیف ذخیره نمی‌شود و همیشه از
+ردیف‌های لغونشدهٔ سفارش‌های مرتبط (purchase_request_line_id) محاسبه می‌شود.
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from peecha.services import unit_conversion as uc
 
 _ZERO = decimal.Decimal(0)
 STATUS_LABELS = {
-    "DRAFT": "پیش‌نویس", "SUBMITTED": "ارسال‌شده برایِ تصویب", "APPROVED": "تصویب‌شده", "REJECTED": "ردشده",
+    "DRAFT": "پیش‌نویس", "SUBMITTED": "ارسال‌شده برای تصویب", "APPROVED": "تصویب‌شده", "REJECTED": "ردشده",
     "CANCELLED": "لغوشده",
 }
-FULFILMENT_LABELS = {"NONE": "سفارش نشده", "PARTIAL": "سفارشِ ناقص", "FULL": "کاملاً سفارش شده"}
+FULFILMENT_LABELS = {"NONE": "سفارش نشده", "PARTIAL": "سفارش ناقص", "FULL": "کاملاً سفارش شده"}
 PRIORITY_LABELS = {"NORMAL": "عادی", "URGENT": "فوری"}
 
 
@@ -49,22 +49,22 @@ class RequestFields:
 def _get(session, request_id: int, company_id: int) -> PurchaseRequest:
     row = session.get(PurchaseRequest, request_id)
     if row is None or row.company_id != company_id:
-        raise ValueError("درخواستِ خرید نامعتبر است.")
+        raise ValueError("درخواست خرید نامعتبر است.")
     return row
 
 
 def _editable(session, request_id: int, company_id: int) -> PurchaseRequest:
     row = _get(session, request_id, company_id)
     if row.status_code not in ("DRAFT", "REJECTED"):
-        raise ValueError("فقط درخواستِ پیش‌نویس (یا ردشده) قابلِ‌ویرایش است.")
+        raise ValueError("فقط درخواست پیش‌نویس (یا ردشده) قابل‌ویرایش است.")
     return row
 
 
 def _apply(row: PurchaseRequest, fields: RequestFields) -> None:
     if fields.priority_code not in PRIORITY_LABELS:
-        raise ValueError("اولویتِ درخواست نامعتبر است.")
+        raise ValueError("اولویت درخواست نامعتبر است.")
     if fields.required_date is not None and fields.required_date < fields.request_date:
-        raise ValueError("تاریخِ نیاز نمی‌تواند پیش از تاریخِ درخواست باشد.")
+        raise ValueError("تاریخ نیاز نمی‌تواند پیش از تاریخ درخواست باشد.")
     row.request_date = fields.request_date
     row.required_date = fields.required_date
     row.priority_code = fields.priority_code
@@ -110,7 +110,7 @@ def add_line(
         if item is None or item.company_id != company_id:
             raise ValueError("کالا نامعتبر است.")
         if session.scalar(select(Item.item_id).where(Item.variant_parent_item_id == item_id).limit(1)) is not None:
-            raise ValueError("کالایِ اصلیِ دارایِ متغیر قابلِ‌درخواست نیست -- یکی از متغیرها را انتخاب کنید.")
+            raise ValueError("کالای اصلی دارای متغیر قابل‌درخواست نیست — یکی از متغیرها را انتخاب کنید.")
         next_no = (session.scalar(select(func.max(PurchaseRequestLine.line_no)).where(PurchaseRequestLine.request_id == request_id)) or 0) + 1
         line = PurchaseRequestLine(
             request_id=request_id, line_no=next_no, item_id=item_id, uom_id=uom_id, quantity=quantity, conversion_factor=factor,
@@ -188,11 +188,11 @@ def approve_request(request_id: int, company_id: int, approved_by_user_id: int) 
     from peecha.services import roles as roles_service
 
     if not roles_service.is_manager(approved_by_user_id, company_id):
-        raise ValueError("تصویبِ درخواستِ خرید فقط برایِ مدیر ممکن است.")
+        raise ValueError("تصویب درخواست خرید فقط برای مدیر ممکن است.")
     with new_session() as session:
         row = _get(session, request_id, company_id)
         if row.status_code != "SUBMITTED":
-            raise ValueError("فقط درخواستِ ارسال‌شده قابلِ‌تصویب است.")
+            raise ValueError("فقط درخواست ارسال‌شده قابل‌تصویب است.")
         row.status_code = "APPROVED"
         row.approved_by_user_id = approved_by_user_id
         row.approved_at = datetime.datetime.now()
@@ -201,11 +201,11 @@ def approve_request(request_id: int, company_id: int, approved_by_user_id: int) 
 
 def reject_request(request_id: int, company_id: int, reason: str) -> None:
     if not (reason or "").strip():
-        raise ValueError("علتِ رد را بنویسید.")
+        raise ValueError("علت رد را بنویسید.")
     with new_session() as session:
         row = _get(session, request_id, company_id)
         if row.status_code != "SUBMITTED":
-            raise ValueError("فقط درخواستِ ارسال‌شده قابلِ‌رد است.")
+            raise ValueError("فقط درخواست ارسال‌شده قابل‌رد است.")
         row.status_code = "REJECTED"
         row.rejected_reason = reason.strip()
         session.commit()
@@ -218,7 +218,7 @@ def cancel_request(request_id: int, company_id: int, reason_id: int | None = Non
             return
         if _ordered_by_line(session, [ln.line_id for ln in session.scalars(
                 select(PurchaseRequestLine).where(PurchaseRequestLine.request_id == request_id))]):
-            raise ValueError("از این درخواست سفارشِ خرید ساخته شده -- ابتدا آن سفارش‌ها را لغو کنید.")
+            raise ValueError("از این درخواست سفارش خرید ساخته شده — ابتدا آن سفارش‌ها را لغو کنید.")
         row.status_code = "CANCELLED"
         row.cancellation_reason_id = reason_id
         session.commit()
@@ -240,7 +240,7 @@ def _ordered_by_line(session, line_ids: list[int], include_drafts: bool = True) 
 
 
 def ordered_quantities(line_ids: list[int], include_drafts: bool = True) -> dict[int, decimal.Decimal]:
-    """include_drafts=False: فقط سفارش‌هایِ تاییدشده (برایِ بودجه، تا مبلغ نه در «در جریان» گم شود نه دوبار شمرده شود)."""
+    """include_drafts=False: فقط سفارش‌های تاییدشده (برای بودجه، تا مبلغ نه در «در جریان» گم شود نه دوبار شمرده شود)."""
     with new_session() as session:
         return _ordered_by_line(session, line_ids, include_drafts)
 
@@ -268,15 +268,15 @@ def convert_to_orders(
     request_id: int, company_id: int, user_id: int, supplier_id: int | None = None,
     quantities: dict[int, decimal.Decimal] | None = None, order_date: datetime.date | None = None,
 ) -> list[int]:
-    """درخواستِ تصویب‌شده → سفارشِ خرید (یک سفارش برایِ هر تامین‌کننده).
-    supplier_id: تامین‌کنندهٔ همهٔ ردیف‌ها (وگرنه تامین‌کنندهٔ پیشنهادیِ هر ردیف).
-    quantities: {line_id: مقدار به واحدِ ردیف} برایِ سفارشِ بخشی؛ پیش‌فرض = کلِ مانده."""
+    """درخواست تصویب‌شده → سفارش خرید (یک سفارش برای هر تامین‌کننده).
+    supplier_id: تامین‌کنندهٔ همهٔ ردیف‌ها (وگرنه تامین‌کنندهٔ پیشنهادی هر ردیف).
+    quantities: {line_id: مقدار به واحد ردیف} برای سفارش بخشی؛ پیش‌فرض = کل مانده."""
     from peecha import session as app_session
 
     with new_session() as session:
         row = _get(session, request_id, company_id)
         if row.status_code != "APPROVED":
-            raise ValueError("فقط درخواستِ تصویب‌شده به سفارش تبدیل می‌شود.")
+            raise ValueError("فقط درخواست تصویب‌شده به سفارش تبدیل می‌شود.")
         lines = list(session.scalars(select(PurchaseRequestLine).where(PurchaseRequestLine.request_id == request_id)
                                      .order_by(PurchaseRequestLine.line_no)))
         ordered = _ordered_by_line(session, [ln.line_id for ln in lines])
@@ -289,16 +289,16 @@ def convert_to_orders(
                 continue
             wanted_base = quantities[ln.line_id] * ln.conversion_factor
             if wanted_base > remaining_base:
-                raise ValueError("مقدارِ سفارش از ماندهٔ ردیفِ درخواست بیشتر است.")
+                raise ValueError("مقدار سفارش از ماندهٔ ردیف درخواست بیشتر است.")
             remaining_base = wanted_base
         if remaining_base <= 0:
             continue
         supplier = supplier_id or ln.suggested_supplier_detail_account_id
         if supplier is None:
-            raise ValueError("برایِ ردیف‌هایِ بدونِ تامین‌کنندهٔ پیشنهادی، تامین‌کننده را انتخاب کنید.")
+            raise ValueError("برای ردیف‌های بدون تامین‌کنندهٔ پیشنهادی، تامین‌کننده را انتخاب کنید.")
         groups[supplier].append((ln, remaining_base))
     if not groups:
-        raise ValueError("ماندهٔ قابلِ‌سفارشی در این درخواست وجود ندارد.")
+        raise ValueError("ماندهٔ قابل‌سفارشی در این درخواست وجود ندارد.")
     company = app_session.current_company
     currency_id = company.base_currency_id if company is not None and company.company_id == company_id else _base_currency(company_id)
     order_ids = []
@@ -308,7 +308,7 @@ def convert_to_orders(
             requested_delivery_date=row.required_date, cost_center_detail_account_id=row.cost_center_detail_account_id,
             project_detail_account_id=row.project_detail_account_id, purchase_type_id=row.purchase_type_id,
             branch_id=row.branch_id, org_unit_id=row.org_unit_id,
-            description=f"از درخواستِ خریدِ شمارهٔ {row.request_no}",
+            description=f"از درخواست خرید شمارهٔ {row.request_no}",
         )
         order_id = documents_service.create_document(company_id, user_id, "PURCHASE_ORDER", order_date or datetime.date.today(), header)
         for ln, qty_base in items:

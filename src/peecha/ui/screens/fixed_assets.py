@@ -1,8 +1,8 @@
-"""صفحه‌هایِ دارایی‌هایِ ثابت -- R265.
+"""صفحه‌های دارایی‌های ثابت — R265.
 
-«دارایی‌ها» مرکزِ عملیات است: فهرست + صفحهٔ هر دارایی (نمایِ کلی، مالی، استهلاک، تراکنش‌ها، انتقال‌ها، تعمیرات، مدارک،
-تاریخچه) و دکمه‌هایِ عملیات. کاربر فقط «طبقه» را انتخاب می‌کند؛ حساب‌ها از تنظیماتِ طبقه می‌آیند.
-ثبتِ دارایی با ویزاردِ هفت‌مرحله‌ای. همهٔ محاسبه/ثبت در سرویس‌هایِ fixed_assets است.
+«دارایی‌ها» مرکز عملیات است: فهرست + صفحهٔ هر دارایی (نمای کلی، مالی، استهلاک، تراکنش‌ها، انتقال‌ها، تعمیرات، مدارک،
+تاریخچه) و دکمه‌های عملیات. کاربر فقط «طبقه» را انتخاب می‌کند؛ حساب‌ها از تنظیمات طبقه می‌آیند.
+ثبت دارایی با ویزارد هفت‌مرحله‌ای. همهٔ محاسبه/ثبت در سرویس‌های fixed_assets است.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def user_id() -> int | None:
 
 
 def combo(items, none_label: str | None = None) -> QComboBox:
-    """کمبویِ جستجوپذیر (تایپِ بخشی از نام)."""
+    """فهرست جستجوپذیر (تایپ بخشی از نام)."""
     box = QComboBox()
     box.setEditable(True)
     box.setInsertPolicy(QComboBox.NoInsert)
@@ -91,7 +91,7 @@ def table(headers: list[str]) -> QTableWidget:
 
 
 def selected_data(t: QTableWidget):
-    """شناسهٔ ردیفِ انتخاب‌شده (UserRoleِ ستونِ اول) یا None."""
+    """شناسهٔ ردیف انتخاب‌شده (UserRole ستون اول) یا None."""
     items = t.selectedItems()
     return t.item(items[0].row(), 0).data(Qt.UserRole) if items else None
 
@@ -113,7 +113,7 @@ def fill(t: QTableWidget, rows: list[list], data: list | None = None) -> None:
 
 
 class Lookups:
-    """فهرست‌هایِ مشترکِ کمبوها (یک بار برایِ هر refresh)."""
+    """فهرست‌های مشترک فهرستها (یک بار برای هر refresh)."""
 
     def __init__(self, cid: int) -> None:
         from peecha.services import chart_of_accounts as coa_service
@@ -137,7 +137,7 @@ class Lookups:
 
 
 def scrolled(widget: QWidget, max_height: int = 0) -> QScrollArea:
-    """فرمِ بلند در پنجرهٔ کوچک اسکرول بخورد، نه این‌که فیلدها له شوند و متن دیده نشود."""
+    """فرم بلند در پنجرهٔ کوچک اسکرول بخورد، نه این‌که فیلدها له شوند و متن دیده نشود."""
     area = QScrollArea()
     area.setWidgetResizable(True)
     area.setFrameShape(QFrame.NoFrame)
@@ -148,7 +148,7 @@ def scrolled(widget: QWidget, max_height: int = 0) -> QScrollArea:
 
 
 class FormDialog(QDialog):
-    """فرمِ کوچکِ عملیات: [(کلید، برچسب، ویجت)] -- values() با تبدیلِ تاریخ/عدد/داده."""
+    """فرم کوچک عملیات: [(کلید، برچسب، ویجت)] -- values() با تبدیل تاریخ/عدد/داده."""
 
     def __init__(self, title: str, fields: list[tuple[str, str, QWidget]], hint: str = "", parent=None) -> None:
         super().__init__(parent)
@@ -241,7 +241,7 @@ def asset_label_image(asset, dpi: int = 300) -> QImage:
 
 # =========================================================================================================
 class FaDashboard(_ProcurementDashboardBase):
-    TITLE = "داشبوردِ دارایی‌هایِ ثابت"
+    TITLE = "داشبورد دارایی‌های ثابت"
     _KPI_STYLE = {"COUNT": ("🏭", "ACCENT"), "GROSS": ("💰", "CHART_TEAL"), "ACCUM": ("📉", "CHART_ORANGE"),
                   "NBV": ("📘", "ACCENT"), "IN_SERVICE": ("⚙", "SUCCESS"), "MAINTENANCE": ("🔧", "WARNING"),
                   "FULLY_DEPRECIATED": ("◌", "CHART_PURPLE"), "DISPOSED": ("✖", "DANGER")}
@@ -301,7 +301,7 @@ class FaDashboard(_ProcurementDashboardBase):
             card = self.cards[code]
             card._title_label.setText(kpi.title)
             card.set_value(format_kpi(kpi.value, kpi.kind, 0))
-            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارشِ مبدا")
+            card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارش مبدا")
         fill(self.alerts_table, [[label, n] for label, n in alert_rows])
         for key, data in charts.items():
             if data["kind"] == "donut":
@@ -312,13 +312,13 @@ class FaDashboard(_ProcurementDashboardBase):
 
 # =========================================================================================================
 class AssetWizard(QDialog):
-    """ثبتِ دارایی در ۷ مرحله: اطلاعات ← بها ← طبقه ← روشِ استهلاک ← محل و مرکزِ هزینه ← بررسی ← ثبت."""
+    """ثبت دارایی در ۷ مرحله: اطلاعات ← بها ← طبقه ← روش استهلاک ← محل و مرکز هزینه ← بررسی ← ثبت."""
 
-    STEPS = ("اطلاعاتِ دارایی", "بهایِ خرید", "طبقه‌بندی", "روشِ استهلاک", "محل و مرکزِ هزینه", "بررسی", "ثبت")
+    STEPS = ("اطلاعات دارایی", "بهای خرید", "طبقه‌بندی", "روش استهلاک", "محل و مرکز هزینه", "بررسی", "ثبت")
 
     def __init__(self, lookups: Lookups, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ثبتِ دارایی")
+        self.setWindowTitle("ثبت دارایی")
         self.setLayoutDirection(Qt.RightToLeft)
         self.setMinimumWidth(620)
         self.lk = lookups
@@ -335,43 +335,43 @@ class AssetWizard(QDialog):
         w["asset_type_code"] = combo([(v, k) for k, v in fac.TYPE_LABELS.items()])
         set_combo(w["asset_type_code"], "EQUIPMENT")
         w["brand"], w["model"], w["serial_no"], w["description"] = QLineEdit(), QLineEdit(), QLineEdit(), QLineEdit()
-        self._page([("asset_code", "کدِ دارایی"), ("name", "نام"), ("asset_type_code", "نوع"), ("brand", "برند"), ("model", "مدل"),
+        self._page([("asset_code", "کد دارایی"), ("name", "نام"), ("asset_type_code", "نوع"), ("brand", "برند"), ("model", "مدل"),
                     ("serial_no", "شمارهٔ سریال"), ("description", "شرح")])
         # ۲) بها
         w["purchase"], w["transport"], w["installation"], w["other_cost"] = num_field(), num_field(), num_field(), num_field()
-        w["offset_account"] = combo(lookups.accounts, "— حسابِ طرفِ مقابل (پرداختنی/بانک) —")
+        w["offset_account"] = combo(lookups.accounts, "— حساب طرف مقابل (پرداختنی/بانک) —")
         w["supplier"] = combo(lookups.suppliers, "— تامین‌کننده —")
         w["acquisition_date"] = date_field()
         w["invoice_reference"] = QLineEdit()
-        self._page([("purchase", "قیمتِ خرید"), ("transport", "حمل"), ("installation", "نصب/راه‌اندازی"),
-                    ("other_cost", "سایر هزینه‌هایِ سرمایه‌ای"), ("offset_account", "حسابِ طرفِ مقابل"), ("supplier", "تامین‌کننده"),
-                    ("acquisition_date", "تاریخِ تحصیل"), ("invoice_reference", "شمارهٔ فاکتور")])
+        self._page([("purchase", "قیمت خرید"), ("transport", "حمل"), ("installation", "نصب/راه‌اندازی"),
+                    ("other_cost", "سایر هزینه‌های سرمایه‌ای"), ("offset_account", "حساب طرف مقابل"), ("supplier", "تامین‌کننده"),
+                    ("acquisition_date", "تاریخ تحصیل"), ("invoice_reference", "شمارهٔ فاکتور")])
         # ۳) طبقه
         w["category_id"] = combo(lookups.categories)
-        w["group_id"] = combo(lookups.groups, "— بدونِ گروه —")
+        w["group_id"] = combo(lookups.groups, "— بدون گروه —")
         self._page([("category_id", "طبقهٔ دارایی"), ("group_id", "گروه")],
-                   "حساب‌هایِ دارایی/استهلاک/سود و زیان از تنظیماتِ طبقه خوانده می‌شود.")
+                   "حساب‌های دارایی/استهلاک/سود و زیان از تنظیمات طبقه خوانده می‌شود.")
         # ۴) استهلاک
-        w["depreciation_method"] = combo([(v, k) for k, v in fac.METHOD_LABELS.items()], "— پیش‌فرضِ طبقه —")
+        w["depreciation_method"] = combo([(v, k) for k, v in fac.METHOD_LABELS.items()], "— پیش‌فرض طبقه —")
         w["useful_life"], w["residual_value"], w["declining_rate"] = num_field(), num_field(), num_field()
-        w["useful_life_unit"] = combo([("ماه", "MONTH"), ("سال", "YEAR"), ("ساعتِ کار", "HOUR"), ("واحدِ تولید", "UNIT")])
+        w["useful_life_unit"] = combo([("ماه", "MONTH"), ("سال", "YEAR"), ("ساعت کار", "HOUR"), ("واحد تولید", "UNIT")])
         w["capitalize"] = QCheckBox("همین حالا سرمایه‌ای و در بهره‌برداری شود")
         w["capitalize"].setChecked(True)
         w["in_service_date"] = date_field()
-        self._page([("depreciation_method", "روشِ استهلاک"), ("useful_life", "عمرِ مفید (خالی = پیش‌فرض)"),
-                    ("useful_life_unit", "واحدِ عمر"), ("residual_value", "ارزشِ اسقاط"), ("declining_rate", "نرخِ نزولیِ سالانه"),
-                    ("capitalize", ""), ("in_service_date", "تاریخِ بهره‌برداری")])
+        self._page([("depreciation_method", "روش استهلاک"), ("useful_life", "عمر مفید (خالی = پیش‌فرض)"),
+                    ("useful_life_unit", "واحد عمر"), ("residual_value", "ارزش اسقاط"), ("declining_rate", "نرخ نزولی سالانه"),
+                    ("capitalize", ""), ("in_service_date", "تاریخ بهره‌برداری")])
         # ۵) محل
         w["location_id"] = combo(lookups.locations, "— محل —")
-        w["cost_center_detail_account_id"] = combo(lookups.cost_centers, "— مرکزِ هزینه (پیش‌فرضِ طبقه) —")
+        w["cost_center_detail_account_id"] = combo(lookups.cost_centers, "— مرکز هزینه (پیش‌فرض طبقه) —")
         w["custodian_employee_id"] = combo(lookups.employees, "— تحویل‌گیرنده —")
         w["branch_id"] = combo(lookups.branches, "— شعبه —")
         w["department_id"] = combo(lookups.departments, "— دپارتمان —")
-        w["is_production_machine"] = QCheckBox("ماشینِ تولیدی")
+        w["is_production_machine"] = QCheckBox("ماشین تولیدی")
         w["work_center_code"], w["standard_hours"] = QLineEdit(), num_field()
-        self._page([("location_id", "محل"), ("cost_center_detail_account_id", "مرکزِ هزینه"), ("custodian_employee_id", "تحویل‌گیرنده"),
+        self._page([("location_id", "محل"), ("cost_center_detail_account_id", "مرکز هزینه"), ("custodian_employee_id", "تحویل‌گیرنده"),
                     ("branch_id", "شعبه"), ("department_id", "دپارتمان"), ("is_production_machine", ""),
-                    ("work_center_code", "مرکزِ کار"), ("standard_hours", "ساعتِ استانداردِ سالانه")])
+                    ("work_center_code", "مرکز کار"), ("standard_hours", "ساعت استاندارد سالانه")])
         # ۶) بررسی
         self.review = QLabel("")
         self.review.setWordWrap(True)
@@ -422,7 +422,7 @@ class AssetWizard(QDialog):
     def _next(self) -> None:
         i = self.stack.currentIndex()
         if i == 0 and not (self.w["asset_code"].text().strip() and self.w["name"].text().strip()):
-            QMessageBox.warning(self, "ثبتِ دارایی", "کد و نام الزامی است.")
+            QMessageBox.warning(self, "ثبت دارایی", "کد و نام الزامی است.")
             return
         if i == 5:
             self.submit()
@@ -466,9 +466,9 @@ class AssetWizard(QDialog):
         total = sum((c.amount for c in self.costs()), ZERO)
         return P("\n".join([
             f"کد/نام: {f.asset_code} -- {f.name}", f"طبقه: {self.w['category_id'].currentText()}",
-            f"بهایِ تمام‌شده: {money(total)} ({len(self.costs())} جزء)",
-            f"روشِ استهلاک: {self.w['depreciation_method'].currentText()} -- عمر: {f.useful_life or 'پیش‌فرض'}",
-            f"محل: {self.w['location_id'].currentText()} -- مرکزِ هزینه: {self.w['cost_center_detail_account_id'].currentText()}",
+            f"بهای تمام‌شده: {money(total)} ({len(self.costs())} جزء)",
+            f"روش استهلاک: {self.w['depreciation_method'].currentText()} -- عمر: {f.useful_life or 'پیش‌فرض'}",
+            f"محل: {self.w['location_id'].currentText()} -- مرکز هزینه: {self.w['cost_center_detail_account_id'].currentText()}",
             "سرمایه‌ای و در بهره‌برداری: " + ("بله" if self.w["capitalize"].isChecked() else "خیر")]))
 
     def submit(self) -> int | None:
@@ -482,7 +482,7 @@ class AssetWizard(QDialog):
                     approval.request(cid, uid, "CAPITALIZE", asset_id, date=self.w["acquisition_date"].date(),
                                      in_service_date=self.w["in_service_date"].date())
         except ValueError as exc:
-            QMessageBox.warning(self, "ثبتِ دارایی", str(exc))
+            QMessageBox.warning(self, "ثبت دارایی", str(exc))
             return None
         self.created_asset_id = asset_id
         self.result_label.setText(P(f"دارایی «{self.w['asset_code'].text().strip()}» ثبت شد."))
@@ -493,12 +493,12 @@ class AssetWizard(QDialog):
 # =========================================================================================================
 @ms.styled
 class AssetsScreen(QWidget):
-    """مرکزِ عملیاتِ دارایی."""
+    """مرکز عملیات دارایی."""
 
     scroll_in_mdi = True
 
     FORM = "fa_assets"
-    TABS = ("نمایِ کلی", "مالی", "استهلاک", "تراکنش‌ها", "انتقال‌ها", "تعمیر و بهسازی", "مدارک", "تاریخچه")
+    TABS = ("نمای کلی", "مالی", "استهلاک", "تراکنش‌ها", "انتقال‌ها", "تعمیر و بهسازی", "مدارک", "تاریخچه")
 
     def __init__(self, main_window=None) -> None:
         super().__init__()
@@ -509,7 +509,7 @@ class AssetsScreen(QWidget):
         self.dialog_runner = lambda dlg: dlg.exec() == QDialog.Accepted
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("دارایی‌هایِ ثابت")
+        title = QLabel("دارایی‌های ثابت")
         title.setObjectName("pageTitle")
         self.search = QLineEdit()
         self.search.setPlaceholderText("جستجو: کد، نام، سریال، بارکد یا QR")
@@ -522,14 +522,14 @@ class AssetsScreen(QWidget):
             self.status_filter.addItem(label, code)
         self.category_filter.currentIndexChanged.connect(self.reload_list)
         self.status_filter.currentIndexChanged.connect(self.reload_list)
-        self.new_button = QPushButton("ثبتِ دارایی")
+        self.new_button = QPushButton("ثبت دارایی")
         self.new_button.setObjectName("primaryButton")
         self.new_button.clicked.connect(self.new_asset)
         outer.addWidget(ms.header_card(title, self.search, self.category_filter, self.status_filter, self.new_button))
         self.status_label = QLabel("")
         outer.addWidget(self.status_label)
         split = QSplitter(Qt.Horizontal)
-        self.list_table = table(["کد", "نام", "طبقه", "وضعیت", "ارزشِ دفتری"])
+        self.list_table = table(["کد", "نام", "طبقه", "وضعیت", "ارزش دفتری"])
         self.list_table.itemSelectionChanged.connect(self._selected)
         split.addWidget(self.list_table)
         self.detail = QWidget()
@@ -538,17 +538,17 @@ class AssetsScreen(QWidget):
         self.header_title.setObjectName("pageTitle")
         dl.addWidget(self.header_title)
         cards_box, self.cards = ms.summary([
-            ("status", "وضعیت", "info", "📌"), ("gross", "بهایِ تمام‌شده", "neutral", "🧾"),
-            ("accum", "استهلاکِ انباشته", "warning", "📉"), ("nbv", "ارزشِ فعلی (دفتری)", "success", "✅"),
-            ("location", "محل", "neutral", "📍"), ("cost_center", "مرکزِ هزینه", "neutral", "🏢"),
-            ("custodian", "تحویل‌گیرنده", "neutral", "👤"), ("end_of_life", "پایانِ عمر", "neutral", "📅")])
+            ("status", "وضعیت", "info", "📌"), ("gross", "بهای تمام‌شده", "neutral", "🧾"),
+            ("accum", "استهلاک انباشته", "warning", "📉"), ("nbv", "ارزش فعلی (دفتری)", "success", "✅"),
+            ("location", "محل", "neutral", "📍"), ("cost_center", "مرکز هزینه", "neutral", "🏢"),
+            ("custodian", "تحویل‌گیرنده", "neutral", "👤"), ("end_of_life", "پایان عمر", "neutral", "📅")])
         dl.addWidget(cards_box)
         self.actions = {}
         specs = (("capitalize", "سرمایه‌ای‌کردن", "fa_capitalize"), ("transfer", "انتقال", "fa_transfer"),
-                 ("depreciate", "محاسبهٔ استهلاک", "fa_depreciation"), ("improve", "افزایشِ سرمایه / تعمیر", "fa_improve"),
-                 ("impair", "کاهشِ ارزش", "fa_impair"), ("revalue", "تجدیدِ ارزیابی", "fa_revalue"),
-                 ("sell", "فروش", "fa_sell"), ("scrap", "اسقاط", "fa_scrap"), ("reclassify", "تغییرِ طبقه", "fa_reclassify"),
-                 ("usage", "ثبتِ کارکرد", "fa_assets"), ("label", "برچسبِ QR", "fa_assets"), ("ledger", "دفترِ دارایی", "fa_assets"))
+                 ("depreciate", "محاسبهٔ استهلاک", "fa_depreciation"), ("improve", "افزایش سرمایه / تعمیر", "fa_improve"),
+                 ("impair", "کاهش ارزش", "fa_impair"), ("revalue", "تجدید ارزیابی", "fa_revalue"),
+                 ("sell", "فروش", "fa_sell"), ("scrap", "اسقاط", "fa_scrap"), ("reclassify", "تغییر طبقه", "fa_reclassify"),
+                 ("usage", "ثبت کارکرد", "fa_assets"), ("label", "برچسب QR", "fa_assets"), ("ledger", "دفتر دارایی", "fa_assets"))
         for i, (key, label, form) in enumerate(specs):
             b = QPushButton(label)
             b.setProperty("form", form)
@@ -558,14 +558,14 @@ class AssetsScreen(QWidget):
         self.t_overview = QLabel("")
         self.t_overview.setWordWrap(True)
         self.t_overview.setAlignment(Qt.AlignTop | Qt.AlignRight)
-        self.t_financial = table(["جزءِ بها", "مبلغ", "مرجع"])
+        self.t_financial = table(["جزء بها", "مبلغ", "مرجع"])
         self.t_fin_note = QLabel("")
         fin = QWidget()
         fl = QVBoxLayout(fin)
         fl.addWidget(self.t_fin_note)
         fl.addWidget(self.t_financial)
-        self.t_depr = table(["دوره", "استهلاک", "ارزشِ دفتری", "وضعیت"])
-        self.t_ledger = table(["تاریخ", "نوع", "بها", "استهلاک", "کاهشِ ارزش", "ارزشِ دفتری", "شرح"])
+        self.t_depr = table(["دوره", "استهلاک", "ارزش دفتری", "وضعیت"])
+        self.t_ledger = table(["تاریخ", "نوع", "بها", "استهلاک", "کاهش ارزش", "ارزش دفتری", "شرح"])
         self.t_transfers = table(["تاریخ", "تغییرات", "علت"])
         self.t_maint = table(["تاریخ", "نوع", "مبلغ", "شرح"])
         self.t_docs = table(["نوع", "فایل", "تاریخ"])
@@ -573,7 +573,7 @@ class AssetsScreen(QWidget):
         dlay = QVBoxLayout(docs)
         drow = QHBoxLayout()
         self.doc_type = combo([(v, k) for k, v in fdocs.DOCUMENT_TYPES.items()])
-        add_doc = QPushButton("افزودنِ مدرک")
+        add_doc = QPushButton("افزودن مدرک")
         add_doc.clicked.connect(self.add_document)
         drow.addWidget(self.doc_type)
         drow.addWidget(add_doc)
@@ -643,7 +643,7 @@ class AssetsScreen(QWidget):
             self.load_asset(asset_id)
 
     def open_asset(self, asset_id: int) -> None:
-        """از گزارش/داشبورد (دابل‌کلیک): فیلترِ «همه» و همان دارایی."""
+        """از گزارش/داشبورد (دابل‌کلیک): فیلتر «همه» و همان دارایی."""
         self.status_filter.blockSignals(True)
         self.status_filter.setCurrentIndex(1)
         self.status_filter.blockSignals(False)
@@ -689,14 +689,14 @@ class AssetsScreen(QWidget):
         overview = [f"طبقه: {cat}", f"نوع: {fac.TYPE_LABELS.get(a.asset_type_code, '')}",
                     f"برند/مدل/سریال: {a.brand or '-'} / {a.model or '-'} / {a.serial_no or '-'}",
                     f"منبع: {fa.SOURCE_LABELS.get(a.source_code, a.source_code)} -- فاکتور: {a.invoice_reference or '-'}",
-                    f"تاریخِ تحصیل: {numerals.format_jalali_date(a.acquisition_date) if a.acquisition_date else '-'}"
+                    f"تاریخ تحصیل: {numerals.format_jalali_date(a.acquisition_date) if a.acquisition_date else '-'}"
                     f" -- بهره‌برداری: {numerals.format_jalali_date(a.in_service_date) if a.in_service_date else '-'}",
-                    f"روشِ استهلاک: {fac.METHOD_LABELS.get(a.depreciation_method)} -- عمر: {a.useful_life or '-'} "
-                    f"({a.useful_life_unit}) -- اسقاط: {money(a.residual_value) if show_cost else '—'}",
+                    f"روش استهلاک: {fac.METHOD_LABELS.get(a.depreciation_method)} -- عمر: {a.useful_life or '-'} "
+                    f"({a.useful_life_unit}) — اسقاط: {money(a.residual_value) if show_cost else '—'}",
                     f"QR: {fa.qr_payload(a)}"]
         if a.is_production_machine:
-            overview.append(f"تولید: مرکزِ کار {a.work_center_code or '-'} -- خط {a.production_line or '-'} "
-                            f"-- ساعتِ استاندارد {a.standard_hours or '-'} -- کارکردِ ثبت‌شده {a.units_consumed}")
+            overview.append(f"تولید: مرکز کار {a.work_center_code or '-'} -- خط {a.production_line or '-'} "
+                            f"-- ساعت استاندارد {a.standard_hours or '-'} -- کارکرد ثبت‌شده {a.units_consumed}")
         warranties = fp.warranties(asset_id)
         insurances = fp.insurances(asset_id)
         if warranties:
@@ -710,12 +710,12 @@ class AssetsScreen(QWidget):
         if show_cost:
             fill(self.t_financial, [[fa.COST_TYPES.get(ci.cost_type, ci.cost_type), ci.amount, ci.reference or ""]
                                     for ci in fa.cost_items(asset_id)])
-            self.t_fin_note.setText(P(f"بها {money(a.gross_cost)} -- استهلاکِ انباشته {money(a.accumulated_depreciation)} -- "
-                                      f"کاهشِ ارزش {money(a.accumulated_impairment)} -- مازادِ تجدیدِ ارزیابی "
+            self.t_fin_note.setText(P(f"بها {money(a.gross_cost)} -- استهلاک انباشته {money(a.accumulated_depreciation)} -- "
+                                      f"کاهش ارزش {money(a.accumulated_impairment)} -- مازاد تجدید ارزیابی "
                                       f"{money(a.revaluation_surplus)}"))
         else:
             fill(self.t_financial, [])
-            self.t_fin_note.setText("مشاهدهٔ ارقامِ بها نیازمندِ دسترسیِ «دارایی: مشاهدهٔ بها» است.")
+            self.t_fin_note.setText("مشاهدهٔ ارقام بها نیازمند دسترسی «دارایی: مشاهدهٔ بها» است.")
         fill(self.t_depr, [[row.period_code, row.amount, row.book_value, "ثبت‌شده" if row.posted else "پیش‌بینی"]
                            for row in fd.schedule(cid, asset_id)])
         fill(self.t_ledger, [[t.date, t.label, t.cost, t.depreciation, t.impairment, t.book_value, t.description or ""]
@@ -723,14 +723,14 @@ class AssetsScreen(QWidget):
         events = fa.events(cid, asset_id)
         fill(self.t_transfers, [[e.event_date, "، ".join(fa.TRANSFER_FIELDS.get(k, k) for k in (e.details or {})), e.reason or ""]
                                 for e in events if e.event_type == "TRANSFER"])
-        fill(self.t_maint, [[e.event_date, "افزایشِ سرمایه‌ای" if e.event_type == "IMPROVEMENT" else "تعمیر", e.amount, e.reason or ""]
+        fill(self.t_maint, [[e.event_date, "افزایش سرمایه‌ای" if e.event_type == "IMPROVEMENT" else "تعمیر", e.amount, e.reason or ""]
                             for e in events if e.event_type in ("IMPROVEMENT", "MAINTENANCE")])
         fill(self.t_docs, [[fdocs.DOCUMENT_TYPES.get(d.document_type_code or "OTHER", ""), d.file_name, d.uploaded_at.date()]
                            for d in fdocs.list_documents(cid, asset_id)])
-        labels = {"CAPITALIZATION": "سرمایه‌ای‌شدن", "TRANSFER": "انتقال", "RECLASS": "تغییرِ طبقه", "IMPROVEMENT": "بهسازی",
-                  "MAINTENANCE": "تعمیر", "IMPAIRMENT": "کاهشِ ارزش", "REVALUATION": "تجدیدِ ارزیابی", "SALE": "فروش",
+        labels = {"CAPITALIZATION": "سرمایه‌ای‌شدن", "TRANSFER": "انتقال", "RECLASS": "تغییر طبقه", "IMPROVEMENT": "بهسازی",
+                  "MAINTENANCE": "تعمیر", "IMPAIRMENT": "کاهش ارزش", "REVALUATION": "تجدید ارزیابی", "SALE": "فروش",
                   "SCRAP": "اسقاط", "DONATION": "اهدا", "WRITE_OFF": "حذف", "SPLIT": "تقسیم", "MERGE": "ادغام", "STATUS": "وضعیت"}
-        status_labels = {"POSTED": "ثبت‌شده", "PENDING_APPROVAL": "در انتظارِ تأیید", "APPROVED": "تأییدشده", "REJECTED": "ردشده",
+        status_labels = {"POSTED": "ثبت‌شده", "PENDING_APPROVAL": "در انتظار تایید", "APPROVED": "تاییدشده", "REJECTED": "ردشده",
                          "DRAFT": "پیش‌نویس", "CANCELLED": "لغو"}
         fill(self.t_history, [[e.event_date, labels.get(e.event_type, e.event_type), status_labels.get(e.status_code, ""),
                                e.amount, e.reason or ""] for e in events])
@@ -763,50 +763,50 @@ class AssetsScreen(QWidget):
         lk = self.lk or Lookups(company_id())
         a = self.asset
         if key == "capitalize":
-            return FormDialog("سرمایه‌ای‌کردن", [("date", "تاریخ", date_field()), ("in_service_date", "تاریخِ بهره‌برداری", date_field())],
-                              "تاریخِ شروعِ استهلاک طبقِ سیاستِ تنظیمات تعیین می‌شود.", self)
+            return FormDialog("سرمایه‌ای‌کردن", [("date", "تاریخ", date_field()), ("in_service_date", "تاریخ بهره‌برداری", date_field())],
+                              "تاریخ شروع استهلاک طبق سیاست تنظیمات تعیین می‌شود.", self)
         if key == "transfer":
-            loc, cc, emp = combo(lk.locations, "— بدونِ تغییر —"), combo(lk.cost_centers, "— بدونِ تغییر —"), combo(lk.employees, "— بدونِ تغییر —")
-            br, dep = combo(lk.branches, "— بدونِ تغییر —"), combo(lk.departments, "— بدونِ تغییر —")
-            return FormDialog("انتقالِ دارایی", [("date", "تاریخ", date_field()), ("location_id", "محلِ جدید", loc),
-                                                 ("cost_center_detail_account_id", "مرکزِ هزینهٔ جدید", cc),
+            loc, cc, emp = combo(lk.locations, "— بدون تغییر —"), combo(lk.cost_centers, "— بدون تغییر —"), combo(lk.employees, "— بدون تغییر —")
+            br, dep = combo(lk.branches, "— بدون تغییر —"), combo(lk.departments, "— بدون تغییر —")
+            return FormDialog("انتقال دارایی", [("date", "تاریخ", date_field()), ("location_id", "محل جدید", loc),
+                                                 ("cost_center_detail_account_id", "مرکز هزینهٔ جدید", cc),
                                                  ("custodian_employee_id", "تحویل‌گیرندهٔ جدید", emp), ("branch_id", "شعبهٔ جدید", br),
-                                                 ("department_id", "دپارتمانِ جدید", dep), ("reason", "علت", QLineEdit())], parent=self)
+                                                 ("department_id", "دپارتمان جدید", dep), ("reason", "علت", QLineEdit())], parent=self)
         if key == "improve":
             capital = QComboBox()
-            capital.addItem("طبقِ سیاست (حدِ مبلغ)", None)
-            capital.addItem("افزایشِ سرمایه‌ای", True)
+            capital.addItem("طبق سیاست (حد مبلغ)", None)
+            capital.addItem("افزایش سرمایه‌ای", True)
             capital.addItem("هزینهٔ تعمیر", False)
-            return FormDialog("افزایشِ سرمایه / تعمیر", [
-                ("date", "تاریخ", date_field()), ("amount", "مبلغ", num_field()), ("offset_account_id", "حسابِ طرفِ مقابل",
+            return FormDialog("افزایش سرمایه / تعمیر", [
+                ("date", "تاریخ", date_field()), ("amount", "مبلغ", num_field()), ("offset_account_id", "حساب طرف مقابل",
                                                                                  combo(lk.accounts)),
-                ("offset_detail_account_id", "طرف‌حساب", combo(lk.suppliers, "— بدونِ طرف‌حساب —")), ("capital", "نوع", capital),
-                ("extend_life_months", "افزایشِ عمر (ماه)", num_field(0)), ("description", "شرح", QLineEdit())], parent=self)
+                ("offset_detail_account_id", "طرف‌حساب", combo(lk.suppliers, "— بدون طرف‌حساب —")), ("capital", "نوع", capital),
+                ("extend_life_months", "افزایش عمر (ماه)", num_field(0)), ("description", "شرح", QLineEdit())], parent=self)
         if key == "impair":
-            return FormDialog("کاهشِ ارزش", [("date", "تاریخ", date_field()),
-                                             ("recoverable_amount", "مبلغِ بازیافتنی", num_field()), ("reason", "علت", QLineEdit())],
-                              P(f"ارزشِ دفتریِ فعلی: {money(a.book_value)}"), self)
+            return FormDialog("کاهش ارزش", [("date", "تاریخ", date_field()),
+                                             ("recoverable_amount", "مبلغ بازیافتنی", num_field()), ("reason", "علت", QLineEdit())],
+                              P(f"ارزش دفتری فعلی: {money(a.book_value)}"), self)
         if key == "revalue":
-            return FormDialog("تجدیدِ ارزیابی", [("date", "تاریخ", date_field()), ("new_value", "ارزشِ جدید", num_field()),
+            return FormDialog("تجدید ارزیابی", [("date", "تاریخ", date_field()), ("new_value", "ارزش جدید", num_field()),
                                                  ("reason", "علت/کارشناس", QLineEdit())],
-                              P(f"ارزشِ دفتریِ فعلی: {money(a.book_value)}"), self)
+                              P(f"ارزش دفتری فعلی: {money(a.book_value)}"), self)
         if key == "sell":
-            return FormDialog("فروشِ دارایی", [("date", "تاریخ", date_field()), ("price", "مبلغِ فروش", num_field()),
-                                               ("receivable_account_id", "حسابِ دریافتنی/بانک", combo(lk.accounts)),
+            return FormDialog("فروش دارایی", [("date", "تاریخ", date_field()), ("price", "مبلغ فروش", num_field()),
+                                               ("receivable_account_id", "حساب دریافتنی/بانک", combo(lk.accounts)),
                                                ("customer_detail_account_id", "خریدار", combo(lk.customers, "— خریدار —")),
                                                ("reason", "شرح", QLineEdit())],
-                              P(f"ارزشِ دفتری: {money(a.book_value)} -- سود/زیان خودکار محاسبه می‌شود."), self)
+                              P(f"ارزش دفتری: {money(a.book_value)} -- سود/زیان خودکار محاسبه می‌شود."), self)
         if key == "scrap":
             return FormDialog("اسقاط", [("date", "تاریخ", date_field()), ("reason", "علت", QLineEdit()),
-                                        ("condition_note", "وضعیتِ فیزیکی", QLineEdit()), ("scrap_value", "ارزشِ ضایعات", num_field(0)),
-                                        ("scrap_value_account_id", "حسابِ دریافتِ ضایعات", combo(lk.accounts, "— ندارد —"))],
-                              P(f"ارزشِ دفتری: {money(a.book_value)}"), self)
+                                        ("condition_note", "وضعیت فیزیکی", QLineEdit()), ("scrap_value", "ارزش ضایعات", num_field(0)),
+                                        ("scrap_value_account_id", "حساب دریافت ضایعات", combo(lk.accounts, "— ندارد —"))],
+                              P(f"ارزش دفتری: {money(a.book_value)}"), self)
         if key == "reclassify":
-            return FormDialog("تغییرِ طبقه", [("new_category_id", "طبقهٔ جدید", combo(lk.categories)), ("date", "تاریخ", date_field()),
+            return FormDialog("تغییر طبقه", [("new_category_id", "طبقهٔ جدید", combo(lk.categories)), ("date", "تاریخ", date_field()),
                                               ("reason", "علت", QLineEdit())], parent=self)
         if key == "usage":
-            return FormDialog("ثبتِ کارکرد", [("date", "تاریخ", date_field()), ("units", "ساعت/واحد", num_field()),
-                                              ("production_order_ref", "سفارشِ تولید", QLineEdit())], parent=self)
+            return FormDialog("ثبت کارکرد", [("date", "تاریخ", date_field()), ("units", "ساعت/واحد", num_field()),
+                                              ("production_order_ref", "سفارش تولید", QLineEdit())], parent=self)
         return None
 
     def action(self, key: str):
@@ -827,10 +827,10 @@ class AssetsScreen(QWidget):
         return self.run_operation(key, dlg.values())
 
     def run_operation(self, key: str, v: dict):
-        """اجرایِ عملیات با مقادیرِ فرم (برایِ دکمه‌ها و آزمون)؛ عملیاتِ حساس از مسیرِ تأیید می‌رود."""
+        """اجرای عملیات با مقادیر فرم (برای دکمه‌ها و آزمون)؛ عملیات حساس از مسیر تایید می‌رود."""
         cid, uid, asset_id = company_id(), user_id(), self.asset.asset_id
-        warnings = {"sell": "فروشِ دارایی سندِ حسابداری و سود/زیان ثبت می‌کند و برگشت‌پذیر نیست. ادامه می‌دهید؟",
-                    "scrap": "اسقاطِ دارایی برگشت‌پذیر نیست. ادامه می‌دهید؟"}
+        warnings = {"sell": "فروش دارایی سند حسابداری و سود/زیان ثبت می‌کند و برگشت‌پذیر نیست. ادامه می‌دهید؟",
+                    "scrap": "اسقاط دارایی برگشت‌پذیر نیست. ادامه می‌دهید؟"}
         if key in warnings and not self.confirm(warnings[key]):
             return None
         try:
@@ -870,14 +870,14 @@ class AssetsScreen(QWidget):
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return None
         pending = getattr(result, "status_code", None) == "PENDING_APPROVAL"
-        theme.set_status_label(self.status_label, "درخواست به کارتابلِ تأیید رفت." if pending else "انجام شد.", ok=True)
+        theme.set_status_label(self.status_label, "درخواست به کارتابل تایید رفت." if pending else "انجام شد.", ok=True)
         self.reload_list()
         self.load_asset(asset_id)
         return result
 
     def print_label(self) -> QImage:
         image = asset_label_image(self.asset)
-        path, _ = QFileDialog.getSaveFileName(self, "ذخیرهٔ برچسبِ QR", f"{self.asset.asset_code}.png", "PNG (*.png)") \
+        path, _ = QFileDialog.getSaveFileName(self, "ذخیرهٔ برچسب QR", f"{self.asset.asset_code}.png", "PNG (*.png)") \
             if self.isVisible() else ("", "")
         if path:
             image.save(path)
@@ -887,7 +887,7 @@ class AssetsScreen(QWidget):
         if self.asset is None:
             return None
         if file_path is None:
-            file_path, _ = QFileDialog.getOpenFileName(self, "انتخابِ مدرک")
+            file_path, _ = QFileDialog.getOpenFileName(self, "انتخاب مدرک")
         if not file_path:
             return None
         try:
@@ -910,11 +910,11 @@ class DepreciationScreen(QWidget):
         self.confirm = lambda text: QMessageBox.question(self, "استهلاک", text) == QMessageBox.Yes
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("اجرایِ استهلاکِ دوره")
+        title = QLabel("اجرای استهلاک دوره")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
-        hint = QLabel("محاسبه ← بررسی ← تأیید ← ثبت. پس از ثبت، اصلاح فقط با «برگشت» (سندِ معکوس) ممکن است. "
-                      "هزینهٔ استهلاکِ هر دارایی به مرکزِ هزینهٔ همان دارایی ثبت می‌شود.")
+        hint = QLabel("محاسبه ← بررسی ← تایید ← ثبت. پس از ثبت، اصلاح فقط با «برگشت» (سند معکوس) ممکن است. "
+                      "هزینهٔ استهلاک هر دارایی به مرکز هزینهٔ همان دارایی ثبت می‌شود.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
@@ -927,7 +927,7 @@ class DepreciationScreen(QWidget):
         row.addWidget(QLabel("دوره:"))
         row.addWidget(self.period)
         self.buttons = {}
-        for key, label, action in (("calculate", "محاسبه", "CREATE"), ("review", "بررسی", "EDIT"), ("approve", "تأیید", "APPROVE"),
+        for key, label, action in (("calculate", "محاسبه", "CREATE"), ("review", "بررسی", "EDIT"), ("approve", "تایید", "APPROVE"),
                                    ("post", "ثبت", "CREATE"), ("reverse", "برگشت", "APPROVE")):
             b = QPushButton(label)
             b.setProperty("action", action)
@@ -938,9 +938,9 @@ class DepreciationScreen(QWidget):
         outer.addLayout(row)
         self.status_label = QLabel("")
         outer.addWidget(self.status_label)
-        self.runs = table(["دوره", "وضعیت", "تعداد", "جمعِ استهلاک", "تاریخِ ثبت"])
+        self.runs = table(["دوره", "وضعیت", "تعداد", "جمع استهلاک", "تاریخ ثبت"])
         self.runs.itemSelectionChanged.connect(self._show_lines)
-        self.lines = table(["کد", "نام", "روش", "ارزشِ اولِ دوره", "استهلاک", "ارزشِ پایانِ دوره", "کارکرد"])
+        self.lines = table(["کد", "نام", "روش", "ارزش اول دوره", "استهلاک", "ارزش پایان دوره", "کارکرد"])
         split = QSplitter(Qt.Vertical)
         split.addWidget(self.runs)
         split.addWidget(self.lines)
@@ -978,18 +978,18 @@ class DepreciationScreen(QWidget):
             if key == "calculate":
                 fd.calculate_run(cid, uid, self.period.currentData())
             elif run is None:
-                raise ValueError("برایِ این دوره هنوز محاسبه‌ای انجام نشده است.")
+                raise ValueError("برای این دوره هنوز محاسبه‌ای انجام نشده است.")
             elif key == "review":
                 fd.review_run(cid, uid, run.run_id)
             elif key == "approve":
                 fd.approve_run(cid, uid, run.run_id)
             elif key == "post":
-                if not self.confirm(P(f"استهلاکِ دورهٔ {run.period_code} به مبلغِ {money(run.total_amount)} ثبت و سندِ حسابداری "
+                if not self.confirm(P(f"استهلاک دورهٔ {run.period_code} به مبلغ {money(run.total_amount)} ثبت و سند حسابداری "
                                       "صادر می‌شود. ادامه می‌دهید؟")):
                     return False
                 fd.post_run(cid, uid, run.run_id)
             elif key == "reverse":
-                if not self.confirm("استهلاکِ این دوره با سندِ معکوس برگشت می‌خورد. ادامه می‌دهید؟"):
+                if not self.confirm("استهلاک این دوره با سند معکوس برگشت می‌خورد. ادامه می‌دهید؟"):
                     return False
                 fd.reverse_run(cid, uid, run.run_id)
         except ValueError as exc:
@@ -1014,7 +1014,7 @@ class SetupScreen(QWidget):
         super().__init__()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("تنظیماتِ دارایی‌هایِ ثابت")
+        title = QLabel("تنظیمات دارایی‌های ثابت")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
         self.status_label = QLabel("")
@@ -1032,12 +1032,12 @@ class SetupScreen(QWidget):
         self.cat_code, self.cat_name = QLineEdit(), QLineEdit()
         self.cat_method = combo([(v, k) for k, v in fac.METHOD_LABELS.items()])
         self.cat_life, self.cat_residual, self.cat_rate = num_field(), num_field(), num_field()
-        self.cat_cc_required = QCheckBox("مرکزِ هزینه الزامی")
+        self.cat_cc_required = QCheckBox("مرکز هزینه الزامی")
         self.cat_cc = QComboBox()
         self.cat_accounts = {k: QComboBox() for k in fac.ACCOUNT_FIELDS}
-        for label, w in (("کد", self.cat_code), ("نام", self.cat_name), ("روشِ پیش‌فرض", self.cat_method),
-                         ("عمرِ پیش‌فرض (ماه)", self.cat_life), ("درصدِ اسقاط", self.cat_residual), ("نرخِ نزولی", self.cat_rate),
-                         ("", self.cat_cc_required), ("مرکزِ هزینهٔ پیش‌فرض", self.cat_cc)):
+        for label, w in (("کد", self.cat_code), ("نام", self.cat_name), ("روش پیش‌فرض", self.cat_method),
+                         ("عمر پیش‌فرض (ماه)", self.cat_life), ("درصد اسقاط", self.cat_residual), ("نرخ نزولی", self.cat_rate),
+                         ("", self.cat_cc_required), ("مرکز هزینهٔ پیش‌فرض", self.cat_cc)):
             self.cat_form.addRow(label, w)
         for k, label in fac.ACCOUNT_FIELDS.items():
             self.cat_form.addRow(label, self.cat_accounts[k])
@@ -1047,7 +1047,7 @@ class SetupScreen(QWidget):
         self.cat_new.clicked.connect(self._cat_clear)
         self.cat_save.clicked.connect(self.save_category)
         # R276: حذفِ طبقه (اگر در دارایی‌ها استفاده شده باشد غیرفعال می‌شود)
-        self.cat_delete = delete_button("حذفِ طبقهٔ انتخاب‌شده")
+        self.cat_delete = delete_button("حذف طبقهٔ انتخاب‌شده")
         self.cat_delete.clicked.connect(lambda: confirm_and_delete(
             self, "طبقهٔ دارایی", self.cat_name.text(), fam.AssetCategory, self._cat_id, company_id(), self.refresh))
         brow.addWidget(self.cat_new)
@@ -1069,16 +1069,16 @@ class SetupScreen(QWidget):
         lrow = QHBoxLayout()
         self.loc_code, self.loc_name = QLineEdit(), QLineEdit()
         self.loc_type = combo([("سایت/کارخانه", "SITE"), ("ساختمان", "BUILDING"), ("طبقه", "FLOOR"), ("اتاق", "ROOM"),
-                               ("خطِ تولید", "LINE"), ("سایر", "OTHER")])
+                               ("خط تولید", "LINE"), ("سایر", "OTHER")])
         self.loc_parent = QComboBox()
         add_loc = QPushButton("ذخیرهٔ محل")
         add_loc.clicked.connect(self.save_location)
-        new_loc = QPushButton("محلِ جدید")
+        new_loc = QPushButton("محل جدید")
         new_loc.clicked.connect(self._loc_clear)
-        del_loc = delete_button("حذفِ محلِ انتخاب‌شده")
+        del_loc = delete_button("حذف محل انتخاب‌شده")
         del_loc.clicked.connect(lambda: confirm_and_delete(
-            self, "محلِ دارایی", self.loc_name.text(), fam.AssetLocation, self._loc_id, company_id(), self.refresh))
-        for w in (QLabel("کد"), self.loc_code, QLabel("نام"), self.loc_name, self.loc_type, QLabel("زیرِ"), self.loc_parent, add_loc,
+            self, "محل دارایی", self.loc_name.text(), fam.AssetLocation, self._loc_id, company_id(), self.refresh))
+        for w in (QLabel("کد"), self.loc_code, QLabel("نام"), self.loc_name, self.loc_type, QLabel("زیر"), self.loc_parent, add_loc,
                   new_loc, del_loc):
             lrow.addWidget(w)
         ll.addLayout(lrow)
@@ -1093,11 +1093,11 @@ class SetupScreen(QWidget):
         self.grp_code, self.grp_name = QLineEdit(), QLineEdit()
         add_grp = QPushButton("ذخیرهٔ گروه")
         add_grp.clicked.connect(self.save_group)
-        new_grp = QPushButton("گروهِ جدید")
+        new_grp = QPushButton("گروه جدید")
         new_grp.clicked.connect(self._grp_clear)
-        del_grp = delete_button("حذفِ گروهِ انتخاب‌شده")
+        del_grp = delete_button("حذف گروه انتخاب‌شده")
         del_grp.clicked.connect(lambda: confirm_and_delete(
-            self, "گروهِ دارایی", self.grp_name.text(), fam.AssetGroup, self._grp_id, company_id(), self.refresh))
+            self, "گروه دارایی", self.grp_name.text(), fam.AssetGroup, self._grp_id, company_id(), self.refresh))
         for w in (QLabel("کد"), self.grp_code, QLabel("نام"), self.grp_name, add_grp, new_grp, del_grp):
             grow.addWidget(w)
         gl.addLayout(grow)
@@ -1105,15 +1105,15 @@ class SetupScreen(QWidget):
         # سیاست‌ها
         pol = QWidget()
         pf = QFormLayout(pol)
-        self.start_rule = combo([("تاریخِ بهره‌برداری", "IN_SERVICE"), ("تاریخِ تحصیل", "ACQUISITION"), ("ماهِ بعد", "NEXT_MONTH"),
-                                 ("تاریخِ مشخص (در سرمایه‌ای‌کردن)", "SPECIFIC")])
+        self.start_rule = combo([("تاریخ بهره‌برداری", "IN_SERVICE"), ("تاریخ تحصیل", "ACQUISITION"), ("ماه بعد", "NEXT_MONTH"),
+                                 ("تاریخ مشخص (در سرمایه‌ای‌کردن)", "SPECIFIC")])
         self.improve_min, self.large_improve = num_field(), num_field()
-        self.require_cc = QCheckBox("مرکزِ هزینه برایِ همهٔ دارایی‌ها الزامی")
+        self.require_cc = QCheckBox("مرکز هزینه برای همهٔ دارایی‌ها الزامی")
         save_pol = QPushButton("ذخیرهٔ سیاست‌ها")
         save_pol.setObjectName("primaryButton")
         save_pol.clicked.connect(self.save_settings)
-        for label, w in (("شروعِ استهلاک", self.start_rule), ("حدِ سرمایه‌ای‌شدنِ بهسازی", self.improve_min),
-                         ("حدِ بهسازیِ نیازمندِ تأیید", self.large_improve), ("", self.require_cc), ("", save_pol)):
+        for label, w in (("شروع استهلاک", self.start_rule), ("حد سرمایه‌ای‌شدن بهسازی", self.improve_min),
+                         ("حد بهسازی نیازمند تایید", self.large_improve), ("", self.require_cc), ("", save_pol)):
             pf.addRow(label, w)
         self.tabs.addTab(pol, "سیاست‌ها")
         self._cat_id = None
@@ -1145,7 +1145,7 @@ class SetupScreen(QWidget):
 
         with new_session() as session:
             paths = {loc.location_id: fac.location_path(session, loc.location_id) for loc in locs}
-        types = {"SITE": "سایت", "BUILDING": "ساختمان", "FLOOR": "طبقه", "ROOM": "اتاق", "LINE": "خطِ تولید", "OTHER": "سایر"}
+        types = {"SITE": "سایت", "BUILDING": "ساختمان", "FLOOR": "طبقه", "ROOM": "اتاق", "LINE": "خط تولید", "OTHER": "سایر"}
         self._locs = locs
         fill(self.loc_table, [[loc.code, loc.name, types.get(loc.location_type, ""), paths[loc.location_id]] for loc in locs],
              [loc.location_id for loc in locs])
@@ -1275,15 +1275,15 @@ class CipScreen(QWidget):
         self.dialog_runner = lambda dlg: dlg.exec() == QDialog.Accepted
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("دارایی در جریانِ تکمیل (CIP)")
+        title = QLabel("دارایی در جریان تکمیل (CIP)")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
-        hint = QLabel("هزینه‌هایِ ساخت (مواد از انبار، دستمزد، نصب، حمل، مهندسی) جمع و در پایان به دارایی تبدیل می‌شود.")
+        hint = QLabel("هزینه‌های ساخت (مواد از انبار، دستمزد، نصب، حمل، مهندسی) جمع و در پایان به دارایی تبدیل می‌شود.")
         hint.setObjectName("sectionHint")
         outer.addWidget(hint)
         row = QHBoxLayout()
         self.buttons = {}
-        for key, label in (("new", "پروژهٔ جدید"), ("cost", "ثبتِ هزینه"), ("material", "مصرفِ مواد از انبار"),
+        for key, label in (("new", "پروژهٔ جدید"), ("cost", "ثبت هزینه"), ("material", "مصرف مواد از انبار"),
                            ("capitalize", "تبدیل به دارایی")):
             b = QPushButton(label)
             b.clicked.connect(lambda _c=False, k=key: self.action(k))
@@ -1293,7 +1293,7 @@ class CipScreen(QWidget):
         outer.addLayout(row)
         self.status_label = QLabel("")
         outer.addWidget(self.status_label)
-        self.projects = table(["کد", "نام", "شروع", "وضعیت", "جمعِ هزینه"])
+        self.projects = table(["کد", "نام", "شروع", "وضعیت", "جمع هزینه"])
         outer.addWidget(self.projects, stretch=1)
         self._rows = []
 
@@ -1325,25 +1325,25 @@ class CipScreen(QWidget):
         if values is None:
             if key == "new":
                 dlg = FormDialog("پروژهٔ جدید", [("code", "کد", QLineEdit()), ("name", "نام", QLineEdit()),
-                                                 ("category_id", "طبقهٔ داراییِ نهایی", combo(lk.categories)),
-                                                 ("start_date", "تاریخِ شروع", date_field()),
-                                                 ("cost_center", "مرکزِ هزینه", combo(lk.cost_centers, "— ندارد —")),
+                                                 ("category_id", "طبقهٔ دارایی نهایی", combo(lk.categories)),
+                                                 ("start_date", "تاریخ شروع", date_field()),
+                                                 ("cost_center", "مرکز هزینه", combo(lk.cost_centers, "— ندارد —")),
                                                  ("project", "پروژه", combo(lk.projects, "— ندارد —"))], parent=self)
             elif key == "cost":
-                dlg = FormDialog("ثبتِ هزینه", [("date", "تاریخ", date_field()),
+                dlg = FormDialog("ثبت هزینه", [("date", "تاریخ", date_field()),
                                                 ("cost_type", "نوع", combo([(v, k) for k, v in fe.CIP_COST_TYPES.items() if k != "MATERIAL"])),
-                                                ("amount", "مبلغ", num_field()), ("offset_account_id", "حسابِ طرفِ مقابل", combo(lk.accounts)),
+                                                ("amount", "مبلغ", num_field()), ("offset_account_id", "حساب طرف مقابل", combo(lk.accounts)),
                                                 ("description", "شرح", QLineEdit())], parent=self)
             elif key == "material":
                 items = [(f"{i.code} — {i.name or ''}", i.item_id) for i in catalog_service.list_items(cid, transactable_only=True)]
                 whs = [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations_service.list_warehouses(cid, active_only=True)]
-                dlg = FormDialog("مصرفِ مواد", [("date", "تاریخ", date_field()), ("item_id", "کالا", combo(items)),
-                                                ("warehouse_id", "انبار", combo(whs)), ("quantity", "مقدار (واحدِ پایه)", num_field())],
-                                 "خروج از انبار با موتورِ انبار و بهایِ واقعیِ خروج.", self)
+                dlg = FormDialog("مصرف مواد", [("date", "تاریخ", date_field()), ("item_id", "کالا", combo(items)),
+                                                ("warehouse_id", "انبار", combo(whs)), ("quantity", "مقدار (واحد پایه)", num_field())],
+                                 "خروج از انبار با موتور انبار و بهای واقعی خروج.", self)
             else:
-                dlg = FormDialog("تبدیل به دارایی", [("asset_code", "کدِ دارایی", QLineEdit()), ("name", "نام", QLineEdit()),
-                                                     ("date", "تاریخِ سرمایه‌ای‌شدن", date_field()),
-                                                     ("in_service_date", "تاریخِ بهره‌برداری", date_field())], parent=self)
+                dlg = FormDialog("تبدیل به دارایی", [("asset_code", "کد دارایی", QLineEdit()), ("name", "نام", QLineEdit()),
+                                                     ("date", "تاریخ سرمایه‌ای‌شدن", date_field()),
+                                                     ("in_service_date", "تاریخ بهره‌برداری", date_field())], parent=self)
             if not self.dialog_runner(dlg):
                 return None
             values = dlg.values()
@@ -1385,15 +1385,15 @@ class PhysicalCountScreen(QWidget):
         super().__init__()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("شمارشِ فیزیکیِ دارایی")
+        title = QLabel("شمارش فیزیکی دارایی")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
         row = QHBoxLayout()
         self.count_combo = QComboBox()
         self.count_combo.currentIndexChanged.connect(self._load_items)
         self.code, self.location = QLineEdit(), QComboBox()
-        self.code.setPlaceholderText("کدِ شمارشِ جدید")
-        new = QPushButton("شمارشِ جدید")
+        self.code.setPlaceholderText("کد شمارش جدید")
+        new = QPushButton("شمارش جدید")
         new.clicked.connect(self.new_count)
         for w in (QLabel("شمارش:"), self.count_combo, self.code, QLabel("محل:"), self.location, new):
             row.addWidget(w)
@@ -1401,19 +1401,19 @@ class PhysicalCountScreen(QWidget):
         outer.addLayout(row)
         scan_row = QHBoxLayout()
         self.scan_input = QLineEdit()
-        self.scan_input.setPlaceholderText("اسکنِ QR/بارکد یا تایپِ کدِ دارایی + Enter")
+        self.scan_input.setPlaceholderText("اسکن QR/بارکد یا تایپ کد دارایی + Enter")
         self.scan_input.returnPressed.connect(lambda: self.scan())
         self.found_location = QComboBox()
         self.damaged = QCheckBox("آسیب‌دیده")
-        self.apply_moves = QCheckBox("ثبتِ محلِ یافت‌شده در شناسنامه")
-        close = QPushButton("بستنِ شمارش")
+        self.apply_moves = QCheckBox("ثبت محل یافت‌شده در شناسنامه")
+        close = QPushButton("بستن شمارش")
         close.clicked.connect(self.close_count)
-        for w in (self.scan_input, QLabel("محلِ یافت:"), self.found_location, self.damaged, self.apply_moves, close):
+        for w in (self.scan_input, QLabel("محل یافت:"), self.found_location, self.damaged, self.apply_moves, close):
             scan_row.addWidget(w)
         outer.addLayout(scan_row)
         self.status_label = QLabel("")
         outer.addWidget(self.status_label)
-        self.items = table(["کد", "نام", "نتیجه", "محلِ مورد انتظار", "محلِ یافت‌شده", "روش"])
+        self.items = table(["کد", "نام", "نتیجه", "محل مورد انتظار", "محل یافت‌شده", "روش"])
         outer.addWidget(self.items, stretch=1)
 
     def refresh(self) -> None:
@@ -1421,7 +1421,7 @@ class PhysicalCountScreen(QWidget):
         if cid is None:
             return
         locs = fac.list_locations(cid)
-        for box, none in ((self.location, "— همهٔ محل‌ها —"), (self.found_location, "— محلِ شمارش —")):
+        for box, none in ((self.location, "— همهٔ محل‌ها —"), (self.found_location, "— محل شمارش —")):
             box.clear()
             box.addItem(none, None)
             for loc in locs:

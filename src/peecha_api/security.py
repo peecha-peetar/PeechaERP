@@ -1,7 +1,7 @@
-"""صدور/بررسیِ توکنِ دسترسی (JWT، کوتاه‌مدت) و توکنِ رفرش (رشتهٔ
-تصادفیِ مات، درازمدت، هش‌شده در دیتابیس -- دقیقاً هم‌الگو با ذخیرهٔ
-رمزِ عبورِ کاربران در services/auth.py، فقط بدونِ نمکِ جداگانه چون
-خودِ توکن از قبل با آنتروپیِ بالا تصادفی است)."""
+"""صدور/بررسی توکن دسترسی (JWT، کوتاه‌مدت) و توکن رفرش (رشتهٔ
+تصادفی مات، درازمدت، هش‌شده در دیتابیس — دقیقاً هم‌الگو با ذخیرهٔ
+رمز عبور کاربران در services/auth.py، فقط بدون نمک جداگانه چون
+خود توکن از قبل با آنتروپی بالا تصادفی است)."""
 
 from __future__ import annotations
 
@@ -74,6 +74,6 @@ def revoke_device_token(device_token_id: int, company_id: int) -> None:
     with new_session() as session:
         row = session.get(DeviceToken, device_token_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("توکنِ دستگاه نامعتبر است.")
+            raise ValueError("توکن دستگاه نامعتبر است.")
         row.revoked_at = datetime.datetime.now()
         session.commit()

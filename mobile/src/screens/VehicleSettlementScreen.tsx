@@ -59,20 +59,20 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
       );
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message ?? "ثبتِ تسویه ناموفق بود.");
+      setError(err.message ?? "ثبت تسویه ناموفق بود.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) return <InlineSpinner label="در حالِ بارگذاریِ اطلاعاتِ امروز..." />;
+  if (loading) return <InlineSpinner label="در حال بارگذاری اطلاعات امروز..." />;
 
   if (submitted) {
     return (
       <View style={{ flex: 1, padding: spacing.lg, gap: spacing.md }}>
         <EmptyState
           title="تسویه ثبت شد"
-          description="این تسویه اکنون منتظرِ تاییدِ انبار و سپس تاییدِ حسابداری است."
+          description="این تسویه اکنون منتظر تایید انبار و سپس تایید حسابداری است."
         />
         <Button label="بازگشت" onPress={onBack} />
       </View>
@@ -81,9 +81,9 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>تسویهٔ پایانِ روزِ خودرو</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>تسویهٔ پایان روز خودرو</Text>
       <Text style={[typography.caption, { color: colors.textSecondary }]}>
-        مبلغِ فاکتورشدهٔ امروز: {Number(invoicedAmount).toLocaleString("fa-IR")}
+        مبلغ فاکتورشدهٔ امروز: {Number(invoicedAmount).toLocaleString("fa-IR")}
       </Text>
 
       <FlatList
@@ -95,31 +95,31 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
           const shortage = Number(item.loaded_quantity) - Number(item.sold_quantity) - returned;
           return (
             <Card style={{ padding: spacing.md }}>
-              <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>{item.item_name ?? `کالایِ #${item.item_id}`}</Text>
+              <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>{item.item_name ?? `کالای #${item.item_id}`}</Text>
               <Text style={[typography.caption, { color: colors.textSecondary }]}>
                 بارگیری‌شده: {item.loaded_quantity} — فروخته‌شده: {item.sold_quantity}
               </Text>
               <Input
-                label="مقدارِ برگشتی"
+                label="مقدار برگشتی"
                 value={returnedByItem[item.item_id] ?? ""}
                 onChangeText={(v) => setReturnedByItem((prev) => ({ ...prev, [item.item_id]: v }))}
                 keyboardType="numeric"
                 numeric
               />
               <Text style={[typography.caption, { color: shortage === 0 ? colors.textSecondary : colors.danger }]}>
-                {shortage === 0 ? "بدونِ کسری/اضافی" : shortage > 0 ? `کسری: ${shortage}` : `اضافی: ${-shortage}`}
+                {shortage === 0 ? "بدون کسری/اضافی" : shortage > 0 ? `کسری: ${shortage}` : `اضافی: ${-shortage}`}
               </Text>
             </Card>
           );
         }}
-        ListEmptyComponent={<EmptyState title="بارگیری/فروشی برایِ امروز ثبت نشده" />}
+        ListEmptyComponent={<EmptyState title="بارگیری/فروشی برای امروز ثبت نشده" />}
       />
 
-      <Input label="مبلغِ نقدِ تحویلی" value={declaredCash} onChangeText={setDeclaredCash} keyboardType="numeric" numeric />
+      <Input label="مبلغ نقد تحویلی" value={declaredCash} onChangeText={setDeclaredCash} keyboardType="numeric" numeric />
 
       {error ? <Text style={[typography.body, { color: colors.danger }]}>{error}</Text> : null}
 
-      <Button label={submitting ? "در حالِ ثبت..." : "ثبتِ تسویه"} onPress={submit} loading={submitting} disabled={submitting} />
+      <Button label={submitting ? "در حال ثبت..." : "ثبت تسویه"} onPress={submit} loading={submitting} disabled={submitting} />
       <Button label="بازگشت" variant="ghost" onPress={onBack} />
     </View>
   );

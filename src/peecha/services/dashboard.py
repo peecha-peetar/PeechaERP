@@ -1,7 +1,7 @@
-"""کوئری‌های داشبورد — همه واقعی روی دیتابیس، بدون داده‌ی ساختگی.
+"""کوئری‌های داشبورد — همه واقعی روی دیتابیس، بدون دادهٔ ساختگی.
 
 چون هنوز هیچ ماژولی به‌جز حسابداری (نصفه) و مدیریت کاربر ساخته نشده، از
-KPIهای نمونه‌ی طراحی (فروش، موجودی انبار، ...) که هنوز داده‌ای برایشان
+KPIهای نمونهٔ طراحی (فروش، موجودی انبار، ...) که هنوز داده‌ای برایشان
 نداریم صرف‌نظر شده؛ به‌جایش چیزهایی نشان داده می‌شود که همین حالا صادقانه
 قابل‌محاسبه‌اند.
 """
@@ -41,9 +41,9 @@ CATEGORY_LABELS = {
     "LIABILITY": "بدهی",
     "EQUITY": "حقوق صاحبان سهام",
     "REVENUE": "درآمد",
-    "COGS": "بهایِ تمام‌شده",
+    "COGS": "بهای تمام‌شده",
     "EXPENSE": "هزینه",
-    "STATISTICAL": "حساب‌هایِ آماری",
+    "STATISTICAL": "حساب‌های آماری",
 }
 
 
@@ -130,7 +130,7 @@ def chart_of_accounts_by_category(company_id: int | None) -> list[tuple[str, int
 
 
 def journal_entries_by_status(company_id: int | None) -> list[tuple[str, int]]:
-    """طبقِ تبِ «حسابداری»: شکستِ تعدادِ اسنادِ حسابداری بر اساسِ وضعیت
+    """طبق تب «حسابداری»: شکست تعداد اسناد حسابداری بر اساس وضعیت
     (پیش‌نویس/موقت/دائم/برگشت‌خورده/ابطال‌شده)."""
     with new_session() as db_session:
         stmt = select(JournalEntryStatus.code, func.count()).join(
@@ -162,9 +162,9 @@ class TreasurySummary:
 
 
 def treasury_summary(company_id: int | None) -> TreasurySummary:
-    """طبقِ تبِ «خزانه‌داری»: چک‌هایِ دریافتیِ هنوز-نزدِ-صندوق، چک‌هایِ
-    پرداختیِ هنوز-وصول‌نشده، و اقساطِ معوقه -- هرکدام از همان سرویسِ
-    ازپیش‌تست‌شده‌یِ خودشان."""
+    """طبق تب «خزانه‌داری»: چک‌های دریافتی هنوز-نزد-صندوق، چک‌های
+    پرداختی هنوز-وصول‌نشده، و اقساط معوقه — هرکدام از همان سرویس
+    ازپیش‌تست‌شدهٔ خودشان."""
     summary = TreasurySummary()
     if company_id is None:
         return summary
@@ -194,8 +194,8 @@ class InventorySummary:
 
 
 def inventory_summary(company_id: int | None) -> InventorySummary:
-    """طبقِ تبِ «انبار»: ارزشِ کلِ موجودی، تعدادِ کالا/انبارِ فعال، و
-    تعدادِ ردیف‌هایِ موجودیِ منفی (نشانه‌یِ خطایِ ثبت -- نه یک وضعیتِ
+    """طبق تب «انبار»: ارزش کل موجودی، تعداد کالا/انبار فعال، و
+    تعداد ردیف‌های موجودی منفی (نشانهٔ خطای ثبت — نه یک وضعیت
     عادی)."""
     summary = InventorySummary()
     if company_id is None:
@@ -236,8 +236,8 @@ class CommercialSummary:
 
 
 def commercial_summary(company_id: int | None, document_type_code: str) -> CommercialSummary:
-    """طبقِ تب‌هایِ «فروش»/«خرید»: جمعِ فاکتورهایِ ثبتِ‌نهایی‌شده‌یِ همین
-    ماه، و تعداد/مبلغِ فاکتورهایِ هنوز-تسویه‌نشده (از سرویسِ تسویه)."""
+    """طبق تب‌های «فروش»/«خرید»: جمع فاکتورهای ثبت‌نهایی‌شدهٔ همین
+    ماه، و تعداد/مبلغ فاکتورهای هنوز-تسویه‌نشده (از سرویس تسویه)."""
     summary = CommercialSummary()
     if company_id is None:
         return summary
@@ -262,11 +262,11 @@ def commercial_summary(company_id: int | None, document_type_code: str) -> Comme
 def commercial_amount_per_month(
     company_id: int | None, document_type_code: str, months: int = 6, counterparty_detail_account_id: int | None = None,
 ) -> tuple[list[str], list[decimal.Decimal]]:
-    """معادلِ journal_entries_per_month، برایِ جمعِ مبلغِ فاکتورهایِ
-    ثبتِ‌نهایی‌شده‌یِ یک نوعِ سند (فروش/خرید) در N ماهِ اخیر. طبقِ
-    نیازِ داشبوردِ معلقِ مشتری (customer_dashboard.py)، فیلترِ اختیاریِ
-    counterparty_detail_account_id هم اضافه شد تا همین تابع برایِ روندِ
-    فروشِ *یک* مشتریِ خاص هم بدونِ تکرارِ کوئری قابلِ‌استفاده باشد."""
+    """معادل journal_entries_per_month، برای جمع مبلغ فاکتورهای
+    ثبت‌نهایی‌شدهٔ یک نوع سند (فروش/خرید) در N ماه اخیر. طبق
+    نیاز داشبورد معلق مشتری (customer_dashboard.py)، فیلتر اختیاری
+    counterparty_detail_account_id هم اضافه شد تا همین تابع برای روند
+    فروش *یک* مشتری خاص هم بدون تکرار کوئری قابل‌استفاده باشد."""
     today = datetime.date.today()
     year, month = today.year, today.month
     ym_buckets: list[tuple[int, int]] = []
@@ -307,8 +307,8 @@ def commercial_amount_per_month(
 def top_counterparties(
     company_id: int | None, document_type_code: str, limit: int = 5
 ) -> list[tuple[str, decimal.Decimal]]:
-    """طبقِ تب‌هایِ «فروش»/«خرید»: پُرفروش‌ترین مشتریان / پُرخریدترین
-    تامین‌کنندگان (بر اساسِ جمعِ مبلغِ فاکتورهایِ ثبتِ‌نهایی‌شده)."""
+    """طبق تب‌های «فروش»/«خرید»: پُرفروش‌ترین مشتریان / پُرخریدترین
+    تامین‌کنندگان (بر اساس جمع مبلغ فاکتورهای ثبت‌نهایی‌شده)."""
     if company_id is None:
         return []
     with new_session() as db_session:
@@ -340,14 +340,14 @@ class SmartAlert:
 
 
 def list_smart_alerts(company_id: int | None) -> list[SmartAlert]:
-    """طبقِ ادامهٔ فهرستِ درخواستی («هشدارهایِ هوشمندِ فراگیر»): بنرِ
-    قبلیِ تبِ «کلی» فقط موعدِ تسویه را پوشش می‌داد (و همچنان مستقل و
-    دست‌نخورده باقی می‌ماند)؛ این تابع دقیقاً همان اصل را به دو منبعِ
-    هشدارِ ازپیش‌ساخته‌شده‌یِ دیگر که تا امروز در هیچ‌جایِ داشبورد
-    نمایش داده نمی‌شدند تعمیم می‌دهد -- اقساطِ معوقه و اقداماتِ
-    فوریِ دستیارِ فروش (ریسکِ ریزش/عبور از سقفِ اعتبار) -- هرکدام
-    مستقیماً از سرویسِ ازپیش‌تست‌شده‌یِ خودش، بدونِ محاسبه‌یِ موازیِ
-    تازه و بدونِ تکرارِ هشدارِ تسویه."""
+    """طبق ادامهٔ فهرست درخواستی («هشدارهای هوشمند فراگیر»): بنر
+    قبلی تب «کلی» فقط موعد تسویه را پوشش می‌داد (و همچنان مستقل و
+    دست‌نخورده باقی می‌ماند)؛ این تابع دقیقاً همان اصل را به دو منبع
+    هشدار ازپیش‌ساخته‌شدهٔ دیگر که تا امروز در هیچ‌جای داشبورد
+    نمایش داده نمی‌شدند تعمیم می‌دهد — اقساط معوقه و اقدامات
+    فوری دستیار فروش (ریسک ریزش/عبور از سقف اعتبار) — هرکدام
+    مستقیماً از سرویس ازپیش‌تست‌شدهٔ خودش، بدون محاسبهٔ موازی
+    تازه و بدون تکرار هشدار تسویه."""
     alerts: list[SmartAlert] = []
     if company_id is None:
         return alerts
@@ -357,7 +357,7 @@ def list_smart_alerts(company_id: int | None) -> list[SmartAlert]:
     overdue = installments_service.list_installments(company_id, status_codes=["OVERDUE"])
     if overdue:
         alerts.append(SmartAlert(
-            severity="danger", title=f"{len(overdue)} قسطِ معوقه نیاز به پیگیری دارد",
+            severity="danger", title=f"{len(overdue)} قسط معوقه نیاز به پیگیری دارد",
             nav_code="TREASURY_INSTALLMENTS",
         ))
 
@@ -366,7 +366,7 @@ def list_smart_alerts(company_id: int | None) -> list[SmartAlert]:
     if danger_actions:
         alerts.append(SmartAlert(
             severity="danger",
-            title=f"{len(danger_actions)} مشتری نیازمندِ اقدامِ فوری‌اند -- دستیارِ فروش را ببینید",
+            title=f"{len(danger_actions)} مشتری نیازمند اقدام فوری‌اند — دستیار فروش را ببینید",
             nav_code="SALES_ASSISTANT",
         ))
 
@@ -386,12 +386,12 @@ class SalesCommandCenter:
 
 
 def sales_command_center(company_id: int | None) -> SalesCommandCenter:
-    """طبقِ ادامهٔ فهرستِ درخواستی («پیشخوانِ فروش»): سه محورِ این تب،
-    مستقیماً از رویِ سرویس‌هایِ ازپیش‌ساخته‌شده‌یِ «دستیارِ فروش»
-    (get_daily_actions)، «پیش‌بینیِ فروش» (compute_sales_trend)، و «سودِ
-    واقعیِ مشتریان» (compute_customer_profit) پر می‌شوند -- بدونِ هیچ
-    محاسبه‌یِ موازیِ تازه، دقیقاً طبقِ اصلِ «استفاده‌یِ مجدد پیش از
-    بازسازی» که در تمامِ این سرویس قبلاً رعایت شده."""
+    """طبق ادامهٔ فهرست درخواستی («پیشخوان فروش»): سه محور این تب،
+    مستقیماً از روی سرویس‌های ازپیش‌ساخته‌شدهٔ «دستیار فروش»
+    (get_daily_actions)، «پیش‌بینی فروش» (compute_sales_trend)، و «سود
+    واقعی مشتریان» (compute_customer_profit) پر می‌شوند — بدون هیچ
+    محاسبهٔ موازی تازه، دقیقاً طبق اصل «استفادهٔ مجدد پیش از
+    بازسازی» که در تمام این سرویس قبلاً رعایت شده."""
     result = SalesCommandCenter()
     if company_id is None:
         return result
@@ -442,7 +442,7 @@ def hr_summary(company_id: int | None) -> HrSummary:
 
 @dataclass
 class ExecutiveOverview:
-    """R276: نمایِ مدیریتیِ تبِ «کلی» -- از همان سرویس‌هایِ ماژول‌ها، بدونِ محاسبهٔ موازی."""
+    """R276: نمای مدیریتی تب «کلی» — از همان سرویس‌های ماژول‌ها، بدون محاسبهٔ موازی."""
     sales_this_month: decimal.Decimal = _ZERO
     purchases_this_month: decimal.Decimal = _ZERO
     receivables: decimal.Decimal = _ZERO

@@ -1,7 +1,7 @@
-"""تاییدِ تحویل (Proof of Delivery) از موبایل -- امضا/عکس به‌صورتِ
-base64 می‌آیند، رویِ دیسک ذخیره می‌شوند (هم‌الگو با ذخیرهٔ ضمائمِ
-detail_dimensions.py) و فقط مسیرِ فایل در دیتابیس ذخیره می‌شود؛ خودِ
-منطقِ تاییدِ تحویل رویِ services/delivery_confirmation.py (R129) سوار
+"""تایید تحویل (Proof of Delivery) از موبایل — امضا/عکس به‌صورت
+base64 می‌آیند، روی دیسک ذخیره می‌شوند (هم‌الگو با ذخیرهٔ ضمائم
+detail_dimensions.py) و فقط مسیر فایل در دیتابیس ذخیره می‌شود؛ خود
+منطق تایید تحویل روی services/delivery_confirmation.py (R129) سوار
 است."""
 
 from __future__ import annotations

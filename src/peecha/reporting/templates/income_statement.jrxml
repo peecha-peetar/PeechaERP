@@ -6,9 +6,9 @@
               columnWidth="535" leftMargin="30" rightMargin="30" topMargin="20" bottomMargin="20"
               whenNoDataType="AllSectionsNoDetail">
 
-    <!-- طبقِ رفعِ باگِ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
-         کافی است. طبقِ رفعِ باگِ ارتفاعِ متنِ Bold: تایتلِ ۱۶pt حداقل به
-         ارتفاعِ ۳۰ نیاز دارد وگرنه کاملاً نامرئی رندر می‌شود. -->
+    <!-- طبق رفع باگ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
+         کافی است. طبق رفع باگ ارتفاع متن Bold: تایتل ۱۶pt حداقل به
+         ارتفاع ۳۰ نیاز دارد وگرنه کاملاً نامرئی رندر می‌شود. -->
     <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8.5"/>
     <style name="Title" fontName="Vazirmatn" fontSize="16" isBold="true"/>
     <style name="SubTitle" fontName="Vazirmatn" fontSize="10"/>
@@ -18,20 +18,20 @@
 
     <parameter name="companyName" class="java.lang.String">
 
-        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+        <parameterDescription><![CDATA[نام شرکت]]></parameterDescription>
 
     </parameter>
     <parameter name="dateRangeLabel" class="java.lang.String">
-        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+        <parameterDescription><![CDATA[بازهٔ تاریخ]]></parameterDescription>
     </parameter>
     <parameter name="generatedAt" class="java.lang.String">
-        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+        <parameterDescription><![CDATA[تاریخ تولید گزارش]]></parameterDescription>
     </parameter>
     <parameter name="netIncomeLabel" class="java.lang.String">
-        <parameterDescription><![CDATA[برچسبِ سودِ خالص]]></parameterDescription>
+        <parameterDescription><![CDATA[برچسب سود خالص]]></parameterDescription>
     </parameter>
     <parameter name="netIncomeDisplay" class="java.lang.String">
-        <parameterDescription><![CDATA[سودِ خالص]]></parameterDescription>
+        <parameterDescription><![CDATA[سود خالص]]></parameterDescription>
     </parameter>
 
     <parameter name="companyLogoPath" class="java.lang.String">
@@ -44,12 +44,12 @@
 
         <property name="net.sf.jasperreports.json.field.expression" value="account_code"/>
 
-        <fieldDescription><![CDATA[کدِ حساب]]></fieldDescription>
+        <fieldDescription><![CDATA[کد حساب]]></fieldDescription>
 
     </field>
     <field name="account_name" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="account_name"/>
-        <fieldDescription><![CDATA[نامِ حساب]]></fieldDescription>
+        <fieldDescription><![CDATA[نام حساب]]></fieldDescription>
     </field>
     <field name="category_label" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="category_label"/>
@@ -57,11 +57,11 @@
     </field>
     <field name="current_amount_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="current_amount_display"/>
-        <fieldDescription><![CDATA[مبلغِ دورهٔ جاری]]></fieldDescription>
+        <fieldDescription><![CDATA[مبلغ دورهٔ جاری]]></fieldDescription>
     </field>
     <field name="previous_amount_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="previous_amount_display"/>
-        <fieldDescription><![CDATA[مبلغِ دورهٔ قبل]]></fieldDescription>
+        <fieldDescription><![CDATA[مبلغ دورهٔ قبل]]></fieldDescription>
     </field>
 
     <pageHeader>
@@ -81,7 +81,7 @@
             <staticText>
                 <reportElement style="Title" x="0" y="0" width="535" height="30"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <text><![CDATA[صورتِ سود و زیان]]></text>
+                <text><![CDATA[صورت سود و زیان]]></text>
             </staticText>
             <textField>
                 <reportElement style="SubTitle" x="0" y="32" width="535" height="20"/>
@@ -92,7 +92,7 @@
             <textField>
                 <reportElement style="Footer" x="0" y="54" width="535" height="16"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <textFieldExpression><![CDATA["تاریخِ تولیدِ گزارش: " + $P{generatedAt}]]></textFieldExpression>
+                <textFieldExpression><![CDATA["تاریخ تولید گزارش: " + $P{generatedAt}]]></textFieldExpression>
             </textField>
         </band>
     </pageHeader>
@@ -105,8 +105,8 @@
             <staticText><reportElement style="Header" x="0" y="0" width="70" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[کد]]></text></staticText>
             <staticText><reportElement style="Header" x="70" y="0" width="220" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[نام]]></text></staticText>
             <staticText><reportElement style="Header" x="290" y="0" width="80" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[دسته]]></text></staticText>
-            <staticText><reportElement style="Header" x="370" y="0" width="85" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[دوره‌یِ جاری]]></text></staticText>
-            <staticText><reportElement style="Header" x="455" y="0" width="80" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[سالِ قبل]]></text></staticText>
+            <staticText><reportElement style="Header" x="370" y="0" width="85" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[دورهٔ جاری]]></text></staticText>
+            <staticText><reportElement style="Header" x="455" y="0" width="80" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[سال قبل]]></text></staticText>
         </band>
     </columnHeader>
 
@@ -129,7 +129,7 @@
             <textField>
                 <reportElement style="Footer" x="0" y="0" width="535" height="18"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <textFieldExpression><![CDATA["صفحه‌یِ " + $V{PAGE_NUMBER}]]></textFieldExpression>
+                <textFieldExpression><![CDATA["صفحهٔ " + $V{PAGE_NUMBER}]]></textFieldExpression>
             </textField>
         </band>
     </pageFooter>

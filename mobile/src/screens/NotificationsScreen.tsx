@@ -23,7 +23,7 @@ export function NotificationsScreen({ apiClient, onBack }: Props) {
     try {
       setItems(await apiClient.listNotifications());
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ اعلان‌ها ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت اعلان‌ها ناموفق بود.");
     } finally {
       setLoading(false);
       setRefreshing(false);

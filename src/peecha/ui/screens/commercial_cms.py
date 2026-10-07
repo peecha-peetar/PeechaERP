@@ -1,4 +1,4 @@
-"""سینکِ مقاله با CMS (وردپرس) -- طبقِ ادامه‌یِ اولویتِ بخشِ محتوا/
+"""همگام‌سازی مقاله با CMS (وردپرس) — طبق ادامهٔ اولویت بخش محتوا/
 بازاریابی. معماری هم‌الگو با commercial_social.py."""
 
 from __future__ import annotations
@@ -39,24 +39,24 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("سینکِ محتوا با CMS")
+        title = QLabel("همگام‌سازی محتوا با CMS")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_connections_tab(), "اتصالاتِ وردپرس")
+        tabs.addTab(self._build_connections_tab(), "اتصالات وردپرس")
         tabs.addTab(self._build_articles_tab(), "مقالات")
         outer.addWidget(tabs, stretch=1)
 
         self.set_field_help([
-            (self.cms_platform_combo, "سامانهٔ مدیریتِ محتوایی که به آن وصل می‌شوید."),
-            (self.cms_name_field, "نامِ نمایشیِ این اتصال، فقط برایِ تشخیصِ خودتان."),
-            (self.cms_site_url_field, "آدرسِ کاملِ سایتِ وردپرس."),
-            (self.cms_username_field, "نامِ‌کاربریِ وردپرس."),
-            (self.cms_app_password_field, "Application Passwordِ وردپرس (نه رمزِ اصلیِ ورود)."),
-            (self.article_connection_combo, "اتصالی که این مقاله رویِ آن منتشر می‌شود."),
-            (self.article_title_field, "عنوانِ مقاله."),
-            (self.article_body_field, "متنِ کاملِ مقاله -- می‌تواند شاملِ HTML باشد."),
+            (self.cms_platform_combo, "سامانهٔ مدیریت محتوایی که به آن وصل می‌شوید."),
+            (self.cms_name_field, "نام نمایشی این اتصال، فقط برای تشخیص خودتان."),
+            (self.cms_site_url_field, "آدرس کامل سایت وردپرس."),
+            (self.cms_username_field, "نام‌کاربری وردپرس."),
+            (self.cms_app_password_field, "Application Password وردپرس (نه رمز اصلی ورود)."),
+            (self.article_connection_combo, "اتصالی که این مقاله روی آن منتشر می‌شود."),
+            (self.article_title_field, "عنوان مقاله."),
+            (self.article_body_field, "متن کامل مقاله — می‌تواند شامل HTML باشد."),
         ])
 
     def _company_id(self) -> int | None:
@@ -68,7 +68,7 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer = QVBoxLayout(page)
 
         self.connections_table = QTableWidget(0, 3)
-        self.connections_table.setHorizontalHeaderLabels(["پلتفرم", "نام", "آدرسِ سایت"])
+        self.connections_table.setHorizontalHeaderLabels(["پلتفرم", "نام", "آدرس سایت"])
         self.connections_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.connections_table.verticalHeader().setVisible(False)
         self.connections_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -81,32 +81,32 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.cms_platform_combo.addItem(label, code)
         form.addWidget(self.cms_platform_combo)
         self.cms_name_field = QLineEdit()
-        self.cms_name_field.setPlaceholderText("نامِ نمایشی (مثلاً «وبلاگِ فروشگاه»)")
+        self.cms_name_field.setPlaceholderText("نام نمایشی (مثلاً «وبلاگ فروشگاه»)")
         form.addWidget(self.cms_name_field, stretch=1)
         self.cms_site_url_field = QLineEdit()
-        self.cms_site_url_field.setPlaceholderText("آدرسِ سایت (مثلاً https://example.com)")
+        self.cms_site_url_field.setPlaceholderText("آدرس سایت (مثلاً https://example.com)")
         form.addWidget(self.cms_site_url_field, stretch=1)
         self.cms_username_field = QLineEdit()
-        self.cms_username_field.setPlaceholderText("نامِ‌کاربری")
+        self.cms_username_field.setPlaceholderText("نام‌کاربری")
         form.addWidget(self.cms_username_field)
         self.cms_app_password_field = QLineEdit()
-        self.cms_app_password_field.setPlaceholderText("رمزِ‌کاره (Application Password)")
+        self.cms_app_password_field.setPlaceholderText("رمز‌کاره (Application Password)")
         self.cms_app_password_field.setEchoMode(QLineEdit.Password)
         form.addWidget(self.cms_app_password_field)
         add_connection_button = QPushButton("➕")
         add_connection_button.setObjectName("primaryIconButton")
         add_connection_button.setFixedWidth(44)
-        add_connection_button.setToolTip("افزودنِ اتصال")
+        add_connection_button.setToolTip("افزودن اتصال")
         add_connection_button.clicked.connect(self._add_connection)
         form.addWidget(add_connection_button)
         test_connection_button = QPushButton("🔎")
         test_connection_button.setObjectName("iconButton")
         test_connection_button.setFixedWidth(44)
-        test_connection_button.setToolTip("آزمایشِ اتصالِ انتخاب‌شده")
+        test_connection_button.setToolTip("آزمایش اتصال انتخاب‌شده")
         test_connection_button.clicked.connect(self._test_connection)
         form.addWidget(test_connection_button)
         # R276: حذفِ اتصالِ انتخاب‌شده
-        delete_connection_button = delete_button("حذفِ اتصالِ انتخاب‌شده")
+        delete_connection_button = delete_button("حذف اتصال انتخاب‌شده")
         delete_connection_button.clicked.connect(self._delete_connection)
         form.addWidget(delete_connection_button)
         outer.addLayout(form)
@@ -185,18 +185,18 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.article_connection_combo = QComboBox()
         form.addWidget(self.article_connection_combo)
         self.article_title_field = QLineEdit()
-        self.article_title_field.setPlaceholderText("عنوانِ مقاله")
+        self.article_title_field.setPlaceholderText("عنوان مقاله")
         form.addWidget(self.article_title_field, stretch=1)
         add_article_button = QPushButton("➕")
         add_article_button.setObjectName("primaryIconButton")
         add_article_button.setFixedWidth(44)
-        add_article_button.setToolTip("افزودنِ مقاله به‌عنوانِ پیش‌نویس")
+        add_article_button.setToolTip("افزودن مقاله به‌عنوان پیش‌نویس")
         add_article_button.clicked.connect(self._add_article)
         form.addWidget(add_article_button)
         outer.addLayout(form)
 
         self.article_body_field = QPlainTextEdit()
-        self.article_body_field.setPlaceholderText("متنِ مقاله (HTML مجاز است)")
+        self.article_body_field.setPlaceholderText("متن مقاله (HTML مجاز است)")
         self.article_body_field.setFixedHeight(120)
         outer.addWidget(self.article_body_field)
 
@@ -223,9 +223,9 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             else:
                 publish_button = QPushButton("🔄")
             publish_button.setObjectName("primaryIconButton")
-            publish_button.setToolTip("انتشار" if article.status_code != "PUBLISHED" else "به‌روزرسانیِ پستِ منتشرشده")
+            publish_button.setToolTip("انتشار" if article.status_code != "PUBLISHED" else "به‌روزرسانی پست منتشرشده")
             publish_button.clicked.connect(lambda _checked=False, article_id=article.article_id: self._publish_article(article_id))
-            remove = delete_button("حذفِ مقاله (فقط از این برنامه)")
+            remove = delete_button("حذف مقاله (فقط از این برنامه)")
             remove.clicked.connect(lambda _checked=False, a=article: confirm_and_delete(
                 self, "مقاله", a.title, CmsArticle, a.article_id, self._company_id(), self._refresh_articles))
             self.articles_table.setCellWidget(row_index, 4, row_actions(publish_button, remove))
@@ -233,7 +233,7 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete_connection(self) -> None:
         connection_id = getattr(self, "_selected_connection_id", None)
         connection = next((c for c in self._connections if c.connection_id == connection_id), None)
-        if confirm_and_delete(self, "اتصالِ سایت", connection.display_name if connection else "", CmsConnection, connection_id,
+        if confirm_and_delete(self, "اتصال سایت", connection.display_name if connection else "", CmsConnection, connection_id,
                               self._company_id()):
             self._selected_connection_id = None
             self.refresh()

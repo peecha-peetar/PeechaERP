@@ -1,9 +1,9 @@
-"""مغایرتِ بانکی/حساب از اکسل — طبقِ آیتمِ ۵ (درخواستِ صریح: «مغایرتِ
-بانکی/حساب از اکسل، فقط نمایشِ اختلاف‌ها») + پاسخِ تاییدشده‌یِ کاربر
-(«فقط نمایشِ اختلاف‌ها، پیشنهادی»): کاربر یک حسابِ کدینگی (معمولاً بانک/
-صندوق) و بازه‌یِ تاریخ را انتخاب می‌کند، صورت‌حسابِ اکسلِ همان حساب را
-ایمپورت می‌کند، و فقط ردیف‌هایی که در یک طرف هستند و طرفِ مقابل ندارند
-نمایش داده می‌شوند — بدونِ هیچ مکانیزمِ تطبیق‌دادن/رفع‌مغایرتِ دستی."""
+"""مغایرت بانکی/حساب از اکسل — طبق آیتم ۵ (درخواست صریح: «مغایرت
+بانکی/حساب از اکسل، فقط نمایش اختلاف‌ها») + پاسخ تاییدشدهٔ کاربر
+(«فقط نمایش اختلاف‌ها، پیشنهادی»): کاربر یک حساب کدینگی (معمولاً بانک/
+صندوق) و بازهٔ تاریخ را انتخاب می‌کند، صورت‌حساب اکسل همان حساب را
+ورود می‌کند، و فقط ردیف‌هایی که در یک طرف هستند و طرف مقابل ندارند
+نمایش داده می‌شوند — بدون هیچ مکانیزم تطبیق‌دادن/رفع‌مغایرت دستی."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ _GUESS_KEYWORDS: dict[str, list[str]] = {
 }
 
 _COLUMNS = ["منبع", "تاریخ", "مرجع", "شرح", "بدهکار", "بستانکار"]
-_SOURCE_LABELS = {"LEDGER": "فقط در دفترِ حساب", "STATEMENT": "فقط در صورت‌حسابِ اکسل"}
+_SOURCE_LABELS = {"LEDGER": "فقط در دفتر حساب", "STATEMENT": "فقط در صورت‌حساب اکسل"}
 
 
 class BankReconciliationScreen(FieldHelpMixin, QWidget):
@@ -57,7 +57,7 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(16)
 
-        title_label = QLabel("مغایرتِ بانکی/حساب از اکسل")
+        title_label = QLabel("مغایرت بانکی/حساب از اکسل")
         title_label.setObjectName("pageTitle")
         layout.addWidget(title_label)
 
@@ -71,13 +71,13 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
         filter_row.addWidget(QLabel("تا تاریخ:"))
         self.date_to_field = JalaliDateEdit()
         filter_row.addWidget(self.date_to_field)
-        import_button = QPushButton("📥 ایمپورتِ صورت‌حساب از اکسل")
+        import_button = QPushButton("📥 ورود صورت‌حساب از اکسل")
         import_button.setObjectName("primaryButton")
         import_button.clicked.connect(self._on_import_excel)
         filter_row.addWidget(import_button)
         layout.addLayout(filter_row)
 
-        self.summary_label = QLabel("یک حساب و بازه‌یِ تاریخ را انتخاب کنید، سپس صورت‌حسابِ بانک را از اکسل ایمپورت کنید.")
+        self.summary_label = QLabel("یک حساب و بازهٔ تاریخ را انتخاب کنید، سپس صورت‌حساب بانک را از اکسل وارد کنید.")
         self.summary_label.setObjectName("sectionHint")
         layout.addWidget(self.summary_label)
 
@@ -93,11 +93,11 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.account_combo,
-                "حسابِ کدینگی (معمولاً بانک یا صندوق) که صورت‌حسابش می‌خواهید مقایسه شود.",
+                "حساب کدینگی (معمولاً بانک یا صندوق) که صورت‌حسابش می‌خواهید مقایسه شود.",
             ),
             (
                 import_button,
-                "فایلِ اکسلِ صورت‌حسابِ بانک را انتخاب کنید؛ فقط ردیف‌هایی که در یک طرف هستند و طرفِ مقابل ندارند نشان داده می‌شوند — هیچ ردیفی تغییر/تایید نمی‌شود.",
+                "فایل اکسل صورت‌حساب بانک را انتخاب کنید؛ فقط ردیف‌هایی که در یک طرف هستند و طرف مقابل ندارند نشان داده می‌شوند — هیچ ردیفی تغییر/تایید نمی‌شود.",
             ),
         ])
 
@@ -125,7 +125,7 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
             if index >= 0:
                 self.account_combo.setCurrentIndex(index)
         self.table.setRowCount(0)
-        self.summary_label.setText("یک حساب و بازه‌یِ تاریخ را انتخاب کنید، سپس صورت‌حسابِ بانک را از اکسل ایمپورت کنید.")
+        self.summary_label.setText("یک حساب و بازهٔ تاریخ را انتخاب کنید، سپس صورت‌حساب بانک را از اکسل وارد کنید.")
 
     def _fmt(self, value) -> str:
         return numerals.format_money(value, self._currency_decimal_places, None) if value else ""
@@ -139,10 +139,10 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
         date_from = self.date_from_field.date()
         date_to = self.date_to_field.date()
         if date_from > date_to:
-            QMessageBox.warning(self, "خطا", "بازه‌یِ تاریخ نامعتبر است.")
+            QMessageBox.warning(self, "خطا", "بازهٔ تاریخ نامعتبر است.")
             return
 
-        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایلِ صورت‌حسابِ اکسل", "", "Excel Files (*.xlsx)")
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخاب فایل صورت‌حساب اکسل", "", "Excel Files (*.xlsx)")
         if not path:
             return
         rows = read_excel_rows(self, path)
@@ -150,7 +150,7 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
             return
 
         dialog = ExcelColumnMappingDialog(
-            _TARGET_FIELDS, _GUESS_KEYWORDS, rows[0], self, title="ایمپورتِ صورت‌حسابِ بانک — تناظرِ ستون‌ها"
+            _TARGET_FIELDS, _GUESS_KEYWORDS, rows[0], self, title="ورود صورت‌حساب بانک — تناظر ستون‌ها"
         )
         if dialog.exec() != ExcelColumnMappingDialog.Accepted:
             return
@@ -168,7 +168,7 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
                 debit = numerals.parse_decimal(str(row[debit_col])) if debit_col is not None and row[debit_col] is not None else numerals.parse_decimal("0")
                 credit = numerals.parse_decimal(str(row[credit_col])) if credit_col is not None and row[credit_col] is not None else numerals.parse_decimal("0")
             except ValueError as exc:
-                errors.append(f"ردیفِ {row_no}: {exc}")
+                errors.append(f"ردیف {row_no}: {exc}")
                 continue
             if debit == 0 and credit == 0:
                 continue
@@ -180,7 +180,7 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
                     if not hasattr(date_value, "year"):
                         date_value = numerals.parse_jalali_date(str(raw_date))
                 except ValueError as exc:
-                    errors.append(f"ردیفِ {row_no}: {exc}")
+                    errors.append(f"ردیف {row_no}: {exc}")
                     continue
             description = str(row[desc_col]).strip() if desc_col is not None and row[desc_col] is not None else ""
             statement_rows.append(
@@ -188,7 +188,7 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
             )
 
         if errors:
-            QMessageBox.warning(self, "خطاهایِ ایمپورت", "\n".join(errors[:20]))
+            QMessageBox.warning(self, "خطاهای ورود", "\n".join(errors[:20]))
 
         differences = reconciliation_service.compute_differences(company_id, account_id, date_from, date_to, statement_rows)
         self._show_differences(differences)
@@ -207,12 +207,12 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
         if not differences:
-            self.summary_label.setText("هیچ اختلافی یافت نشد — همه‌یِ ردیف‌هایِ دفترِ حساب و صورت‌حسابِ اکسل تطبیق داده شدند.")
+            self.summary_label.setText("هیچ اختلافی یافت نشد — همهٔ ردیف‌های دفتر حساب و صورت‌حساب اکسل تطبیق داده شدند.")
         else:
             ledger_only = sum(1 for d in differences if d.source == "LEDGER")
             statement_only = sum(1 for d in differences if d.source == "STATEMENT")
             self.summary_label.setText(
                 f"{numerals.to_persian_digits(str(len(differences)))} اختلاف یافت شد — "
-                f"{numerals.to_persian_digits(str(ledger_only))} فقط در دفترِ حساب، "
-                f"{numerals.to_persian_digits(str(statement_only))} فقط در صورت‌حسابِ اکسل."
+                f"{numerals.to_persian_digits(str(ledger_only))} فقط در دفتر حساب، "
+                f"{numerals.to_persian_digits(str(statement_only))} فقط در صورت‌حساب اکسل."
             )

@@ -1,6 +1,6 @@
-"""گزارش‌هایِ دارایی‌هایِ ثابت -- R264 (موتور و صفحهٔ عمومیِ گزارش؛ فقط خواندنی از دفترِ دارایی).
+"""گزارش‌های دارایی‌های ثابت — R264 (موتور و صفحهٔ عمومی گزارش؛ فقط خواندنی از دفتر دارایی).
 
-دابل‌کلیک: (شناسهٔ دارایی، «FA_ASSET») صفحهٔ دارایی؛ (شناسهٔ سند، «JOURNAL_ENTRY») سندِ حسابداری.
+دابل‌کلیک: (شناسهٔ دارایی، «FA_ASSET») صفحهٔ دارایی؛ (شناسهٔ سند، «JOURNAL_ENTRY») سند حسابداری.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from peecha.services.fixed_assets import common as c
 from peecha.services.purchase_reports import DATE, INT, MONEY, PERCENT, QTY, TEXT, ReportDef, ReportResult
 
 ZERO = c.ZERO
-_GROUP = "دارایی‌هایِ ثابت"
+_GROUP = "دارایی‌های ثابت"
 _STATUS_OPT = (("status", "وضعیت", (("ACTIVE", "فعال"), ("ALL", "همه"), ("CLOSED", "واگذارشده"))),)
 
 
@@ -67,7 +67,7 @@ class _Labels:
 
 
 def _filtered(session, company_id: int, f) -> set[int] | None:
-    """R275: شناسهٔ دارایی‌هایِ مجاز طبقِ فیلترهایِ طبقه/محل (با زیرمحل‌ها)/شعبه/مرکزِ هزینه؛ None یعنی بدونِ فیلتر."""
+    """R275: شناسهٔ دارایی‌های مجاز طبق فیلترهای طبقه/محل (با زیرمحل‌ها)/شعبه/مرکز هزینه؛ None یعنی بدون فیلتر."""
     from peecha.db.models.fixed_assets import AssetLocation
 
     category, location = getattr(f, "fa_category_id", None), getattr(f, "fa_location_id", None)
@@ -111,9 +111,9 @@ def _assets(session, company_id: int, f, status_default: str = "ACTIVE"):
 
 # --- دفترِ دارایی‌ها و تفکیک‌ها -----------------------------------------------------------------------------
 def register(company_id: int, f) -> ReportResult:
-    r = ReportResult([("کد", TEXT), ("نام", TEXT), ("طبقه", TEXT), ("بهایِ تمام‌شده", MONEY), ("استهلاکِ انباشته", MONEY),
-                      ("کاهشِ ارزش", MONEY), ("ارزشِ دفتری", MONEY), ("محل", TEXT), ("مرکزِ هزینه", TEXT), ("وضعیت", TEXT)],
-                     note="ارقام از دفترِ دارایی (دفترِ اصلیِ حسابداری).")
+    r = ReportResult([("کد", TEXT), ("نام", TEXT), ("طبقه", TEXT), ("بهای تمام‌شده", MONEY), ("استهلاک انباشته", MONEY),
+                      ("کاهش ارزش", MONEY), ("ارزش دفتری", MONEY), ("محل", TEXT), ("مرکز هزینه", TEXT), ("وضعیت", TEXT)],
+                     note="ارقام از دفتر دارایی (دفتر اصلی حسابداری).")
     with new_session() as session:
         lab = _Labels(session, company_id)
         for a in _assets(session, company_id, f):
@@ -124,7 +124,7 @@ def register(company_id: int, f) -> ReportResult:
 
 
 def _by(dimension: str):
-    titles = {"LOCATION": "محل", "BRANCH": "شعبه", "COST_CENTER": "مرکزِ هزینه", "CATEGORY": "طبقه"}
+    titles = {"LOCATION": "محل", "BRANCH": "شعبه", "COST_CENTER": "مرکز هزینه", "CATEGORY": "طبقه"}
 
     def report(company_id: int, f) -> ReportResult:
         agg: dict[str, list] = defaultdict(lambda: [0, ZERO, ZERO, ZERO])
@@ -133,14 +133,14 @@ def _by(dimension: str):
             for a in _assets(session, company_id, f):
                 key = {"LOCATION": lambda: lab.location(a.location_id), "BRANCH": lambda: lab.branches.get(a.branch_id, ""),
                        "COST_CENTER": lambda: lab.detail(a.cost_center_detail_account_id),
-                       "CATEGORY": lambda: lab.cats.get(a.category_id, "")}[dimension]() or f"بدونِ {titles[dimension]}"
+                       "CATEGORY": lambda: lab.cats.get(a.category_id, "")}[dimension]() or f"بدون {titles[dimension]}"
                 g = agg[key]
                 g[0] += 1
                 g[1] += a.gross_cost
                 g[2] += a.accumulated_depreciation + a.accumulated_impairment
                 g[3] += a.book_value
-        r = ReportResult([(titles[dimension], TEXT), ("تعداد", INT), ("بهایِ تمام‌شده", MONEY),
-                          ("استهلاک و کاهشِ ارزشِ انباشته", MONEY), ("ارزشِ دفتری", MONEY), ("سهم از ارزش", PERCENT)], no_total={5})
+        r = ReportResult([(titles[dimension], TEXT), ("تعداد", INT), ("بهای تمام‌شده", MONEY),
+                          ("استهلاک و کاهش ارزش انباشته", MONEY), ("ارزش دفتری", MONEY), ("سهم از ارزش", PERCENT)], no_total={5})
         total = sum((g[3] for g in agg.values()), ZERO)
         for key, (n, gross, acc, nbv) in sorted(agg.items(), key=lambda kv: -kv[1][3]):
             r.add([key, n, gross, acc, nbv, (nbv * 100 / total).quantize(decimal.Decimal("0.1")) if total else None])
@@ -149,8 +149,8 @@ def _by(dimension: str):
 
 
 def fully_depreciated(company_id: int, f) -> ReportResult:
-    r = ReportResult([("کد", TEXT), ("نام", TEXT), ("طبقه", TEXT), ("بهایِ تمام‌شده", MONEY), ("ارزشِ اسقاط", MONEY),
-                      ("تاریخِ بهره‌برداری", DATE), ("محل", TEXT)], note="دارایی‌هایی که هنوز در اختیارند ولی کاملاً مستهلک شده‌اند.")
+    r = ReportResult([("کد", TEXT), ("نام", TEXT), ("طبقه", TEXT), ("بهای تمام‌شده", MONEY), ("ارزش اسقاط", MONEY),
+                      ("تاریخ بهره‌برداری", DATE), ("محل", TEXT)], note="دارایی‌هایی که هنوز در اختیارند ولی کاملاً مستهلک شده‌اند.")
     with new_session() as session:
         lab = _Labels(session, company_id)
         allowed = _filtered(session, company_id, f)
@@ -165,9 +165,9 @@ def fully_depreciated(company_id: int, f) -> ReportResult:
 
 # --- استهلاک و حرکت‌ها --------------------------------------------------------------------------------------
 def depreciation(company_id: int, f) -> ReportResult:
-    r = ReportResult([("دوره", TEXT), ("کد", TEXT), ("نام", TEXT), ("ارزشِ اولِ دوره", MONEY), ("استهلاک", MONEY),
-                      ("ارزشِ پایانِ دوره", MONEY), ("کارکرد", QTY), ("مرکزِ هزینه", TEXT)], no_total={3, 5},
-                     note="فقط اجراهایِ ثبت‌شده در بازه.")
+    r = ReportResult([("دوره", TEXT), ("کد", TEXT), ("نام", TEXT), ("ارزش اول دوره", MONEY), ("استهلاک", MONEY),
+                      ("ارزش پایان دوره", MONEY), ("کارکرد", QTY), ("مرکز هزینه", TEXT)], no_total={3, 5},
+                     note="فقط اجراهای ثبت‌شده در بازه.")
     with new_session() as session:
         lab = _Labels(session, company_id)
         rows = session.execute(
@@ -187,9 +187,9 @@ def depreciation(company_id: int, f) -> ReportResult:
 
 
 def movement(company_id: int, f) -> ReportResult:
-    r = ReportResult([("تاریخ", DATE), ("کد", TEXT), ("نام", TEXT), ("نوع", TEXT), ("تغییرِ بها", MONEY), ("استهلاک", MONEY),
-                      ("کاهشِ ارزش", MONEY), ("مازادِ تجدیدِ ارزیابی", MONEY), ("شرح", TEXT)],
-                     note="همهٔ حرکت‌هایِ دفترِ دارایی (تحصیل، انتقال، بهسازی، تجدیدِ ارزیابی، کاهشِ ارزش، واگذاری، ...).")
+    r = ReportResult([("تاریخ", DATE), ("کد", TEXT), ("نام", TEXT), ("نوع", TEXT), ("تغییر بها", MONEY), ("استهلاک", MONEY),
+                      ("کاهش ارزش", MONEY), ("مازاد تجدید ارزیابی", MONEY), ("شرح", TEXT)],
+                     note="همهٔ حرکت‌های دفتر دارایی (تحصیل، انتقال، بهسازی، تجدید ارزیابی، کاهش ارزش، واگذاری، ...).")
     kinds = f.options.get("kind")
     with new_session() as session:
         q = (select(AssetTransaction, Asset.asset_code, Asset.name).join(Asset, Asset.asset_id == AssetTransaction.asset_id)
@@ -207,8 +207,8 @@ def movement(company_id: int, f) -> ReportResult:
 
 
 def disposals(company_id: int, f) -> ReportResult:
-    r = ReportResult([("تاریخ", DATE), ("کد", TEXT), ("نام", TEXT), ("نوع", TEXT), ("بهایِ تمام‌شده", MONEY),
-                      ("استهلاک و کاهشِ ارزش", MONEY), ("ارزشِ دفتری", MONEY), ("مبلغِ دریافتی", MONEY), ("سود/زیان", MONEY),
+    r = ReportResult([("تاریخ", DATE), ("کد", TEXT), ("نام", TEXT), ("نوع", TEXT), ("بهای تمام‌شده", MONEY),
+                      ("استهلاک و کاهش ارزش", MONEY), ("ارزش دفتری", MONEY), ("مبلغ دریافتی", MONEY), ("سود/زیان", MONEY),
                       ("علت", TEXT)])
     labels = {"SALE": "فروش", "SCRAP": "اسقاط", "DONATION": "اهدا", "WRITE_OFF": "حذف از دفاتر"}
     with new_session() as session:
@@ -237,7 +237,7 @@ def gain_loss(company_id: int, f) -> ReportResult:
         g[2] += row[7] or ZERO
         g[3] += max(row[8] or ZERO, ZERO)
         g[4] += min(row[8] or ZERO, ZERO)
-    r = ReportResult([("نوعِ واگذاری", TEXT), ("تعداد", INT), ("ارزشِ دفتری", MONEY), ("مبلغِ دریافتی", MONEY), ("سود", MONEY),
+    r = ReportResult([("نوع واگذاری", TEXT), ("تعداد", INT), ("ارزش دفتری", MONEY), ("مبلغ دریافتی", MONEY), ("سود", MONEY),
                       ("زیان", MONEY), ("خالص", MONEY)])
     for kind, (n, nbv, proceeds, gain, loss) in agg.items():
         r.add([kind, n, nbv, proceeds, gain, -loss, gain + loss])
@@ -247,7 +247,7 @@ def gain_loss(company_id: int, f) -> ReportResult:
 def cip_report(company_id: int, f) -> ReportResult:
     from peecha.services.fixed_assets import events as fe
 
-    r = ReportResult([("کد", TEXT), ("نام", TEXT), ("تاریخِ شروع", DATE), ("وضعیت", TEXT), ("جمعِ هزینه", MONEY), ("داراییِ حاصل", TEXT)])
+    r = ReportResult([("کد", TEXT), ("نام", TEXT), ("تاریخ شروع", DATE), ("وضعیت", TEXT), ("جمع هزینه", MONEY), ("دارایی حاصل", TEXT)])
     status = {"OPEN": "در جریان", "CAPITALIZED": "سرمایه‌ای‌شده", "CANCELLED": "لغو"}
     with new_session() as session:
         codes = dict(session.execute(select(Asset.asset_id, Asset.asset_code).where(Asset.company_id == company_id)).all())
@@ -262,8 +262,8 @@ def cip_report(company_id: int, f) -> ReportResult:
 def physical(company_id: int, f) -> ReportResult:
     from peecha.services.fixed_assets import physical as fp
 
-    r = ReportResult([("شمارش", TEXT), ("کد", TEXT), ("نام", TEXT), ("نتیجه", TEXT), ("محلِ مورد انتظار", TEXT),
-                      ("محلِ یافت‌شده", TEXT), ("روش", TEXT), ("توضیح", TEXT)], note="مغایرت‌هایِ آخرین شمارش (یا همهٔ ردیف‌ها).")
+    r = ReportResult([("شمارش", TEXT), ("کد", TEXT), ("نام", TEXT), ("نتیجه", TEXT), ("محل مورد انتظار", TEXT),
+                      ("محل یافت‌شده", TEXT), ("روش", TEXT), ("توضیح", TEXT)], note="مغایرت‌های آخرین شمارش (یا همهٔ ردیف‌ها).")
     with new_session() as session:
         count = session.scalar(select(PhysicalCount).where(PhysicalCount.company_id == company_id)
                                .order_by(PhysicalCount.count_date.desc(), PhysicalCount.count_id.desc()).limit(1))
@@ -292,8 +292,8 @@ def aging(company_id: int, f) -> ReportResult:
             agg[label][0] += 1
             agg[label][1] += a.gross_cost
             agg[label][2] += a.book_value
-    r = ReportResult([("سنِ دارایی", TEXT), ("تعداد", INT), ("بهایِ تمام‌شده", MONEY), ("ارزشِ دفتری", MONEY),
-                      ("نسبتِ ارزشِ باقی‌مانده", PERCENT)], no_total={4})
+    r = ReportResult([("سن دارایی", TEXT), ("تعداد", INT), ("بهای تمام‌شده", MONEY), ("ارزش دفتری", MONEY),
+                      ("نسبت ارزش باقی‌مانده", PERCENT)], no_total={4})
     for _limit, label in buckets:
         n, gross, nbv = agg[label]
         r.add([label, n, gross, nbv, (nbv * 100 / gross).quantize(decimal.Decimal("0.1")) if gross else None])
@@ -314,8 +314,8 @@ def forecast_report(company_id: int, f) -> ReportResult:
     for asset_id in ids:
         for row in fd.forecast(company_id, asset_id, months=months):
             by_period[row.period_code] += row.amount
-    r = ReportResult([("دوره", TEXT), ("استهلاکِ پیش‌بینی‌شده", MONEY), ("تجمعی", MONEY)],
-                     note="بر اساسِ روش و عمرِ باقی‌ماندهٔ هر دارایی (بدونِ خرید/واگذاریِ آینده).", no_total={2})
+    r = ReportResult([("دوره", TEXT), ("استهلاک پیش‌بینی‌شده", MONEY), ("تجمعی", MONEY)],
+                     note="بر اساس روش و عمر باقی‌ماندهٔ هر دارایی (بدون خرید/واگذاری آینده).", no_total={2})
     running = ZERO
     for period in sorted(by_period):
         running += by_period[period]
@@ -326,9 +326,9 @@ def forecast_report(company_id: int, f) -> ReportResult:
 def machine_cost(company_id: int, f) -> ReportResult:
     from peecha.services.fixed_assets import production as fprod
 
-    r = ReportResult([("کد", TEXT), ("ماشین", TEXT), ("مرکزِ کار", TEXT), ("دوره", TEXT), ("استهلاکِ دوره", MONEY),
-                      ("ساعتِ کارکرد", QTY), ("نرخِ هر ساعت", MONEY), ("تخصیص به تولید", MONEY)], no_total={6},
-                     note="نرخ = استهلاکِ دوره ÷ ساعتِ کارکرد (یا نرخِ دستیِ ماشین) -- مبنایِ بهایِ تولید.")
+    r = ReportResult([("کد", TEXT), ("ماشین", TEXT), ("مرکز کار", TEXT), ("دوره", TEXT), ("استهلاک دوره", MONEY),
+                      ("ساعت کارکرد", QTY), ("نرخ هر ساعت", MONEY), ("تخصیص به تولید", MONEY)], no_total={6},
+                     note="نرخ = استهلاک دوره ÷ ساعت کارکرد (یا نرخ دستی ماشین) — مبنای بهای تولید.")
     period_code = c.period_of(f.date_to or datetime.date.today())[0]
     with new_session() as session:
         allocated = dict(session.execute(select(MachineCostAllocation.asset_id, func.sum(MachineCostAllocation.amount))
@@ -349,31 +349,31 @@ _NONE = ()
 # R275: فیلترهایِ دارایی (طبقه، محل، شعبه، مرکزِ هزینه)
 _FA = ("fa_category", "fa_location", "branch", "cost_center")
 FA_REPORTS: list[ReportDef] = [
-    ReportDef("FA_REGISTER", "دفترِ دارایی‌هایِ ثابت", register, _FA,
-              "کد، نام، طبقه، بها، استهلاک، ارزشِ دفتری، محل، مرکزِ هزینه و وضعیت.", "none", _GROUP, options=_STATUS_OPT),
-    ReportDef("FA_DEPRECIATION", "گزارشِ استهلاک", depreciation, _FA, "استهلاکِ ثبت‌شدهٔ هر دارایی در هر دوره.", "range", _GROUP),
-    ReportDef("FA_MOVEMENT", "گردشِ دارایی‌ها", movement, _FA, "تحصیل، انتقال، بهسازی، تجدیدِ ارزیابی، کاهشِ ارزش، واگذاری.",
+    ReportDef("FA_REGISTER", "دفتر دارایی‌های ثابت", register, _FA,
+              "کد، نام، طبقه، بها، استهلاک، ارزش دفتری، محل، مرکز هزینه و وضعیت.", "none", _GROUP, options=_STATUS_OPT),
+    ReportDef("FA_DEPRECIATION", "گزارش استهلاک", depreciation, _FA, "استهلاک ثبت‌شدهٔ هر دارایی در هر دوره.", "range", _GROUP),
+    ReportDef("FA_MOVEMENT", "گردش دارایی‌ها", movement, _FA, "تحصیل، انتقال، بهسازی، تجدید ارزیابی، کاهش ارزش، واگذاری.",
               "range", _GROUP, options=(("kind", "نوع", (("ALL", "همه"),) + tuple(c.TXN_LABELS.items())),)),
-    ReportDef("FA_FULLY_DEPRECIATED", "دارایی‌هایِ کاملاً مستهلک", fully_depreciated, _FA, "در اختیار ولی بدونِ ارزشِ قابلِ استهلاک.",
+    ReportDef("FA_FULLY_DEPRECIATED", "دارایی‌های کاملاً مستهلک", fully_depreciated, _FA, "در اختیار ولی بدون ارزش قابل استهلاک.",
               "none", _GROUP),
-    ReportDef("FA_BY_LOCATION", "دارایی‌ها به تفکیکِ محل", _by("LOCATION"), _FA, "تعداد و ارزش در هر محل.", "none", _GROUP,
+    ReportDef("FA_BY_LOCATION", "دارایی‌ها به تفکیک محل", _by("LOCATION"), _FA, "تعداد و ارزش در هر محل.", "none", _GROUP,
               options=_STATUS_OPT),
-    ReportDef("FA_BY_BRANCH", "دارایی‌ها به تفکیکِ شعبه", _by("BRANCH"), _FA, "تعداد و ارزش در هر شعبه.", "none", _GROUP,
+    ReportDef("FA_BY_BRANCH", "دارایی‌ها به تفکیک شعبه", _by("BRANCH"), _FA, "تعداد و ارزش در هر شعبه.", "none", _GROUP,
               options=_STATUS_OPT),
-    ReportDef("FA_BY_COST_CENTER", "دارایی‌ها به تفکیکِ مرکزِ هزینه", _by("COST_CENTER"), _FA, "تعداد و ارزش در هر مرکزِ هزینه.",
+    ReportDef("FA_BY_COST_CENTER", "دارایی‌ها به تفکیک مرکز هزینه", _by("COST_CENTER"), _FA, "تعداد و ارزش در هر مرکز هزینه.",
               "none", _GROUP, options=_STATUS_OPT),
-    ReportDef("FA_BY_CATEGORY", "دارایی‌ها به تفکیکِ طبقه", _by("CATEGORY"), _FA, "تعداد و ارزش در هر طبقه.", "none", _GROUP,
+    ReportDef("FA_BY_CATEGORY", "دارایی‌ها به تفکیک طبقه", _by("CATEGORY"), _FA, "تعداد و ارزش در هر طبقه.", "none", _GROUP,
               options=_STATUS_OPT),
-    ReportDef("FA_CIP", "دارایی‌هایِ در جریانِ تکمیل", cip_report, _NONE, "پروژه‌هایِ ساخت و جمعِ هزینه.", "none", _GROUP,
+    ReportDef("FA_CIP", "دارایی‌های در جریان تکمیل", cip_report, _NONE, "پروژه‌های ساخت و جمع هزینه.", "none", _GROUP,
               options=(("status", "وضعیت", (("ACTIVE", "در جریان"), ("ALL", "همه"))),)),
-    ReportDef("FA_DISPOSALS", "واگذاری‌ها (فروش/اسقاط)", disposals, _FA, "بها، استهلاک، ارزشِ دفتری، مبلغِ دریافتی و سود/زیان.",
+    ReportDef("FA_DISPOSALS", "واگذاری‌ها (فروش/اسقاط)", disposals, _FA, "بها، استهلاک، ارزش دفتری، مبلغ دریافتی و سود/زیان.",
               "range", _GROUP),
-    ReportDef("FA_GAIN_LOSS", "سود و زیانِ واگذاری", gain_loss, _FA, "جمعِ سود/زیان به تفکیکِ نوعِ واگذاری.", "range", _GROUP),
-    ReportDef("FA_PHYSICAL", "شمارشِ فیزیکیِ دارایی", physical, _FA, "مغایرت‌هایِ آخرین شمارش.", "none", _GROUP,
+    ReportDef("FA_GAIN_LOSS", "سود و زیان واگذاری", gain_loss, _FA, "جمع سود/زیان به تفکیک نوع واگذاری.", "range", _GROUP),
+    ReportDef("FA_PHYSICAL", "شمارش فیزیکی دارایی", physical, _FA, "مغایرت‌های آخرین شمارش.", "none", _GROUP,
               options=(("rows", "ردیف‌ها", (("DIFF", "فقط مغایرت"), ("ALL", "همه"))),)),
-    ReportDef("FA_AGING", "سنِ دارایی‌ها", aging, _FA, "تعداد و ارزش به تفکیکِ سنِ دارایی.", "as_of", _GROUP, options=_STATUS_OPT),
-    ReportDef("FA_FORECAST", "پیش‌بینیِ استهلاک", forecast_report, _FA, "استهلاکِ ماه‌هایِ آینده.", "none", _GROUP,
+    ReportDef("FA_AGING", "سن دارایی‌ها", aging, _FA, "تعداد و ارزش به تفکیک سن دارایی.", "as_of", _GROUP, options=_STATUS_OPT),
+    ReportDef("FA_FORECAST", "پیش‌بینی استهلاک", forecast_report, _FA, "استهلاک ماه‌های آینده.", "none", _GROUP,
               options=(("months", "ماه", (("12", "۱۲ ماه"), ("24", "۲۴ ماه"), ("60", "۶۰ ماه"))),)),
-    ReportDef("FA_MACHINE_COST", "بهایِ ماشین‌آلاتِ تولید", machine_cost, _FA, "نرخِ هر ساعتِ ماشین و تخصیص به تولید.",
+    ReportDef("FA_MACHINE_COST", "بهای ماشین‌آلات تولید", machine_cost, _FA, "نرخ هر ساعت ماشین و تخصیص به تولید.",
               "as_of", _GROUP),
 ]

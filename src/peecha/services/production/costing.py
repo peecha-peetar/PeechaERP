@@ -1,9 +1,9 @@
-"""هزینه‌یابیِ تولید -- R268: دستمزد، ماشین، سربار، موتورِ عمومیِ سرشکن (استخرِ هزینه)، بهایِ استاندارد (چندسطحی)،
-بهایِ واقعی، تحلیلِ انحراف و بستنِ دوره‌ای.
+"""هزینه‌یابی تولید — R268: دستمزد، ماشین، سربار، موتور عمومی سرشکن (مخزن هزینه)، بهای استاندارد (چندسطحی)،
+بهای واقعی، تحلیل انحراف و بستن دوره‌ای.
 
-بهایِ مواد همیشه از موتورِ انبار می‌آید (همان روشِ قیمت‌گذاریِ هر کالا: FIFO/LIFO/میانگین/استاندارد/...)؛ این ماژول
-روشِ قیمت‌گذاریِ مستقلی ندارد. دستمزد/ماشین/سربار «جذب‌شده» ثبت می‌شوند (بدهکار WIP / بستانکار حسابِ جذب)؛ هزینهٔ
-واقعیِ حقوق و استهلاک همچنان در ماژول‌هایِ خودشان ثبت می‌شود.
+بهای مواد همیشه از موتور انبار می‌آید (همان روش قیمت‌گذاری هر کالا: FIFO/LIFO/میانگین/استاندارد/...)؛ این ماژول
+روش قیمت‌گذاری مستقلی ندارد. دستمزد/ماشین/سربار «جذب‌شده» ثبت می‌شوند (بدهکار کالای در جریان ساخت / بستانکار حساب جذب)؛ هزینهٔ
+واقعی حقوق و استهلاک همچنان در ماژول‌های خودشان ثبت می‌شود.
 """
 
 from __future__ import annotations
@@ -30,14 +30,14 @@ ZERO, ONE = c.ZERO, c.ONE
 _HUNDRED = decimal.Decimal(100)
 
 VARIANCE_LABELS = {
-    "MATERIAL_PRICE": "انحرافِ نرخِ مواد", "MATERIAL_USAGE": "انحرافِ مصرفِ مواد", "LABOR_RATE": "انحرافِ نرخِ دستمزد",
-    "LABOR_EFFICIENCY": "انحرافِ کاراییِ دستمزد", "MACHINE_RATE": "انحرافِ نرخِ ماشین", "MACHINE_EFFICIENCY": "انحرافِ کاراییِ ماشین",
-    "OVERHEAD": "انحرافِ سربار", "PRODUCTION_QUANTITY": "انحرافِ مقدارِ تولید", "SCRAP": "انحرافِ ضایعات",
-    "TOTAL": "انحرافِ کلِ تولید",
+    "MATERIAL_PRICE": "انحراف نرخ مواد", "MATERIAL_USAGE": "انحراف مصرف مواد", "LABOR_RATE": "انحراف نرخ دستمزد",
+    "LABOR_EFFICIENCY": "انحراف کارایی دستمزد", "MACHINE_RATE": "انحراف نرخ ماشین", "MACHINE_EFFICIENCY": "انحراف کارایی ماشین",
+    "OVERHEAD": "انحراف سربار", "PRODUCTION_QUANTITY": "انحراف مقدار تولید", "SCRAP": "انحراف ضایعات",
+    "TOTAL": "انحراف کل تولید",
 }
 POOL_CATEGORIES = {"ELECTRICITY": "برق", "GAS": "گاز", "DEPRECIATION": "استهلاک", "MAINTENANCE": "تعمیرات و نگهداری",
-                   "RENT": "اجارهٔ کارخانه", "INSURANCE": "بیمه", "INDIRECT": "هزینهٔ غیرمستقیمِ تولید",
-                   "OVERHEAD": "سربارِ کارخانه", "OTHER": "سایر"}
+                   "RENT": "اجارهٔ کارخانه", "INSURANCE": "بیمه", "INDIRECT": "هزینهٔ غیرمستقیم تولید",
+                   "OVERHEAD": "سربار کارخانه", "OTHER": "سایر"}
 
 
 # =====================================================================================
@@ -52,7 +52,7 @@ def period_is_closed(session, company_id: int, date: datetime.date) -> bool:
 
 def ensure_period_open(session, company_id: int, date: datetime.date) -> None:
     if period_is_closed(session, company_id, date):
-        raise ValueError(f"دورهٔ بهایِ {c_period(date)[0]} بسته شده است و ثبتِ تولید در آن مجاز نیست.")
+        raise ValueError(f"دورهٔ بهای {c_period(date)[0]} بسته شده است و ثبت تولید در آن مجاز نیست.")
 
 
 def c_period(date: datetime.date):
@@ -93,13 +93,13 @@ def _op_of(session, order: ProductionOrder, op_id: int | None) -> OrderOperation
         return None
     op = session.get(OrderOperation, op_id)
     if op is None or op.order_id != order.order_id:
-        raise ValueError("عملیاتِ دستور نامعتبر است.")
+        raise ValueError("عملیات دستور نامعتبر است.")
     return op
 
 
 def _overhead_for(session, order: ProductionOrder, op: OrderOperation | None, labor_hours: decimal.Decimal,
                   machine_hours: decimal.Decimal, date, user_id, key) -> None:
-    """سربار با نرخِ از پیش تعیین‌شده رویِ مبنایِ واقعی (ساعتِ کار یا ماشین، طبقِ تنظیمات)."""
+    """سربار با نرخ از پیش تعیین‌شده روی مبنای واقعی (ساعت کار یا ماشین، طبق تنظیمات)."""
     if op is None or not op.overhead_rate:
         return
     basis = c.settings(session, order.company_id).default_overhead_basis
@@ -124,11 +124,11 @@ class LaborInput:
 
 
 def record_labor(company_id: int, user_id: int, order_id: int, data: LaborInput, idempotency_key: str | None = None) -> int:
-    """دستمزدِ مستقیم = ساعت × نرخ (+ اضافه‌کار × نرخ × ضریب). بدهکار WIP / بستانکار دستمزدِ جذب‌شده."""
+    """دستمزد مستقیم = ساعت × نرخ (+ اضافه‌کار × نرخ × ضریب). بدهکار کالای در جریان ساخت / بستانکار دستمزد جذب‌شده."""
     po = _orders()
     hours, overtime = decimal.Decimal(data.hours or 0), decimal.Decimal(data.overtime_hours or 0)
     if hours < 0 or overtime < 0 or hours + overtime <= 0:
-        raise ValueError("ساعتِ کار باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("ساعت کار باید بزرگ‌تر از صفر باشد.")
     date = data.work_date or datetime.date.today()
     with new_session() as session:
         if idempotency_key and (done := session.scalar(select(LaborEntry.entry_id).join(
@@ -182,12 +182,12 @@ class MachineInput:
 
 
 def record_machine(company_id: int, user_id: int, order_id: int, data: MachineInput, idempotency_key: str | None = None) -> int:
-    """هزینهٔ ماشین = ساعت × نرخ (نرخ: دستی ← عملیات ← مرکزِ کاری ← ماژولِ دارایی). تخصیص در fa.machine_cost_allocations
-    هم به کدِ دستور ثبت می‌شود."""
+    """هزینهٔ ماشین = ساعت × نرخ (نرخ: دستی ← عملیات ← مرکز کاری ← ماژول دارایی). تخصیص در fa.machine_cost_allocations
+    هم به کد دستور ثبت می‌شود."""
     po = _orders()
     hours = decimal.Decimal(data.hours or 0)
     if hours <= 0:
-        raise ValueError("ساعتِ ماشین باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("ساعت ماشین باید بزرگ‌تر از صفر باشد.")
     date = data.work_date or datetime.date.today()
     with new_session() as session:
         if idempotency_key and (done := session.scalar(select(MachineEntry.entry_id).join(
@@ -239,8 +239,8 @@ def _machine(session, order, op, asset_id, hours, rate, date, user_id, key, is_s
 
 def apply_standard_conversion(session, order: ProductionOrder, produced_total: decimal.Decimal, date: datetime.date,
                               user_id: int, key: str | None) -> None:
-    """«محاسبهٔ خودکارِ بها»: برایِ عملیاتی که ساعتِ واقعی برایش ثبت نشده، دستمزد/ماشینِ استاندارد به نسبتِ تولیدِ تجمعی
-    جذب می‌شود (سربار هم همراهش). عملیاتی که ساعتِ واقعی دارد دست نمی‌خورد."""
+    """«محاسبهٔ خودکار بها»: برای عملیاتی که ساعت واقعی برایش ثبت نشده، دستمزد/ماشین استاندارد به نسبت تولید تجمعی
+    جذب می‌شود (سربار هم همراهش). عملیاتی که ساعت واقعی دارد دست نمی‌خورد."""
     ratio = decimal.Decimal(produced_total) / decimal.Decimal(order.planned_qty)
     for op in session.scalars(select(OrderOperation).where(OrderOperation.order_id == order.order_id).order_by(OrderOperation.seq)):
         manual_labor = session.scalar(select(func.count()).select_from(LaborEntry).where(
@@ -286,12 +286,12 @@ def list_machine(company_id: int, order_id: int) -> list[MachineEntry]:
 # موتورِ عمومیِ سرشکن + استخرِ هزینه
 # =====================================================================================
 def allocate(total, bases: dict) -> dict:
-    """سرشکنِ total به نسبتِ مبناها (کلید ← مقدار)؛ گردکردن رویِ بزرگ‌ترین سهم. مبنایِ صفر = خطا."""
+    """سرشکن total به نسبت مبناها (کلید ← مقدار)؛ گردکردن روی بزرگ‌ترین سهم. مبنای صفر = خطا."""
     total = c.money(total)
     positive = {k: decimal.Decimal(v) for k, v in bases.items() if decimal.Decimal(v) > 0}
     base = sum(positive.values(), ZERO)
     if base <= 0:
-        raise ValueError("مبنایِ سرشکن برایِ هیچ دستوری مقدار ندارد.")
+        raise ValueError("مبنای سرشکن برای هیچ دستوری مقدار ندارد.")
     shares = {k: c.money(total * v / base) for k, v in positive.items()}
     biggest = max(positive, key=lambda k: positive[k])
     shares[biggest] += total - sum(shares.values(), ZERO)
@@ -302,19 +302,19 @@ def save_pool(company_id: int, code: str, name: str, period_code: str, amount, b
               work_center_id: int | None = None, notes: str | None = None, user_id: int | None = None,
               pool_id: int | None = None) -> int:
     if basis not in c.OVERHEAD_BASES:
-        raise ValueError("مبنایِ سرشکن نامعتبر است.")
+        raise ValueError("مبنای سرشکن نامعتبر است.")
     if category not in POOL_CATEGORIES:
-        raise ValueError("نوعِ هزینه نامعتبر است.")
+        raise ValueError("نوع هزینه نامعتبر است.")
     amount = decimal.Decimal(amount)
     if amount < 0 or not code.strip() or not name.strip():
-        raise ValueError("کد، نام و مبلغِ معتبر الزامی است.")
+        raise ValueError("کد، نام و مبلغ معتبر الزامی است.")
     code_p, _s, _e = c_period_from_code(period_code)
     with new_session() as session:
         row = session.get(CostPool, pool_id) if pool_id else CostPool(company_id=company_id, allocated_amount=ZERO, status_code="OPEN")
         if row is None or row.company_id != company_id:
-            raise ValueError("استخرِ هزینه نامعتبر است.")
+            raise ValueError("مخزن هزینه نامعتبر است.")
         if pool_id and row.allocated_amount:
-            raise ValueError("استخرِ سرشکن‌شده قابلِ ویرایش نیست.")
+            raise ValueError("مخزن سرشکن‌شده قابل ویرایش نیست.")
         row.code, row.name, row.period_code, row.amount, row.basis = code.strip(), name.strip(), code_p, amount, basis
         row.category, row.work_center_id, row.notes = category, work_center_id, notes
         if pool_id is None:
@@ -338,7 +338,7 @@ def list_pools(company_id: int, period_code: str | None = None) -> list[CostPool
 
 
 def pool_bases(session, company_id: int, pool: CostPool) -> dict[int, decimal.Decimal]:
-    """مبنایِ هر دستورِ بازِ دارایِ فعالیت در دورهٔ استخر."""
+    """مبنای هر دستور باز دارای فعالیت در دورهٔ مخزن."""
     _code, start, end = c_period_from_code(pool.period_code)
     orders_q = select(ProductionOrder.order_id).where(ProductionOrder.company_id == company_id,
                                                       ProductionOrder.status_code.in_(("RELEASED", "IN_PROGRESS", "ON_HOLD", "COMPLETED")))
@@ -374,7 +374,7 @@ def preview_pool(company_id: int, pool_id: int, manual: dict[int, decimal.Decima
     with new_session() as session:
         pool = session.get(CostPool, pool_id)
         if pool is None or pool.company_id != company_id:
-            raise ValueError("استخرِ هزینه نامعتبر است.")
+            raise ValueError("مخزن هزینه نامعتبر است.")
         bases = _bases_for(session, company_id, pool, manual)
         shares = _shares(pool, bases)
         codes = dict(session.execute(select(ProductionOrder.order_id, ProductionOrder.order_code)
@@ -386,9 +386,9 @@ def preview_pool(company_id: int, pool_id: int, manual: dict[int, decimal.Decima
 def _bases_for(session, company_id, pool, manual):
     if pool.basis in ("PERCENTAGE", "MANUAL"):
         if not manual:
-            raise ValueError("برایِ سرشکنِ درصدی/دستی، سهمِ هر دستور را وارد کنید.")
+            raise ValueError("برای سرشکن درصدی/دستی، سهم هر دستور را وارد کنید.")
         if pool.basis == "PERCENTAGE" and sum(decimal.Decimal(v) for v in manual.values()) != _HUNDRED:
-            raise ValueError("جمعِ درصدها باید ۱۰۰ باشد.")
+            raise ValueError("جمع درصدها باید ۱۰۰ باشد.")
         return {int(k): decimal.Decimal(v) for k, v in manual.items()}
     return pool_bases(session, company_id, pool)
 
@@ -397,21 +397,21 @@ def _shares(pool: CostPool, bases: dict) -> dict:
     remaining = decimal.Decimal(pool.amount) - decimal.Decimal(pool.allocated_amount)
     if pool.basis == "MANUAL":
         if c.money(sum(bases.values(), ZERO)) != c.money(remaining):
-            raise ValueError(f"جمعِ مبالغِ دستی ({c.money(sum(bases.values(), ZERO))}) با ماندهٔ استخر ({c.money(remaining)}) برابر نیست.")
+            raise ValueError(f"جمع مبالغ دستی ({c.money(sum(bases.values(), ZERO))}) با ماندهٔ مخزن ({c.money(remaining)}) برابر نیست.")
         return {k: c.money(v) for k, v in bases.items() if v}
     return allocate(remaining, bases)
 
 
 def allocate_pool(company_id: int, user_id: int, pool_id: int, manual: dict[int, decimal.Decimal] | None = None,
                   date: datetime.date | None = None) -> list[SimpleNamespace]:
-    """سرشکنِ استخر رویِ دستورها: بدهکار WIP هر دستور / بستانکار سربارِ جذب‌شده -- اتمیک (همه یا هیچ)."""
+    """سرشکن مخزن روی دستورها: بدهکار کالای در جریان ساخت هر دستور / بستانکار سربار جذب‌شده — اتمیک (همه یا هیچ)."""
     po = _orders()
     with new_session() as session:
         pool = session.scalar(select(CostPool).where(CostPool.pool_id == pool_id).with_for_update())
         if pool is None or pool.company_id != company_id:
-            raise ValueError("استخرِ هزینه نامعتبر است.")
+            raise ValueError("مخزن هزینه نامعتبر است.")
         if pool.status_code == "ALLOCATED":
-            raise ValueError("این استخر قبلاً سرشکن شده است.")
+            raise ValueError("این مخزن قبلاً سرشکن شده است.")
         c.require_roles(session, company_id, (c.WIP, c.OVERHEAD_APPLIED))
         _code, _start, end = c_period_from_code(pool.period_code)
         date = date or min(end, datetime.date.today())
@@ -421,7 +421,7 @@ def allocate_pool(company_id: int, user_id: int, pool_id: int, manual: dict[int,
         for order_id, amount in shares.items():
             order = po.lock_order(session, company_id, order_id)
             if order.status_code in ("CLOSED", "CANCELLED", "DRAFT", "PLANNED"):
-                raise ValueError(f"دستورِ {order.order_code} باز نیست و سربار نمی‌پذیرد.")
+                raise ValueError(f"دستور {order.order_code} باز نیست و سربار نمی‌پذیرد.")
             txn = _conversion_txn(session, order, "OVERHEAD", c.OVERHEAD_APPLIED, amount, date, user_id,
                                   f"pool:{pool_id}:{order_id}", None, details={"pool_id": pool_id, "basis": pool.basis})
             session.add(CostAllocationRow(pool_id=pool_id, order_id=order_id, basis_value=bases.get(order_id, ZERO), amount=amount,
@@ -446,7 +446,7 @@ def _sum(session, order_id: int, types: tuple, col=OrderTransaction.amount, wher
 
 
 def order_costs(session, order: ProductionOrder) -> SimpleNamespace:
-    """بهایِ واقعی و استانداردِ دستور (برایِ مقدارِ تولیدِ سالم) به تفکیکِ عنصر."""
+    """بهای واقعی و استاندارد دستور (برای مقدار تولید سالم) به تفکیک عنصر."""
     oid = order.order_id
     produced = decimal.Decimal(order.produced_qty)
     planned = decimal.Decimal(order.planned_qty)
@@ -535,7 +535,7 @@ def get_order_costs(company_id: int, order_id: int) -> SimpleNamespace:
     with new_session() as session:
         order = session.get(ProductionOrder, order_id)
         if order is None or order.company_id != company_id:
-            raise ValueError("دستورِ تولید نامعتبر است.")
+            raise ValueError("دستور تولید نامعتبر است.")
         return order_costs(session, order)
 
 
@@ -543,12 +543,12 @@ def get_variances(company_id: int, order_id: int) -> list[SimpleNamespace]:
     with new_session() as session:
         order = session.get(ProductionOrder, order_id)
         if order is None or order.company_id != company_id:
-            raise ValueError("دستورِ تولید نامعتبر است.")
+            raise ValueError("دستور تولید نامعتبر است.")
         return variance_analysis(session, order)
 
 
 def store_summary(session, order: ProductionOrder) -> SimpleNamespace:
-    """خلاصهٔ بها و انحراف‌ها هنگامِ بستن (برایِ گزارش‌ها و بستنِ دوره)."""
+    """خلاصهٔ بها و انحراف‌ها هنگام بستن (برای گزارش‌ها و بستن دوره)."""
     costs = order_costs(session, order)
     row = session.get(OrderCostSummary, order.order_id) or OrderCostSummary(order_id=order.order_id)
     row.computed_at, row.produced_qty = datetime.datetime.now(), order.produced_qty
@@ -584,7 +584,7 @@ def _rollup(session, company_id: int, item_id: int, date: datetime.date, cache: 
         return cache[item_id]
     bom_id = pm.effective_bom_id(session, item_id, date)
     if bom_id is None:
-        raise ValueError(f"برایِ «{c.item_label(session, item_id)}» BOMِ معتبری وجود ندارد.")
+        raise ValueError(f"برای «{c.item_label(session, item_id)}» فهرست مواد معتبری وجود ندارد.")
     bom = session.get(BomHeader, bom_id)
     batch = decimal.Decimal(bom.batch_size_qty)
     material, details = ZERO, []
@@ -624,8 +624,8 @@ def _rollup(session, company_id: int, item_id: int, date: datetime.date, cache: 
 
 def rollup_standard_cost(company_id: int, item_id: int, date: datetime.date | None = None, write: bool = False,
                          user_id: int | None = None) -> list[SimpleNamespace]:
-    """بهایِ استانداردِ چندسطحی (مواد + دستمزد + ماشین + سربار − جانبی). با write=True کارت ثبت و جمع در
-    inv.standard_costs (همان جدولِ بهایِ استانداردِ موتورِ انبار) نوشته می‌شود -- برایِ محصول و نیمه‌ساخته‌هایش."""
+    """بهای استاندارد چندسطحی (مواد + دستمزد + ماشین + سربار − جانبی). با write=True کارت ثبت و جمع در
+    inv.standard_costs (همان جدول بهای استاندارد موتور انبار) نوشته می‌شود — برای محصول و نیمه‌ساخته‌هایش."""
     date = date or datetime.date.today()
     with new_session() as session:
         c.item_of(session, company_id, item_id)
@@ -694,9 +694,9 @@ def _period_numbers(session, company_id: int, code: str, start: datetime.date, e
     in_progress = list(session.scalars(select(ProductionOrder.order_code).where(
         ProductionOrder.order_id.in_(order_ids or {-1}), ProductionOrder.status_code.in_(("RELEASED", "IN_PROGRESS", "ON_HOLD")))))
     st = c.settings(session, company_id)
-    blockers = [f"استخرِ سرشکن‌نشده: {', '.join(open_pools)}"] if open_pools else []
+    blockers = [f"مخزن سرشکن‌نشده: {', '.join(open_pools)}"] if open_pools else []
     if st.require_cost_closing and unclosed:
-        blockers.append(f"دستورهایِ تکمیل‌شدهٔ بسته‌نشده: {', '.join(unclosed)}")
+        blockers.append(f"دستورهای تکمیل‌شدهٔ بسته‌نشده: {', '.join(unclosed)}")
     return SimpleNamespace(
         period_code=code, period_start=start, period_end=end, orders_count=len(order_ids), wip_balance=c.money(wip),
         material_total=c.money(total(("ISSUE",)) - total(("RETURN",))), labor_total=c.money(total(("LABOR",))),
@@ -708,7 +708,7 @@ def _period_numbers(session, company_id: int, code: str, start: datetime.date, e
 
 
 def close_period(company_id: int, user_id: int, period_code: str) -> int:
-    """بستنِ دوره: ارقامِ WIP/بهایِ واقعی/سربار/انحراف نهایی و ثبتِ تولید در آن دوره قفل می‌شود."""
+    """بستن دوره: ارقام کالای در جریان ساخت/بهای واقعی/سربار/انحراف نهایی و ثبت تولید در آن دوره قفل می‌شود."""
     code, start, end = c_period_from_code(period_code)
     with new_session() as session:
         session.execute(select(CostClosing.closing_id).where(CostClosing.company_id == company_id).with_for_update()).all()
@@ -716,7 +716,7 @@ def close_period(company_id: int, user_id: int, period_code: str) -> int:
             raise ValueError(f"دورهٔ {code} قبلاً بسته شده است.")
         n = _period_numbers(session, company_id, code, start, end)
         if n.blockers:
-            raise ValueError("بستنِ دوره ممکن نیست: " + " | ".join(n.blockers))
+            raise ValueError("بستن دوره ممکن نیست: " + " | ".join(n.blockers))
         for oid in session.scalars(select(ProductionOrder.order_id).where(
                 ProductionOrder.company_id == company_id, ProductionOrder.status_code == "CLOSED",
                 ProductionOrder.closed_at >= datetime.datetime.combine(start, datetime.time.min))):
@@ -736,7 +736,7 @@ def close_period(company_id: int, user_id: int, period_code: str) -> int:
 
 def reopen_period(company_id: int, user_id: int, period_code: str, reason: str) -> None:
     if not (reason or "").strip():
-        raise ValueError("دلیلِ بازگشایی الزامی است.")
+        raise ValueError("دلیل بازگشایی الزامی است.")
     code, _s, _e = c_period_from_code(period_code)
     with new_session() as session:
         row = session.scalar(select(CostClosing).where(CostClosing.company_id == company_id, CostClosing.period_code == code,

@@ -1,7 +1,7 @@
-"""نقشهٔ تعاملیِ انبار و مدیریتِ محل‌ها -- R248.
+"""نقشهٔ تعاملی انبار و مدیریت محل‌ها — R248.
 
-موتورِ نقشه: QGraphicsView/QGraphicsScene خودِ Qt (۲بعدی، زوم، سطحِ جزئیات). مختصاتِ هر عنصر
-(X/Y/عرض/ارتفاع/چرخش و Z برایِ نسخهٔ سه‌بعدیِ آینده) در inv.bin_locations ذخیره می‌شود.
+موتور نقشه: QGraphicsView/QGraphicsScene خود Qt (۲بعدی، زوم، سطح جزئیات). مختصات هر عنصر
+(X/Y/عرض/ارتفاع/چرخش و Z برای نسخهٔ سه‌بعدی آینده) در inv.bin_locations ذخیره می‌شود.
 همهٔ داده‌ها از services/warehouse_locations (موجودی از inv.stock_balance) می‌آید.
 """
 
@@ -36,12 +36,12 @@ def _p(text) -> str:
 
 
 def _m(value) -> str:
-    """متر بدونِ صفرهایِ اضافه (۱۰٫۵۰۰ → ۱۰٫۵)."""
+    """متر بدون صفرهای اضافه (۱۰٫۵۰۰ → ۱۰٫۵)."""
     return _p(f"{float(value):g}") if value is not None else ""
 
 
 def _dims(n) -> str:
-    """«عرض × طول × ارتفاع متر» -- فقط ابعادِ واردشده."""
+    """«عرض × طول × ارتفاع متر» — فقط ابعاد واردشده."""
     parts = [(label, v) for label, v in (("عرض", n.width_m), ("طول", n.length_m), ("ارتفاع", n.height_m)) if v]
     return " × ".join(f"{label} {_m(v)}" for label, v in parts) + " متر" if parts else ""
 
@@ -51,7 +51,7 @@ def _dec(value: float | None) -> decimal.Decimal | None:
 
 
 class LocationItem(QGraphicsRectItem):
-    """یک محل رویِ نقشه؛ در حالتِ ویرایش جابه‌جا/تغییرِ اندازه می‌شود و رها کردن، مختصات را ذخیره می‌کند."""
+    """یک محل روی نقشه؛ در حالت ویرایش جابه‌جا/تغییر اندازه می‌شود و رها کردن، مختصات را ذخیره می‌کند."""
 
     def __init__(self, node, rect: tuple, screen: "WarehouseMapScreen") -> None:
         x, y, w, h, rot = rect
@@ -190,12 +190,12 @@ class _MapView(QGraphicsView):
 
 
 class LocationDialog(QDialog):
-    """ایجاد/ویرایشِ محل (منطقه، راهرو، قفسه، طبقه، Bin)."""
+    """ایجاد/ویرایش محل (منطقه، راهرو، قفسه، طبقه، خانه)."""
 
     def __init__(self, parent, level: str, fields: wl.LocationFields | None = None, creating: bool = True,
                  suggested_code: str = "") -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"{'محلِ تازه' if creating else 'ویرایشِ محل'} -- {wl.LEVEL_LABELS[level] if level in wl.LEVEL_LABELS else 'محل'}")
+        self.setWindowTitle(f"{'محل تازه' if creating else 'ویرایش محل'} -- {wl.LEVEL_LABELS[level] if level in wl.LEVEL_LABELS else 'محل'}")
         f = fields or wl.LocationFields()
         grid = QGridLayout(self)
         self.segment = QLineEdit(suggested_code)
@@ -240,18 +240,18 @@ class LocationDialog(QDialog):
         self.putaway.setChecked(f.allow_putaway)
         self.replenish.setChecked(f.allow_replenishment)
         self.damaged.setChecked(f.is_damaged)
-        self.hazardous = QCheckBox("کالایِ خطرناک مجاز")
+        self.hazardous = QCheckBox("کالای خطرناک مجاز")
         self.hazardous.setChecked(f.allows_hazardous)
         self._fields = f
-        rows = [("کدِ بخش", self.segment), ("نام", self.name), ("نوعِ محل", self.type_combo), ("وضعیت", self.status_combo),
+        rows = [("کد بخش", self.segment), ("نام", self.name), ("نوع محل", self.type_combo), ("وضعیت", self.status_combo),
                 ("عرض (متر)", self.width_m), ("طول (متر)", self.length_m), ("ارتفاع (متر)", self.height_m),
                 ("حداکثر وزن (کیلوگرم)", self.max_weight), ("حداکثر حجم (مترمکعب)", self.max_volume),
-                ("حداقلِ دما", self.temp_min), ("حداکثرِ دما", self.temp_max)]
+                ("حداقل دما", self.temp_min), ("حداکثر دما", self.temp_max)]
         if level == "BIN":
-            self.width_m.setToolTip("طولی که Bin در امتدادِ قفسه می‌گیرد؛ خالی = سهمِ مساوی از باقی‌ماندهٔ طولِ قفسه")
-            self.length_m.setToolTip("عمقِ Bin؛ خالی = عمقِ قفسه")
+            self.width_m.setToolTip("طولی که خانه در امتداد قفسه می‌گیرد؛ خالی = سهم مساوی از باقی‌ماندهٔ طول قفسه")
+            self.length_m.setToolTip("عمق خانه؛ خالی = عمق قفسه")
         if level == "SHELF":
-            self.height_m.setToolTip("ارتفاعِ همین طبقه؛ خالی = سهمِ مساوی از باقی‌ماندهٔ ارتفاعِ قفسه")
+            self.height_m.setToolTip("ارتفاع همین طبقه؛ خالی = سهم مساوی از باقی‌ماندهٔ ارتفاع قفسه")
             rows.append(("شمارهٔ طبقه", self.level_number))
         if level == "AISLE":
             rows.append(("جهت", self.direction))
@@ -295,7 +295,7 @@ def _table(headers: list[str]) -> QTableWidget:
 
 
 class WarehouseMapScreen(QWidget):
-    """نقشه + فیلتر + جزئیاتِ محل + درختِ محل‌ها."""
+    """نقشه + فیلتر + جزئیات محل + درخت محل‌ها."""
 
     def __init__(self, main_window=None) -> None:
         super().__init__()
@@ -311,7 +311,7 @@ class WarehouseMapScreen(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
         top = QHBoxLayout()
-        title = QLabel("نقشه و محل‌هایِ انبار")
+        title = QLabel("نقشه و محل‌های انبار")
         title.setObjectName("pageTitle")
         top.addWidget(title)
         top.addSpacing(12)
@@ -328,7 +328,7 @@ class WarehouseMapScreen(QWidget):
         top.addWidget(self.mode_combo)
         top.addStretch(1)
         self.search_field = QLineEdit()
-        self.search_field.setPlaceholderText("جستجو: کد/نام/بارکدِ کالا یا کد/QRِ محل")
+        self.search_field.setPlaceholderText("جستجو: کد/نام/بارکد کالا یا کد/QR محل")
         self.search_field.setMinimumWidth(280)
         self.search_field.returnPressed.connect(lambda: self.search(self.search_field.text()))
         top.addWidget(self.search_field)
@@ -339,12 +339,12 @@ class WarehouseMapScreen(QWidget):
         outer.addLayout(top)
 
         tools = QHBoxLayout()
-        for text, slot in (("＋", lambda: self.zoom(1.25)), ("－", lambda: self.zoom(0.8)), ("کلِ نقشه", self.fit)):
+        for text, slot in (("＋", lambda: self.zoom(1.25)), ("－", lambda: self.zoom(0.8)), ("کل نقشه", self.fit)):
             b = QPushButton(text)
             b.setObjectName("flatButton")
             b.clicked.connect(slot)
             tools.addWidget(b)
-        self.edit_check = QCheckBox("حالتِ ویرایشِ نقشه")
+        self.edit_check = QCheckBox("حالت ویرایش نقشه")
         self.edit_check.toggled.connect(self.set_edit_mode)
         tools.addSpacing(12)
         tools.addWidget(self.edit_check)
@@ -356,11 +356,11 @@ class WarehouseMapScreen(QWidget):
             tools.addWidget(b)
             self.add_buttons[level] = b
         tools.addStretch(1)
-        self.view3d_check = QCheckBox("نمایِ سه‌بعدی")
+        self.view3d_check = QCheckBox("نمای سه‌بعدی")
         self.view3d_check.toggled.connect(self.set_3d)
         tools.addWidget(self.view3d_check)
-        for text, slot in (("مسیرِ برداشت", self.show_picking_path), ("چاپِ برچسب", self.print_labels),
-                           ("ابعادِ انبار", self.edit_warehouse_dimensions)):
+        for text, slot in (("مسیر برداشت", self.show_picking_path), ("چاپ برچسب", self.print_labels),
+                           ("ابعاد انبار", self.edit_warehouse_dimensions)):
             b = QPushButton(text)
             b.setObjectName("flatButton")
             b.clicked.connect(slot)
@@ -387,9 +387,9 @@ class WarehouseMapScreen(QWidget):
         dl.addWidget(self.detail_info)
         ops = QGridLayout()
         self.op_buttons = {}
-        for code, text in (("EDIT", "ویرایش"), ("STATUS", "وضعیت"), ("TRANSFER", "انتقال"), ("PUTAWAY", "پیشنهادِ جانمایی"),
-                           ("REPLENISH", "حداقل/حداکثرِ تأمین"), ("COUNT", "شمارشِ محل"), ("TASKS", "وظایفِ انبار"),
-                           ("DEFAULT", "مکانِ پیش‌فرض"), ("DELETE", "حذف")):
+        for code, text in (("EDIT", "ویرایش"), ("STATUS", "وضعیت"), ("TRANSFER", "انتقال"), ("PUTAWAY", "پیشنهاد جانمایی"),
+                           ("REPLENISH", "حداقل/حداکثر تامین"), ("COUNT", "شمارش محل"), ("TASKS", "وظایف انبار"),
+                           ("DEFAULT", "مکان پیش‌فرض"), ("DELETE", "حذف")):
             b = QPushButton(text)
             b.setObjectName("flatButton")
             # R255: دو ستون و ارتفاعِ کافی تا متنِ دکمه‌ها در پنلِ باریک بریده/پنهان نشود
@@ -408,7 +408,7 @@ class WarehouseMapScreen(QWidget):
         rot.addWidget(self.rotation_spin)
         rot.addStretch(1)
         dl.addLayout(rot)
-        self.rack_title = QLabel("نمایِ قفسه (طبقه × محل)")
+        self.rack_title = QLabel("نمای قفسه (طبقه × محل)")
         self.rack_title.setObjectName("cardTitle")
         dl.addWidget(self.rack_title)
         self.rack_info = QLabel("")
@@ -438,7 +438,7 @@ class WarehouseMapScreen(QWidget):
         self.tree_widget.setHeaderLabels(["محل", "نوع", "وضعیت", "اشغال"])
         self.tree_widget.itemClicked.connect(lambda item, _c: self.select_location(item.data(0, Qt.UserRole)))
         tl.addWidget(self.tree_widget)
-        side.addTab(tree_tab, "درختِ محل‌ها")
+        side.addTab(tree_tab, "درخت محل‌ها")
         # --- تاریخچه
         self.history_table = _table(["زمان", "رویداد", "شرح", "کالا", "مقدار"])
         side.addTab(self.history_table, "تاریخچه")
@@ -467,13 +467,13 @@ class WarehouseMapScreen(QWidget):
             self.status_filter.addItem(label, code)
         self.status_filter.currentIndexChanged.connect(lambda _i: self.apply_filters())
         filters.addWidget(self.status_filter)
-        filters.addWidget(QLabel("حداقلِ اشغال:"))
+        filters.addWidget(QLabel("حداقل اشغال:"))
         self.occupancy_filter = QSpinBox()
         self.occupancy_filter.setRange(0, 100)
         self.occupancy_filter.setSuffix("٪")
         self.occupancy_filter.valueChanged.connect(lambda _v: self.apply_filters())
         filters.addWidget(self.occupancy_filter)
-        self.show_inactive_check = QCheckBox("نمایشِ محل‌هایِ غیرفعال")
+        self.show_inactive_check = QCheckBox("نمایش محل‌های غیرفعال")
         self.show_inactive_check.toggled.connect(lambda _c: self.load_warehouse(self.warehouse_id))
         filters.addWidget(self.show_inactive_check)
         filters.addStretch(1)
@@ -507,7 +507,7 @@ class WarehouseMapScreen(QWidget):
         can_view = self.allowed("VIEW")
         self.view.setEnabled(can_view)
         if not can_view:
-            self.status_label.setText("دسترسیِ مشاهدهٔ نقشهٔ انبار ندارید.")
+            self.status_label.setText("دسترسی مشاهدهٔ نقشهٔ انبار ندارید.")
             return
         for level, b in self.add_buttons.items():
             b.setEnabled(self.allowed("CREATE"))
@@ -563,14 +563,14 @@ class WarehouseMapScreen(QWidget):
         self.apply_mode()
         self.fit()
         unplaced = [n for n in self.nodes if n.location_id not in geo and n.level is not None]
-        self.status_label.setText(_p(f"{len(self.items)} محل رویِ نقشه") + (f" -- {_p(len(unplaced))} بی‌مختصات" if unplaced else ""))
+        self.status_label.setText(_p(f"{len(self.items)} محل روی نقشه") + (f" -- {_p(len(unplaced))} بی‌مختصات" if unplaced else ""))
 
     def _fill_tree(self) -> None:
         self.tree_widget.clear()
         widgets = {}
         for n in sorted(self.nodes, key=lambda n: n.full_code):
             o = self.occ.get(n.location_id)
-            w = QTreeWidgetItem([_p(n.full_code), wl.LEVEL_LABELS.get(n.level, "محلِ قدیمی"), wl.STATUSES.get(n.status_code, ""),
+            w = QTreeWidgetItem([_p(n.full_code), wl.LEVEL_LABELS.get(n.level, "محل قدیمی"), wl.STATUSES.get(n.status_code, ""),
                                  f"{_p(o.percent)}٪" if o and o.percent is not None else ""])
             w.setData(0, Qt.UserRole, n.location_id)
             widgets[n.location_id] = w
@@ -600,7 +600,7 @@ class WarehouseMapScreen(QWidget):
         self.update_lod()
 
     def update_lod(self) -> None:
-        """Binها فقط وقتی دیده و کلیک می‌شوند که زوم کافی است (وگرنه کلیکِ قفسه را می‌گرفتند)."""
+        """خانه‌ها فقط وقتی دیده و کلیک می‌شوند که زوم کافی است (وگرنه کلیک قفسه را می‌گرفتند)."""
         lod = self.view.transform().m11()
         for item in self.items.values():
             if item.node.level in ("BIN", None):
@@ -622,7 +622,7 @@ class WarehouseMapScreen(QWidget):
         except ValueError as exc:
             self._warn(str(exc))
             return
-        theme.set_status_label(self.status_label, f"مختصاتِ «{_p(item.node.full_code)}» ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, f"مختصات «{_p(item.node.full_code)}» ذخیره شد.", ok=True)
         node = item.node
         node.map_x, node.map_y = decimal.Decimal(str(round(pos.x(), 2))), decimal.Decimal(str(round(pos.y(), 2)))
         node.map_width, node.map_height = decimal.Decimal(str(round(rect.width(), 2))), decimal.Decimal(str(round(rect.height(), 2)))
@@ -713,7 +713,7 @@ class WarehouseMapScreen(QWidget):
             item.setToolTip(self._hover_text(lid))
 
     def _presence_html(self, location_id: int) -> list[str]:
-        """R256: مقدار، سریال‌ها و بچ‌هایِ کالایِ جستجوشده در همین محل (با زیرمحل‌ها)."""
+        """R256: مقدار، سریال‌ها و بچ‌های کالای جستجوشده در همین محل (با زیرمحل‌ها)."""
         if not self.search_item_ids:
             return []
         names = "، ".join(f"{c} {n}" for c, n in (self._item_labels.get(i, ("", "", ""))[:2] for i in self.search_item_ids))
@@ -726,7 +726,7 @@ class WarehouseMapScreen(QWidget):
         if p.serials:
             shown = p.serials[:30]
             more = len(p.serials) - len(shown)
-            lines.append(_p(f"سریال‌ها ({len(p.serials)}): ") + "، ".join(shown) + (_p(f" و {more} سریالِ دیگر") if more else ""))
+            lines.append(_p(f"سریال‌ها ({len(p.serials)}): ") + "، ".join(shown) + (_p(f" و {more} سریال دیگر") if more else ""))
         if p.batches:
             lines.append("بچ‌ها: " + _p("، ".join(
                 f"{lt.batch_no} ({numerals.format_money(lt.quantity, 2, None)}"
@@ -735,14 +735,14 @@ class WarehouseMapScreen(QWidget):
         return lines
 
     def _hover_text(self, location_id: int) -> str:
-        """R255: متنِ نمایش با ماوس (نقشه، سه‌بعدی، نمایِ قفسه): کد/نام، نوع، ابعاد، اشغال و کالا؛
-        R256: + مقدار/سریال/بچِ کالایِ جستجوشده در همان محل."""
+        """R255: متن نمایش با ماوس (نقشه، سه‌بعدی، نمای قفسه): کد/نام، نوع، ابعاد، اشغال و کالا؛
+        R256: + مقدار/سریال/بچ کالای جستجوشده در همان محل."""
         n = self.by_id.get(location_id)
         if n is None:
             return ""
         o = self.occ.get(location_id)
         lines = ["<b>" + _p(n.full_code) + "</b>" + (f" -- {n.name}" if n.name else ""),
-                 f"{wl.LEVEL_LABELS.get(n.level, 'محلِ قدیمی')} | {wl.STATUSES.get(n.status_code, '')}"]
+                 f"{wl.LEVEL_LABELS.get(n.level, 'محل قدیمی')} | {wl.STATUSES.get(n.status_code, '')}"]
         if _dims(n):
             lines.append(_dims(n))
         if n.level == "RACK":
@@ -774,14 +774,14 @@ class WarehouseMapScreen(QWidget):
         chain = wl.ancestors(self.by_id, location_id)
         path = " ← ".join(_p(c.code.split("-")[-1]) for c in chain)
         cap = lambda v, unit: f"{_p(numerals.format_money(v, 2, None))} {unit}" if v is not None else "—"  # noqa: E731
-        info = [f"<b>{_p(node.full_code)}</b> -- {wl.LEVEL_LABELS.get(node.level, 'محلِ قدیمی')}",
+        info = [f"<b>{_p(node.full_code)}</b> -- {wl.LEVEL_LABELS.get(node.level, 'محل قدیمی')}",
                 f"مسیر: {path}", f"نوع: {wl.LOCATION_TYPES.get(node.location_type_code, '—')} | وضعیت: {wl.STATUSES.get(node.status_code)}"]
         if _dims(node):
             info.append(f"ابعاد: {_dims(node)}")
         if o:
             info.append(f"وزن: {cap(o.weight, 'kg')} از {cap(o.max_weight, 'kg')} | حجم: {cap(o.volume, 'm³')} از {cap(o.max_volume, 'm³')}")
             info.append(f"اشغال: <b>{_p(o.percent) + '٪' if o.percent is not None else 'ظرفیت تعریف نشده'}</b> | "
-                        f"تعدادِ کالا: {_p(len(o.items))} | مقدار: {_p(numerals.format_money(o.quantity, 2, None))}")
+                        f"تعداد کالا: {_p(len(o.items))} | مقدار: {_p(numerals.format_money(o.quantity, 2, None))}")
             if o.percent is not None and o.percent > 100:
                 info.append(f"<span style='color:{theme.DANGER}'>⚠ اشغال بیش از ظرفیت است.</span>")
         flags = [t for t, ok in (("برداشت", node.is_pickable), ("جانمایی", node.allow_putaway),
@@ -790,7 +790,7 @@ class WarehouseMapScreen(QWidget):
         from peecha.services import inventory_locations as locations_service
 
         if locations_service.get_explicit_default_bin_id(self.warehouse_id) == location_id:
-            info.append("<b>مکانِ پیش‌فرضِ انبار</b> (ردیف‌هایِ بی‌مکانِ رسید/حواله این‌جا ثبت می‌شوند)")
+            info.append("<b>مکان پیش‌فرض انبار</b> (ردیف‌های بی‌مکان رسید/حواله این‌جا ثبت می‌شوند)")
         info += self._presence_html(location_id)
         self.detail_title.setText(_p(node.full_code))
         self.detail_info.setText("<br>".join(info))
@@ -818,8 +818,8 @@ class WarehouseMapScreen(QWidget):
         self.elevation_table.clear()
         self._elevation = {}
         if rack is None:
-            self.rack_title.setText("نمایِ قفسه (طبقه × محل)")
-            self.rack_info.setText("برایِ دیدنِ طبقه‌ها و محل‌ها، یک قفسه، طبقه یا Bin را انتخاب کنید.")
+            self.rack_title.setText("نمای قفسه (طبقه × محل)")
+            self.rack_info.setText("برای دیدن طبقه‌ها و محل‌ها، یک قفسه، طبقه یا خانه را انتخاب کنید.")
             self.elevation_table.setRowCount(0)
             self.elevation_table.setColumnCount(0)
             return
@@ -831,10 +831,10 @@ class WarehouseMapScreen(QWidget):
         ro = self.occ.get(rack.location_id)
         n_bins = sum(len(b) for b in bins.values())
         lines = [f"ابعاد: {_dims(rack) or 'تعریف نشده'}",
-                 f"طبقه: {_p(len(shelves))} | محل (Bin): {_p(n_bins)} | وضعیت: {wl.STATUSES.get(rack.status_code, '')}"]
+                 f"طبقه: {_p(len(shelves))} | خانهٔ قفسه: {_p(n_bins)} | وضعیت: {wl.STATUSES.get(rack.status_code, '')}"]
         if ro:
             lines.append(f"اشغال: <b>{_p(ro.percent) + '٪' if ro.percent is not None else 'ظرفیت تعریف نشده'}</b> | "
-                         f"تعدادِ کالا: {_p(len(ro.items))} | مقدار: {_p(numerals.format_money(ro.quantity, 2, None))}")
+                         f"تعداد کالا: {_p(len(ro.items))} | مقدار: {_p(numerals.format_money(ro.quantity, 2, None))}")
         self.rack_title.setText(_p(f"قفسهٔ {rack.full_code}" + (f" -- {rack.name}" if rack.name else "")))
         self.rack_info.setText("<br>".join(lines))
         self.elevation_table.setRowCount(len(shelves))
@@ -888,7 +888,7 @@ class WarehouseMapScreen(QWidget):
             self.select_location(location_ids[0], focus=False)
 
     def search(self, text: str) -> list[int]:
-        """کالا/محل/QR → انبارِ محل انتخاب، محل‌ها هایلایت و روی نقشه زوم می‌شود."""
+        """کالا/محل/QR → انبار محل انتخاب، محل‌ها هایلایت و روی نقشه زوم می‌شود."""
         try:
             result = wl.search(self._company_id(), text)
         except ValueError as exc:
@@ -922,7 +922,7 @@ class WarehouseMapScreen(QWidget):
             self._apply_tooltips()
         self.highlight(in_current)
         others = len(result.location_ids) - len(in_current)
-        theme.set_status_label(self.status_label, _p(f"{len(in_current)} محل یافت شد" + (f" (+{others} در انبارهایِ دیگر)" if others else "")),
+        theme.set_status_label(self.status_label, _p(f"{len(in_current)} محل یافت شد" + (f" (+{others} در انبارهای دیگر)" if others else "")),
                                ok=True)
         return in_current
 
@@ -945,7 +945,7 @@ class WarehouseMapScreen(QWidget):
 
     # --- عملیات --------------------------------------------------------------
     def add_location(self, level: str, segment: str | None = None, fields: wl.LocationFields | None = None) -> int | None:
-        """محلِ تازه زیرِ محلِ انتخاب‌شده (برایِ منطقه زیرِ خودِ انبار)."""
+        """محل تازه زیر محل انتخاب‌شده (برای منطقه زیر خود انبار)."""
         if not self.allowed("CREATE") or self.warehouse_id is None:
             return None
         parent = self.by_id.get(self.selected_id) if level != "AREA" else None
@@ -979,14 +979,14 @@ class WarehouseMapScreen(QWidget):
                     wl.update_location(company_id, node.location_id, dialog.result_fields(), user_id)
             elif op == "STATUS":
                 labels = list(wl.STATUSES.values())
-                choice, ok = QInputDialog.getItem(self, "وضعیتِ محل", "وضعیت:", labels, labels.index(wl.STATUSES[node.status_code]), False)
+                choice, ok = QInputDialog.getItem(self, "وضعیت محل", "وضعیت:", labels, labels.index(wl.STATUSES[node.status_code]), False)
                 if ok:
                     wl.set_status(company_id, node.location_id, list(wl.STATUSES)[labels.index(choice)], user_id)
             elif op == "DELETE":
                 children = len(wl.descendants(self.nodes, node.location_id)) - 1
-                note = f" همراهِ {_p(children)} زیرمحل" if children else ""
-                if QMessageBox.question(self, "حذف", f"محلِ «{_p(node.full_code)}»{note} حذف شود؟\n"
-                                        "اگر هر کدام موجودی یا سابقه داشته باشد، به‌جایِ حذف غیرفعال و از نقشه پنهان می‌شوند.") \
+                note = f" همراه {_p(children)} زیرمحل" if children else ""
+                if QMessageBox.question(self, "حذف", f"محل «{_p(node.full_code)}»{note} حذف شود؟\n"
+                                        "اگر هر کدام موجودی یا سابقه داشته باشد، به‌جای حذف غیرفعال و از نقشه پنهان می‌شوند.") \
                         == QMessageBox.Yes:
                     result = wl.delete_location(company_id, node.location_id, user_id)
                     theme.set_status_label(self.status_label, "حذف شد." if result == "DELETED" else "سابقه داشت؛ غیرفعال شد.", ok=True)
@@ -1000,15 +1000,15 @@ class WarehouseMapScreen(QWidget):
                 from peecha.services import location_counts as lc
 
                 sid = lc.create_location_count(company_id, self.warehouse_id, [node.location_id], user_id)
-                theme.set_status_label(self.status_label, _p(f"شمارشِ محل شروع شد (جلسهٔ {sid})؛ ادامه در «وظایفِ انبار» یا موبایل."), ok=True)
+                theme.set_status_label(self.status_label, _p(f"شمارش محل شروع شد (جلسهٔ {sid})؛ ادامه در «وظایف انبار» یا موبایل."), ok=True)
             elif op == "DEFAULT":
                 from peecha.services import inventory_locations as locations_service
 
                 current = locations_service.get_explicit_default_bin_id(self.warehouse_id)
                 new = None if current == node.location_id else node.location_id
                 locations_service.set_default_bin_location(company_id, self.warehouse_id, new, user_id)
-                theme.set_status_label(self.status_label, _p(f"مکانِ پیش‌فرضِ انبار: {node.full_code}") if new
-                                       else "مکانِ پیش‌فرض برداشته شد (مکانِ عمومی).", ok=True)
+                theme.set_status_label(self.status_label, _p(f"مکان پیش‌فرض انبار: {node.full_code}") if new
+                                       else "مکان پیش‌فرض برداشته شد (مکان عمومی).", ok=True)
             elif op == "TASKS":
                 if self._main_window is not None:
                     self._main_window.open_screen("INV_WMS_TASKS")
@@ -1021,7 +1021,7 @@ class WarehouseMapScreen(QWidget):
             self.select_location(node.location_id, focus=False)
 
     def _replenishment_dialog(self, node) -> None:
-        """R249: حداقل/حداکثرِ یک کالا در این محلِ برداشت."""
+        """R249: حداقل/حداکثر یک کالا در این محل برداشت."""
         from peecha.services import inventory_catalog as catalog_service
         from peecha.services import warehouse_operations as ops
 
@@ -1029,18 +1029,18 @@ class WarehouseMapScreen(QWidget):
         labels = [_p(f"{i.code} — {i.name or ''}") for i in items]
         if not labels:
             raise ValueError("کالایی تعریف نشده است.")
-        choice, ok = QInputDialog.getItem(self, "تأمینِ مجدد", "کالا:", labels, 0, True)
+        choice, ok = QInputDialog.getItem(self, "تامین مجدد", "کالا:", labels, 0, True)
         if not ok or choice not in labels:
             return
-        low, ok = QInputDialog.getDouble(self, "تأمینِ مجدد", "حداقل در این محل:", 0, 0, 1e9, 3)
+        low, ok = QInputDialog.getDouble(self, "تامین مجدد", "حداقل در این محل:", 0, 0, 1e9, 3)
         if not ok:
             return
-        high, ok = QInputDialog.getDouble(self, "تأمینِ مجدد", "حداکثر (تا این مقدار پر می‌شود):", low + 1, 0, 1e9, 3)
+        high, ok = QInputDialog.getDouble(self, "تامین مجدد", "حداکثر (تا این مقدار پر می‌شود):", low + 1, 0, 1e9, 3)
         if not ok:
             return
         ops.save_rule(self._company_id(), ops.RuleFields(node.location_id, items[labels.index(choice)].item_id,
                                                           decimal.Decimal(str(low)), decimal.Decimal(str(high))))
-        theme.set_status_label(self.status_label, "قاعدهٔ تأمینِ مجدد ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "قاعدهٔ تامین مجدد ذخیره شد.", ok=True)
 
     def _transfer_dialog(self, node) -> None:
         rows = [c for c in getattr(self, "_contents", []) if c.location_id == node.location_id] or getattr(self, "_contents", [])
@@ -1054,7 +1054,7 @@ class WarehouseMapScreen(QWidget):
         targets = [n for n in self.nodes if wl.is_operable(n) and n.allow_putaway and n.location_id != content.location_id
                    and not any(m.parent_id == n.location_id for m in self.nodes)]
         target_labels = [_p(n.full_code) for n in targets]
-        target, ok = QInputDialog.getItem(self, "انتقال", "محلِ مقصد:", target_labels, 0, False)
+        target, ok = QInputDialog.getItem(self, "انتقال", "محل مقصد:", target_labels, 0, False)
         if not ok:
             return
         qty, ok = QInputDialog.getDouble(self, "انتقال", "مقدار:", float(content.quantity), 0.001, float(content.quantity), 3)
@@ -1062,30 +1062,30 @@ class WarehouseMapScreen(QWidget):
             return
         doc_id = wl.transfer(self._company_id(), self._user_id(), content.item_id, content.location_id,
                              targets[target_labels.index(target)].location_id, decimal.Decimal(str(qty)))
-        theme.set_status_label(self.status_label, _p(f"سندِ انتقالِ {doc_id} ثبت شد."), ok=True)
+        theme.set_status_label(self.status_label, _p(f"سند انتقال {doc_id} ثبت شد."), ok=True)
 
     def _putaway_dialog(self) -> None:
         from peecha.services import inventory_catalog as catalog_service
 
         items = catalog_service.list_items(self._company_id(), transactable_only=True)
         labels = [_p(f"{i.code} — {i.name or ''}") for i in items]
-        choice, ok = QInputDialog.getItem(self, "پیشنهادِ جانمایی", "کالا:", labels, 0, True)
+        choice, ok = QInputDialog.getItem(self, "پیشنهاد جانمایی", "کالا:", labels, 0, True)
         if not ok or choice not in labels:
             return
-        qty, ok = QInputDialog.getDouble(self, "پیشنهادِ جانمایی", "مقدار:", 1, 0.001, 1e9, 3)
+        qty, ok = QInputDialog.getDouble(self, "پیشنهاد جانمایی", "مقدار:", 1, 0.001, 1e9, 3)
         if not ok:
             return
         suggestions = wl.putaway_suggestions(self._company_id(), self.warehouse_id, items[labels.index(choice)].item_id,
                                              decimal.Decimal(str(qty)))
         if not suggestions:
-            raise ValueError("محلِ مناسبی (فعال، مجاز و با ظرفیتِ کافی) پیدا نشد.")
+            raise ValueError("محل مناسبی (فعال، مجاز و با ظرفیت کافی) پیدا نشد.")
         self.highlight([s.location_id for s in suggestions[:1]])
         text = "\n\n".join(f"{i + 1}) {_p(s.location_code)} -- امتیاز {_p(s.score)}\n   " + "، ".join(s.reasons)
                            for i, s in enumerate(suggestions))
-        QMessageBox.information(self, "پیشنهادِ جانمایی", f"کلاسِ ABC کالا: {suggestions[0].abc_class}\n\n{text}")
+        QMessageBox.information(self, "پیشنهاد جانمایی", f"کلاس ABC کالا: {suggestions[0].abc_class}\n\n{text}")
 
     def show_picking_path(self, location_ids: list[int] | None = None):
-        """مسیرِ برداشت: وظایفِ برداشتِ بازِ همین انبار (یا محل‌هایِ داده‌شده) به ترتیبِ نزدیک‌ترین همسایه."""
+        """مسیر برداشت: وظایف برداشت باز همین انبار (یا محل‌های داده‌شده) به ترتیب نزدیک‌ترین همسایه."""
         from peecha.services import warehouse_operations as ops
 
         if location_ids is None:
@@ -1095,7 +1095,7 @@ class WarehouseMapScreen(QWidget):
             self.scene.removeItem(self.path_item)
             self.path_item = None
         if not location_ids:
-            theme.set_status_label(self.status_label, "برداشتِ بازی برایِ مسیریابی نیست.", ok=False)
+            theme.set_status_label(self.status_label, "برداشت بازی برای مسیریابی نیست.", ok=False)
             return None
         route = wl.picking_path(self._company_id(), self.warehouse_id, location_ids)
         points = [self.items[i].sceneBoundingRect().center() for i in ([route.start] if route.start in self.items else []) + route.order
@@ -1119,11 +1119,11 @@ class WarehouseMapScreen(QWidget):
         from peecha.ui.location_labels import print_location_labels
 
         if not self.allowed("PRINT"):
-            self._warn("دسترسیِ چاپِ برچسب ندارید.")
+            self._warn("دسترسی چاپ برچسب ندارید.")
             return False
         if location_ids is None:
             if self.selected_id is None:
-                self._warn("ابتدا یک محل (یا منطقه/قفسه برایِ چاپِ گروهی) را انتخاب کنید.")
+                self._warn("ابتدا یک محل (یا منطقه/قفسه برای چاپ گروهی) را انتخاب کنید.")
                 return False
             location_ids = sorted(wl.descendants(self.nodes, self.selected_id), key=lambda i: self.by_id[i].full_code)
         labels = [(i, self.by_id[i].full_code, self.by_id[i].name or wl.LEVEL_LABELS.get(self.by_id[i].level, "")) for i in location_ids]
@@ -1135,8 +1135,8 @@ class WarehouseMapScreen(QWidget):
         wh = locations_service.get_warehouse(self.warehouse_id, self._company_id())
         values = []
         for label, current in (("عرض (متر)", wh.fields.width_m), ("طول (متر)", wh.fields.length_m), ("ارتفاع (متر)", wh.fields.height_m),
-                               ("حداکثرِ وزن (کیلوگرم)", wh.fields.capacity_weight_kg)):
-            v, ok = QInputDialog.getDouble(self, "ابعادِ انبار", label, float(current or 0), 0, 1e9, 2)
+                               ("حداکثر وزن (کیلوگرم)", wh.fields.capacity_weight_kg)):
+            v, ok = QInputDialog.getDouble(self, "ابعاد انبار", label, float(current or 0), 0, 1e9, 2)
             if not ok:
                 return
             values.append(_dec(v))
@@ -1145,7 +1145,7 @@ class WarehouseMapScreen(QWidget):
 
 
 class _PickerMap(WarehouseMapScreen):
-    """نقشهٔ فقط‌انتخاب (بدونِ ویرایش) برایِ تعیینِ مکان در تاییدِ رسید."""
+    """نقشهٔ فقط‌انتخاب (بدون ویرایش) برای تعیین مکان در تایید رسید."""
 
     def __init__(self, on_select) -> None:
         super().__init__(None)
@@ -1163,22 +1163,22 @@ class _PickerMap(WarehouseMapScreen):
 
 
 class LocationPickerDialog(QDialog):
-    """R254: انتخابِ مکانِ ردیف رویِ نقشه؛ فقط محلِ برگِ فعال (Bin/طبقهٔ بی‌زیرمحل) پذیرفته می‌شود."""
+    """R254: انتخاب مکان ردیف روی نقشه؛ فقط محل برگ فعال (خانه/طبقهٔ بی‌زیرمحل) پذیرفته می‌شود."""
 
     def __init__(self, parent, warehouse_id: int, current_id: int | None = None, item_id: int | None = None,
                  quantity: decimal.Decimal | None = None, title: str = "") -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"انتخابِ مکان رویِ نقشه{' -- ' + title if title else ''}")
+        self.setWindowTitle(f"انتخاب مکان روی نقشه{' -- ' + title if title else ''}")
         self.resize(1200, 760)
         self.selected_location_id: int | None = None
         layout = QVBoxLayout(self)
         self.map = _PickerMap(self._picked)
         layout.addWidget(self.map, stretch=1)
         bottom = QHBoxLayout()
-        self.choice_label = QLabel("رویِ یک Bin یا طبقه کلیک کنید (از نقشه، درختِ محل‌ها یا نمایِ قفسه).")
+        self.choice_label = QLabel("روی یک خانه یا طبقه کلیک کنید (از نقشه، درخت محل‌ها یا نمای قفسه).")
         bottom.addWidget(self.choice_label, stretch=1)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("انتخابِ این مکان")
+        self.buttons.button(QDialogButtonBox.Ok).setText("انتخاب این مکان")
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -1197,7 +1197,7 @@ class LocationPickerDialog(QDialog):
         if current_id is not None and current_id in self.map.by_id:
             self.map.select_location(current_id, focus=True)
         elif suggested:
-            self.choice_label.setText(_p("پیشنهادِ جانمایی: " + "، ".join(self.map.by_id[i].full_code for i in suggested[:3]
+            self.choice_label.setText(_p("پیشنهاد جانمایی: " + "، ".join(self.map.by_id[i].full_code for i in suggested[:3]
                                                                          if i in self.map.by_id)))
 
     def _picked(self, location_id: int | None) -> None:
@@ -1209,8 +1209,8 @@ class LocationPickerDialog(QDialog):
         if node is None:
             return
         if ok:
-            self.choice_label.setText(_p(f"مکانِ انتخابی: {node.full_code}"))
+            self.choice_label.setText(_p(f"مکان انتخابی: {node.full_code}"))
         elif has_children:
-            self.choice_label.setText(_p(f"«{node.full_code}» زیرمحل دارد؛ یک Bin یا طبقهٔ داخلِ آن را انتخاب کنید."))
+            self.choice_label.setText(_p(f"«{node.full_code}» زیرمحل دارد؛ یک خانه یا طبقهٔ داخل آن را انتخاب کنید."))
         else:
             self.choice_label.setText(_p(f"«{node.full_code}» غیرفعال است."))

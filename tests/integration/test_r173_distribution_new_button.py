@@ -56,12 +56,12 @@ generic = CommercialDocumentsListScreen(None, type_filter_codes=("SALES_ORDER", 
 def count_new_buttons(screen):
     return sum(1 for w in screen.findChildren(QPushButton) if w.text().startswith("➕"))
 
-check(count_new_buttons(pre_sales) == 2, f"دکمه‌هایِ «سندِ تازه» در تبِ پخشِ سرد نمایش داده می‌شوند (got {count_new_buttons(pre_sales)})")
-check(count_new_buttons(online) == 0, f"دکمه‌هایِ «سندِ تازه» در تبِ فروشِ اینترنتی (سینک‌محور) همچنان پنهانند (got {count_new_buttons(online)})")
-check(count_new_buttons(generic) == 2, f"دکمه‌هایِ «سندِ تازه» در فهرستِ عمومی (بدونِ کانال) دست‌نخورده مانده‌اند (got {count_new_buttons(generic)})")
+check(count_new_buttons(pre_sales) == 2, f"دکمه‌های «سند تازه» در تب پخش سرد نمایش داده می‌شوند (got {count_new_buttons(pre_sales)})")
+check(count_new_buttons(online) == 0, f"دکمه‌های «سند تازه» در تب فروش اینترنتی (همگام‌سازی‌محور) همچنان پنهانند (got {count_new_buttons(online)})")
+check(count_new_buttons(generic) == 2, f"دکمه‌های «سند تازه» در فهرست عمومی (بدون کانال) دست‌نخورده مانده‌اند (got {count_new_buttons(generic)})")
 
 default_channel = pre_sales._default_channel_code()
-check(default_channel == "COLD-1", f"کانالِ پیش‌فرضِ تبِ پخشِ سرد درست تشخیص داده شد (got {default_channel})")
+check(default_channel == "COLD-1", f"کانال پیش‌فرض تب پخش سرد درست تشخیص داده شد (got {default_channel})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

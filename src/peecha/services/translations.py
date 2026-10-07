@@ -1,16 +1,16 @@
-"""سرویسِ ترجمه‌ی برچسب‌هایِ ناوبری (ساید‌بار/ریبون/زیرفرم‌هایِ تنظیمات) به
-زبان‌هایِ غیرِپیش‌فرض.
+"""سرویس ترجمهٔ برچسب‌های ناوبری (ساید‌بار/ریبون/زیرفرم‌های تنظیمات) به
+زبان‌های غیرپیش‌فرض.
 
-طبقِ حسابرسیِ صریح: `session.current_language` در کلِ برنامه هیچ‌جا
-مقداردهی نمی‌شد (سوییچرِ «زبانِ فعال» در هدر فقط ظاهراً پر می‌شد، بدونِ
-signalِ متصل) و صفحه‌ی «ترجمه‌ها» زیرِ تنظیماتِ سیستم یک PlaceholderScreen
-خالی بود — یعنی سوییچِ زبان در عمل هیچ اثری روی برنامه نداشت. این سرویس
-رویِ همان جدولِ عمومیِ core.translations کار می‌کند (که طبقِ کامنتِ خودِ
-schema از ابتدا برایِ entity_type='menu' طراحی شده بود، بدونِ نیاز به
+طبق حسابرسی صریح: `session.current_language` در کل برنامه هیچ‌جا
+مقداردهی نمی‌شد (سوییچر «زبان فعال» در هدر فقط ظاهراً پر می‌شد، بدون
+signal متصل) و صفحهٔ «ترجمه‌ها» زیر تنظیمات سیستم یک PlaceholderScreen
+خالی بود — یعنی سوییچ زبان در عمل هیچ اثری روی برنامه نداشت. این سرویس
+روی همان جدول عمومی core.translations کار می‌کند (که طبق کامنت خود
+schema از ابتدا برای entity_type='menu' طراحی شده بود، بدون نیاز به
 migration تازه).
 
-پیشنهادِ خودکار (LibreTranslate) عمداً این‌جا نیست: کلاینتش موقعِ حذفِ
-معماریِ Kivy پاک شد و به یک سرویسِ بیرونیِ در‌دسترس نیاز دارد که در این
+پیشنهاد خودکار (LibreTranslate) عمداً این‌جا نیست: کلاینتش موقع حذف
+معماری Kivy پاک شد و به یک سرویس بیرونی در‌دسترس نیاز دارد که در این
 محیط تاییدنشده است؛ ترجمه فعلاً دستی است — اگر بعداً لازم شد، جداگانه
 اضافه می‌شود."""
 
@@ -54,7 +54,7 @@ def list_translatable_labels() -> list[TranslatableLabel]:
 
 
 def list_translations_for_language(language_id: int) -> dict[str, str]:
-    """code -> ترجمه‌یِ موجود، فقط برایِ کدهایی که ترجمه دارند."""
+    """code -> ترجمهٔ موجود، فقط برای کدهایی که ترجمه دارند."""
     with new_session() as session:
         rows = session.execute(
             select(Translation.property_name, Translation.value).where(
@@ -94,9 +94,9 @@ def set_translation(code: str, language_id: int, value: str) -> None:
 
 
 def translate_label(code: str, source_label: str, language_id: int | None) -> str:
-    """برچسبِ ترجمه‌شده برایِ language_id اگر موجود باشد، وگرنه همان متنِ
-    فارسیِ اصلی — تابعِ مرکزی که shell_window.py هنگامِ رندرِ ساید‌بار/ریبون
-    صدا می‌زند. language_id=None (یا زبانِ پیش‌فرض) یعنی همیشه فارسی."""
+    """برچسب ترجمه‌شده برای language_id اگر موجود باشد، وگرنه همان متن
+    فارسی اصلی — تابع مرکزی که shell_window.py هنگام رندر ساید‌بار/ریبون
+    صدا می‌زند. language_id=None (یا زبان پیش‌فرض) یعنی همیشه فارسی."""
     if language_id is None:
         return source_label
     translations = list_translations_for_language(language_id)

@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -86,11 +86,11 @@ central = locations_service.create_warehouse(company_id, "WH", "مرکزی", loc
 vehicle = locations_service.create_warehouse(company_id, "N01", "نیسان", locations_service.WarehouseFields(
     warehouse_type_code="VEHICLE", allow_negative_stock=True, default_tax_percent=decimal.Decimal("5"),
 ))
-van = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرم", "VAN_SALES")
+van = pricing_service.create_channel(company_id, "VAN-1", "پخش گرم", "VAN_SALES")
 
-price_list = pricing_service.create_price_list(company_id, "PL1", "فهرستِ عمومی", "SALES", company.base_currency_id, datetime.date.today())
+price_list = pricing_service.create_price_list(company_id, "PL1", "فهرست عمومی", "SALES", company.base_currency_id, datetime.date.today())
 customer = partners_service.create_customer(
-    company_id, "C-1", "فروشگاهِ نمونه",
+    company_id, "C-1", "فروشگاه نمونه",
     fields=partners_service.CustomerProfileFields(default_price_list_id=price_list), fast_track=True,
 )
 
@@ -102,7 +102,7 @@ item_no_photo_id = catalog_service.create_item(company_id, "9102", "چای", cat
 
 pricing_service.set_price_list_item(price_list, item_id, uom_id, decimal.Decimal("10000"))
 pricing_service.set_price_list_item(price_list, item_no_photo_id, uom_id, decimal.Decimal("2000"))
-pricing_service.create_discount_rule(company_id, "D1", "تخفیفِ همگانی", "PERCENT", "ALL", discount_value=decimal.Decimal("10"))
+pricing_service.create_discount_rule(company_id, "D1", "تخفیف همگانی", "PERCENT", "ALL", discount_value=decimal.Decimal("10"))
 
 doc = inv_documents_service.create_stock_document(company_id, user.user_id, "RECEIPT", datetime.date.today(),
     inv_documents_service.DocumentHeaderFields(destination_warehouse_id=vehicle))
@@ -123,9 +123,9 @@ r = client.get("/pricing/resolve", headers=H, params={
 })
 check(r.status_code == 200, f"resolve ۲۰۰ (body={r.text[:200]})")
 resolved = r.json()
-check(decimal.Decimal(resolved["unit_price"]) == decimal.Decimal("10000"), f"قیمتِ ناخالص از فهرستِ قیمت (got {resolved})")
-check(decimal.Decimal(resolved["discount_amount"]) == decimal.Decimal("1000"), f"تخفیفِ ۱۰٪ (got {resolved})")
-check(decimal.Decimal(resolved["tax_percent"]) == decimal.Decimal("5"), f"درصدِ مالياتِ انبار (۵٪) روی درصدِ خودِ کالا (۹٪) اولویت دارد (got {resolved})")
+check(decimal.Decimal(resolved["unit_price"]) == decimal.Decimal("10000"), f"قیمت ناخالص از فهرست قیمت (got {resolved})")
+check(decimal.Decimal(resolved["discount_amount"]) == decimal.Decimal("1000"), f"تخفیف ۱۰٪ (got {resolved})")
+check(decimal.Decimal(resolved["tax_percent"]) == decimal.Decimal("5"), f"درصد مالیات انبار (۵٪) روی درصد خود کالا (۹٪) اولویت دارد (got {resolved})")
 
 # ---------- ۲. POST /orders: تخفیف واقعاً ثبت می‌شود، مالیات خودِ سرور تعیین می‌کند ----------
 payload = {
@@ -135,27 +135,27 @@ payload = {
     "lines": [{"item_id": item_id, "uom_id": uom_id, "quantity": "1", "unit_price": "10000", "discount_amount": "1000"}],
 }
 r = client.post("/orders", headers=H, json=payload)
-check(r.status_code == 200, f"فاکتورِ پخشِ گرم ثبت شد (body={r.text})")
+check(r.status_code == 200, f"فاکتور پخش گرم ثبت شد (body={r.text})")
 doc_id = r.json()["document_id"]
 _, lines = documents_service.get_document(doc_id, company_id)
 check(len(lines) == 1, f"یک ردیف ثبت شد (got {len(lines)})")
 line = lines[0]
 # خالص = ۱۰۰۰۰ − ۱۰۰۰ = ۹۰۰۰ -- مالیات = ۹۰۰۰×۵٪ = ۴۵۰ (نه ۹٪ِ خودِ کالا، چونِ انبار override کرده)
-check(line.discount_amount == decimal.Decimal("1000"), f"تخفیف در سندِ ثبت‌شده (got {line.discount_amount})")
-check(line.tax_percent == decimal.Decimal("5.00") or line.tax_percent == decimal.Decimal("5"), f"درصدِ مالیاتِ انبار در سند (got {line.tax_percent})")
-check(line.tax_amount == decimal.Decimal("450.00") or line.tax_amount == decimal.Decimal("450"), f"مالياتِ محاسبه‌شده رویِ خالص (got {line.tax_amount})")
+check(line.discount_amount == decimal.Decimal("1000"), f"تخفیف در سند ثبت‌شده (got {line.discount_amount})")
+check(line.tax_percent == decimal.Decimal("5.00") or line.tax_percent == decimal.Decimal("5"), f"درصد مالیات انبار در سند (got {line.tax_percent})")
+check(line.tax_amount == decimal.Decimal("450.00") or line.tax_amount == decimal.Decimal("450"), f"مالیات محاسبه‌شده روی خالص (got {line.tax_amount})")
 
 # اگر کلاینت هیچ discount_amountای نفرستد (سازگاریِ عقب‌رو با موبایلِ آپدیت‌نشده) -- صفر می‌ماند، نه خطا
 payload2 = dict(payload, lines=[{"item_id": item_id, "uom_id": uom_id, "quantity": "1", "unit_price": "10000"}])
 r2 = client.post("/orders", headers=H, json=payload2)
-check(r2.status_code == 200, f"بدونِ discount_amount هم ۲۰۰ (body={r2.text})")
+check(r2.status_code == 200, f"بدون discount_amount هم ۲۰۰ (body={r2.text})")
 _, lines2 = documents_service.get_document(r2.json()["document_id"], company_id)
-check(lines2[0].discount_amount == decimal.Decimal("0"), f"بدونِ تخفیف یعنی صفر (got {lines2[0].discount_amount})")
+check(lines2[0].discount_amount == decimal.Decimal("0"), f"بدون تخفیف یعنی صفر (got {lines2[0].discount_amount})")
 
 # ---------- ۳. عکسِ کالا در کاتالوگِ موبایل ----------
 r = client.get(f"/products/catalog?warehouse_id={vehicle}", headers=H)
 cat = {i["item_id"]: i for i in r.json()["items"]}
-check(cat[item_id]["photo_base64"] is None, f"پیش از فعال‌سازیِ گروهِ عکس، عکس نیست (got {cat[item_id]['photo_base64']})")
+check(cat[item_id]["photo_base64"] is None, f"پیش از فعال‌سازی گروه عکس، عکس نیست (got {cat[item_id]['photo_base64']})")
 
 item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
 dimensions_service.set_dimension_type_photo_enabled(item_dim_type_id, company_id, True)
@@ -173,14 +173,14 @@ finally:
 r = client.get(f"/products/catalog?warehouse_id={vehicle}", headers=H)
 cat = {i["item_id"]: i for i in r.json()["items"]}
 photo_b64 = cat[item_id]["photo_base64"]
-check(photo_b64 is not None, f"عکسِ اصلیِ کالا بعدِ آپلود در کاتالوگ هست (got {cat[item_id]})")
-check(cat[item_no_photo_id]["photo_base64"] is None, f"کالایِ بی‌عکس همچنان null است (got {cat[item_no_photo_id]['photo_base64']})")
+check(photo_b64 is not None, f"عکس اصلی کالا بعد بارگذاری در کاتالوگ هست (got {cat[item_id]})")
+check(cat[item_no_photo_id]["photo_base64"] is None, f"کالای بی‌عکس همچنان null است (got {cat[item_no_photo_id]['photo_base64']})")
 if photo_b64 is not None:
     import base64
     raw = base64.b64decode(photo_b64)
     with PILImage.open(io.BytesIO(raw)) as thumb:
         check(max(thumb.size) <= 96, f"عکس کوچک شده (got {thumb.size})")
-    check(len(raw) < 20000, f"حجمِ بندانگشتی معقول است (got {len(raw)} bytes)")
+    check(len(raw) < 20000, f"حجم بندانگشتی معقول است (got {len(raw)} bytes)")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

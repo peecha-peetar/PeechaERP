@@ -1,8 +1,8 @@
-"""اعلان‌هایِ Field Sales (Phase 1) -- مفهومی که تا این نسخه اصلاً در ERP
-وجود نداشت (نه دسکتاپ، نه API). عمداً از موتورِ کارتابل/گردشِ‌کارِ موجود
-(services/cartable.py) جدا نگه داشته شده: کارتابل برایِ «تاییدِ
-چندمرحله‌ایِ یک سند» است، اعلان برایِ «خبررسانیِ ساده به یک/چند کاربر»
--- دو نیازِ متفاوت که یکی جایگزینِ دیگری نیست."""
+"""اعلان‌های Field Sales (Phase 1) — مفهومی که تا این نسخه اصلاً در ERP
+وجود نداشت (نه دسکتاپ، نه API). عمداً از موتور کارتابل/گردش‌کار موجود
+(services/cartable.py) جدا نگه داشته شده: کارتابل برای «تایید
+چندمرحله‌ای یک سند» است، اعلان برای «خبررسانی ساده به یک/چند کاربر»
+-- دو نیاز متفاوت که یکی جایگزین دیگری نیست."""
 
 from __future__ import annotations
 
@@ -45,8 +45,8 @@ def notify_managers(
     company_id: int, type_code: str, title: str, body: str = "",
     entity_type: str | None = None, entity_id: int | None = None,
 ) -> list[int]:
-    """طبقِ همان تعریفِ roles_service.is_manager -- به همه‌یِ کاربرانِ
-    این شرکت که مدیر محسوب می‌شوند (نقشِ مدیریتی یا is_super_admin)."""
+    """طبق همان تعریف roles_service.is_manager — به همهٔ کاربران
+    این شرکت که مدیر محسوب می‌شوند (نقش مدیریتی یا is_super_admin)."""
     with new_session() as session:
         user_ids = session.scalars(
             select(UserCompany.user_id).where(UserCompany.company_id == company_id)

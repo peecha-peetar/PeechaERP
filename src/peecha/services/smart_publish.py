@@ -1,8 +1,8 @@
-"""Smart Publish -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ
-PeechaSync -- پردازشِ خودکارِ تصویرِ محصول»): واترمارک + حکِ کدِ/نامِ
-کالا + فشرده‌سازیِ WebP، به‌صورتِ یک عملیاتِ دستیِ «پردازشِ هوشمند» رویِ
-هر عکسِ مرکزِ رسانه (نه قلاب‌شده به هر مسیرِ آپلودِ دیگر در برنامه، تا
-جریان‌هایِ موجود دست‌نخورده بمانند)."""
+"""انتشار هوشمند — طبق بازخورد صریح کاربر («امکانات حیاتی
+PeechaSync — پردازش خودکار تصویر محصول»): واترمارک + حک کد/نام
+کالا + فشرده‌سازی WebP، به‌صورت یک عملیات دستی «پردازش هوشمند» روی
+هر عکس مرکز رسانه (نه قلاب‌شده به هر مسیر بارگذاری دیگر در برنامه، تا
+جریان‌های موجود دست‌نخورده بمانند)."""
 
 from __future__ import annotations
 
@@ -41,9 +41,9 @@ def set_settings(
     stamp_text_source: str | None = None, webp_quality: int | None = None,
 ) -> None:
     if watermark_position is not None and watermark_position not in ("bottom-right", "bottom-left", "top-right", "top-left", "center"):
-        raise ValueError("موقعیتِ واترمارک نامعتبر است.")
+        raise ValueError("موقعیت واترمارک نامعتبر است.")
     if stamp_text_source is not None and stamp_text_source not in ("item_code", "item_name"):
-        raise ValueError("منبعِ متنِ حک‌شده نامعتبر است.")
+        raise ValueError("منبع متن حک‌شده نامعتبر است.")
     with new_session() as session:
         row = session.get(SmartPublishSettings, company_id)
         if row is None:
@@ -67,11 +67,11 @@ def set_settings(
 def set_watermark_image(company_id: int, file_path: str) -> None:
     source = Path(file_path)
     if not source.is_file():
-        raise ValueError("فایلِ واترمارک یافت نشد.")
+        raise ValueError("فایل واترمارک یافت نشد.")
     try:
         _WATERMARK_DIR.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise ValueError(f"پوشهٔ Smart Publish («{_WATERMARK_DIR}») در دسترس نیست: {exc}") from exc
+        raise ValueError(f"پوشهٔ انتشار هوشمند («{_WATERMARK_DIR}») در دسترس نیست: {exc}") from exc
     destination = _WATERMARK_DIR / f"watermark_{company_id}_{uuid.uuid4().hex}{source.suffix}"
     shutil.copyfile(source, destination)
     with new_session() as session:
@@ -130,8 +130,8 @@ def _apply_text_stamp(base: Image.Image, text: str) -> Image.Image:
 
 
 def process_image_file(company_id: int, source_path: str, *, item_code: str | None = None, item_name: str | None = None) -> bytes:
-    """پردازشِ یک عکس طبقِ تنظیماتِ Smart Publishِ شرکت -- ترتیب: واترمارک
-    ← حکِ متن ← فشرده‌سازیِ WebP. برمی‌گرداند: بایت‌هایِ عکسِ نهاییِ WebP."""
+    """پردازش یک عکس طبق تنظیمات انتشار هوشمند شرکت — ترتیب: واترمارک
+    ← حک متن ← فشرده‌سازی WebP. برمی‌گرداند: بایت‌های عکس نهایی WebP."""
     settings = get_settings(company_id)
     image = Image.open(source_path)
     image = _apply_watermark(image, settings)

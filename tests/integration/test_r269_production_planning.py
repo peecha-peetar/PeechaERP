@@ -10,7 +10,7 @@ check = fx.check
 
 pc.update_settings(company_id, uid, default_material_warehouse_id=wh_rm, default_fg_warehouse_id=wh_fg)
 BF, BL, WCF, RO = pm.BomFields, pm.BomLineFields, pm.WorkCenterFields, pm.RoutingOpFields
-wc = pm.save_work_center(company_id, WCF(code="L1", name="خطِ ۱", shifts_per_day=1, hours_per_shift=D(8), working_days_per_week=7))
+wc = pm.save_work_center(company_id, WCF(code="L1", name="خط ۱", shifts_per_day=1, hours_per_shift=D(8), working_days_per_week=7))
 rt = pm.create_routing(company_id, fg, "مسیر", [RO(10, "مونتاژ", wc, run_minutes=D(30))])
 bom_semi = pm.create_bom_version(company_id, semi, BF(batch_size_qty=D(1)))
 pm.add_bom_component(company_id, bom_semi, BL(r3, D(1)))
@@ -29,7 +29,7 @@ with new_session() as s:
     s.commit()
 
 customer = dimensions_service.create_customer(company_id, "C1", "مشتری")
-wh_sales = locations_service.create_warehouse(company_id, "SALE", "انبارِ فروش", WF(allow_negative_stock=True))
+wh_sales = locations_service.create_warehouse(company_id, "SALE", "انبار فروش", WF(allow_negative_stock=True))
 so = documents_service.create_document(company_id, uid, "SALES_ORDER", today, documents_service.DocumentHeaderFields(
     counterparty_detail_account_id=customer, currency_id=company.base_currency_id, warehouse_id=wh_sales))
 documents_service.add_line(so, company_id, item_id=fg, uom_id=pcs, quantity=D(100), quantity_base=D(100), unit_price=D(500000))
@@ -58,7 +58,7 @@ check(pp.generate_from_min_stock(company_id, plan) == 1, "plan from minimum stoc
 check(raises(lambda: pp.add_plan_line(company_id, plan, fg, mend + datetime.timedelta(days=40), D(1)), "بازه"), "plan line outside plan range")
 summ = pp.plan_summary(company_id, plan)
 check(sum(x.quantity for x in summ) == D(90) + D(30), f"plan weekly summary ({[(x.period_start, x.quantity) for x in summ]})")
-check(raises(lambda: pp.convert_plan_to_orders(company_id, uid, plan), "تأیید"), "unapproved plan cannot convert")
+check(raises(lambda: pp.convert_plan_to_orders(company_id, uid, plan), "تایید"), "unapproved plan cannot convert")
 pp.approve_plan(company_id, uid, plan)
 
 # ===== MRP ======================================================================================
@@ -76,11 +76,11 @@ check(mrp[r1].suggested_qty == D(360) and mrp[r1].release_date == mrp[r1].need_d
 check(mrp[pk].min_stock == D(50) and mrp[pk].suggested_qty == D(230 + 50 - 20), "packaging includes minimum stock")
 
 # مثالِ مشخصات: نیاز ۱۰۰۰، موجود ۶۰۰، رزرو ۲۰۰ → کمبود ۶۰۰
-fg2 = item("FG-B", "محصولِ B", "FINISHED_GOOD")
+fg2 = item("FG-B", "محصول B", "FINISHED_GOOD")
 b2 = pm.create_bom_version(company_id, fg2, BF(batch_size_qty=D(1)))
 pm.add_bom_component(company_id, b2, BL(r2, D(1)))
 receive(r2, 600, 20000)
-fg3 = item("FG-C", "محصولِ C", "FINISHED_GOOD")
+fg3 = item("FG-C", "محصول C", "FINISHED_GOOD")
 b3 = pm.create_bom_version(company_id, fg3, BF(batch_size_qty=D(1)))
 pm.add_bom_component(company_id, b3, BL(r2, D(1)))
 oy = po.create_order(company_id, uid, po.OrderFields(item_id=fg3, planned_qty=D(200)))
@@ -119,7 +119,7 @@ cap2 = {x.work_center_id: x for x in pp.capacity_load(company_id, today, today)}
 check(cap2.overloaded and cap2.utilization > 100, f"one-day 500h load on 8h line is overloaded ({cap2.utilization}%)")
 cal = pp.calendar(company_id, today, week_end)
 mine = [e for e in cal if e.order_id == o_big]
-check(len(mine) == 1 and mine[0].quantity == D(1000) and mine[0].work_center == "خطِ ۱", "calendar: what/how much/which day/which line")
+check(len(mine) == 1 and mine[0].quantity == D(1000) and mine[0].work_center == "خط ۱", "calendar: what/how much/which day/which line")
 check(any(e.kind == "ORDER" for e in cal) and all(today <= e.date <= week_end for e in cal), "calendar limited to range")
 
 from peecha.services import data_reset

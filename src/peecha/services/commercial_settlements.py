@@ -1,11 +1,11 @@
-"""تسویه‌یِ فاکتور (comm.invoice_settlements/comm.settlement_alarm_settings)
--- طبقِ درخواستِ صریح («هر دریافت و پرداخت رفرنسِ فاکتور را داشته باشد و
-مدیریتِ تسویه‌یِ فاکتورها را ایجاد کن»).
+"""تسویهٔ فاکتور (comm.invoice_settlements/comm.settlement_alarm_settings)
+-- طبق درخواست صریح («هر دریافت و پرداخت رفرنس فاکتور را داشته باشد و
+مدیریت تسویهٔ فاکتورها را ایجاد کن»).
 
-چون هر رسیدِ خزانه‌داری در این برنامه چیزی جز یک سندِ حسابداری
-(acc.journal_entries) نیست (هیچ جدولِ «سندِ خزانه‌داری»یِ جداگانه‌ای وجود
-ندارد)، تخصیصِ دریافت/پرداخت به فاکتور به‌صورتِ دستی -- از یک صفحه‌یِ
-جداگانه‌یِ «مدیریتِ تسویه» -- به journal_entry_id وصل می‌شود؛ خودِ فرمِ
+چون هر رسید خزانه‌داری در این برنامه چیزی جز یک سند حسابداری
+(acc.journal_entries) نیست (هیچ جدول «سند خزانه‌داری»ی جداگانه‌ای وجود
+ندارد)، تخصیص دریافت/پرداخت به فاکتور به‌صورت دستی — از یک صفحهٔ
+جداگانهٔ «مدیریت تسویه» — به journal_entry_id وصل می‌شود؛ خود فرم
 دریافت/پرداخت (treasury_voucher.py) دست‌نخورده می‌ماند."""
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ SETTLEMENT_PLAN_METHOD_LABELS = {
     "CASH": "نقدی",
     "BANK": "بانکی / کارتخوان",
     "CHECK": "چک",
-    "CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
+    "CHECK_DISBURSEMENT": "پرداخت با چک دریافتی (خرج چک)",
     "DISCOUNT": "تخفیف",
     "GOODS_COUPON": "کالابرگ",
     "VOUCHER": "بن",
@@ -63,15 +63,15 @@ _SETTLEMENT_PLAN_PAYMENT_METHODS = ("CASH", "BANK", "CHECK", "CHECK_DISBURSEMENT
 
 
 def settlement_plan_method_codes(document_type_code: str, company_id: int | None = None) -> tuple[str, ...]:
-    """طبقِ درخواستِ صریح («همه روش‌هایِ دریافتی که در روش‌هایِ دریافت
-    تعریف شده اینجا هم بیاره»): روش‌هایِ ثابت (تهاتر/اقساط عمداً مستثنا،
-    چون این دیالوگ برایِ آن‌ها -- که به یک رکوردِ مرتبطِ مشخص وابسته‌اند
-    و خودشان جریانِ کاری/داده‌یِ مخصوصِ خودشان لازم دارند -- طراحی نشده)
-    + روش‌هایِ سفارشیِ همین شرکت
-    (از «انواعِ سندِ دریافت/پرداخت» در تنظیماتِ خزانه‌داری -- کدشان با
+    """طبق درخواست صریح («همه روش‌های دریافتی که در روش‌های دریافت
+    تعریف شده اینجا هم بیاره»): روش‌های ثابت (تهاتر/اقساط عمداً مستثنا،
+    چون این دیالوگ برای آن‌ها — که به یک رکورد مرتبط مشخص وابسته‌اند
+    و خودشان جریان کاری/دادهٔ مخصوص خودشان لازم دارند — طراحی نشده)
+    + روش‌های سفارشی همین شرکت
+    (از «انواع سند دریافت/پرداخت» در تنظیمات خزانه‌داری — کدشان با
     treasury_voucher.py هم‌الگو است: CUSTOM_<id>). وقتی company_id داده
-    نشود (مثلاً در سرویس‌هایِ دیگری که فقط کدهایِ ثابت را می‌خواهند)،
-    فقط همان روش‌هایِ ثابت برمی‌گردد."""
+    نشود (مثلاً در سرویس‌های دیگری که فقط کدهای ثابت را می‌خواهند)،
+    فقط همان روش‌های ثابت برمی‌گردد."""
     fixed = _SETTLEMENT_PLAN_RECEIPT_METHODS if document_type_code == "SALES_INVOICE" else _SETTLEMENT_PLAN_PAYMENT_METHODS
     if company_id is None:
         return fixed
@@ -92,11 +92,11 @@ class MobileSettlementMethodRow:
 
 
 def list_mobile_settlement_methods(company_id: int) -> list[MobileSettlementMethodRow]:
-    """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
-    انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
-    موبایل خاموش کنیم»): همه‌یِ روش‌هایِ واقعیِ همین شرکت برایِ فاکتورِ
-    فروش (settlement_plan_method_codes) + وضعیتِ فعال/غیرِفعالِ موبایل
-    -- بدونِ تنظیمِ صریح، پیش‌فرض فعال است."""
+    """طبق درخواست صریح کاربر («نوع تسویه در پخش گرم باید همانند
+    انواع تسویه در دسکتاپ باشد — فقط جایی باشد که برخی را برای
+    موبایل خاموش کنیم»): همهٔ روش‌های واقعی همین شرکت برای فاکتور
+    فروش (settlement_plan_method_codes) + وضعیت فعال/غیرفعال موبایل
+    -- بدون تنظیم صریح، پیش‌فرض فعال است."""
     codes = settlement_plan_method_codes("SALES_INVOICE", company_id)
     with new_session() as session:
         overrides = {
@@ -113,7 +113,7 @@ def list_mobile_settlement_methods(company_id: int) -> list[MobileSettlementMeth
 
 def set_mobile_settlement_method_enabled(company_id: int, method_code: str, is_enabled: bool) -> None:
     if method_code not in settlement_plan_method_codes("SALES_INVOICE", company_id):
-        raise ValueError("روشِ تسویه نامعتبر است.")
+        raise ValueError("روش تسویه نامعتبر است.")
     with new_session() as session:
         row = session.get(MobileSettlementMethod, (company_id, method_code))
         if row is None:
@@ -160,8 +160,8 @@ class SettlementPlan:
 
     @property
     def remaining_on_credit(self) -> decimal.Decimal:
-        """طبقِ درخواستِ صریح: مانده‌یِ پوشش‌داده‌نشده‌یِ فاکتور یعنی «نسیه» --
-        نیازی به ردیفِ جداگانه ندارد."""
+        """طبق درخواست صریح: ماندهٔ پوشش‌داده‌نشدهٔ فاکتور یعنی «نسیه» --
+        نیازی به ردیف جداگانه ندارد."""
         return self.total_amount - self.lines_total
 
 
@@ -198,23 +198,23 @@ def get_settlement_plan(document_id: int, company_id: int) -> SettlementPlan | N
 def save_settlement_plan(
     document_id: int, company_id: int, created_by_user_id: int, lines: list[tuple],
 ) -> int:
-    """ذخیره/بازنویسیِ نقشه‌یِ تسویه‌یِ یک فاکتورِ خرید/فروش -- طبقِ درخواستِ
-    صریح («چند تا مورد از این نحوه تسویه... و با تاییدِ مدیر»): هر بار که
-    نقشه ذخیره می‌شود (حتی بعدِ تایید)، وضعیت به PENDING_APPROVAL برمی‌گردد
-    -- تاییدِ قبلی برایِ ترکیبِ تازه دیگر معتبر نیست و باید دوباره تاییدشود.
+    """ذخیره/بازنویسی نقشهٔ تسویهٔ یک فاکتور خرید/فروش — طبق درخواست
+    صریح («چند تا مورد از این نحوه تسویه... و با تایید مدیر»): هر بار که
+    نقشه ذخیره می‌شود (حتی بعد تایید)، وضعیت به PENDING_APPROVAL برمی‌گردد
+    -- تایید قبلی برای ترکیب تازه دیگر معتبر نیست و باید دوباره تاییدشود.
 
-    هر ردیفِ lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code, amount[,
-    note[, detail_account_id]]) -- طبقِ درخواستِ صریح («جلویِ هر ردیف...
-    فیلدِ تفصیلی»)، عضوِ چهارم اختیاری است و فراخوان‌هایِ قدیمیِ ۳عضوی
-    بدونِ تغییر کار می‌کنند."""
+    هر ردیف lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code, amount[,
+    note[, detail_account_id]]) — طبق درخواست صریح («جلوی هر ردیف...
+    فیلد تفصیلی»)، عضو چهارم اختیاری است و فراخوان‌های قدیمی ۳عضوی
+    بدون تغییر کار می‌کنند."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("فاکتور نامعتبر است.")
         if doc.document_type_code not in _INVOICE_TYPES:
-            raise ValueError("نقشه‌یِ تسویه فقط برایِ فاکتورِ خرید/فروش ممکن است.")
+            raise ValueError("نقشهٔ تسویه فقط برای فاکتور خرید/فروش ممکن است.")
         if doc.status_code == "POSTED":
-            raise ValueError("فاکتورِ ثبتِ‌نهایی‌شده دیگر نقشه‌یِ تسویه‌اش قابلِ‌تغییر نیست.")
+            raise ValueError("فاکتور ثبت‌نهایی‌شده دیگر نقشهٔ تسویه‌اش قابل‌تغییر نیست.")
         allowed_methods = set(settlement_plan_method_codes(doc.document_type_code, company_id))
         cleaned: list[tuple[str, decimal.Decimal, str | None, int | None]] = []
         for entry in lines:
@@ -222,13 +222,13 @@ def save_settlement_plan(
             note = entry[2] if len(entry) > 2 else None
             detail_account_id = entry[3] if len(entry) > 3 else None
             if method_code not in allowed_methods:
-                raise ValueError("روشِ ردیف نامعتبر است.")
+                raise ValueError("روش ردیف نامعتبر است.")
             if amount <= _ZERO:
-                raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
+                raise ValueError("مبلغ هر ردیف باید مثبت باشد.")
             cleaned.append((method_code, amount, note, detail_account_id))
         lines_total = sum((amount for _m, amount, _n, _d in cleaned), _ZERO)
         if lines_total > doc.total_amount:
-            raise ValueError(f"جمعِ ردیف‌ها ({lines_total}) از مبلغِ کلِ فاکتور ({doc.total_amount}) بیشتر است.")
+            raise ValueError(f"جمع ردیف‌ها ({lines_total}) از مبلغ کل فاکتور ({doc.total_amount}) بیشتر است.")
 
         plan = session.scalar(
             select(CommercialDocumentSettlementPlan).where(CommercialDocumentSettlementPlan.document_id == document_id)
@@ -263,11 +263,11 @@ def save_settlement_plan(
 
 
 def delete_settlement_plan(document_id: int, company_id: int) -> None:
-    """طبقِ درخواستِ صریح («روشِ پرداخت‌هایِ مربوط به همان فاکتور نیز
-    به‌همراهِ فاکتور ویرایش یا حذف بشه»): وقتی یک فروشِ تک‌فروشیِ
-    تاییدشده دوباره برایِ اصلاح باز می‌شود یا لغو می‌شود، نقشه‌یِ تسویه‌یِ
-    قبلی‌اش -- که دیگر با محتوایِ تازه‌یِ سبد/فاکتور هم‌خوان نیست -- هم
-    باید حذف شود؛ صندوق‌دار پس از تاییدِ دوباره، نحوه‌یِ تسویه را از نو
+    """طبق درخواست صریح («روش پرداخت‌های مربوط به همان فاکتور نیز
+    به‌همراه فاکتور ویرایش یا حذف بشه»): وقتی یک فروش تک‌فروشی
+    تاییدشده دوباره برای اصلاح باز می‌شود یا لغو می‌شود، نقشهٔ تسویهٔ
+    قبلی‌اش — که دیگر با محتوای تازهٔ سبد/فاکتور هم‌خوان نیست — هم
+    باید حذف شود؛ صندوق‌دار پس از تایید دوباره، نحوهٔ تسویه را از نو
     مشخص می‌کند."""
     with new_session() as session:
         plan = session.scalar(
@@ -315,9 +315,9 @@ def get_pos_settlement_method_default(company_id: int, method_code: str) -> PosS
 
 
 def list_pos_settlement_method_defaults(company_id: int) -> dict[str, PosSettlementMethodDefaultInfo]:
-    """طبقِ درخواستِ صریح: پیش‌فرضِ تفصیلی (+ مرکزِ هزینه/پروژه) به‌ازایِ
-    هر روشِ دریافت/پرداختِ فرمِ نحوهٔ تسویه‌یِ تک‌فروشی -- برایِ صفحهٔ
-    تنظیمات و برایِ پیش‌پرکردنِ خودِ دیالوگ."""
+    """طبق درخواست صریح: پیش‌فرض تفصیلی (+ مرکز هزینه/پروژه) به‌ازای
+    هر روش دریافت/پرداخت فرم نحوهٔ تسویهٔ تک‌فروشی — برای صفحهٔ
+    تنظیمات و برای پیش‌پرکردن خود دیالوگ."""
     with new_session() as session:
         rows = session.scalars(
             select(PosSettlementMethodDefault).where(PosSettlementMethodDefault.company_id == company_id)
@@ -346,11 +346,11 @@ def set_pos_settlement_method_default(
 
 
 def resolve_method_detail_options(company_id: int, direction: str, method_code: str) -> tuple[int | None, list]:
-    """گزینه‌هایِ تفصیلیِ معتبر برایِ یک روشِ دریافت/پرداخت -- هم برایِ
-    گزینشِ صندوق‌دار در فرمِ نحوهٔ تسویه، هم برایِ تنظیمِ پیش‌فرض. خروجی:
-    (account_id یا None اگر این روش نگاشتِ حسابی ندارد، فهرستِ ردیف‌هایِ
-    تفصیلیِ مجاز -- اگر معین هیچ بُعدِ الزامی‌ای نداشته باشد، فهرستِ آزادِ
-    همه‌یِ تفصیلی‌هایِ برگ برمی‌گردد، هم‌الگو با treasury_voucher.py)."""
+    """گزینه‌های تفصیلی معتبر برای یک روش دریافت/پرداخت — هم برای
+    گزینش صندوق‌دار در فرم نحوهٔ تسویه، هم برای تنظیم پیش‌فرض. خروجی:
+    (account_id یا None اگر این روش نگاشت حسابی ندارد، فهرست ردیف‌های
+    تفصیلی مجاز — اگر معین هیچ بُعد الزامی‌ای نداشته باشد، فهرست آزاد
+    همهٔ تفصیلی‌های برگ برمی‌گردد، هم‌الگو با treasury_voucher.py)."""
     from peecha.services import detail_dimensions as dimensions_service
     from peecha.services import treasury as treasury_service
 
@@ -386,11 +386,11 @@ def resolve_method_detail_options(company_id: int, direction: str, method_code: 
 
 
 def mobile_method_detail_options(company_id: int, method_code: str) -> tuple[bool, list]:
-    """طبقِ درخواستِ صریحِ کاربر («ثبتِ تسویه دقیقاً همون فیلدهایی که
-    دسکتاپ داره»): هم‌الگو با ستونِ «تفصیلی» در دیالوگِ نحوه‌یِ تسویهٔ
-    دسکتاپ -- فقط وقتی معینِ نگاشته‌شدهٔ این روش (دریافت) واقعاً یک
-    تفصیلی (صندوق/حسابِ بانکی/شخص) را الزامی کرده باشد، گزینه‌ها برگردانده
-    می‌شوند؛ در غیرِ این صورت (False, []) و موبایل انتخاب‌گری نشان نمی‌دهد."""
+    """طبق درخواست صریح کاربر («ثبت تسویه دقیقاً همون فیلدهایی که
+    دسکتاپ داره»): هم‌الگو با ستون «تفصیلی» در دیالوگ نحوهٔ تسویهٔ
+    دسکتاپ — فقط وقتی معین نگاشته‌شدهٔ این روش (دریافت) واقعاً یک
+    تفصیلی (صندوق/حساب بانکی/شخص) را الزامی کرده باشد، گزینه‌ها برگردانده
+    می‌شوند؛ در غیر این صورت (False, []) و موبایل انتخاب‌گری نشان نمی‌دهد."""
     from peecha.services import detail_dimensions as dimensions_service
 
     account_id, options = resolve_method_detail_options(company_id, "RECEIPT", method_code)
@@ -406,9 +406,9 @@ def mobile_method_detail_options(company_id: int, method_code: str) -> tuple[boo
 
 
 def method_requires_cost_center_or_project(company_id: int, direction: str, method_code: str) -> tuple[bool, bool]:
-    """آیا معینِ نگاشته‌شده‌یِ این روش، مرکزِ هزینه/پروژه را الزامی کرده --
-    طبقِ درخواستِ صریح («اگر تفصیلی‌ها مراکزِ هزینه و پروژه داشتند در
-    همان تنظیمات... انجام شود»)، فقط در این حالت فیلدهایِ پیش‌فرضِ
+    """آیا معین نگاشته‌شدهٔ این روش، مرکز هزینه/پروژه را الزامی کرده --
+    طبق درخواست صریح («اگر تفصیلی‌ها مراکز هزینه و پروژه داشتند در
+    همان تنظیمات... انجام شود»)، فقط در این حالت فیلدهای پیش‌فرض
     مربوطه در صفحهٔ تنظیمات فعال/معنی‌دار می‌شوند."""
     from peecha.services import detail_dimensions as dimensions_service
     from peecha.services import treasury as treasury_service
@@ -425,15 +425,15 @@ def method_requires_cost_center_or_project(company_id: int, direction: str, meth
 
 
 def can_approve_settlement_plan(user_id: int, company_id: int) -> bool:
-    """طبقِ درخواستِ صریح: فقط برایِ نمایش/پنهان‌کردنِ دکمه‌یِ «تاییدِ
-    مدیر» در UI -- خودِ approve_settlement_plan هم دوباره همین شرط را
+    """طبق درخواست صریح: فقط برای نمایش/پنهان‌کردن دکمهٔ «تایید
+    مدیر» در UI — خود approve_settlement_plan هم دوباره همین شرط را
     اعتبارسنجی می‌کند (هم‌الگو با can_correct_posted_document)."""
     return roles_service.is_manager(user_id, company_id)
 
 
 def approve_settlement_plan(document_id: int, company_id: int, approved_by_user_id: int) -> None:
     if not roles_service.is_manager(approved_by_user_id, company_id):
-        raise ValueError("تاییدِ نحوه‌یِ تسویه فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است.")
+        raise ValueError("تایید نحوهٔ تسویه فقط برای مدیر (نقش ادمین/سوپروایزر/مدیر) ممکن است.")
     with new_session() as session:
         plan = session.scalar(
             select(CommercialDocumentSettlementPlan).where(
@@ -442,12 +442,12 @@ def approve_settlement_plan(document_id: int, company_id: int, approved_by_user_
             )
         )
         if plan is None:
-            raise ValueError("ابتدا نحوه‌یِ تسویه را ذخیره کنید.")
+            raise ValueError("ابتدا نحوهٔ تسویه را ذخیره کنید.")
         if plan.status_code == "APPROVED":
-            raise ValueError("این نقشه‌یِ تسویه قبلاً تاییدشده است.")
+            raise ValueError("این نقشهٔ تسویه قبلاً تاییدشده است.")
         doc = session.get(CommercialDocument, document_id)
         if doc is not None and plan.total_amount != doc.total_amount:
-            raise ValueError("مبلغِ فاکتور پس از ذخیره‌یِ نقشه تغییر کرده — ابتدا نقشه را دوباره ذخیره کنید.")
+            raise ValueError("مبلغ فاکتور پس از ذخیرهٔ نقشه تغییر کرده — ابتدا نقشه را دوباره ذخیره کنید.")
         plan.status_code = "APPROVED"
         plan.approved_by_user_id = approved_by_user_id
         plan.approved_at = datetime.datetime.now()
@@ -463,19 +463,19 @@ def approve_settlement_plan(document_id: int, company_id: int, approved_by_user_
 
 
 def check_settlement_credit_exposure(document_id: int, company_id: int, checked_by_user_id: int) -> bool:
-    """بخشِ نسیه‌یِ همین فاکتور (remaining_on_credit) -- نه کلِ مبلغِ
-    فاکتور، چون بخشِ نقدی/کارت/چکِ همان‌لحظه اصلاً مواجهه نمی‌سازد -- در
-    برابرِ سقفِ اعتبار سنجیده می‌شود. ردِ ساده نمی‌کند، فقط CreditHold
-    می‌سازد (بازگشتِ True) تا مدیر بعداً آزادسازی کند؛ True/False فقط
-    برایِ نمایشِ هشدار به فراخوان است.
+    """بخش نسیهٔ همین فاکتور (remaining_on_credit) — نه کل مبلغ
+    فاکتور، چون بخش نقدی/کارت/چک همان‌لحظه اصلاً مواجهه نمی‌سازد — در
+    برابر سقف اعتبار سنجیده می‌شود. رد ساده نمی‌کند، فقط CreditHold
+    می‌سازد (بازگشت True) تا مدیر بعداً آزادسازی کند؛ True/False فقط
+    برای نمایش هشدار به فراخوان است.
 
-    طبقِ اصلِ صریح («هرگز فروشِ واقعی را برایِ نبودِ تنظیمات/محدودیت رد
-    نکن»): در پخشِ گرم (پیش‌فاکتورِ اپِ موبایل)، این تابع عمداً *بعدِ*
-    ثبتِ‌نهاییِ فاکتور صدا زده می‌شود (peecha_api.routers.orders) -- نه
-    داخلِ auto_approve_settlement_plan پیش از post_document -- چون کالا
-    همان لحظه فیزیکاً از خودرو تحویل شده؛ مسدودکردنِ ثبتِ‌نهایی یعنی ردِ
-    یک فروشِ واقعاً انجام‌شده. هُلد همچنان ساخته می‌شود تا مدیر آگاه شود،
-    فقط این فاکتورِ خاص را دیگر مسدود نمی‌کند (چون در لحظه‌یِ ساختنِ هُلد
+    طبق اصل صریح («هرگز فروش واقعی را برای نبود تنظیمات/محدودیت رد
+    نکن»): در پخش گرم (پیش‌فاکتور برنامهٔ موبایل)، این تابع عمداً *بعد*
+    ثبت‌نهایی فاکتور صدا زده می‌شود (peecha_api.routers.orders) — نه
+    داخل auto_approve_settlement_plan پیش از post_document — چون کالا
+    همان لحظه فیزیکاً از خودرو تحویل شده؛ مسدودکردن ثبت‌نهایی یعنی رد
+    یک فروش واقعاً انجام‌شده. هُلد همچنان ساخته می‌شود تا مدیر آگاه شود،
+    فقط این فاکتور خاص را دیگر مسدود نمی‌کند (چون در لحظهٔ ساختن هُلد
     سند از قبل POSTED است)."""
     plan = get_settlement_plan(document_id, company_id)
     if plan is None or plan.remaining_on_credit <= _ZERO:
@@ -488,45 +488,45 @@ def check_settlement_credit_exposure(document_id: int, company_id: int, checked_
     if not credit_service.check_credit_exposure(company_id, counterparty_id, plan.remaining_on_credit):
         return False
     credit_service.create_credit_hold(
-        counterparty_id, f"عبور از سقفِ اعتبار در بخشِ نسیه‌یِ فاکتور #{document_id}", checked_by_user_id,
+        counterparty_id, f"عبور از سقف اعتبار در بخش نسیهٔ فاکتور #{document_id}", checked_by_user_id,
         related_document_id=document_id,
     )
     return True
 
 
 def require_approved_settlement_plan(document_id: int, company_id: int) -> SettlementPlan:
-    """طبقِ درخواستِ صریح («با تاییدِ مدیر... فاکتور سند بخوره و تسویه
-    بشه»): برایِ فاکتورِ خرید/فروش، ثبتِ نهایی بدونِ نقشه‌یِ تسویه‌یِ
-    تاییدشده مسدود می‌شود -- این تابع همان دروازه است (هم در سرویسِ
-    ثبتِ‌نهایی و هم در UI بررسی می‌شود)."""
+    """طبق درخواست صریح («با تایید مدیر... فاکتور سند بخوره و تسویه
+    بشه»): برای فاکتور خرید/فروش، ثبت نهایی بدون نقشهٔ تسویهٔ
+    تاییدشده مسدود می‌شود — این تابع همان دروازه است (هم در سرویس
+    ثبت‌نهایی و هم در UI بررسی می‌شود)."""
     plan = get_settlement_plan(document_id, company_id)
     if plan is None:
-        raise ValueError("پیش از ثبتِ نهایی، ابتدا از دکمه‌یِ «نحوه‌یِ تسویه» نحوه‌یِ پرداخت را مشخص کنید.")
+        raise ValueError("پیش از ثبت نهایی، ابتدا از دکمهٔ «نحوهٔ تسویه» نحوهٔ پرداخت را مشخص کنید.")
     if not plan.is_approved:
-        raise ValueError("نحوه‌یِ تسویه هنوز توسطِ مدیر تاییدنشده است.")
+        raise ValueError("نحوهٔ تسویه هنوز توسط مدیر تاییدنشده است.")
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is not None and plan.total_amount != doc.total_amount:
-            raise ValueError("مبلغِ فاکتور پس از تاییدِ نقشه‌یِ تسویه تغییر کرده — نقشه را دوباره ذخیره و تایید کنید.")
+            raise ValueError("مبلغ فاکتور پس از تایید نقشهٔ تسویه تغییر کرده — نقشه را دوباره ذخیره و تایید کنید.")
     return plan
 
 
 def auto_approve_settlement_plan(document_id: int, company_id: int, user_id: int, lines: list[tuple]) -> None:
-    """میان‌بُرِ برنامه‌نویسی -- برایِ ابزارهایِ داخلی/فراخوانی‌هایِ خودکار
-    و بخصوص برایِ اپِ پخشِ گرم (ون‌سیلز): طبقِ درخواستِ صریحِ کاربر («نوعِ
-    تسویه در پخشِ گرم باید همانندِ انواعِ تسویه در دسکتاپ باشد»)، این
-    تابع (برخلافِ نسخهٔ قبلی‌اش که همیشه ۱۰۰٪ نقدی می‌ساخت) هر ترکیبِ
-    دلخواهی از روش‌ها/مبالغ را می‌پذیرد (همان قالبِ save_settlement_plan)
-    و بلافاصله تاییدمی‌کند. گذرگاهِ واقعیِ کاربرِ دسکتاپ همچنان دکمه‌یِ
-    «نحوه‌یِ تسویه» + تاییدِ مدیر (approve_settlement_plan) است.
+    """میان‌بُر برنامه‌نویسی — برای ابزارهای داخلی/فراخوانی‌های خودکار
+    و بخصوص برای اپ پخش گرم (ون‌سیلز): طبق درخواست صریح کاربر («نوع
+    تسویه در پخش گرم باید همانند انواع تسویه در دسکتاپ باشد»)، این
+    تابع (برخلاف نسخهٔ قبلی‌اش که همیشه ۱۰۰٪ نقدی می‌ساخت) هر ترکیب
+    دلخواهی از روش‌ها/مبالغ را می‌پذیرد (همان قالب save_settlement_plan)
+    و بلافاصله تاییدمی‌کند. گذرگاه واقعی کاربر دسکتاپ همچنان دکمهٔ
+    «نحوهٔ تسویه» + تایید مدیر (approve_settlement_plan) است.
 
-    این تابع عمداً از گیتِ is_manager عبور می‌کند و خودش تاییدمی‌کند --
-    چون در پخشِ گرم، مبلغ همان‌لحظه توسطِ خودِ ویزیتور از مشتری در محل
-    دریافت می‌شود و هیچ مدیری حضورِ فیزیکی برایِ زدنِ دکمه‌یِ تاییدِ
-    مدیر ندارد؛ اجباری‌کردنِ آن تاییدِ دستی، عملاً کلِ گردشِ کارِ فروشِ
-    فی‌المجلس را غیرِممکن می‌کند. کنترلِ صحتِ این تراکنش (به‌جایِ امضایِ
-    مدیر) از طریقِ رسیدِ تحویل تامین می‌شود (delivery_confirmation:
-    امضا/عکس/مختصاتِ GPS/زمان -- در peecha_api.routers.delivery)."""
+    این تابع عمداً از گیت is_manager عبور می‌کند و خودش تاییدمی‌کند --
+    چون در پخش گرم، مبلغ همان‌لحظه توسط خود ویزیتور از مشتری در محل
+    دریافت می‌شود و هیچ مدیری حضور فیزیکی برای زدن دکمهٔ تایید
+    مدیر ندارد؛ اجباری‌کردن آن تایید دستی، عملاً کل گردش کار فروش
+    فی‌المجلس را غیرممکن می‌کند. کنترل صحت این تراکنش (به‌جای امضای
+    مدیر) از طریق رسید تحویل تامین می‌شود (delivery_confirmation:
+    امضا/عکس/مختصات GPS/زمان — در peecha_api.routers.delivery)."""
     save_settlement_plan(document_id, company_id, user_id, lines)
     with new_session() as session:
         plan = session.scalar(
@@ -536,7 +536,7 @@ def auto_approve_settlement_plan(document_id: int, company_id: int, user_id: int
             )
         )
         if plan is None:
-            raise ValueError("ابتدا نحوه‌یِ تسویه را ذخیره کنید.")
+            raise ValueError("ابتدا نحوهٔ تسویه را ذخیره کنید.")
         plan.status_code = "APPROVED"
         plan.approved_by_user_id = user_id
         plan.approved_at = datetime.datetime.now()
@@ -544,10 +544,10 @@ def auto_approve_settlement_plan(document_id: int, company_id: int, user_id: int
 
 
 def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, user_id: int) -> None:
-    """پوششِ سازگاریِ عقب‌رو -- فقط برایِ نسخه‌هایِ قدیمیِ اپِ موبایل که
-    هنوز settlement_lines نمی‌فرستند (پیش از این رفع، رفتارِ همیشگی
-    «۱۰۰٪ نقدی» بود)؛ نسخه‌هایِ تازه باید صریحاً auto_approve_settlement_plan
-    را با روش‌هایِ انتخاب‌شده‌یِ کاربر صدا بزنند."""
+    """پوشش سازگاری عقب‌رو — فقط برای نسخه‌های قدیمی برنامهٔ موبایل که
+    هنوز settlement_lines نمی‌فرستند (پیش از این رفع، رفتار همیشگی
+    «۱۰۰٪ نقدی» بود)؛ نسخه‌های تازه باید صریحاً auto_approve_settlement_plan
+    را با روش‌های انتخاب‌شدهٔ کاربر صدا بزنند."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -560,9 +560,9 @@ def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, us
 def compute_due_date(
     company_id: int, document_type_code: str, counterparty_detail_account_id: int, document_date: datetime.date,
 ) -> datetime.date | None:
-    """موعدِ تسویه از رویِ payment_term_days طرفِ‌حساب -- اگر طرفِ‌حساب
-    پروفایلِ مشتری/تامین‌کننده نداشته باشد (مثلاً حسابِ عمومیِ نقدی)، None
-    برمی‌گردد (یعنی «بدونِ موعدِ مشخص»)."""
+    """موعد تسویه از روی payment_term_days طرف‌حساب — اگر طرف‌حساب
+    پروفایل مشتری/تامین‌کننده نداشته باشد (مثلاً حساب عمومی نقدی)، None
+    برمی‌گردد (یعنی «بدون موعد مشخص»)."""
     if document_type_code not in _INVOICE_TYPES:
         return None
     with new_session() as session:
@@ -613,10 +613,10 @@ def get_invoice_settlement_status(document_id: int, company_id: int) -> InvoiceS
 
 
 def list_unsettled_invoices(company_id: int, document_type_code: str | None = None) -> list[InvoiceSettlementStatus]:
-    """طبقِ درخواستِ صریح: فهرستِ فاکتورهایِ ثبت‌شده که هنوز به‌طورِ کامل
-    تسویه نشده‌اند -- برایِ صفحه‌یِ «فاکتورهایِ تسویه‌نشده» و ورودیِ
-    صفحه‌یِ «مدیریتِ تسویه». عمداً فقط POSTED (نه CORRECTED) -- فاکتورِ
-    اصلاح‌شده دیگر مبلغِ معتبر ندارد؛ فاکتورِ *جایگزین*ِ آن (که خودش POSTED
+    """طبق درخواست صریح: فهرست فاکتورهای ثبت‌شده که هنوز به‌طور کامل
+    تسویه نشده‌اند — برای صفحهٔ «فاکتورهای تسویه‌نشده» و ورودی
+    صفحهٔ «مدیریت تسویه». عمداً فقط POSTED (نه CORRECTED) — فاکتور
+    اصلاح‌شده دیگر مبلغ معتبر ندارد؛ فاکتور *جایگزین* آن (که خودش POSTED
     است) همان است که باید تسویه شود."""
     with new_session() as session:
         stmt = select(CommercialDocument).where(
@@ -642,14 +642,14 @@ def list_unsettled_invoices(company_id: int, document_type_code: str | None = No
 
 
 def list_invoices_due_soon(company_id: int, document_type_code: str | None = None) -> list[InvoiceSettlementStatus]:
-    """طبقِ درخواستِ صریح («آپشنی که N روز مانده به موعدِ تسویه آلارم
-    بدهد»): فقط اگر آلارم برایِ این شرکت فعال باشد، فاکتورهایِ
-    تسویه‌نشده‌ای که سررسیدشان ظرفِ alarm_days_before روزِ آینده است (یا
-    گذشته -- معوقه) را برمی‌گرداند.
+    """طبق درخواست صریح («آپشنی که N روز مانده به موعد تسویه آلارم
+    بدهد»): فقط اگر آلارم برای این شرکت فعال باشد، فاکتورهای
+    تسویه‌نشده‌ای که سررسیدشان ظرف alarm_days_before روز آینده است (یا
+    گذشته — معوقه) را برمی‌گرداند.
 
-    طبقِ رفعِ باگِ واقعی («این آلارم کجا نمایش داده می‌شود؟» -- تا این‌جا
+    طبق رفع باگ واقعی («این آلارم کجا نمایش داده می‌شود؟» — تا این‌جا
     هیچ صفحه‌ای این تابع را صدا نمی‌زد): حالا در commercial_settlement.py
-    مستقیماً به‌عنوانِ یک بنرِ هشدار در بالایِ فرمِ تسویه استفاده می‌شود."""
+    مستقیماً به‌عنوان یک بنر هشدار در بالای فرم تسویه استفاده می‌شود."""
     settings = get_alarm_settings(company_id)
     if not settings.is_enabled or settings.alarm_days_before <= 0:
         return []
@@ -675,7 +675,7 @@ def list_settlements_for_journal_entry(journal_entry_id: int, company_id: int) -
     with new_session() as session:
         je = session.get(JournalEntry, journal_entry_id)
         if je is None or je.company_id != company_id:
-            raise ValueError("سندِ حسابداری نامعتبر است.")
+            raise ValueError("سند حسابداری نامعتبر است.")
         return list(session.scalars(
             select(InvoiceSettlement).where(InvoiceSettlement.journal_entry_id == journal_entry_id)
             .order_by(InvoiceSettlement.settlement_id.desc())
@@ -686,27 +686,27 @@ def allocate_settlement(
     company_id: int, invoice_document_id: int, journal_entry_id: int | None, settlement_date: datetime.date,
     amount: decimal.Decimal, created_by_user_id: int, reference_no: str | None = None, description: str | None = None,
 ) -> int:
-    """طبقِ درخواستِ صریح: تخصیصِ (بخشی از) یک دریافت/پرداختِ ثبت‌شده به یک
-    فاکتور -- تسویه‌یِ جزئی مجاز است (چند بار روی یک فاکتور)، اما مبلغِ
-    هرباره نمی‌تواند از مانده‌یِ فاکتور بیشتر باشد."""
+    """طبق درخواست صریح: تخصیص (بخشی از) یک دریافت/پرداخت ثبت‌شده به یک
+    فاکتور — تسویهٔ جزئی مجاز است (چند بار روی یک فاکتور)، اما مبلغ
+    هرباره نمی‌تواند از ماندهٔ فاکتور بیشتر باشد."""
     if amount <= _ZERO:
-        raise ValueError("مبلغِ تسویه باید مثبت باشد.")
+        raise ValueError("مبلغ تسویه باید مثبت باشد.")
     with new_session() as session:
         doc = session.get(CommercialDocument, invoice_document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("فاکتور نامعتبر است.")
         if doc.document_type_code not in _INVOICE_TYPES:
-            raise ValueError("تسویه فقط برایِ فاکتورِ خرید/فروش ممکن است.")
+            raise ValueError("تسویه فقط برای فاکتور خرید/فروش ممکن است.")
         if doc.status_code != "POSTED":
-            raise ValueError("فقط فاکتورِ ثبتِ‌نهایی‌شده (و نه اصلاح‌شده/لغوشده) قابلِ‌تسویه است.")
+            raise ValueError("فقط فاکتور ثبت‌نهایی‌شده (و نه اصلاح‌شده/لغوشده) قابل‌تسویه است.")
         if journal_entry_id is not None:
             je = session.get(JournalEntry, journal_entry_id)
             if je is None or je.company_id != company_id:
-                raise ValueError("سندِ حسابداریِ دریافت/پرداخت نامعتبر است.")
+                raise ValueError("سند حسابداری دریافت/پرداخت نامعتبر است.")
         settled = _settled_amount(session, invoice_document_id)
         remaining = doc.total_amount - settled
         if amount > remaining:
-            raise ValueError(f"مبلغِ تسویه از مانده‌یِ فاکتور ({remaining}) بیشتر است.")
+            raise ValueError(f"مبلغ تسویه از ماندهٔ فاکتور ({remaining}) بیشتر است.")
         settlement = InvoiceSettlement(
             company_id=company_id, invoice_document_id=invoice_document_id, journal_entry_id=journal_entry_id,
             settlement_date=settlement_date, amount=amount, reference_no=(reference_no or None),
@@ -737,7 +737,7 @@ def get_alarm_settings(company_id: int) -> SettlementAlarmSettings:
 
 def set_alarm_settings(company_id: int, is_enabled: bool, alarm_days_before: int) -> None:
     if alarm_days_before < 0:
-        raise ValueError("تعدادِ روز نمی‌تواند منفی باشد.")
+        raise ValueError("تعداد روز نمی‌تواند منفی باشد.")
     with new_session() as session:
         settings = session.get(SettlementAlarmSettings, company_id)
         if settings is None:

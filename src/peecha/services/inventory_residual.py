@@ -1,12 +1,12 @@
-"""اصلاحِ ماندهٔ ریالیِ موجودی (تسعیر/پاک‌سازی) -- R230.
+"""اصلاح ماندهٔ ریالی موجودی (تسعیر/پاک‌سازی) — R230.
 
-وقتی موجودیِ تعدادیِ یک کالا صفر است ولی حسابِ «موجودیِ کالا» در دفترِ کل (به
-تفکیکِ تفصیلیِ همان کالا) هنوز مانده دارد، آن مانده انحرافِ بهاست (گرد‌کردن،
-اختلافِ بهایِ امانی/اصلاحیه، برگشت‌ها). روشِ استاندارد: این مانده با یک سندِ
-اصلاحی به حسابِ «اختلافِ بهایِ موجودی» (یا بهایِ تمام‌شده) بسته می‌شود تا
-ارزشِ دفتریِ موجودی با موجودیِ واقعی (صفر) برابر شود.
+وقتی موجودی تعدادی یک کالا صفر است ولی حساب «موجودی کالا» در دفتر کل (به
+تفکیک تفصیلی همان کالا) هنوز مانده دارد، آن مانده انحراف بهاست (گرد‌کردن،
+اختلاف بهای امانی/اصلاحیه، برگشت‌ها). روش استاندارد: این مانده با یک سند
+اصلاحی به حساب «اختلاف بهای موجودی» (یا بهای تمام‌شده) بسته می‌شود تا
+ارزش دفتری موجودی با موجودی واقعی (صفر) برابر شود.
 
-حسابِ مقابل از نگاشتِ INVENTORY_REVALUATION (تنظیماتِ انبار ‹ نگاشتِ حساب‌ها)؛
+حساب مقابل از نگاشت INVENTORY_REVALUATION (تنظیمات انبار ‹ نگاشت حساب‌ها)؛
 اگر تعریف نشده باشد INVENTORY_COST_VARIANCE و در نهایت COGS استفاده می‌شود.
 """
 
@@ -54,7 +54,7 @@ def counter_account_id(company_id: int) -> tuple[int | None, str | None]:
 
 
 def inventory_account_tracks_items(company_id: int) -> bool:
-    """بدونِ تفصیلیِ «کالا» رویِ حسابِ موجودی، مانده به تفکیکِ کالا قابلِ‌محاسبه نیست."""
+    """بدون تفصیلی «کالا» روی حساب موجودی، مانده به تفکیک کالا قابل‌محاسبه نیست."""
     inventory_account_id = engine_service.get_account_mapping(company_id, "INVENTORY_ASSET")
     if inventory_account_id is None:
         return False
@@ -108,8 +108,8 @@ def list_residuals(company_id: int, zero_quantity_only: bool = True, threshold: 
 
 
 def required_extra_dimensions(company_id: int) -> list[dimensions_service.RequiredDimension]:
-    """R231: ابعادِ الزامیِ حسابِ موجودی و حسابِ مقابل (به‌جز «کالا» که خودکار
-    پر می‌شود) -- مثلاً مرکزِ هزینه/پروژه -- تا در فرمِ تسعیر انتخاب شوند."""
+    """R231: ابعاد الزامی حساب موجودی و حساب مقابل (به‌جز «کالا» که خودکار
+    پر می‌شود) — مثلاً مرکز هزینه/پروژه — تا در فرم تسعیر انتخاب شوند."""
     item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
     counter_id, key = counter_account_id(company_id)
     fixed = engine_service.get_account_mapping_detail(company_id, key) if key else None
@@ -132,23 +132,23 @@ def post_residual_adjustment(
     company_id: int, user_id: int, item_ids: list[int], document_date: datetime.date | None = None,
     extra_details: dict[int, int] | None = None,
 ) -> int:
-    """سندِ اصلاحی: ماندهٔ دفتریِ موجودیِ کالاهایِ انتخاب‌شده به حسابِ مقابل بسته می‌شود.
-    extra_details: تفصیلی‌هایِ الزامیِ دیگر (مرکزِ هزینه/پروژه...)، {نوعِ‌بُعد: تفصیلی}."""
+    """سند اصلاحی: ماندهٔ دفتری موجودی کالاهای انتخاب‌شده به حساب مقابل بسته می‌شود.
+    extra_details: تفصیلی‌های الزامی دیگر (مرکز هزینه/پروژه...)، {نوع‌بُعد: تفصیلی}."""
     from peecha.services.commercial_documents import auto_line
 
     rows = [r for r in list_residuals(company_id) if r.item_id in set(item_ids)]
     if not rows:
-        raise ValueError("ماندهٔ ریالیِ قابلِ‌اصلاحی برایِ کالاهایِ انتخاب‌شده وجود ندارد.")
+        raise ValueError("ماندهٔ ریالی قابل‌اصلاحی برای کالاهای انتخاب‌شده وجود ندارد.")
     counter_id, key = counter_account_id(company_id)
     if counter_id is None:
         raise ValueError(
-            "حسابِ «اختلافِ بهایِ موجودی (تسعیر)» در تنظیماتِ انبار ‹ نگاشتِ حساب‌ها مشخص نشده است."
+            "حساب «اختلاف بهای موجودی (تسعیر)» در تنظیمات انبار ‹ نگاشت حساب‌ها مشخص نشده است."
         )
     fixed_detail = engine_service.get_account_mapping_detail(company_id, key)
     inventory_account_id = engine_service.get_account_mapping(company_id, "INVENTORY_ASSET")
     item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
     dims = {k: v for k, v in (extra_details or {}).items() if v is not None}
-    description = "اصلاحِ ماندهٔ ریالیِ موجودیِ کالایِ با موجودیِ صفر (تسعیر)"
+    description = "اصلاح ماندهٔ ریالی موجودی کالای با موجودی صفر (تسعیر)"
     lines: list[je_service.LineInput] = []
     for r in rows:
         amount = abs(r.residual).quantize(decimal.Decimal("0.01"))

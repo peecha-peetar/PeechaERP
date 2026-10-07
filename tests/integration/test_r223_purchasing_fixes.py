@@ -56,11 +56,11 @@ count_uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT", 
 weight_uom_id = catalog_service.create_uom(company_id, "KG", "کیلوگرم", "WEIGHT", decimal_places=3)
 
 count_item_id = catalog_service.create_item(
-    company_id, "4001", "کالایِ شمارشی",
+    company_id, "4001", "کالای شمارشی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=count_uom_id, is_sellable=True, is_purchasable=True),
 )
 weight_item_id = catalog_service.create_item(
-    company_id, "4002", "کالایِ وزنی",
+    company_id, "4002", "کالای وزنی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=weight_uom_id, is_sellable=True, is_purchasable=True),
 )
 
@@ -71,19 +71,19 @@ dialog = _LineDialog(None, items, company_id, None, 2, document_type_code="PURCH
 dialog.item_combo.setCurrentIndex(dialog.item_combo.findData(count_item_id))
 check(
     dialog.quantity_field._decimals == 0,
-    f"با انتخابِ کالایِ شمارشی (واحدِ بدونِ اعشار)، فیلدِ مقدار اعشار نمی‌پذیرد (got {dialog.quantity_field._decimals})",
+    f"با انتخاب کالای شمارشی (واحد بدون اعشار)، فیلد مقدار اعشار نمی‌پذیرد (got {dialog.quantity_field._decimals})",
 )
 dialog.item_combo.setCurrentIndex(dialog.item_combo.findData(weight_item_id))
 check(
     dialog.quantity_field._decimals == 3,
-    f"با انتخابِ کالایِ وزنی، فیلدِ مقدار سه‌رقمِ اعشار می‌پذیرد (got {dialog.quantity_field._decimals})",
+    f"با انتخاب کالای وزنی، فیلد مقدار سه‌رقم اعشار می‌پذیرد (got {dialog.quantity_field._decimals})",
 )
 dialog.close()
 
 # همین رفتار در ردیفِ ورودیِ درون‌خطیِ خودِ فرمِ سند (نه دیالوگِ جدا).
 from peecha.ui.screens.commercial_document import CommercialDocumentScreen
 
-supplier_id = dimensions_service.create_supplier(company_id, "S1", "تامین‌کننده‌یِ آزمایشی")
+supplier_id = dimensions_service.create_supplier(company_id, "S1", "تامین‌کنندهٔ آزمایشی")
 doc_id = documents_service.create_document(
     company_id, user.user_id, "PURCHASE_ORDER", datetime.date.today(),
     documents_service.DocumentHeaderFields(
@@ -96,7 +96,7 @@ entry_widgets = screen._entry_row_widgets
 entry_widgets["item_combo"].setCurrentIndex(entry_widgets["item_combo"].findData(count_item_id))
 check(
     entry_widgets["qty"]._decimals == 0,
-    f"ردیفِ ورودیِ سفارشِ خرید هم برایِ کالایِ شمارشی اعشار نمی‌پذیرد (got {entry_widgets['qty']._decimals})",
+    f"ردیف ورودی سفارش خرید هم برای کالای شمارشی اعشار نمی‌پذیرد (got {entry_widgets['qty']._decimals})",
 )
 
 # =========================================================================
@@ -105,15 +105,15 @@ check(
 #    سازمان‌هایی که نیازِ این مراحل را ندارند»). پیش‌فرض خاموش -- دکمهٔ
 #    تصویب باید نمایان بماند؛ با روشن‌کردنِ Toggle باید پنهان شود.
 # =========================================================================
-check(screen.approve_button.isVisibleTo(screen), "پیش‌فرض (Toggle خاموش)، دکمهٔ تصویبِ سفارشِ خرید نمایان است")
+check(screen.approve_button.isVisibleTo(screen), "پیش‌فرض (Toggle خاموش)، دکمهٔ تصویب سفارش خرید نمایان است")
 
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL", True)
 screen.refresh()
-check(not screen.approve_button.isVisibleTo(screen), "با روشن‌کردنِ Toggle، دکمهٔ تصویب پنهان می‌شود")
+check(not screen.approve_button.isVisibleTo(screen), "با روشن‌کردن Toggle، دکمهٔ تصویب پنهان می‌شود")
 
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL", False)
 screen.refresh()
-check(screen.approve_button.isVisibleTo(screen), "با خاموش‌کردنِ دوبارهٔ Toggle، دکمهٔ تصویب برمی‌گردد")
+check(screen.approve_button.isVisibleTo(screen), "با خاموش‌کردن دوبارهٔ Toggle، دکمهٔ تصویب برمی‌گردد")
 
 # =========================================================================
 # ۳: UIِ تبدیلِ واحدِ کالا (ItemUomConversion) در فرمِ کالا -- طبقِ گزارشِ
@@ -130,7 +130,7 @@ panel.load(item_row)
 
 check(
     panel.uom_conversion_combo.findData(count_uom_id) < 0,
-    "واحدِ پایهٔ خودِ کالا در کمبویِ تبدیلِ واحد نیست (تبدیلِ واحدِ پایه به خودش بی‌معناست)",
+    "واحد پایهٔ خود کالا در فهرست تبدیل واحد نیست (تبدیل واحد پایه به خودش بی‌معناست)",
 )
 box_uom_id = catalog_service.create_uom(company_id, "BOX", "کارتن", "COUNT", decimal_places=0)
 panel.refresh(company_id)
@@ -141,16 +141,16 @@ panel.uom_conversion_purchase_default_checkbox.setChecked(True)
 panel._add_uom_conversion()
 
 rows = catalog_service.list_item_uom_conversions(count_item_id)
-check(len(rows) == 1, f"ردیفِ تبدیلِ واحد ذخیره شد (got {len(rows)})")
-check(rows[0].uom_id == box_uom_id and rows[0].conversion_factor == decimal.Decimal(24), "واحد و ضریبِ درست ذخیره شدند")
-check(rows[0].is_purchase_default is True, "پرچمِ پیش‌فرضِ خرید ذخیره شد")
+check(len(rows) == 1, f"ردیف تبدیل واحد ذخیره شد (got {len(rows)})")
+check(rows[0].uom_id == box_uom_id and rows[0].conversion_factor == decimal.Decimal(24), "واحد و ضریب درست ذخیره شدند")
+check(rows[0].is_purchase_default is True, "پرچم پیش‌فرض خرید ذخیره شد")
 # R225: جدولِ واحدها ردیفِ واحدِ پایه را هم نشان می‌دهد (پایه + کارتن).
-check(panel.uom_conversion_table.rowCount() == 2, "جدولِ تبدیلِ واحد در UI هم رفرش شد")
+check(panel.uom_conversion_table.rowCount() == 2, "جدول تبدیل واحد در UI هم رفرش شد")
 
 panel._select_unit_row(rows[0].conversion_id)
 panel._remove_uom_conversion()
 rows = catalog_service.list_item_uom_conversions(count_item_id)
-check(len(rows) == 0, "حذفِ ردیفِ تبدیلِ واحد از UI کار می‌کند")
+check(len(rows) == 0, "حذف ردیف تبدیل واحد از UI کار می‌کند")
 
 # =========================================================================
 # ۴: تاییدِ رسیدِ کالا برایِ سفارشِ خرید -- طبقِ گزارشِ صریحِ کاربر («بعدِ
@@ -175,25 +175,25 @@ documents_service.confirm_document(receipt_doc_id, company_id, user.user_id)
 
 try:
     documents_service.approve_warehouse(receipt_doc_id, company_id, user.user_id)
-    check(False, "پیش‌فرض (Toggle خاموش)، تاییدِ انبارِ سفارشِ خرید باید رد شود")
+    check(False, "پیش‌فرض (Toggle خاموش)، تایید انبار سفارش خرید باید رد شود")
 except ValueError:
-    check(True, "پیش‌فرض (Toggle خاموش)، تاییدِ انبارِ سفارشِ خرید رد می‌شود (رفتارِ قبلی دست‌نخورده)")
+    check(True, "پیش‌فرض (Toggle خاموش)، تایید انبار سفارش خرید رد می‌شود (رفتار قبلی دست‌نخورده)")
 
 check(
     documents_service.list_purchase_order_goods_receipt_queue(company_id) == [],
-    "پیش‌فرض (Toggle خاموش)، صفِ تاییدِ رسیدِ کالا خالی است",
+    "پیش‌فرض (Toggle خاموش)، صف تایید رسید کالا خالی است",
 )
 
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST", True)  # R230: رفتارِ پیشین (رسید پیش از ثبتِ نهایی)
 
 queue = documents_service.list_purchase_order_goods_receipt_queue(company_id)
-check(any(d.document_id == receipt_doc_id for d in queue), "با روشن‌کردنِ Toggle، سفارشِ خرید در صفِ تاییدِ رسید ظاهر می‌شود")
+check(any(d.document_id == receipt_doc_id for d in queue), "با روشن‌کردن Toggle، سفارش خرید در صف تایید رسید ظاهر می‌شود")
 
-check("قیمت" not in "".join(_LINE_COLUMNS), "جدولِ تاییدِ رسیدِ کالا هیچ ستونِ قیمتی ندارد")
+check("قیمت" not in "".join(_LINE_COLUMNS), "جدول تایید رسید کالا هیچ ستون قیمتی ندارد")
 
 from peecha.services import inventory_locations as locations_service
-receipt_wh = locations_service.create_warehouse(company_id, "WH-R", "انبارِ رسید", locations_service.WarehouseFields())
+receipt_wh = locations_service.create_warehouse(company_id, "WH-R", "انبار رسید", locations_service.WarehouseFields())
 documents_service.approve_warehouse(receipt_doc_id, company_id, user.user_id, warehouse_id=receipt_wh)
 documents_service.set_warehouse_delivered_quantities(receipt_doc_id, company_id, {receipt_line_id: decimal.Decimal(8)})
 
@@ -201,13 +201,13 @@ receipt_screen = PurchaseGoodsReceiptScreen()
 receipt_screen.refresh()
 check(
     any(d.document_id == receipt_doc_id for d in receipt_screen._queue),
-    "صفحه‌یِ تاییدِ رسیدِ کالا هم سفارش را نشان می‌دهد",
+    "صفحهٔ تایید رسید کالا هم سفارش را نشان می‌دهد",
 )
 
 dialog = _GoodsReceiptDialog(None, receipt_doc_id, company_id)
 check(
     dialog._qty_fields[receipt_line_id].value() == 8.0,
-    f"دیالوگِ رسید مقدارِ واقعیِ دریافتی (۸) را نشان می‌دهد (got {dialog._qty_fields[receipt_line_id].value()})",
+    f"دیالوگ رسید مقدار واقعی دریافتی (۸) را نشان می‌دهد (got {dialog._qty_fields[receipt_line_id].value()})",
 )
 dialog.close()
 
@@ -215,13 +215,13 @@ new_invoice_id = documents_service.convert_to_invoice(receipt_doc_id, company_id
 _, invoice_lines = documents_service.get_document(new_invoice_id, company_id)
 check(
     invoice_lines[0].quantity == decimal.Decimal(8),
-    f"تبدیل به فاکتور از مقدارِ دریافتیِ تاییدشده (۸) استفاده می‌کند، نه مقدارِ اولیهٔ سفارش (۹) (got {invoice_lines[0].quantity})",
+    f"تبدیل به فاکتور از مقدار دریافتی تاییدشده (۸) استفاده می‌کند، نه مقدار اولیهٔ سفارش (۹) (got {invoice_lines[0].quantity})",
 )
 
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", False)
 check(
     documents_service.list_purchase_order_goods_receipt_queue(company_id) == [],
-    "با خاموش‌کردنِ دوبارهٔ Toggle، صفِ تاییدِ رسید دوباره خالی می‌شود",
+    "با خاموش‌کردن دوبارهٔ Toggle، صف تایید رسید دوباره خالی می‌شود",
 )
 
 print("FAIL" if FAIL else "RESULT: ALL PASS")

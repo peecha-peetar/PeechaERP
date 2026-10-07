@@ -1,7 +1,7 @@
-"""نمایِ سه‌بعدیِ انبار -- R249: تصویرِ ایزومتریک از همان مختصاتِ نقشه + ارتفاع/Z (services.warehouse_locations.scene_3d).
+"""نمای سه‌بعدی انبار — R249: تصویر ایزومتریک از همان مختصات نقشه + ارتفاع/Z (services.warehouse_locations.scene_3d).
 
-بدونِ OpenGL (رسم با QGraphicsScene) تا رویِ همهٔ سیستم‌ها و حالتِ offscreen کار کند؛ چرخش و زاویهٔ دید
-قابلِ‌تنظیم است و ترتیبِ رسم با الگوریتمِ نقاش (دورتر اول) است.
+بدون OpenGL (رسم با QGraphicsScene) تا روی همهٔ سیستم‌ها و حالت offscreen کار کند؛ چرخش و زاویهٔ دید
+قابل‌تنظیم است و ترتیب رسم با الگوریتم نقاش (دورتر اول) است.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class _View(QGraphicsView):
 
 
 class Warehouse3DView(QWidget):
-    """boxes: خروجیِ scene_3d؛ colors: رنگِ حالتِ نقشه برایِ هر محل (یا None)."""
+    """boxes: خروجی scene_3d؛ colors: رنگ حالت نقشه برای هر محل (یا None)."""
 
     location_clicked = Signal(int)
 
@@ -88,7 +88,7 @@ class Warehouse3DView(QWidget):
         self.labels_check.toggled.connect(lambda _c: self.redraw())
         controls.addWidget(self.labels_check)
         layout.addLayout(controls)
-        self.hover_label = QLabel("ماوس را رویِ هر محل نگه دارید تا نام و اطلاعاتش نمایش داده شود.")
+        self.hover_label = QLabel("ماوس را روی هر محل نگه دارید تا نام و اطلاعاتش نمایش داده شود.")
         self.hover_label.setObjectName("sectionHint")
         self.hover_label.setWordWrap(True)
         self.hover_label.setTextFormat(Qt.RichText)
@@ -107,7 +107,7 @@ class Warehouse3DView(QWidget):
 
     def set_data(self, boxes: list, colors: dict | None = None, highlighted=None, dimmed=None,
                  info: dict | None = None, names: dict | None = None) -> None:
-        """info: متنِ کاملِ هر محل برایِ نمایش با ماوس؛ names: برچسبِ کوتاهِ رویِ منطقه/راهرو/قفسه."""
+        """info: متن کامل هر محل برای نمایش با ماوس؛ names: برچسب کوتاه روی منطقه/راهرو/قفسه."""
         self.boxes = boxes
         self.colors = colors or {}
         self.info = info or {}
@@ -164,7 +164,7 @@ class Warehouse3DView(QWidget):
                     self._draw_label(b, project)
 
     def _draw_label(self, b, project) -> None:
-        """برچسبِ خوانا با اندازهٔ ثابت (مستقل از زوم) و پس‌زمینه، رویِ مرکزِ سقفِ محل."""
+        """برچسب خوانا با اندازهٔ ثابت (مستقل از زوم) و پس‌زمینه، روی مرکز سقف محل."""
         center, _ = project(b.x + b.w / 2, b.y + b.d / 2, b.z + b.h)
         text = QGraphicsSimpleTextItem(self.names.get(b.location_id) or b.code.split("-")[-1])
         font = QFont(text.font())

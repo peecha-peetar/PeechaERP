@@ -1,11 +1,11 @@
-"""رمزنگاریِ اطلاعاتِ حساسِ اتصال به فروشگاهِ اینترنتی (کلیدِ API ووکامرس،
-کلیدِ Webserviceِ پرستاشاپ) پیش از ذخیره در ستونِ
+"""رمزنگاری اطلاعات حساس اتصال به فروشگاه اینترنتی (کلید API ووکامرس،
+کلید Webservice پرستاشاپ) پیش از ذخیره در ستون
 comm.marketplace_connections.credentials_encrypted.
 
-کلید یک‌بار تولید و در فایلِ محلیِ ~/.peecha/ecommerce.key نگه‌داری
-می‌شود (هم‌الگو با فایلِ تنظیماتِ اتصالِ دیتابیس در config.py) — یا اگر
-متغیرِ محیطیِ PEECHA_ECOMMERCE_KEY صریحاً تنظیم شده باشد، همان اولویت
-دارد (برایِ استقرارهایِ چندسیستمی که کلید باید مشترک باشد)."""
+کلید یک‌بار تولید و در فایل محلی ~/.peecha/ecommerce.key نگه‌داری
+می‌شود (هم‌الگو با فایل تنظیمات اتصال دیتابیس در config.py) — یا اگر
+متغیر محیطی PEECHA_ECOMMERCE_KEY صریحاً تنظیم شده باشد، همان اولویت
+دارد (برای استقرارهای چندسیستمی که کلید باید مشترک باشد)."""
 
 from __future__ import annotations
 
@@ -47,4 +47,4 @@ def decrypt_credentials(blob: bytes | None) -> dict:
     try:
         return json.loads(fernet.decrypt(bytes(blob)).decode("utf-8"))
     except InvalidToken as exc:
-        raise ValueError("اطلاعاتِ اتصالِ رمزنگاری‌شده قابلِ‌بازخوانی نیست -- کلیدِ رمزنگاری تغییر کرده است.") from exc
+        raise ValueError("اطلاعات اتصال رمزنگاری‌شده قابل‌بازخوانی نیست — کلید رمزنگاری تغییر کرده است.") from exc

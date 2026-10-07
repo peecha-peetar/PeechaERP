@@ -1,5 +1,5 @@
-"""فروشِ اینترنتی و Omnichannel (مرحلهٔ ۸) — اتصالات، نگاشتِ کالا/مشتری،
-گزارشِ همگام‌سازی، و مسیریابیِ توزیع‌شدهٔ سفارش (DOM)."""
+"""فروش اینترنتی و Omnichannel (مرحلهٔ ۸) — اتصالات، نگاشت کالا/مشتری،
+گزارش همگام‌سازی، و مسیریابی توزیع‌شدهٔ سفارش (DOM)."""
 
 from __future__ import annotations
 
@@ -36,8 +36,8 @@ from peecha.db.models.commercial import FulfillmentRoutingRule
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable
 
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
-_SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
-_STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیقِ منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبارِ ثابت"}
+_SYNC_STATUS_LABELS = {"IMPORTED": "واردشده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
+_STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیق منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبار ثابت"}
 _PRICING_SCOPE_LABELS = {"BRAND": "برند", "CATEGORY": "دسته"}
 _PRICING_MARKUP_LABELS = {"PERCENT": "درصد", "AMOUNT": "مبلغ"}
 _RECONCILIATION_STATUS_LABELS = {"MATCHED": "نگاشته‌شده", "STORE_ONLY": "فقط در فروشگاه", "ERP_ONLY": "فقط در ERP"}
@@ -54,54 +54,54 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("فروشِ اینترنتی و Omnichannel")
+        title = QLabel("فروش اینترنتی و Omnichannel")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         tabs = QTabWidget()
         tabs.addTab(self._build_connections_tab(), "اتصالات و نگاشت‌ها")
-        tabs.addTab(self._build_routing_tab(), "مسیریابیِ سفارش")
-        tabs.addTab(self._build_pricing_tab(), "استودیویِ قیمت")
-        tabs.addTab(self._build_bulk_assign_tab(), "تخصیصِ گروهیِ دسته/برند")
-        tabs.addTab(self._build_gallery_tab(), "گالریِ تصاویرِ فروشگاه")
-        tabs.addTab(self._build_reconciliation_tab(), "تطبیقِ کاتالوگ")
-        tabs.addTab(self._build_torob_tab(), "فیدِ ترب")
+        tabs.addTab(self._build_routing_tab(), "مسیریابی سفارش")
+        tabs.addTab(self._build_pricing_tab(), "استودیوی قیمت")
+        tabs.addTab(self._build_bulk_assign_tab(), "تخصیص گروهی دسته/برند")
+        tabs.addTab(self._build_gallery_tab(), "گالری تصاویر فروشگاه")
+        tabs.addTab(self._build_reconciliation_tab(), "تطبیق کاتالوگ")
+        tabs.addTab(self._build_torob_tab(), "فید ترب")
         outer.addWidget(tabs, stretch=1)
 
         self.set_field_help([
-            (self.platform_combo, "پلتفرمِ فروشگاهِ اینترنتی‌ای که می‌خواهید وصل کنید."),
-            (self.store_url_field, "آدرسِ اینترنتیِ فروشگاه."),
-            (self.channel_combo, "کانالِ فروشِ داخلی که سفارش‌ها/فروش‌هایِ این اتصال به آن نسبت داده می‌شوند."),
-            (self.warehouse_combo, "انباری که موجودیِ این فروشگاه از آن محاسبه/کسر می‌شود."),
-            (self.wc_key_field, "Consumer Key حاصل از تنظیماتِ REST APIِ ووکامرس."),
-            (self.wc_secret_field, "Consumer Secret حاصل از تنظیماتِ REST APIِ ووکامرس -- رمزنگاری‌شده ذخیره می‌شود."),
-            (self.wp_username_field, "نامِ‌کاربریِ وردپرس -- فقط برایِ آپلودِ خودکارِ تصویرِ کالا لازم است."),
-            (self.wp_app_password_field, "Application Passwordِ وردپرس (نه رمزِ اصلیِ ورود) -- برایِ آپلودِ تصویر."),
-            (self.presta_api_key_field, "Webservice Key حاصل از تنظیماتِ وب‌سرویسِ پرستاشاپ."),
-            (self.auto_sync_checkbox, "این اتصال بدونِ فشردنِ دکمه، به‌طورِ خودکار و دوره‌ای سینک شود."),
-            (self.auto_sync_interval_field, "هر چند دقیقه یک‌بار سینکِ خودکار انجام شود."),
-            (self.sku_field, "کدِ محصول (SKU) در سمتِ فروشگاه."),
-            (self.map_item_combo, "کالایِ داخلیِ ERP که این SKU باید به آن نگاشته شود."),
-            (self.external_customer_field, "شناسهٔ مشتری در سمتِ فروشگاه."),
-            (self.map_customer_combo, "مشتریِ داخلیِ ERP که این شناسهٔ خارجی باید به آن نگاشته شود."),
-            (self.routing_channel_combo, "این قاعده فقط برایِ سفارش‌هایِ همین کانال اعمال شود -- خالی یعنی همه‌یِ کانال‌ها."),
-            (self.routing_strategy_combo, "روشِ انتخابِ انبارِ تحویل‌دهنده برایِ سفارش‌هایِ منطبق با این قاعده."),
-            (self.routing_fallback_combo, "انباری که وقتی استراتژیِ بالا نتواند انبارِ بهتری پیدا کند، استفاده می‌شود."),
-            (self.routing_priority_field, "اولویتِ اجرایِ این قاعده در برابرِ قاعده‌هایِ دیگر -- عددِ کوچک‌تر زودتر بررسی می‌شود."),
-            (self.pricing_connection_combo, "اتصالی که این قاعده‌هایِ قیمت برایش اعمال می‌شوند."),
-            (self.pricing_scope_type_combo, "قاعده رویِ یک برند اعمال شود یا یک دسته -- اگر هردو برایِ یک کالا صدق کند، برند اولویت دارد."),
-            (self.pricing_scope_combo, "برند یا دستهٔ موردِنظرِ این قاعده."),
-            (self.pricing_markup_type_combo, "افزایشِ قیمت به‌صورتِ درصد باشد یا مبلغِ ثابت."),
-            (self.pricing_markup_value_field, "مقدارِ افزایش -- طبقِ نوعِ انتخاب‌شده، درصد یا مبلغ."),
-            (self.bulk_search_field, "جست‌وجو در کد یا نامِ کالا برایِ فیلترکردنِ فهرستِ زیر."),
-            (self.bulk_set_brand_checkbox, "با اعمال، برندِ کالاهایِ تیک‌خورده به مقدارِ کنارش تغییر می‌کند."),
-            (self.bulk_brand_combo, "برندی که به کالاهایِ انتخاب‌شده اختصاص می‌یابد."),
-            (self.bulk_set_category_checkbox, "با اعمال، دستهٔ کالاهایِ تیک‌خورده به مقدارِ کنارش تغییر می‌کند."),
-            (self.bulk_category_combo, "دسته‌ای که به کالاهایِ انتخاب‌شده اختصاص می‌یابد."),
-            (self.gallery_connection_combo, "اتصالی که می‌خواهید تصاویرِ محصولاتش را ببینید."),
+            (self.platform_combo, "پلتفرم فروشگاه اینترنتی‌ای که می‌خواهید وصل کنید."),
+            (self.store_url_field, "آدرس اینترنتی فروشگاه."),
+            (self.channel_combo, "کانال فروش داخلی که سفارش‌ها/فروش‌های این اتصال به آن نسبت داده می‌شوند."),
+            (self.warehouse_combo, "انباری که موجودی این فروشگاه از آن محاسبه/کسر می‌شود."),
+            (self.wc_key_field, "Consumer Key حاصل از تنظیمات REST API ووکامرس."),
+            (self.wc_secret_field, "Consumer Secret حاصل از تنظیمات REST API ووکامرس — رمزنگاری‌شده ذخیره می‌شود."),
+            (self.wp_username_field, "نام‌کاربری وردپرس — فقط برای بارگذاری خودکار تصویر کالا لازم است."),
+            (self.wp_app_password_field, "Application Password وردپرس (نه رمز اصلی ورود) — برای بارگذاری تصویر."),
+            (self.presta_api_key_field, "Webservice Key حاصل از تنظیمات وب‌سرویس پرستاشاپ."),
+            (self.auto_sync_checkbox, "این اتصال بدون فشردن دکمه، به‌طور خودکار و دوره‌ای همگام‌سازی شود."),
+            (self.auto_sync_interval_field, "هر چند دقیقه یک‌بار همگام‌سازی خودکار انجام شود."),
+            (self.sku_field, "کد محصول (SKU) در سمت فروشگاه."),
+            (self.map_item_combo, "کالای داخلی ERP که این کد کالا باید به آن نگاشته شود."),
+            (self.external_customer_field, "شناسهٔ مشتری در سمت فروشگاه."),
+            (self.map_customer_combo, "مشتری داخلی ERP که این شناسهٔ خارجی باید به آن نگاشته شود."),
+            (self.routing_channel_combo, "این قاعده فقط برای سفارش‌های همین کانال اعمال شود — خالی یعنی همهٔ کانال‌ها."),
+            (self.routing_strategy_combo, "روش انتخاب انبار تحویل‌دهنده برای سفارش‌های منطبق با این قاعده."),
+            (self.routing_fallback_combo, "انباری که وقتی استراتژی بالا نتواند انبار بهتری پیدا کند، استفاده می‌شود."),
+            (self.routing_priority_field, "اولویت اجرای این قاعده در برابر قاعده‌های دیگر — عدد کوچک‌تر زودتر بررسی می‌شود."),
+            (self.pricing_connection_combo, "اتصالی که این قاعده‌های قیمت برایش اعمال می‌شوند."),
+            (self.pricing_scope_type_combo, "قاعده روی یک برند اعمال شود یا یک دسته — اگر هردو برای یک کالا صدق کند، برند اولویت دارد."),
+            (self.pricing_scope_combo, "برند یا دستهٔ مورد نظر این قاعده."),
+            (self.pricing_markup_type_combo, "افزایش قیمت به‌صورت درصد باشد یا مبلغ ثابت."),
+            (self.pricing_markup_value_field, "مقدار افزایش — طبق نوع انتخاب‌شده، درصد یا مبلغ."),
+            (self.bulk_search_field, "جست‌وجو در کد یا نام کالا برای فیلترکردن فهرست زیر."),
+            (self.bulk_set_brand_checkbox, "با اعمال، برند کالاهای تیک‌خورده به مقدار کنارش تغییر می‌کند."),
+            (self.bulk_brand_combo, "برندی که به کالاهای انتخاب‌شده اختصاص می‌یابد."),
+            (self.bulk_set_category_checkbox, "با اعمال، دستهٔ کالاهای تیک‌خورده به مقدار کنارش تغییر می‌کند."),
+            (self.bulk_category_combo, "دسته‌ای که به کالاهای انتخاب‌شده اختصاص می‌یابد."),
+            (self.gallery_connection_combo, "اتصالی که می‌خواهید تصاویر محصولاتش را ببینید."),
             (self.gallery_sku_combo, "محصولی که تصاویرش نمایش داده شود."),
             (self.reconciliation_connection_combo, "اتصالی که کاتالوگش با ERP تطبیق داده می‌شود."),
-            (self.torob_connection_combo, "اتصالِ نوعِ «ترب» که فایلِ فیدش تولید می‌شود."),
+            (self.torob_connection_combo, "اتصال نوع «ترب» که فایل فیدش تولید می‌شود."),
         ])
 
     def _company_id(self) -> int | None:
@@ -114,7 +114,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         left = QVBoxLayout()
         self.connections_table = QTableWidget(0, 3)
-        self.connections_table.setHorizontalHeaderLabels(["پلتفرم", "آدرسِ فروشگاه", "وضعیت"])
+        self.connections_table.setHorizontalHeaderLabels(["پلتفرم", "آدرس فروشگاه", "وضعیت"])
         self.connections_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.connections_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.connections_table.verticalHeader().setVisible(False)
@@ -126,13 +126,13 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in _PLATFORM_LABELS.items():
             self.platform_combo.addItem(label, code)
         self.store_url_field = QLineEdit()
-        self.store_url_field.setPlaceholderText("آدرسِ فروشگاه (URL)")
+        self.store_url_field.setPlaceholderText("آدرس فروشگاه (URL)")
         self.channel_combo = QComboBox()
         self.warehouse_combo = QComboBox()
         self.conn_form_grid = FieldGrid([
             FieldSpec("platform", "پلتفرم", self.platform_combo, span=1),
-            FieldSpec("store_url", "آدرسِ فروشگاه (URL)", self.store_url_field, span=3),
-            FieldSpec("channel", "کانالِ فروش", self.channel_combo, span=1),
+            FieldSpec("store_url", "آدرس فروشگاه (URL)", self.store_url_field, span=3),
+            FieldSpec("channel", "کانال فروش", self.channel_combo, span=1),
             FieldSpec("warehouse", "انبار", self.warehouse_combo, span=2),
         ])
         self.register_field_grids("commercial_ecommerce_connections", [self.conn_form_grid])
@@ -141,13 +141,13 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_conn_button = QPushButton("🔗")
         add_conn_button.setObjectName("primaryIconButton")
         add_conn_button.setFixedWidth(48)
-        add_conn_button.setToolTip("اتصالِ تازه")
+        add_conn_button.setToolTip("اتصال تازه")
         add_conn_button.clicked.connect(self._add_connection)
         conn_form.addWidget(add_conn_button)
         disconnect_button = QPushButton("🔌")
         disconnect_button.setObjectName("dangerIconButton")
         disconnect_button.setFixedWidth(44)
-        disconnect_button.setToolTip("قطعِ اتصالِ انتخاب‌شده")
+        disconnect_button.setToolTip("قطع اتصال انتخاب‌شده")
         disconnect_button.clicked.connect(self._disconnect)
         conn_form.addWidget(disconnect_button)
         # طبقِ ادامه‌یِ اولویت‌بندی («بررسیِ سلامتِ سایت»): wc_client/
@@ -157,7 +157,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         test_connection_button = QPushButton("🔎")
         test_connection_button.setObjectName("iconButton")
         test_connection_button.setFixedWidth(44)
-        test_connection_button.setToolTip("آزمایشِ اتصالِ انتخاب‌شده")
+        test_connection_button.setToolTip("آزمایش اتصال انتخاب‌شده")
         test_connection_button.clicked.connect(self._test_connection)
         conn_form.addWidget(test_connection_button)
         left.addLayout(conn_form)
@@ -169,7 +169,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.wc_creds_group = QWidget()
         wc_creds_group_layout = QVBoxLayout(self.wc_creds_group)
         wc_creds_group_layout.setContentsMargins(0, 0, 0, 0)
-        wc_creds_group_layout.addWidget(QLabel("کلیدِ APIِ فروشگاه (برایِ اتصالِ انتخاب‌شده)"))
+        wc_creds_group_layout.addWidget(QLabel("کلید API فروشگاه (برای اتصال انتخاب‌شده)"))
         creds_form = QHBoxLayout()
         self.wc_key_field = QLineEdit()
         self.wc_key_field.setPlaceholderText("Consumer Key")
@@ -181,7 +181,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         save_creds_button = QPushButton("🔑")
         save_creds_button.setObjectName("iconButton")
         save_creds_button.setFixedWidth(44)
-        save_creds_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
+        save_creds_button.setToolTip("ذخیرهٔ کلید API (رمزنگاری‌شده)")
         save_creds_button.clicked.connect(self._save_credentials)
         creds_form.addWidget(save_creds_button)
         wc_creds_group_layout.addLayout(creds_form)
@@ -191,10 +191,10 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # دارد (نه کلیدِ APIِ ووکامرس) -- گذرواژهٔ‌برنامه‌ای، نه رمزِ اصلیِ
         # کاربر. اختیاری است؛ بدونش سینکِ کاتالوگ/سفارش/مشتری عادی کار می‌کند،
         # فقط تصویر منتقل نمی‌شود.
-        wc_creds_group_layout.addWidget(QLabel("نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس (اختیاری -- فقط برایِ آپلودِ تصویرِ کالا)"))
+        wc_creds_group_layout.addWidget(QLabel("نام‌کاربری/گذرواژهٔ‌برنامه‌ای وردپرس (اختیاری — فقط برای بارگذاری تصویر کالا)"))
         wp_creds_form = QHBoxLayout()
         self.wp_username_field = QLineEdit()
-        self.wp_username_field.setPlaceholderText("نامِ‌کاربریِ وردپرس")
+        self.wp_username_field.setPlaceholderText("نام‌کاربری وردپرس")
         wp_creds_form.addWidget(self.wp_username_field)
         self.wp_app_password_field = QLineEdit()
         self.wp_app_password_field.setPlaceholderText("Application Password")
@@ -203,7 +203,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         save_wp_creds_button = QPushButton("🖼️")
         save_wp_creds_button.setObjectName("iconButton")
         save_wp_creds_button.setFixedWidth(44)
-        save_wp_creds_button.setToolTip("ذخیرهٔ اطلاعاتِ وردپرس (رمزنگاری‌شده)")
+        save_wp_creds_button.setToolTip("ذخیرهٔ اطلاعات وردپرس (رمزنگاری‌شده)")
         save_wp_creds_button.clicked.connect(self._save_wp_credentials)
         wp_creds_form.addWidget(save_wp_creds_button)
         wc_creds_group_layout.addLayout(wp_creds_form)
@@ -216,7 +216,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.presta_creds_group = QWidget()
         presta_creds_group_layout = QVBoxLayout(self.presta_creds_group)
         presta_creds_group_layout.setContentsMargins(0, 0, 0, 0)
-        presta_creds_group_layout.addWidget(QLabel("کلیدِ APIِ پرستاشاپ (برایِ اتصالِ انتخاب‌شده)"))
+        presta_creds_group_layout.addWidget(QLabel("کلید API پرستاشاپ (برای اتصال انتخاب‌شده)"))
         presta_creds_form = QHBoxLayout()
         self.presta_api_key_field = QLineEdit()
         self.presta_api_key_field.setPlaceholderText("Webservice Key")
@@ -225,15 +225,15 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         save_presta_creds_button = QPushButton("🔑")
         save_presta_creds_button.setObjectName("iconButton")
         save_presta_creds_button.setFixedWidth(44)
-        save_presta_creds_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
+        save_presta_creds_button.setToolTip("ذخیرهٔ کلید API (رمزنگاری‌شده)")
         save_presta_creds_button.clicked.connect(self._save_presta_credentials)
         presta_creds_form.addWidget(save_presta_creds_button)
         presta_creds_group_layout.addLayout(presta_creds_form)
         left.addWidget(self.presta_creds_group)
 
-        sync_now_button = QPushButton("🔄  سینکِ الان (کاتالوگ + مشتریان + سفارش‌هایِ تازه)")
+        sync_now_button = QPushButton("🔄  همگام‌سازی الان (کاتالوگ + مشتریان + سفارش‌های تازه)")
         sync_now_button.setObjectName("primaryIconButton")
-        sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌هایِ تازه را می‌خواند")
+        sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌های تازه را می‌خواند")
         sync_now_button.clicked.connect(self._sync_now)
         left.addWidget(sync_now_button)
 
@@ -241,7 +241,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # عمداً فقط دستی بود -- این‌جا هر اتصال می‌تواند مستقل تصمیم بگیرد
         # که هر چند دقیقه یک‌بار (بدونِ فشردنِ دکمه) خودکار سینک شود.
         auto_sync_form = QHBoxLayout()
-        self.auto_sync_checkbox = QCheckBox("همگام‌سازیِ خودکار (هر)")
+        self.auto_sync_checkbox = QCheckBox("همگام‌سازی خودکار (هر)")
         auto_sync_form.addWidget(self.auto_sync_checkbox)
         self.auto_sync_interval_field = QSpinBox()
         self.auto_sync_interval_field.setRange(1, 1440)
@@ -251,16 +251,16 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         save_auto_sync_button = QPushButton("⏱️")
         save_auto_sync_button.setObjectName("iconButton")
         save_auto_sync_button.setFixedWidth(44)
-        save_auto_sync_button.setToolTip("ذخیرهٔ تنظیماتِ سینکِ خودکار")
+        save_auto_sync_button.setToolTip("ذخیرهٔ تنظیمات همگام‌سازی خودکار")
         save_auto_sync_button.clicked.connect(self._save_auto_sync)
         auto_sync_form.addWidget(save_auto_sync_button)
         left.addLayout(auto_sync_form)
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("نگاشتِ کالا (SKUِ خارجی ↔ کالایِ داخلی)"))
+        right.addWidget(QLabel("نگاشت کالا (SKU خارجی ↔ کالای داخلی)"))
         self.item_mappings_table = QTableWidget(0, 2)
-        self.item_mappings_table.setHorizontalHeaderLabels(["SKUِ خارجی", "کالایِ داخلی"])
+        self.item_mappings_table.setHorizontalHeaderLabels(["کد کالا خارجی", "کالای داخلی"])
         self.item_mappings_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.item_mappings_table.verticalHeader().setVisible(False)
         self.item_mappings_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -268,7 +268,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         right.addWidget(self.item_mappings_table)
         item_map_form = QHBoxLayout()
         self.sku_field = QLineEdit()
-        self.sku_field.setPlaceholderText("SKUِ خارجی")
+        self.sku_field.setPlaceholderText("کد کالا خارجی")
         item_map_form.addWidget(self.sku_field)
         self.map_item_combo = QComboBox()
         item_map_form.addWidget(self.map_item_combo, stretch=1)
@@ -280,9 +280,9 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         item_map_form.addWidget(add_item_map_button)
         right.addLayout(item_map_form)
 
-        right.addWidget(QLabel("نگاشتِ مشتری (شناسهٔ خارجی ↔ مشتریِ داخلی)"))
+        right.addWidget(QLabel("نگاشت مشتری (شناسهٔ خارجی ↔ مشتری داخلی)"))
         self.customer_mappings_table = QTableWidget(0, 2)
-        self.customer_mappings_table.setHorizontalHeaderLabels(["شناسهٔ خارجی", "مشتریِ داخلی"])
+        self.customer_mappings_table.setHorizontalHeaderLabels(["شناسهٔ خارجی", "مشتری داخلی"])
         self.customer_mappings_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.customer_mappings_table.verticalHeader().setVisible(False)
         self.customer_mappings_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -290,7 +290,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         right.addWidget(self.customer_mappings_table)
         customer_map_form = QHBoxLayout()
         self.external_customer_field = QLineEdit()
-        self.external_customer_field.setPlaceholderText("شناسهٔ خارجیِ مشتری")
+        self.external_customer_field.setPlaceholderText("شناسهٔ خارجی مشتری")
         customer_map_form.addWidget(self.external_customer_field)
         self.map_customer_combo = QComboBox()
         customer_map_form.addWidget(self.map_customer_combo, stretch=1)
@@ -302,9 +302,9 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         customer_map_form.addWidget(add_customer_map_button)
         right.addLayout(customer_map_form)
 
-        right.addWidget(QLabel("گزارشِ همگام‌سازیِ سفارش‌ها"))
+        right.addWidget(QLabel("گزارش همگام‌سازی سفارش‌ها"))
         self.sync_log_table = QTableWidget(0, 3)
-        self.sync_log_table.setHorizontalHeaderLabels(["شمارهٔ سفارشِ خارجی", "وضعیت", "پیامِ خطا"])
+        self.sync_log_table.setHorizontalHeaderLabels(["شمارهٔ سفارش خارجی", "وضعیت", "پیام خطا"])
         self.sync_log_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.sync_log_table.verticalHeader().setVisible(False)
         self.sync_log_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -414,7 +414,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         store_url = self.store_url_field.text().strip()
         channel_code = self.channel_combo.currentData()
         if company_id is None or not store_url or channel_code is None:
-            self.status_label.setText("آدرسِ فروشگاه و کانال را وارد کنید.")
+            self.status_label.setText("آدرس فروشگاه و کانال را وارد کنید.")
             return
         try:
             ecommerce_service.create_connection(company_id, self.platform_combo.currentData(), store_url, channel_code, warehouse_id=self.warehouse_combo.currentData())
@@ -456,7 +456,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         )
         self.wc_key_field.clear()
         self.wc_secret_field.clear()
-        theme.set_status_label(self.status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "کلید API رمزنگاری و ذخیره شد.", ok=True)
 
     def _save_wp_credentials(self) -> None:
         if self._selected_connection_id is None:
@@ -465,14 +465,14 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         username = self.wp_username_field.text().strip()
         app_password = self.wp_app_password_field.text().strip()
         if not username or not app_password:
-            self.status_label.setText("نامِ‌کاربری و Application Passwordِ وردپرس را وارد کنید.")
+            self.status_label.setText("نام‌کاربری و Application Password وردپرس را وارد کنید.")
             return
         ecommerce_service.set_connection_credentials(
             self._selected_connection_id, {"wp_username": username, "wp_app_password": app_password},
         )
         self.wp_username_field.clear()
         self.wp_app_password_field.clear()
-        theme.set_status_label(self.status_label, "اطلاعاتِ وردپرس رمزنگاری و ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "اطلاعات وردپرس رمزنگاری و ذخیره شد.", ok=True)
 
     def _save_presta_credentials(self) -> None:
         if self._selected_connection_id is None:
@@ -480,11 +480,11 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         api_key = self.presta_api_key_field.text().strip()
         if not api_key:
-            self.status_label.setText("کلیدِ APIِ پرستاشاپ را وارد کنید.")
+            self.status_label.setText("کلید API پرستاشاپ را وارد کنید.")
             return
         ecommerce_service.set_connection_credentials(self._selected_connection_id, {"api_key": api_key})
         self.presta_api_key_field.clear()
-        theme.set_status_label(self.status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "کلید API رمزنگاری و ذخیره شد.", ok=True)
 
     def _save_auto_sync(self) -> None:
         if self._selected_connection_id is None:
@@ -497,7 +497,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
-        theme.set_status_label(self.status_label, "تنظیماتِ سینکِ خودکار ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "تنظیمات همگام‌سازی خودکار ذخیره شد.", ok=True)
         self.refresh()
 
     def _sync_now(self) -> None:
@@ -517,7 +517,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         parts = [
             f"کاتالوگ: {result.catalog.pushed} ارسال‌شد، {result.catalog.skipped} ردشد، {result.catalog.failed} ناموفق",
             f"مشتریان: {result.customers.created} تازه، {result.customers.already_mapped} از قبل، {result.customers.failed} ناموفق",
-            f"سفارش‌ها: {result.orders.imported} ایمپورت‌شد، {result.orders.duplicate} تکراری، {result.orders.failed} ناموفق",
+            f"سفارش‌ها: {result.orders.imported} وارد شد، {result.orders.duplicate} تکراری، {result.orders.failed} ناموفق",
         ]
         all_errors = result.catalog.errors + result.customers.errors + result.orders.errors
         if all_errors:
@@ -533,7 +533,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         sku = self.sku_field.text().strip()
         item_id = self.map_item_combo.currentData()
         if not sku or item_id is None:
-            self.status_label.setText("SKU و کالا را وارد کنید.")
+            self.status_label.setText("کد کالا و کالا را وارد کنید.")
             return
         ecommerce_service.map_item(self._selected_connection_id, sku, item_id)
         self.sku_field.clear()
@@ -558,10 +558,10 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_routing_tab(self) -> QWidget:
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.addWidget(QLabel("هنگامِ ایمپورتِ سفارش، اولین قاعدهٔ منطبق (به‌ترتیبِ اولویت) اجرا می‌شود."))
+        outer.addWidget(QLabel("هنگام ورود سفارش، اولین قاعدهٔ منطبق (به‌ترتیب اولویت) اجرا می‌شود."))
 
         self.routing_table = QTableWidget(0, 4)
-        self.routing_table.setHorizontalHeaderLabels(["کانال", "استراتژی", "انبارِ پیش‌فرض", "اولویت"])
+        self.routing_table.setHorizontalHeaderLabels(["کانال", "استراتژی", "انبار پیش‌فرض", "اولویت"])
         self.routing_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.routing_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.routing_table.verticalHeader().setVisible(False)
@@ -587,7 +587,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_rule_button.clicked.connect(self._add_routing_rule)
         form.addWidget(add_rule_button)
         # R276: حذفِ قاعدهٔ انتخاب‌شده
-        delete_rule_button = delete_button("حذفِ قاعدهٔ انتخاب‌شده")
+        delete_rule_button = delete_button("حذف قاعدهٔ انتخاب‌شده")
         delete_rule_button.clicked.connect(self._delete_routing_rule)
         form.addWidget(delete_rule_button)
         outer.addLayout(form)
@@ -625,7 +625,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         fallback_warehouse_id = self.routing_fallback_combo.currentData()
         if company_id is None or fallback_warehouse_id is None:
-            self.routing_status_label.setText("انبارِ پیش‌فرض را انتخاب کنید.")
+            self.routing_status_label.setText("انبار پیش‌فرض را انتخاب کنید.")
             return
         try:
             ecommerce_service.create_routing_rule(
@@ -640,12 +640,12 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- استودیویِ قیمت (Price List Studio) -------------------------------
     def _build_pricing_tab(self) -> QWidget:
-        """طبقِ درخواستِ صریح (پورتِ «Price List Studio»ِ PeechaSync): تعریفِ
-        درصد/مبلغِ افزوده به‌ازایِ دسته یا برندِ *فروشگاه* -- بدونِ نیاز به
-        دستکاریِ تک‌تکِ ردیف‌هایِ فهرستِ قیمت. اولویت: برند > دسته."""
+        """طبق درخواست صریح (پورت «Price List Studio» PeechaSync): تعریف
+        درصد/مبلغ افزوده به‌ازای دسته یا برند *فروشگاه* -- بدون نیاز به
+        دستکاری تک‌تک ردیف‌های فهرست قیمت. اولویت: برند > دسته."""
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.addWidget(QLabel("قاعده‌ای برایِ یک اتصال تعریف کنید تا موقعِ سینکِ کاتالوگ، قیمتِ کالاهایِ آن دسته/برند خودکار افزایش یابد (اولویت: برند > دسته)."))
+        outer.addWidget(QLabel("قاعده‌ای برای یک اتصال تعریف کنید تا موقع همگام‌سازی کاتالوگ، قیمت کالاهای آن دسته/برند خودکار افزایش یابد (اولویت: برند > دسته)."))
 
         self.pricing_connection_combo = QComboBox()
         self.pricing_connection_combo.currentIndexChanged.connect(lambda _index: self._refresh_pricing_rules())
@@ -757,28 +757,28 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- تخصیصِ گروهیِ دسته/برند (Category & Brand Studio) ------------------
     def _build_bulk_assign_tab(self) -> QWidget:
-        """طبقِ درخواستِ صریح (پورتِ «Category & Brand Studio»ِ PeechaSync):
-        به‌جایِ بازکردنِ تک‌تکِ فرمِ کالا، چند کالا را انتخاب و دسته/برندشان
-        را یک‌جا تنظیم کنید -- مثلاً پیش از تعریفِ قاعده‌یِ استودیویِ قیمت."""
+        """طبق درخواست صریح (پورت «Category & Brand Studio» PeechaSync):
+        به‌جای بازکردن تک‌تک فرم کالا، چند کالا را انتخاب و دسته/برندشان
+        را یک‌جا تنظیم کنید — مثلاً پیش از تعریف قاعدهٔ استودیوی قیمت."""
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.addWidget(QLabel("کالاها را از فهرست انتخاب کنید، سپس برند و/یا دسته‌یِ موردِنظر را تنظیم و اعمال کنید."))
+        outer.addWidget(QLabel("کالاها را از فهرست انتخاب کنید، سپس برند و/یا دستهٔ مورد نظر را تنظیم و اعمال کنید."))
 
         self.bulk_search_field = QLineEdit()
-        self.bulk_search_field.setPlaceholderText("جست‌وجو بر اساسِ کد یا نامِ کالا")
+        self.bulk_search_field.setPlaceholderText("جست‌وجو بر اساس کد یا نام کالا")
         self.bulk_search_field.textChanged.connect(lambda _text: self._refresh_bulk_assign_table())
         outer.addWidget(self.bulk_search_field)
 
         self.bulk_items_table = QTableWidget(0, 4)
-        self.bulk_items_table.setHorizontalHeaderLabels(["انتخاب", "کد", "نام", "برند / دسته‌یِ فعلی"])
+        self.bulk_items_table.setHorizontalHeaderLabels(["انتخاب", "کد", "نام", "برند / دستهٔ فعلی"])
         self.bulk_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.bulk_items_table.verticalHeader().setVisible(False)
         self.bulk_items_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         outer.addWidget(self.bulk_items_table, stretch=1)
 
-        select_all_button = QPushButton("انتخابِ همه‌یِ نمایش‌داده‌شده")
+        select_all_button = QPushButton("انتخاب همهٔ نمایش‌داده‌شده")
         select_all_button.clicked.connect(lambda: self._set_all_bulk_rows_checked(True))
-        clear_selection_button = QPushButton("پاک‌کردنِ انتخاب")
+        clear_selection_button = QPushButton("پاک‌کردن انتخاب")
         clear_selection_button.clicked.connect(lambda: self._set_all_bulk_rows_checked(False))
         select_row = QHBoxLayout()
         select_row.addWidget(select_all_button)
@@ -786,18 +786,18 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addLayout(select_row)
 
         form = QHBoxLayout()
-        self.bulk_set_brand_checkbox = QCheckBox("تنظیمِ برند به:")
+        self.bulk_set_brand_checkbox = QCheckBox("تنظیم برند به:")
         form.addWidget(self.bulk_set_brand_checkbox)
         self.bulk_brand_combo = QComboBox()
         form.addWidget(self.bulk_brand_combo, stretch=1)
-        self.bulk_set_category_checkbox = QCheckBox("تنظیمِ دسته به:")
+        self.bulk_set_category_checkbox = QCheckBox("تنظیم دسته به:")
         form.addWidget(self.bulk_set_category_checkbox)
         self.bulk_category_combo = QComboBox()
         form.addWidget(self.bulk_category_combo, stretch=1)
         apply_bulk_button = QPushButton("✅")
         apply_bulk_button.setObjectName("primaryIconButton")
         apply_bulk_button.setFixedWidth(48)
-        apply_bulk_button.setToolTip("اعمال رویِ کالاهایِ انتخاب‌شده")
+        apply_bulk_button.setToolTip("اعمال روی کالاهای انتخاب‌شده")
         apply_bulk_button.clicked.connect(self._apply_bulk_assign)
         form.addWidget(apply_bulk_button)
         outer.addLayout(form)
@@ -834,7 +834,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.bulk_items_table.setItem(row_index, 2, QTableWidgetItem(it.name or ""))
             brand = brands_by_id.get(it.brand_id)
             category = categories_by_id.get(it.category_id)
-            current = f"{brand.name if brand else '(بدونِ برند)'} / {category.name if category else '(بدونِ دسته)'}"
+            current = f"{brand.name if brand else '(بدون برند)'} / {category.name if category else '(بدون دسته)'}"
             self.bulk_items_table.setItem(row_index, 3, QTableWidgetItem(current))
 
     def _set_all_bulk_rows_checked(self, checked: bool) -> None:
@@ -848,11 +848,11 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if company_id is None:
             return
         self.bulk_brand_combo.clear()
-        self.bulk_brand_combo.addItem("(بدونِ برند)", None)
+        self.bulk_brand_combo.addItem("(بدون برند)", None)
         for b in catalog_service.list_brands(company_id, active_only=True):
             self.bulk_brand_combo.addItem(f"{b.code} — {b.name}", b.brand_id)
         self.bulk_category_combo.clear()
-        self.bulk_category_combo.addItem("(بدونِ دسته)", None)
+        self.bulk_category_combo.addItem("(بدون دسته)", None)
         for c in catalog_service.list_categories(company_id, active_only=True):
             self.bulk_category_combo.addItem(f"{c.code} — {c.name}", c.category_id)
 
@@ -861,7 +861,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         set_brand = self.bulk_set_brand_checkbox.isChecked()
         set_category = self.bulk_set_category_checkbox.isChecked()
         if company_id is None or (not set_brand and not set_category):
-            self.bulk_assign_status_label.setText("حداقل یکی از «تنظیمِ برند»/«تنظیمِ دسته» را فعال کنید.")
+            self.bulk_assign_status_label.setText("حداقل یکی از «تنظیم برند»/«تنظیم دسته» را فعال کنید.")
             return
         item_ids = [
             self.bulk_items_table.item(row, 0).data(Qt.UserRole)
@@ -880,10 +880,10 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- گالریِ تصاویرِ فروشگاه ---------------------------------------------
     def _build_gallery_tab(self) -> QWidget:
-        """طبقِ درخواستِ صریح (پورتِ «مدیرِ تصاویرِ سایت»ِ PeechaSync): سینکِ
-        کاتالوگ فقط وقتی محصول هیچ تصویری ندارد یکی آپلود می‌کند -- این‌جا
-        کاربر می‌تواند بدونِ ورود به پنلِ فروشگاه، تصاویرِ واقعیِ یک
-        محصول را ببیند و یک تصویرِ خاص را حذف کند."""
+        """طبق درخواست صریح (پورت «مدیر تصاویر سایت» PeechaSync): همگام‌سازی
+        کاتالوگ فقط وقتی محصول هیچ تصویری ندارد یکی بارگذاری می‌کند — این‌جا
+        کاربر می‌تواند بدون ورود به پنل فروشگاه، تصاویر واقعی یک
+        محصول را ببیند و یک تصویر خاص را حذف کند."""
         page = QWidget()
         outer = QVBoxLayout(page)
 
@@ -896,7 +896,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         load_gallery_button = QPushButton("🔄")
         load_gallery_button.setObjectName("iconButton")
         load_gallery_button.setFixedWidth(44)
-        load_gallery_button.setToolTip("بارگذاریِ تصاویرِ این محصول از فروشگاه")
+        load_gallery_button.setToolTip("بارگذاری تصاویر این محصول از فروشگاه")
         load_gallery_button.clicked.connect(self._load_product_gallery)
         form.addWidget(load_gallery_button)
         outer.addLayout(form)
@@ -939,7 +939,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         connection_id = self.gallery_connection_combo.currentData()
         external_sku = self.gallery_sku_combo.currentData()
         if connection_id is None or external_sku is None:
-            self.gallery_status_label.setText("ابتدا اتصال و SKU را انتخاب کنید.")
+            self.gallery_status_label.setText("ابتدا اتصال و کد کالا را انتخاب کنید.")
             return
         try:
             images = ecommerce_service.list_product_images(connection_id, external_sku)
@@ -971,24 +971,24 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- تطبیقِ کاتالوگ (Catalog Reconciliation) ----------------------------
     def _build_reconciliation_tab(self) -> QWidget:
-        """طبقِ درخواستِ صریحِ کاربر: کلِ کاتالوگِ فروشگاه در برابرِ کلِ
-        کاتالوگِ ERP -- کالاهایی که فقط در فروشگاه‌اند (با پیشنهادِ خودکار)،
-        کالاهایی که فقط در ERPاند، و کالاهایِ از قبل نگاشته‌شده."""
+        """طبق درخواست صریح کاربر: کل کاتالوگ فروشگاه در برابر کل
+        کاتالوگ ERP — کالاهایی که فقط در فروشگاه‌اند (با پیشنهاد خودکار)،
+        کالاهایی که فقط در ERPاند، و کالاهای از قبل نگاشته‌شده."""
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.addWidget(QLabel("کلِ کاتالوگِ فروشگاه را با کالاهایِ ERP تطبیق می‌دهد -- برایِ نگاشتنِ کالاهایی که فقط در یک طرف دیده می‌شوند."))
+        outer.addWidget(QLabel("کل کاتالوگ فروشگاه را با کالاهای ERP تطبیق می‌دهد — برای نگاشتن کالاهایی که فقط در یک طرف دیده می‌شوند."))
 
         form = QHBoxLayout()
         self.reconciliation_connection_combo = QComboBox()
         form.addWidget(self.reconciliation_connection_combo, stretch=1)
-        load_reconciliation_button = QPushButton("🔄  بارگذاریِ تطبیق")
+        load_reconciliation_button = QPushButton("🔄  بارگذاری تطبیق")
         load_reconciliation_button.setObjectName("primaryIconButton")
         load_reconciliation_button.clicked.connect(self._load_reconciliation)
         form.addWidget(load_reconciliation_button)
         outer.addLayout(form)
 
         self.reconciliation_table = QTableWidget(0, 5)
-        self.reconciliation_table.setHorizontalHeaderLabels(["وضعیت", "SKU/کد", "نام", "کالایِ ERP / SKUِ فروشگاه", ""])
+        self.reconciliation_table.setHorizontalHeaderLabels(["وضعیت", "کد کالا/کد", "نام", "کالای ERP / کد کالا فروشگاه", ""])
         self.reconciliation_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.reconciliation_table.verticalHeader().setVisible(False)
         self.reconciliation_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -1059,7 +1059,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _map_reconciliation_row(self, connection_id: int, external_sku: str, item_id: int | None) -> None:
         if not external_sku or item_id is None:
-            self.reconciliation_status_label.setText("هم SKU و هم کالایِ ERP باید مشخص باشند.")
+            self.reconciliation_status_label.setText("هم کد کالا و هم کالای ERP باید مشخص باشند.")
             return
         ecommerce_service.map_item(connection_id, external_sku, item_id)
         theme.set_status_label(self.reconciliation_status_label, f"«{external_sku}» نگاشته شد.", ok=True)
@@ -1067,21 +1067,21 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- فیدِ ترب -----------------------------------------------------------
     def _build_torob_tab(self) -> QWidget:
-        """طبقِ ادامه‌یِ اولویت‌بندی («مقایسه‌یِ قیمت با ترب»): ترب برخلافِ
-        ووکامرس/پرستاشاپ APIِ Push ندارد -- کاربر فقط یک فایلِ XML طبقِ
-        فرمتِ فیدِ ترب می‌سازد و رویِ سرورِ خودش قرار می‌دهد تا کراولرِ
+        """طبق ادامهٔ اولویت‌بندی («مقایسهٔ قیمت با ترب»): ترب برخلاف
+        ووکامرس/پرستاشاپ API Push ندارد — کاربر فقط یک فایل XML طبق
+        قالب فید ترب می‌سازد و روی سرور خودش قرار می‌دهد تا کراولر
         ترب آن را بخواند."""
         page = QWidget()
         outer = QVBoxLayout(page)
 
-        info_label = QLabel("اتصالی از نوعِ «ترب» با آدرسِ پایه‌یِ صفحاتِ محصول ایجاد کنید، سپس فایلِ XML را تولید و رویِ فروشگاهِ خودتان بارگذاری کنید تا ترب آن را بخواند.")
+        info_label = QLabel("اتصالی از نوع «ترب» با آدرس پایهٔ صفحات محصول ایجاد کنید، سپس فایل XML را تولید و روی فروشگاه خودتان بارگذاری کنید تا ترب آن را بخواند.")
         info_label.setWordWrap(True)
         outer.addWidget(info_label)
 
         form = QHBoxLayout()
         self.torob_connection_combo = QComboBox()
         form.addWidget(self.torob_connection_combo, stretch=1)
-        generate_button = QPushButton("📤 تولید و ذخیره‌یِ فایلِ XML")
+        generate_button = QPushButton("📤 تولید و ذخیرهٔ فایل XML")
         generate_button.setObjectName("primaryIconButton")
         generate_button.clicked.connect(self._generate_torob_feed)
         form.addWidget(generate_button)
@@ -1106,16 +1106,16 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _generate_torob_feed(self) -> None:
         connection_id = self.torob_connection_combo.currentData()
         if connection_id is None:
-            self.torob_status_label.setText("ابتدا یک اتصالِ «ترب» ایجاد کنید (در تبِ «اتصالات و نگاشت‌ها»).")
+            self.torob_status_label.setText("ابتدا یک اتصال «ترب» ایجاد کنید (در تب «اتصالات و نگاشت‌ها»).")
             return
         try:
             feed_xml = ecommerce_service.generate_torob_feed_xml(connection_id)
         except ValueError as exc:
             self.torob_status_label.setText(str(exc))
             return
-        path, _filter = QFileDialog.getSaveFileName(self, "ذخیره‌یِ فایلِ فیدِ ترب", "torob-feed.xml", "XML (*.xml)")
+        path, _filter = QFileDialog.getSaveFileName(self, "ذخیرهٔ فایل فید ترب", "torob-feed.xml", "XML (*.xml)")
         if not path:
             return
         with open(path, "w", encoding="utf-8") as f:
             f.write(feed_xml)
-        theme.set_status_label(self.torob_status_label, f"فایلِ فید در «{path}» ذخیره شد.", ok=True)
+        theme.set_status_label(self.torob_status_label, f"فایل فید در «{path}» ذخیره شد.", ok=True)

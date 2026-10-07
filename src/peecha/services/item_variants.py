@@ -1,12 +1,12 @@
-"""سرویسِ ویژگی/متغیرِ کالا — طبقِ درخواستِ صریح: امکانِ تعریفِ ویژگی
-(سایز، وزن، مدل و ...)، تعریفِ مقادیرِ هر ویژگی، تولیدِ خودکارِ ترکیبِ
-متغیرها برایِ یک کالا، و بارکدِ مجزا برایِ کالایِ اصلی + بارکدِ ترکیبی
-برایِ هر متغیر.
+"""سرویس ویژگی/متغیر کالا — طبق درخواست صریح: امکان تعریف ویژگی
+(سایز، وزن، مدل و ...)، تعریف مقادیر هر ویژگی، تولید خودکار ترکیب
+متغیرها برای یک کالا، و بارکد مجزا برای کالای اصلی + بارکد ترکیبی
+برای هر متغیر.
 
-جدول‌هایِ inv.item_attributes / inv.item_attribute_values /
-inv.item_variant_values و ستونِ inv.items.variant_parent_item_id از
-معماریِ اولیه (۰۵۷_inventory_catalog.sql) از پیش موجودند؛ این سرویس اولین
-لایه‌یِ واقعیِ استفاده از آن‌هاست."""
+جدول‌های inv.item_attributes / inv.item_attribute_values /
+inv.item_variant_values و ستون inv.items.variant_parent_item_id از
+معماری اولیه (۰۵۷_inventory_catalog.sql) از پیش موجودند؛ این سرویس اولین
+لایهٔ واقعی استفاده از آن‌هاست."""
 
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ class ItemAttributeRow:
 
 
 def list_item_attributes(company_id: int, active_only: bool = False) -> list[ItemAttributeRow]:
-    """طبقِ درخواستِ صریح («الویت و ترتیبِ ویژگی‌ها چجوری مشخص میشه؟»):
-    ترتیبِ ویژگی‌ها دیگر صرفاً ترتیبِ ساخته‌شدن نیست -- بر اساسِ
-    display_order (قابلِ‌تغییر با دکمه‌هایِ اولویت در فرم) مرتب می‌شود."""
+    """طبق درخواست صریح («الویت و ترتیب ویژگی‌ها چجوری مشخص میشه؟»):
+    ترتیب ویژگی‌ها دیگر صرفاً ترتیب ساخته‌شدن نیست — بر اساس
+    display_order (قابل‌تغییر با دکمه‌های اولویت در فرم) مرتب می‌شود."""
     with new_session() as session:
         query = select(ItemAttribute).where(ItemAttribute.company_id == company_id)
         if active_only:
@@ -47,12 +47,12 @@ def create_item_attribute(company_id: int, code: str, name: str, display_order: 
     code = code.strip()
     name = name.strip()
     if not code or not name:
-        raise ValueError("کد و نامِ ویژگی نمی‌توانند خالی باشند.")
+        raise ValueError("کد و نام ویژگی نمی‌توانند خالی باشند.")
     with new_session() as session:
         if session.scalar(
             select(ItemAttribute).where(ItemAttribute.company_id == company_id, ItemAttribute.code == code)
         ):
-            raise ValueError(f"ویژگی‌ای با کدِ «{code}» از قبل وجود دارد.")
+            raise ValueError(f"ویژگی‌ای با کد «{code}» از قبل وجود دارد.")
         if display_order is None:
             # طبقِ رفتارِ پیش‌فرضِ منطقی: ویژگیِ تازه به انتهایِ ترتیب اضافه
             # می‌شود، نه ابتدا -- تا اولویتِ ویژگی‌هایِ قبلی به‌هم نخورد.
@@ -72,7 +72,7 @@ def update_item_attribute(
     code = code.strip()
     name = name.strip()
     if not code or not name:
-        raise ValueError("کد و نامِ ویژگی نمی‌توانند خالی باشند.")
+        raise ValueError("کد و نام ویژگی نمی‌توانند خالی باشند.")
     with new_session() as session:
         attribute = session.get(ItemAttribute, attribute_id)
         if attribute is None or attribute.company_id != company_id:
@@ -84,7 +84,7 @@ def update_item_attribute(
             )
         )
         if duplicate:
-            raise ValueError(f"ویژگی‌ای با کدِ «{code}» از قبل وجود دارد.")
+            raise ValueError(f"ویژگی‌ای با کد «{code}» از قبل وجود دارد.")
         attribute.code = code
         attribute.name = name
         attribute.is_active = is_active
@@ -93,12 +93,12 @@ def update_item_attribute(
 
 
 def swap_item_attribute_order(company_id: int, attribute_id: int, direction: str) -> None:
-    """طبقِ درخواستِ صریح («الویت و ترتیبِ ویژگی‌ها چجوری مشخص میشه؟»):
-    جابه‌جاییِ اولویتِ یک ویژگی با همسایه‌یِ بلافصلش در همان ترتیبِ فعلی
+    """طبق درخواست صریح («الویت و ترتیب ویژگی‌ها چجوری مشخص میشه؟»):
+    جابه‌جایی اولویت یک ویژگی با همسایهٔ بلافصلش در همان ترتیب فعلی
     (direction: "UP" یعنی زودتر/بالاتر، "DOWN" یعنی دیرتر/پایین‌تر) --
-    برایِ دکمه‌هایِ ⬆️/⬇️ در فرم."""
+    برای دکمه‌های ⬆️/⬇️ در فرم."""
     if direction not in ("UP", "DOWN"):
-        raise ValueError("جهتِ جابه‌جایی نامعتبر است.")
+        raise ValueError("جهت جابه‌جایی نامعتبر است.")
     ordered = list_item_attributes(company_id)
     index = next((i for i, a in enumerate(ordered) if a.attribute_id == attribute_id), None)
     if index is None:
@@ -125,7 +125,7 @@ def delete_item_attribute(attribute_id: int, company_id: int) -> None:
         if attribute is None or attribute.company_id != company_id:
             raise ValueError("ویژگی نامعتبر است.")
         if session.scalar(select(ItemVariantValue).where(ItemVariantValue.attribute_id == attribute_id)):
-            raise ValueError("این ویژگی برایِ ساختِ متغیرهایی استفاده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این ویژگی برای ساخت متغیرهایی استفاده شده و قابل‌حذف نیست.")
         session.execute(delete(ItemAttributeValue).where(ItemAttributeValue.attribute_id == attribute_id))
         session.delete(attribute)
         session.commit()
@@ -163,7 +163,7 @@ def add_item_attribute_value(attribute_id: int, code: str, value: str, display_o
                 ItemAttributeValue.attribute_id == attribute_id, ItemAttributeValue.code == code
             )
         ):
-            raise ValueError(f"مقداری با کدِ «{code}» از قبل برایِ این ویژگی وجود دارد.")
+            raise ValueError(f"مقداری با کد «{code}» از قبل برای این ویژگی وجود دارد.")
         row = ItemAttributeValue(attribute_id=attribute_id, code=code, value=value, display_order=display_order)
         session.add(row)
         session.commit()
@@ -186,7 +186,7 @@ def update_item_attribute_value(value_id: int, code: str, value: str, display_or
             )
         )
         if duplicate:
-            raise ValueError(f"مقداری با کدِ «{code}» از قبل برایِ این ویژگی وجود دارد.")
+            raise ValueError(f"مقداری با کد «{code}» از قبل برای این ویژگی وجود دارد.")
         row.code = code
         row.value = value
         row.display_order = display_order
@@ -199,7 +199,7 @@ def delete_item_attribute_value(value_id: int) -> None:
         if row is None:
             raise ValueError("مقدار نامعتبر است.")
         if session.scalar(select(ItemVariantValue).where(ItemVariantValue.value_id == value_id)):
-            raise ValueError("این مقدار برایِ ساختِ متغیرهایی استفاده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این مقدار برای ساخت متغیرهایی استفاده شده و قابل‌حذف نیست.")
         session.delete(row)
         session.commit()
 
@@ -246,9 +246,9 @@ def list_item_variants(company_id: int, parent_item_id: int) -> list[ItemVariant
 
 
 def ensure_item_barcode(company_id: int, item_id: int) -> str:
-    """اگر بارکدِ کالا (غیرِ متغیر) از قبل خالی باشد، یک بارکدِ مجزایِ
-    خودکار (EAN-13 معتبر) برایِ آن می‌سازد -- طبقِ درخواستِ صریح («برایِ
-    کالایِ اصلی بارکدِ مجزا»)."""
+    """اگر بارکد کالا (غیر متغیر) از قبل خالی باشد، یک بارکد مجزای
+    خودکار (EAN-13 معتبر) برای آن می‌سازد — طبق درخواست صریح («برای
+    کالای اصلی بارکد مجزا»)."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
@@ -256,7 +256,7 @@ def ensure_item_barcode(company_id: int, item_id: int) -> str:
         if item.barcode:
             return item.barcode
         if item.variant_parent_item_id is not None:
-            raise ValueError("بارکدِ متغیرها خودکار و بر اساسِ کالایِ اصلی تولید می‌شود؛ اینجا قابلِ‌ساخت نیست.")
+            raise ValueError("بارکد متغیرها خودکار و بر اساس کالای اصلی تولید می‌شود؛ اینجا قابل‌ساخت نیست.")
         barcode = ean13.generate_main_barcode(item_id)
         item.barcode = barcode
         session.commit()
@@ -264,8 +264,8 @@ def ensure_item_barcode(company_id: int, item_id: int) -> str:
 
 
 def set_variant_notes(company_id: int, item_id: int, notes: str | None) -> None:
-    """طبقِ درخواستِ صریح («برایِ هر متغیر توضیحاتِ مجزا»): تغییرِ سریعِ
-    توضیحاتِ یک کالا/متغیر بدونِ نیاز به فرمِ کاملِ update_item."""
+    """طبق درخواست صریح («برای هر متغیر توضیحات مجزا»): تغییر سریع
+    توضیحات یک کالا/متغیر بدون نیاز به فرم کامل update_item."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
@@ -275,11 +275,11 @@ def set_variant_notes(company_id: int, item_id: int, notes: str | None) -> None:
 
 
 def _sync_parent_transactability(company_id: int, parent_item_id: int) -> None:
-    """طبقِ تصمیمِ صریح («کالایِ اصلی بعدِ داشتنِ متغیر، غیرِقابلِ‌فروش/
-    غیرِموجودی‌محور شود»): به‌محضِ داشتنِ حداقل یک متغیر، خودِ کالایِ
-    اصلی دیگر مستقیماً قابلِ‌فروش/خرید/موجودی‌محور نیست -- فقط خودِ
-    متغیرهایش معامله می‌شوند (کالایِ اصلی صرفاً یک قالب/گروه می‌ماند).
-    اگر آخرین متغیر هم حذف شود، این مقادیر خودکار به حالتِ فعال
+    """طبق تصمیم صریح («کالای اصلی بعد داشتن متغیر، غیرقابل‌فروش/
+    غیرموجودی‌محور شود»): به‌محض داشتن حداقل یک متغیر، خود کالای
+    اصلی دیگر مستقیماً قابل‌فروش/خرید/موجودی‌محور نیست — فقط خود
+    متغیرهایش معامله می‌شوند (کالای اصلی صرفاً یک قالب/گروه می‌ماند).
+    اگر آخرین متغیر هم حذف شود، این مقادیر خودکار به حالت فعال
     برمی‌گردند."""
     with new_session() as session:
         parent = session.get(Item, parent_item_id)
@@ -311,22 +311,22 @@ def delete_item_variant(company_id: int, parent_item_id: int, variant_item_id: i
 def generate_item_variants(
     company_id: int, parent_item_id: int, attribute_value_ids: dict[int, list[int]],
 ) -> list[int]:
-    """طبقِ درخواستِ صریح («برایِ کدِ کالا انواعِ ویژگی تولید کرد»): از رویِ
-    ترکیبِ دکارتیِ مقادیرِ انتخاب‌شده برایِ هر ویژگی، به‌ازایِ هر ترکیب یک
-    کالایِ «متغیر» تازه (هم‌سطح و هم‌گروهِ کالایِ اصلی) می‌سازد و آن را با
-    variant_parent_item_id به کالایِ اصلی وصل می‌کند. ترکیب‌هایی که قبلاً
-    برایِ همین کالا ساخته شده باشند، دوباره ساخته نمی‌شوند (idempotent).
-    هر متغیرِ تازه یک «بارکدِ ترکیبی» (EAN-13، ترکیبِ شناسهٔ کالایِ اصلی +
-    شمارهٔ ترتیبیِ متغیر) خودکار می‌گیرد."""
+    """طبق درخواست صریح («برای کد کالا انواع ویژگی تولید کرد»): از روی
+    ترکیب دکارتی مقادیر انتخاب‌شده برای هر ویژگی، به‌ازای هر ترکیب یک
+    کالای «متغیر» تازه (هم‌سطح و هم‌گروه کالای اصلی) می‌سازد و آن را با
+    variant_parent_item_id به کالای اصلی وصل می‌کند. ترکیب‌هایی که قبلاً
+    برای همین کالا ساخته شده باشند، دوباره ساخته نمی‌شوند (idempotent).
+    هر متغیر تازه یک «بارکد ترکیبی» (EAN-13، ترکیب شناسهٔ کالای اصلی +
+    شمارهٔ ترتیبی متغیر) خودکار می‌گیرد."""
     attribute_value_ids = {aid: list(vals) for aid, vals in attribute_value_ids.items() if vals}
     if not attribute_value_ids:
-        raise ValueError("حداقل یک ویژگی با حداقل یک مقدارِ انتخاب‌شده لازم است.")
+        raise ValueError("حداقل یک ویژگی با حداقل یک مقدار انتخاب‌شده لازم است.")
 
     parent = catalog_service.get_item(parent_item_id)
     if parent is None or parent.company_id != company_id:
-        raise ValueError("کالایِ اصلی نامعتبر است.")
+        raise ValueError("کالای اصلی نامعتبر است.")
     if parent.variant_parent_item_id is not None:
-        raise ValueError("خودِ یک متغیر نمی‌تواند والدِ متغیرهایِ دیگر باشد.")
+        raise ValueError("خود یک متغیر نمی‌تواند والد متغیرهای دیگر باشد.")
 
     dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
         company_id, catalog_service.ITEM_DIMENSION_CODE
@@ -336,7 +336,7 @@ def generate_item_variants(
     }
     parent_detail = detail_rows.get(parent.item_detail_account_id)
     if parent_detail is None:
-        raise ValueError("تفصیلیِ کالایِ اصلی یافت نشد.")
+        raise ValueError("تفصیلی کالای اصلی یافت نشد.")
 
     # طبقِ درخواستِ صریح («الویت و ترتیبِ ویژگی‌ها چجوری مشخص میشه؟»):
     # ترتیبِ بخش‌هایِ نامِ خودکارِ متغیر (مثلاً «سایز / رنگ») از رویِ

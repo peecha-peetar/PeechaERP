@@ -85,11 +85,11 @@ po.report_scrap(company_id, uid, o1, D(3), "شکستگی", scrap_item_id=scrap_i
 view = po.order_view(company_id, o1)
 check(view.order.scrapped_qty == D(3) and on_hand(scrap_item, wh_scrap) == D(3), "S5 product scrap recorded + recoverable scrap to scrap warehouse")
 check(view.wip == D(2436000 - 6000), "S5 scrap recovery credits WIP")
-po.report_scrap(company_id, uid, o1, D(4), "ضایعاتِ ماده", material_id=m_r1.material_id)
+po.report_scrap(company_id, uid, o1, D(4), "ضایعات ماده", material_id=m_r1.material_id)
 check(len([t for t in view.transactions if t.txn_type == "SCRAP"]) == 1, "material scrap recorded separately")
 
 # اتمام با رسیدِ نهایی: کلِ ماندهٔ WIP به محصول
-po.hold_order(company_id, uid, o1, "خرابیِ دستگاه")
+po.hold_order(company_id, uid, o1, "خرابی دستگاه")
 check(raises(lambda: po.complete_order(company_id, uid, o1), "متوقف"), "on-hold order cannot complete")
 po.resume_order(company_id, uid, o1)
 po.complete_order(company_id, uid, o1, po.ReceiptInput(D(60), {byp: D(6)}), idempotency_key="cmp-1")
@@ -111,7 +111,7 @@ check(res.residual == 0 and po.get_order(company_id, o1).status_code == "CLOSED"
 check(res.summary.actual_unit_cost == D(40440), f"actual unit cost 40,440 ({res.summary.actual_unit_cost})")
 check(raises(lambda: po.issue_materials(company_id, uid, o1, [po.IssueLine(m_r1.material_id, D(1))]), "مجاز نیست"), "closed order rejects issue")
 check(raises(lambda: po.close_order(company_id, uid, o1), "قبلاً"), "close twice rejected")
-po.reopen_order(company_id, uid, o1, "اصلاحِ ضایعات")
+po.reopen_order(company_id, uid, o1, "اصلاح ضایعات")
 check(po.get_order(company_id, o1).status_code == "IN_PROGRESS", "reopen with reason")
 po.complete_order(company_id, uid, o1)
 po.close_order(company_id, uid, o1)
@@ -167,7 +167,7 @@ check(raises(lambda: po.complete_order(company_id, uid, o3), "صفر"), "complet
 
 # برگشتِ تولید
 t = po.report_production(company_id, uid, o3, po.ReceiptInput(D(20)))
-po.reverse_production(company_id, uid, t, "اشتباهِ ثبت")
+po.reverse_production(company_id, uid, t, "اشتباه ثبت")
 check(po.get_order(company_id, o3).produced_qty == 0, "reverse production restores produced qty")
 check(raises(lambda: po.reverse_production(company_id, uid, t, "دوباره"), "قبلاً"), "double reversal rejected")
 with new_session() as s:
@@ -180,7 +180,7 @@ with new_session() as s:
 check(immutable, "order transactions are immutable (DB trigger)")
 
 # ===== Scenario 7: Multi-level BOM ====================================================================
-fg2 = item("FG-B", "محصولِ B", "FINISHED_GOOD")
+fg2 = item("FG-B", "محصول B", "FINISHED_GOOD")
 bom_semi = pm.create_bom_version(company_id, semi, BF(batch_size_qty=D(1)), user_id=uid)
 pm.add_bom_component(company_id, bom_semi, BL(r3, D(2)), uid)
 bom2 = pm.create_bom_version(company_id, fg2, BF(batch_size_qty=D(1)), user_id=uid)
@@ -205,7 +205,7 @@ pv = po.order_view(company_id, parent)
 check(pv.order.produced_qty == D(30) and pv.outputs[0].produced_amount == D(330000), "S7 parent consumes semi at its production cost (+packaging)")
 
 # بچ/سریال و ردیابی
-fgl = item("FG-L", "محصولِ بچ‌دار", "FINISHED_GOOD", track_batch=True)
+fgl = item("FG-L", "محصول بچ‌دار", "FINISHED_GOOD", track_batch=True)
 bl = pm.quick_bom(company_id, fgl, [(r3, D(1))], user_id=uid)
 ol = po.create_order(company_id, uid, OF(item_id=fgl, planned_qty=D(5)))
 po.release_order(company_id, uid, ol)
@@ -218,7 +218,7 @@ check(po.get_order(company_id, ol).status_code == "COMPLETED", "backflush-free o
 v = po.order_view(company_id, ol)
 check(v.wip == 0 and v.outputs[0].produced_amount == 0, "no material issued -> zero cost (warns via checklist)")
 check(not {x.key: x.ok for x in po.closing_checklist(company_id, ol)}["CONSUMPTION"], "checklist flags missing consumption")
-check(raises(lambda: po.close_order(company_id, uid, ol), "مصرفِ مواد"), "close blocked without consumption")
+check(raises(lambda: po.close_order(company_id, uid, ol), "مصرف مواد"), "close blocked without consumption")
 
 # backflush
 pc.update_settings(company_id, uid, auto_consumption=True)

@@ -1,6 +1,6 @@
-"""تسویهٔ پایانِ روزِ خودرو (فازِ ۲، بخشِ ۲ از پخشِ گرم) -- طبقِ درخواستِ
-صریحِ کاربر: تعیینِ نقشِ مسئولِ تسویه + دو گیتِ تاییدِ مستقل (انبار،
-حسابداری) پیش از قطعی‌شدنِ برگشتِ کالا."""
+"""تسویهٔ پایان روز خودرو (فاز ۲، بخش ۲ از پخش گرم) — طبق درخواست
+صریح کاربر: تعیین نقش مسئول تسویه + دو گیت تایید مستقل (انبار،
+حسابداری) پیش از قطعی‌شدن برگشت کالا."""
 
 from __future__ import annotations
 
@@ -31,10 +31,10 @@ from peecha.ui.widgets import FieldHelpMixin
 
 _ROLE_LABELS = {"DRIVER": "راننده", "VISITOR": "ویزیتور", "DISTRIBUTOR": "موزع"}
 _STATUS_LABELS = {
-    "SUBMITTED": "منتظرِ تاییدِ انبار", "WAREHOUSE_APPROVED": "منتظرِ تاییدِ حسابداری",
+    "SUBMITTED": "منتظر تایید انبار", "WAREHOUSE_APPROVED": "منتظر تایید حسابداری",
     "ACCOUNTING_APPROVED": "قطعی‌شده",
 }
-_LIST_COLUMNS = ["تاریخ", "ساعتِ ثبت", "خودرو", "وضعیت", "مبلغِ فاکتورشده", "نقدِ اعلامی"]
+_LIST_COLUMNS = ["تاریخ", "ساعت ثبت", "خودرو", "وضعیت", "مبلغ فاکتورشده", "نقد اعلامی"]
 
 
 def _fmt_qty(value: decimal.Decimal) -> str:
@@ -59,7 +59,7 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
         layout.addWidget(title)
 
         role_row = QHBoxLayout()
-        role_row.addWidget(QLabel("نقشِ مسئولِ ثبتِ تسویهٔ آخرِ روز"))
+        role_row.addWidget(QLabel("نقش مسئول ثبت تسویهٔ آخر روز"))
         self.role_combo = QComboBox()
         for code, label in _ROLE_LABELS.items():
             self.role_combo.addItem(label, code)
@@ -87,10 +87,10 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.lines_table)
 
         actions_row = QHBoxLayout()
-        self.approve_warehouse_button = QPushButton("تاییدِ انبار")
+        self.approve_warehouse_button = QPushButton("تایید انبار")
         self.approve_warehouse_button.clicked.connect(self._approve_warehouse)
         actions_row.addWidget(self.approve_warehouse_button)
-        self.approve_accounting_button = QPushButton("تاییدِ حسابداری")
+        self.approve_accounting_button = QPushButton("تایید حسابداری")
         self.approve_accounting_button.clicked.connect(self._approve_accounting)
         actions_row.addWidget(self.approve_accounting_button)
         actions_row.addStretch(1)
@@ -160,7 +160,7 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         settlement_service.set_settlement_role(company_id, self.role_combo.currentData())
-        self.status_label.setText("نقشِ مسئولِ تسویه ذخیره شد.")
+        self.status_label.setText("نقش مسئول تسویه ذخیره شد.")
 
     def _approve_warehouse(self) -> None:
         company_id = self._company_id()
@@ -178,8 +178,8 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
         if company_id is None or self._selected is None:
             return
         if QMessageBox.question(
-            self, "تاییدِ حسابداری",
-            "با تاییدِ نهایی، سندِ برگشتِ کالا ساخته و پست می‌شود. ادامه می‌دهید؟",
+            self, "تایید حسابداری",
+            "با تایید نهایی، سند برگشت کالا ساخته و پست می‌شود. ادامه می‌دهید؟",
         ) != QMessageBox.Yes:
             return
         try:

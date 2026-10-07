@@ -1,10 +1,10 @@
-"""مدل‌هایِ ماژولِ انبار و لجستیک (Inventory & Logistics).
+"""مدل‌های ماژول انبار و لجستیک (Inventory & Logistics).
 
-معادلِ db/schema/057 تا 063_inventory_*.sql — طبقِ سندِ معماریِ ۱۵مرحله‌ای:
-«کالا» موجودیتِ تازه‌ای نیست، Item یک جدولِ اقماریِ یک‌به‌یکِ تفصیلیِ گروهِ
-سیستمیِ INVENTORY_ITEM است (دقیقاً هم‌الگو با hr.employees نسبت به تفصیلیِ
-گروهِ PERSONNEL)؛ Ledger منبعِ حقیقتِ تغییرناپذیر است و Balance همیشه از
-رویِ آن بازسازی‌پذیر می‌ماند.
+معادل db/schema/057 تا 063_inventory_*.sql — طبق سند معماری ۱۵مرحله‌ای:
+«کالا» موجودیت تازه‌ای نیست، Item یک جدول اقماری یک‌به‌یک تفصیلی گروه
+سیستمی INVENTORY_ITEM است (دقیقاً هم‌الگو با hr.employees نسبت به تفصیلی
+گروه PERSONNEL)؛ Ledger منبع حقیقت تغییرناپذیر است و Balance همیشه از
+روی آن بازسازی‌پذیر می‌ماند.
 """
 
 from __future__ import annotations
@@ -89,8 +89,8 @@ class CostingMethod(Base):
 
 
 class ItemCategory(Base):
-    """دسته‌بندیِ سلسله‌مراتبیِ کالا — مستقل از تفصیلی؛ صرفاً برایِ گروه‌بندیِ
-    نمایشی/گزارشی و override حساب در سطحِ دسته."""
+    """دسته‌بندی سلسله‌مراتبی کالا — مستقل از تفصیلی؛ صرفاً برای گروه‌بندی
+    نمایشی/گزارشی و override حساب در سطح دسته."""
 
     __tablename__ = "item_categories"
     __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "inv"})
@@ -104,8 +104,8 @@ class ItemCategory(Base):
 
 
 class Item(Base):
-    """جدولِ اقماریِ «کالا/خدمت» — یک‌به‌یک با تفصیلیِ سطحِ‌آخرِ گروهِ
-    INVENTORY_ITEM؛ خودِ کد/نام/سلسله‌مراتب رویِ acc.detail_accounts است،
+    """جدول اقماری «کالا/خدمت» — یک‌به‌یک با تفصیلی سطح‌آخر گروه
+    INVENTORY_ITEM؛ خود کد/نام/سلسله‌مراتب روی acc.detail_accounts است،
     نه این‌جا."""
 
     __tablename__ = "items"
@@ -196,11 +196,11 @@ class Item(Base):
 
 
 class ItemSupplierCode(Base):
-    """طبقِ درخواستِ صریح («کدهایِ تامین‌کننده با کدهایِ من فرق دارد» و
-    بعداً «بعضی تامین‌کننده‌ها فقط نامِ کالا دارند»): یک کالا می‌تواند چند
-    کد و چند نامِ تامین‌کننده داشته باشد (value_type می‌گوید کدام‌اند) --
-    برایِ شناساییِ خودکارِ ترکیبی (کد یا نام) در وارداتِ فایلِ قیمتِ هر
-    تامین‌کننده (اکسل/PDF/عکس) و تطبیقشان به کالایِ داخلی."""
+    """طبق درخواست صریح («کدهای تامین‌کننده با کدهای من فرق دارد» و
+    بعداً «بعضی تامین‌کننده‌ها فقط نام کالا دارند»): یک کالا می‌تواند چند
+    کد و چند نام تامین‌کننده داشته باشد (value_type می‌گوید کدام‌اند) --
+    برای شناسایی خودکار ترکیبی (کد یا نام) در واردات فایل قیمت هر
+    تامین‌کننده (اکسل/PDF/عکس) و تطبیقشان به کالای داخلی."""
 
     __tablename__ = "item_supplier_codes"
     __table_args__ = (
@@ -293,12 +293,12 @@ class ItemVariantValue(Base):
 
 
 class ItemVariant(Base):
-    """طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
-    یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): هویتِ واقعیِ یک
-    متغیر (کدِ مستقل، ارتباط با کالایِ اصلی) این‌جاست -- ردیفِ inv.items/
-    acc.detail_accounts خودِ متغیر همچنان به‌صورتِ فنی در پس‌زمینه وجود
-    دارد (برایِ threadingِ بُعدِ حسابداری) ولی دیگر هرگز مستقیماً در
-    UIِ تفصیلی‌ها نمایش داده نمی‌شود."""
+    """طبق درخواست صریح («متغیرها دیگر بعنوان تفصیلی معرفی نشوند، در
+    یک جدول مستقل با کدبندی متفاوت ذخیره شوند»): هویت واقعی یک
+    متغیر (کد مستقل، ارتباط با کالای اصلی) این‌جاست — ردیف inv.items/
+    acc.detail_accounts خود متغیر همچنان به‌صورت فنی در پس‌زمینه وجود
+    دارد (برای threading بُعد حسابداری) ولی دیگر هرگز مستقیماً در
+    UI تفصیلی‌ها نمایش داده نمی‌شود."""
 
     __tablename__ = "item_variants"
     __table_args__ = (UniqueConstraint("parent_item_id", "variant_code"), {"schema": "inv"})
@@ -577,8 +577,8 @@ class BinLocation(Base):
 
 
 class WarehouseUserAccess(Base):
-    """کاربرانِ مجازِ انبار — هم‌الگو با sec.user_companies (junction ساده) +
-    چهار پرچمِ توانایی. فقط CRUDِ تعریفی؛ هنوز به هیچ سندی وصل نیست."""
+    """کاربران مجاز انبار — هم‌الگو با sec.user_companies (junction ساده) +
+    چهار پرچم توانایی. فقط CRUD تعریفی؛ هنوز به هیچ سندی وصل نیست."""
 
     __tablename__ = "warehouse_user_access"
     __table_args__ = {"schema": "inv"}
@@ -592,8 +592,8 @@ class WarehouseUserAccess(Base):
 
 
 class WarehouseAccountMapping(Base):
-    """نگاشتِ حسابِ سطحِ‌انبار — عیناً هم‌شکلِ CategoryAccountMapping؛ override
-    رویِ InventoryAccountMapping. طبقِ همان دامنه‌بندی: فقط CRUD این دور."""
+    """نگاشت حساب سطح‌انبار — عیناً هم‌شکل CategoryAccountMapping؛ override
+    روی InventoryAccountMapping. طبق همان دامنه‌بندی: فقط CRUD این دور."""
 
     __tablename__ = "warehouse_account_mappings"
     __table_args__ = {"schema": "inv"}
@@ -693,7 +693,7 @@ class StockDocumentLine(Base):
 
 
 class StockLedger(Base):
-    """دفترِ حرکاتِ موجودی — Append-Only (تغییرناپذیر با Trigger در دیتابیس)."""
+    """دفتر حرکات موجودی — Append-Only (تغییرناپذیر با Trigger در دیتابیس)."""
 
     __tablename__ = "stock_ledger"
     __table_args__ = {"schema": "inv"}
@@ -887,7 +887,7 @@ class CostLayer(Base):
 
 
 class ReplacementCost(Base):
-    """R258: بهایِ جایگزینی (به ازایِ واحدِ پایه) برایِ NIFO و گزارشِ مغایرتِ بهایِ جایگزینی."""
+    """R258: بهای جایگزینی (به ازای واحد پایه) برای NIFO و گزارش مغایرت بهای جایگزینی."""
 
     __tablename__ = "replacement_costs"
     __table_args__ = {"schema": "inv"}
@@ -905,7 +905,7 @@ class ReplacementCost(Base):
 
 
 class CostAllocation(Base):
-    """R257: بهایِ هر خروج از کدام لایه (یا میانگین/استاندارد) آمده است."""
+    """R257: بهای هر خروج از کدام لایه (یا میانگین/استاندارد) آمده است."""
 
     __tablename__ = "cost_allocations"
     __table_args__ = {"schema": "inv"}
@@ -927,7 +927,7 @@ class CostAllocation(Base):
 
 
 class CostRecalculationRun(Base):
-    """R260: یک اجرایِ بازمحاسبهٔ بها (سندِ حسابداریِ اصلاحی + خلاصه)."""
+    """R260: یک اجرای بازمحاسبهٔ بها (سند حسابداری اصلاحی + خلاصه)."""
 
     __tablename__ = "cost_recalculation_runs"
     __table_args__ = {"schema": "inv"}
@@ -1207,7 +1207,7 @@ class VehicleSettlementLine(Base):
 
 
 class LineTrackingEntry(Base):
-    """R227: بچ/سریال/انقضایِ واردشده رویِ ردیفِ سندِ انبار یا بازرگانی (پیش از ثبت)."""
+    """R227: بچ/سریال/انقضای واردشده روی ردیف سند انبار یا بازرگانی (پیش از ثبت)."""
 
     __tablename__ = "line_tracking_entries"
     __table_args__ = {"schema": "inv"}
@@ -1235,7 +1235,7 @@ class LineTrackingEntry(Base):
 
 
 class LotMovement(Base):
-    """R227: دفترِ حرکتِ ردیابی (بچ/سریال/تامین‌کنندهٔ امانی)، به واحدِ پایه و علامت‌دار."""
+    """R227: دفتر حرکت ردیابی (بچ/سریال/تامین‌کنندهٔ امانی)، به واحد پایه و علامت‌دار."""
 
     __tablename__ = "lot_movements"
     __table_args__ = {"schema": "inv"}
@@ -1257,7 +1257,7 @@ class LotMovement(Base):
 
 # --- R247 (migration 184) ----------------------------------------------------
 class CostAdjustmentLog(Base):
-    """لاگِ تاریخ‌دارِ اصلاحِ بهایِ خرید (برایِ ارزشِ تاریخیِ موجودی) -- منطقِ بهایابی را عوض نمی‌کند."""
+    """لاگ تاریخ‌دار اصلاح بهای خرید (برای ارزش تاریخی موجودی) — منطق بهایابی را عوض نمی‌کند."""
 
     __tablename__ = "cost_adjustment_log"
     __table_args__ = {"schema": "inv"}
@@ -1328,7 +1328,7 @@ class WarehouseTask(Base):
 
 
 class ItemStorageProfile(Base):
-    """شرایطِ نگهداریِ کالا برایِ سازگاری با محل (R249)."""
+    """شرایط نگهداری کالا برای سازگاری با محل (R249)."""
 
     __tablename__ = "item_storage_profiles"
     __table_args__ = {"schema": "inv"}
@@ -1345,7 +1345,7 @@ class ItemStorageProfile(Base):
 
 
 class LocationReplenishmentRule(Base):
-    """حداقل/حداکثرِ کالا در محلِ برداشت (R249)."""
+    """حداقل/حداکثر کالا در محل برداشت (R249)."""
 
     __tablename__ = "location_replenishment_rules"
     __table_args__ = {"schema": "inv"}
@@ -1361,7 +1361,7 @@ class LocationReplenishmentRule(Base):
 
 
 class PickWave(Base):
-    """موجِ برداشت (R250)."""
+    """موج برداشت (R250)."""
 
     __tablename__ = "pick_waves"
     __table_args__ = {"schema": "inv"}

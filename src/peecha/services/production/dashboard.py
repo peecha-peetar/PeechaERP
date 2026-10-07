@@ -1,4 +1,4 @@
-"""داشبوردِ تولید -- R270: شاخص‌ها، هشدارها و نمودارها از همان سرویس‌هایِ تولید (بدونِ محاسبهٔ موازی)."""
+"""داشبورد تولید — R270: شاخص‌ها، هشدارها و نمودارها از همان سرویس‌های تولید (بدون محاسبهٔ موازی)."""
 
 from __future__ import annotations
 
@@ -18,13 +18,13 @@ ZERO = c.ZERO
 _HUNDRED = decimal.Decimal(100)
 OPEN = ("RELEASED", "IN_PROGRESS", "ON_HOLD")
 CHART_TITLES = (
-    ("by_period", "تولید به تفکیکِ دوره", "PRD_BY_PERIOD", {}),
-    ("elements", "عناصرِ بهایِ تمام‌شده", "PRD_COST", {}),
-    ("top_products", "محصولاتِ پرتولید", "PRD_BY_PRODUCT", {}),
-    ("variance", "انحرافِ بهایِ دستورها", "PRD_STD_VS_ACTUAL", {}),
+    ("by_period", "تولید به تفکیک دوره", "PRD_BY_PERIOD", {}),
+    ("elements", "عناصر بهای تمام‌شده", "PRD_COST", {}),
+    ("top_products", "محصولات پرتولید", "PRD_BY_PRODUCT", {}),
+    ("variance", "انحراف بهای دستورها", "PRD_STD_VS_ACTUAL", {}),
 )
-ALERT_LABELS = {"SHORTAGE": "کمبودِ مواد", "LATE": "تولیدِ عقب‌افتاده", "OVER_COST": "هزینه بالاتر از استاندارد",
-                "ABNORMAL_SCRAP": "ضایعاتِ غیرعادی"}
+ALERT_LABELS = {"SHORTAGE": "کمبود مواد", "LATE": "تولید عقب‌افتاده", "OVER_COST": "هزینه بالاتر از استاندارد",
+                "ABNORMAL_SCRAP": "ضایعات غیرعادی"}
 ALERT_LEVEL = {"SHORTAGE": "RED", "LATE": "YELLOW", "OVER_COST": "ORANGE", "ABNORMAL_SCRAP": "RED"}
 
 
@@ -45,7 +45,7 @@ def alerts(company_id: int, cost_tolerance_percent: decimal.Decimal = decimal.De
             short = [a for a in availability(company_id, o.order_id) if a.status != "GREEN" and not a.is_optional]
             if short:
                 out.append(SimpleNamespace(kind="SHORTAGE", order_id=o.order_id, order_code=o.order_code,
-                                           text=f"{o.order_code}: کمبودِ {len(short)} ماده"))
+                                           text=f"{o.order_code}: کمبود {len(short)} ماده"))
             if o.due_date < today:
                 out.append(SimpleNamespace(kind="LATE", order_id=o.order_id, order_code=o.order_code,
                                            text=f"{o.order_code}: {(today - o.due_date).days} روز تأخیر"))
@@ -56,7 +56,7 @@ def alerts(company_id: int, cost_tolerance_percent: decimal.Decimal = decimal.De
         total = decimal.Decimal(o.produced_qty) + decimal.Decimal(o.scrapped_qty)
         if o.scrapped_qty and total and decimal.Decimal(o.scrapped_qty) * _HUNDRED / total > scrap_limits[o.order_id]:
             out.append(SimpleNamespace(kind="ABNORMAL_SCRAP", order_id=o.order_id, order_code=o.order_code,
-                                       text=f"{o.order_code}: ضایعاتِ {(decimal.Decimal(o.scrapped_qty) * _HUNDRED / total).quantize(decimal.Decimal('0.1'))}٪"))
+                                       text=f"{o.order_code}: ضایعات {(decimal.Decimal(o.scrapped_qty) * _HUNDRED / total).quantize(decimal.Decimal('0.1'))}٪"))
     return out
 
 
@@ -83,25 +83,25 @@ def dashboard(company_id: int, date_from: datetime.date, date_to: datetime.date)
     al = alerts(company_id)
     n_short = len({a.order_id for a in al if a.kind == "SHORTAGE"})
     kpis = [
-        Kpi("ORDERS", "دستورهایِ تولید", len(orders), "INT", "PRD_ORDERS", "دستورهایِ فعال/برنامه‌شده در بازه", {"status": "ALL"}),
-        Kpi("IN_PROGRESS", "در حالِ تولید", sum(1 for o in orders if o.status_code in OPEN), "INT", "PRD_ORDERS",
-            "صادرشده/در حالِ تولید/متوقف", {"status": "OPEN"}),
+        Kpi("ORDERS", "دستورهای تولید", len(orders), "INT", "PRD_ORDERS", "دستورهای فعال/برنامه‌شده در بازه", {"status": "ALL"}),
+        Kpi("IN_PROGRESS", "در حال تولید", sum(1 for o in orders if o.status_code in OPEN), "INT", "PRD_ORDERS",
+            "صادرشده/در حال تولید/متوقف", {"status": "OPEN"}),
         Kpi("COMPLETED", "تکمیل‌شده", sum(1 for o in orders if o.status_code in ("COMPLETED", "CLOSED")), "INT", "PRD_ORDERS",
             "تکمیل/بسته", {"status": "COMPLETED"}),
         Kpi("DELAYED", "عقب‌افتاده", sum(1 for o in orders if o.due_date < today and o.status_code not in ("COMPLETED", "CLOSED")),
-            "INT", "PRD_EFFICIENCY", "تاریخِ پایان گذشته و تکمیل‌نشده"),
-        Kpi("SHORTAGE", "کمبودِ مواد", n_short, "INT", "PRD_MATERIAL_REQUIREMENT", "دستورهایِ دارایِ کمبود"),
-        Kpi("QTY", "مقدارِ تولید", qty, "INT", "PRD_BY_PRODUCT", "Σ رسیدِ محصولِ اصلی"),
-        Kpi("VALUE", "ارزشِ تولید", value, "MONEY", "PRD_BY_PRODUCT", "Σ بهایِ رسیدِ محصول"),
-        Kpi("ACTUAL", "بهایِ واقعی", actual, "MONEY", "PRD_COST", "مواد + دستمزد + ماشین + سربار − جانبی"),
-        Kpi("STANDARD", "بهایِ استاندارد", standard, "MONEY", "PRD_STD_VS_ACTUAL", "استانداردِ واحد × تولید"),
-        Kpi("VARIANCE", "انحرافِ بها", actual - standard, "MONEY", "PRD_COST_VARIANCE", "واقعی − استاندارد"),
+            "INT", "PRD_EFFICIENCY", "تاریخ پایان گذشته و تکمیل‌نشده"),
+        Kpi("SHORTAGE", "کمبود مواد", n_short, "INT", "PRD_MATERIAL_REQUIREMENT", "دستورهای دارای کمبود"),
+        Kpi("QTY", "مقدار تولید", qty, "INT", "PRD_BY_PRODUCT", "Σ رسید محصول اصلی"),
+        Kpi("VALUE", "ارزش تولید", value, "MONEY", "PRD_BY_PRODUCT", "Σ بهای رسید محصول"),
+        Kpi("ACTUAL", "بهای واقعی", actual, "MONEY", "PRD_COST", "مواد + دستمزد + ماشین + سربار − جانبی"),
+        Kpi("STANDARD", "بهای استاندارد", standard, "MONEY", "PRD_STD_VS_ACTUAL", "استاندارد واحد × تولید"),
+        Kpi("VARIANCE", "انحراف بها", actual - standard, "MONEY", "PRD_COST_VARIANCE", "واقعی − استاندارد"),
         Kpi("SCRAP", "ضایعات٪", (scrap * _HUNDRED / (good + scrap)).quantize(decimal.Decimal("0.1")) if good + scrap else ZERO,
             "PERCENT", "PRD_SCRAP_ANALYSIS", "ضایعات ÷ (سالم + ضایعات)"),
-        Kpi("MAT_EFF", "کاراییِ مواد٪", (sum(mat_eff) / len(mat_eff)).quantize(decimal.Decimal("0.1")) if mat_eff else ZERO,
-            "PERCENT", "PRD_EFFICIENCY", "مصرفِ استاندارد ÷ واقعی"),
-        Kpi("LAB_EFF", "کاراییِ دستمزد٪", (sum(lab_eff) / len(lab_eff)).quantize(decimal.Decimal("0.1")) if lab_eff else ZERO,
-            "PERCENT", "PRD_EFFICIENCY", "ساعتِ استاندارد ÷ واقعی"),
+        Kpi("MAT_EFF", "کارایی مواد٪", (sum(mat_eff) / len(mat_eff)).quantize(decimal.Decimal("0.1")) if mat_eff else ZERO,
+            "PERCENT", "PRD_EFFICIENCY", "مصرف استاندارد ÷ واقعی"),
+        Kpi("LAB_EFF", "کارایی دستمزد٪", (sum(lab_eff) / len(lab_eff)).quantize(decimal.Decimal("0.1")) if lab_eff else ZERO,
+            "PERCENT", "PRD_EFFICIENCY", "ساعت استاندارد ÷ واقعی"),
     ]
     by_period, by_product = defaultdict(lambda: ZERO), defaultdict(lambda: ZERO)
     from peecha.services.fixed_assets.common import period_of

@@ -6,8 +6,8 @@
               columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20"
               whenNoDataType="AllSectionsNoDetail">
 
-    <!-- طبقِ رفعِ باگِ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
-         کافی است؛ pdfFontName/pdfEncoding/isPdfEmbedded از رویِ Font Extensionِ
+    <!-- طبق رفع باگ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
+         کافی است؛ pdfFontName/pdfEncoding/isPdfEmbedded از روی Font Extension
          jasper-runner (peecha-fonts.xml) خودکار حل می‌شود. -->
     <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
     <style name="Title" fontName="Vazirmatn" fontSize="16" isBold="true"/>
@@ -17,20 +17,20 @@
 
     <parameter name="companyName" class="java.lang.String">
 
-        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+        <parameterDescription><![CDATA[نام شرکت]]></parameterDescription>
 
     </parameter>
     <parameter name="itemName" class="java.lang.String">
-        <parameterDescription><![CDATA[نامِ کالا]]></parameterDescription>
+        <parameterDescription><![CDATA[نام کالا]]></parameterDescription>
     </parameter>
     <parameter name="warehouseName" class="java.lang.String">
         <parameterDescription><![CDATA[انبار]]></parameterDescription>
     </parameter>
     <parameter name="dateRangeLabel" class="java.lang.String">
-        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+        <parameterDescription><![CDATA[بازهٔ تاریخ]]></parameterDescription>
     </parameter>
     <parameter name="generatedAt" class="java.lang.String">
-        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+        <parameterDescription><![CDATA[تاریخ تولید گزارش]]></parameterDescription>
     </parameter>
 
     <parameter name="companyLogoPath" class="java.lang.String">
@@ -43,16 +43,16 @@
 
         <property name="net.sf.jasperreports.json.field.expression" value="movement_date_display"/>
 
-        <fieldDescription><![CDATA[تاریخِ حرکت]]></fieldDescription>
+        <fieldDescription><![CDATA[تاریخ حرکت]]></fieldDescription>
 
     </field>
     <field name="document_type_label" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="document_type_label"/>
-        <fieldDescription><![CDATA[نوعِ سند]]></fieldDescription>
+        <fieldDescription><![CDATA[نوع سند]]></fieldDescription>
     </field>
     <field name="document_no_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="document_no_display"/>
-        <fieldDescription><![CDATA[شماره‌یِ سند]]></fieldDescription>
+        <fieldDescription><![CDATA[شمارهٔ سند]]></fieldDescription>
     </field>
     <field name="warehouse_name" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="warehouse_name"/>
@@ -60,7 +60,7 @@
     </field>
     <field name="counterparty_label" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="counterparty_label"/>
-        <fieldDescription><![CDATA[طرفِ‌حساب]]></fieldDescription>
+        <fieldDescription><![CDATA[طرف‌حساب]]></fieldDescription>
     </field>
     <field name="quantity_in_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="quantity_in_display"/>
@@ -72,19 +72,19 @@
     </field>
     <field name="unit_cost_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="unit_cost_display"/>
-        <fieldDescription><![CDATA[بهایِ واحد]]></fieldDescription>
+        <fieldDescription><![CDATA[بهای واحد]]></fieldDescription>
     </field>
     <field name="value_in_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="value_in_display"/>
-        <fieldDescription><![CDATA[بهایِ کلِ ورود]]></fieldDescription>
+        <fieldDescription><![CDATA[بهای کل ورود]]></fieldDescription>
     </field>
     <field name="value_out_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="value_out_display"/>
-        <fieldDescription><![CDATA[بهایِ کلِ خروج]]></fieldDescription>
+        <fieldDescription><![CDATA[بهای کل خروج]]></fieldDescription>
     </field>
     <field name="sale_price_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="sale_price_display"/>
-        <fieldDescription><![CDATA[قیمتِ فروش]]></fieldDescription>
+        <fieldDescription><![CDATA[قیمت فروش]]></fieldDescription>
     </field>
     <field name="running_balance_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="running_balance_display"/>
@@ -92,12 +92,12 @@
     </field>
     <field name="running_value_balance_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="running_value_balance_display"/>
-        <fieldDescription><![CDATA[مانده‌یِ ریالی]]></fieldDescription>
+        <fieldDescription><![CDATA[ماندهٔ ریالی]]></fieldDescription>
     </field>
 
-    <!-- طبقِ رفعِ باگِ واقعیِ کشف‌شده: متنِ ۱۶pt Bold با Vazirmatn اگر
-         ارتفاعِ reportElement فقط اندازه‌یِ خطِ فونتِ لاتین باشد، کاملاً
-         خالی/نامرئی رندر می‌شود، بدونِ هیچ خطایی. حداقل ۳۰ ارتفاع لازم است. -->
+    <!-- طبق رفع باگ واقعی کشف‌شده: متن ۱۶pt Bold با Vazirmatn اگر
+         ارتفاع reportElement فقط اندازهٔ خط فونت لاتین باشد، کاملاً
+         خالی/نامرئی رندر می‌شود، بدون هیچ خطایی. حداقل ۳۰ ارتفاع لازم است. -->
     <pageHeader>
         <band height="72">
             <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank">
@@ -115,7 +115,7 @@
             <staticText>
                 <reportElement style="Title" x="0" y="0" width="802" height="30"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <text><![CDATA[کاردکسِ کالا]]></text>
+                <text><![CDATA[کاردکس کالا]]></text>
             </staticText>
             <textField>
                 <reportElement style="SubTitle" x="0" y="32" width="802" height="20"/>
@@ -127,7 +127,7 @@
             <textField>
                 <reportElement style="Footer" x="0" y="54" width="802" height="16"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <textFieldExpression><![CDATA["تاریخِ تولیدِ گزارش: " + $P{generatedAt}]]></textFieldExpression>
+                <textFieldExpression><![CDATA["تاریخ تولید گزارش: " + $P{generatedAt}]]></textFieldExpression>
             </textField>
         </band>
     </pageHeader>
@@ -138,18 +138,18 @@
                 <reportElement x="0" y="0" width="802" height="26" backcolor="#DDDDDD" mode="Opaque"/>
             </rectangle>
             <staticText><reportElement style="Header" x="0" y="0" width="70" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[تاریخ]]></text></staticText>
-            <staticText><reportElement style="Header" x="70" y="0" width="65" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[نوعِ سند]]></text></staticText>
+            <staticText><reportElement style="Header" x="70" y="0" width="65" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[نوع سند]]></text></staticText>
             <staticText><reportElement style="Header" x="135" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[شماره]]></text></staticText>
             <staticText><reportElement style="Header" x="180" y="0" width="70" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[انبار]]></text></staticText>
-            <staticText><reportElement style="Header" x="250" y="0" width="90" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[طرفِ‌حساب]]></text></staticText>
+            <staticText><reportElement style="Header" x="250" y="0" width="90" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[طرف‌حساب]]></text></staticText>
             <staticText><reportElement style="Header" x="340" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[ورود]]></text></staticText>
             <staticText><reportElement style="Header" x="385" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[خروج]]></text></staticText>
-            <staticText><reportElement style="Header" x="430" y="0" width="65" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ واحد]]></text></staticText>
-            <staticText><reportElement style="Header" x="495" y="0" width="68" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ کلِ ورود]]></text></staticText>
-            <staticText><reportElement style="Header" x="563" y="0" width="68" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ کلِ خروج]]></text></staticText>
-            <staticText><reportElement style="Header" x="631" y="0" width="60" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[قیمتِ فروش]]></text></staticText>
+            <staticText><reportElement style="Header" x="430" y="0" width="65" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهای واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="495" y="0" width="68" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهای کل ورود]]></text></staticText>
+            <staticText><reportElement style="Header" x="563" y="0" width="68" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهای کل خروج]]></text></staticText>
+            <staticText><reportElement style="Header" x="631" y="0" width="60" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[قیمت فروش]]></text></staticText>
             <staticText><reportElement style="Header" x="691" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده]]></text></staticText>
-            <staticText><reportElement style="Header" x="736" y="0" width="66" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده‌یِ ریالی]]></text></staticText>
+            <staticText><reportElement style="Header" x="736" y="0" width="66" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[ماندهٔ ریالی]]></text></staticText>
         </band>
     </columnHeader>
 
@@ -176,7 +176,7 @@
             <textField>
                 <reportElement style="Footer" x="0" y="0" width="802" height="18"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>
-                <textFieldExpression><![CDATA["صفحه‌یِ " + $V{PAGE_NUMBER}]]></textFieldExpression>
+                <textFieldExpression><![CDATA["صفحهٔ " + $V{PAGE_NUMBER}]]></textFieldExpression>
             </textField>
         </band>
     </pageFooter>

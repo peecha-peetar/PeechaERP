@@ -110,14 +110,14 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
 
   const submit = () => {
     const found: string[] = [];
-    if (lines.some((l) => l.unitPrice === null || l.unitPrice <= 0)) found.push("قیمتِ همهٔ کالاهایِ سبد باید وارد شود.");
+    if (lines.some((l) => l.unitPrice === null || l.unitPrice <= 0)) found.push("قیمت همهٔ کالاهای سبد باید وارد شود.");
     const result: OrderSettlementLineInput[] = [];
     for (const method of methods) {
       const draft = drafts[method.method_code];
       const amount = methodAmount(method.method_code);
       if (amount <= 0) continue;
       if (method.requires_detail && (method.detail_options?.length ?? 0) > 0 && draft.detailAccountId === null) {
-        found.push(`برایِ «${method.label}» صندوق/حساب را انتخاب کنید.`);
+        found.push(`برای «${method.label}» صندوق/حساب را انتخاب کنید.`);
       }
       const line: OrderSettlementLineInput = {
         method_code: method.method_code,
@@ -128,10 +128,10 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
       if (method.method_code === "CHECK") {
         line.checks = [];
         draft.checks.forEach((c, index) => {
-          const label = `چکِ ${index + 1}`;
+          const label = `چک ${index + 1}`;
           const dueIso = parseJalaliDate(c.due_date);
           if (!toAsciiDigits(c.check_no)) found.push(`${label}: شمارهٔ چک الزامی است.`);
-          if (!dueIso) found.push(`${label}: تاریخِ سررسید را به‌صورتِ ۱۴۰۵/۰۸/۱۵ وارد کنید.`);
+          if (!dueIso) found.push(`${label}: تاریخ سررسید را به‌صورت ۱۴۰۵/۰۸/۱۵ وارد کنید.`);
           if (parseAmount(c.amount) <= 0) found.push(`${label}: مبلغ الزامی است.`);
           line.checks!.push({
             check_no: toAsciiDigits(c.check_no),
@@ -150,7 +150,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
       }
       result.push(line);
     }
-    if (paid > total) found.push("جمعِ تسویه از مبلغِ فاکتور بیشتر است.");
+    if (paid > total) found.push("جمع تسویه از مبلغ فاکتور بیشتر است.");
     setErrors(found);
     if (found.length === 0) onSubmit(result, receivedByName.trim());
   };
@@ -165,7 +165,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
       </View>
 
       <Card>
-        <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>اقلامِ فاکتور</Text>
+        <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>اقلام فاکتور</Text>
         {lines.map((l) => (
           <View key={lineKey(l)} style={{ paddingVertical: spacing.xs, gap: spacing.xxs }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
@@ -178,7 +178,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
                 keyboardType="numeric"
                 numeric
                 placeholder="قیمت"
-                error={l.unitPrice === null ? "بدونِ قیمت" : undefined}
+                error={l.unitPrice === null ? "بدون قیمت" : undefined}
                 style={{ width: 120, marginBottom: 0 }}
               />
             </View>
@@ -187,21 +187,21 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
                 {l.discountAmount > 0 ? `تخفیف: ${formatAmount(String(l.discountAmount))}` : ""}
                 {l.discountAmount > 0 && l.taxPercent > 0 ? " -- " : ""}
                 {l.taxPercent > 0 ? `مالیات ${formatAmount(String(l.taxPercent))}٪` : ""}
-                {" -- "}جمعِ این ردیف: {formatAmount(String(lineTotalAmount(l)))}
+                {" -- "}جمع این ردیف: {formatAmount(String(lineTotalAmount(l)))}
               </Text>
             ) : null}
           </View>
         ))}
-        <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>جمعِ کالاها: {formatAmount(String(cartGrossTotal(cart)))}</Text>
+        <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>جمع کالاها: {formatAmount(String(cartGrossTotal(cart)))}</Text>
         {cartDiscountTotal(cart) > 0 ? (
           <Text style={[typography.body, { color: colors.textSecondary }]}>تخفیف: {formatAmount(String(cartDiscountTotal(cart)))}</Text>
         ) : null}
         {cartTaxTotal(cart) > 0 ? (
-          <Text style={[typography.body, { color: colors.textSecondary }]}>مالياتِ ارزش‌افزوده: {formatAmount(String(cartTaxTotal(cart)))}</Text>
+          <Text style={[typography.body, { color: colors.textSecondary }]}>مالیات ارزش‌افزوده: {formatAmount(String(cartTaxTotal(cart)))}</Text>
         ) : null}
-        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginTop: spacing.xs }]}>مبلغِ فاکتور: {formatAmount(String(total))}</Text>
+        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginTop: spacing.xs }]}>مبلغ فاکتور: {formatAmount(String(total))}</Text>
         <Text style={[typography.caption, { color: colors.textSecondary }]}>
-          تخفیف از فهرست/قانونِ قیمتِ همین مشتری و مالیات از درصدِ تعریف‌شده برایِ کالا/انبار/شرکت -- خودکار محاسبه و در مبلغِ بالا لحاظ شده است.
+          تخفیف از فهرست/قانون قیمت همین مشتری و مالیات از درصد تعریف‌شده برای کالا/انبار/شرکت — خودکار محاسبه و در مبلغ بالا لحاظ شده است.
         </Text>
       </Card>
 
@@ -216,7 +216,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
                 {draft.checks.map((c, index) => (
                   <View key={c.key} style={{ borderTopWidth: index === 0 ? 0 : 1, borderTopColor: colors.border, paddingTop: index === 0 ? 0 : spacing.sm }}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>چکِ {index + 1}</Text>
+                      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>چک {index + 1}</Text>
                       <Button
                         label="حذف"
                         variant="ghost"
@@ -226,7 +226,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
                     </View>
                     <View style={{ flexDirection: "row", gap: spacing.sm }}>
                       <Input label="شمارهٔ چک *" value={c.check_no} onChangeText={(v) => updateCheck(c.key, { check_no: v })} keyboardType="numeric" numeric style={{ flex: 1 }} />
-                      <Input label="سریالِ چک" value={c.check_serial} onChangeText={(v) => updateCheck(c.key, { check_serial: v })} style={{ flex: 1 }} />
+                      <Input label="سریال چک" value={c.check_serial} onChangeText={(v) => updateCheck(c.key, { check_serial: v })} style={{ flex: 1 }} />
                     </View>
                     <View style={{ flexDirection: "row", gap: spacing.sm }}>
                       <Input label="مبلغ *" value={c.amount} onChangeText={(v) => updateCheck(c.key, { amount: v })} keyboardType="numeric" numeric style={{ flex: 1 }} />
@@ -239,21 +239,21 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
                       ))}
                     </View>
                     {c.bank_id === null ? (
-                      <Input label="نامِ بانک (اگر در فهرست نیست)" value={c.bank_name} onChangeText={(v) => updateCheck(c.key, { bank_name: v })} />
+                      <Input label="نام بانک (اگر در فهرست نیست)" value={c.bank_name} onChangeText={(v) => updateCheck(c.key, { bank_name: v })} />
                     ) : null}
                     <Input label="شمارهٔ شبا" value={c.iban} onChangeText={(v) => updateCheck(c.key, { iban: v })} numeric autoCapitalize="characters" />
                     <Input label="شمارهٔ حساب" value={c.bank_account_no} onChangeText={(v) => updateCheck(c.key, { bank_account_no: v })} keyboardType="numeric" numeric />
-                    <Input label="نامِ صادرکننده" value={c.party_name} onChangeText={(v) => updateCheck(c.key, { party_name: v })} />
+                    <Input label="نام صادرکننده" value={c.party_name} onChangeText={(v) => updateCheck(c.key, { party_name: v })} />
                     <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                      <Input label="کدِ ملی" value={c.national_id} onChangeText={(v) => updateCheck(c.key, { national_id: v })} keyboardType="numeric" numeric style={{ flex: 1 }} />
+                      <Input label="کد ملی" value={c.national_id} onChangeText={(v) => updateCheck(c.key, { national_id: v })} keyboardType="numeric" numeric style={{ flex: 1 }} />
                       <Input label="تلفن" value={c.phone} onChangeText={(v) => updateCheck(c.key, { phone: v })} keyboardType="phone-pad" numeric style={{ flex: 1 }} />
                     </View>
                   </View>
                 ))}
-                <Button label="افزودنِ چک" variant="secondary" onPress={() => update("CHECK", { checks: [...draft.checks, emptyCheck(customer.name)] })} />
+                <Button label="افزودن چک" variant="secondary" onPress={() => update("CHECK", { checks: [...draft.checks, emptyCheck(customer.name)] })} />
                 {draft.checks.length > 0 ? (
                   <Text style={[typography.bodyBold, { color: colors.textPrimary, marginTop: spacing.sm }]}>
-                    جمعِ چک‌ها: {formatAmount(String(methodAmount("CHECK")))}
+                    جمع چک‌ها: {formatAmount(String(methodAmount("CHECK")))}
                   </Text>
                 ) : null}
               </>
@@ -268,7 +268,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
                   style={{ flex: 1 }}
                 />
                 <Button
-                  label="کلِ مانده"
+                  label="کل مانده"
                   variant="ghost"
                   fullWidth={false}
                   onPress={() => update(method.method_code, { amount: String(Math.max(0, remaining + methodAmount(method.method_code))) })}
@@ -279,7 +279,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
             {method.requires_detail && options.length > 0 && (method.method_code !== "CHECK" || draft.checks.length > 0) ? (
               <>
                 <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
-                  {method.method_code === "CHECK" ? "نگه‌داری نزدِ" : "صندوق/حساب"}
+                  {method.method_code === "CHECK" ? "نگه‌داری نزد" : "صندوق/حساب"}
                 </Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginBottom: spacing.sm }}>
                   {options.map((o) => (
@@ -296,14 +296,14 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
       })}
 
       <Card>
-        <Text style={[typography.body, { color: colors.textPrimary }]}>مبلغِ فاکتور: {formatAmount(String(total))}</Text>
+        <Text style={[typography.body, { color: colors.textPrimary }]}>مبلغ فاکتور: {formatAmount(String(total))}</Text>
         <Text style={[typography.body, { color: colors.success }]}>تسویه‌شده: {formatAmount(String(paid))}</Text>
         <Text style={[typography.bodyBold, { color: remaining < 0 ? colors.danger : colors.textPrimary }]}>
-          {remaining < 0 ? `بیش از مبلغِ فاکتور: ${formatAmount(String(-remaining))}` : `مانده (نسیه): ${formatAmount(String(remaining))}`}
+          {remaining < 0 ? `بیش از مبلغ فاکتور: ${formatAmount(String(-remaining))}` : `مانده (نسیه): ${formatAmount(String(remaining))}`}
         </Text>
       </Card>
 
-      <Input label="نامِ تحویل‌گیرنده" value={receivedByName} onChangeText={setReceivedByName} />
+      <Input label="نام تحویل‌گیرنده" value={receivedByName} onChangeText={setReceivedByName} />
 
       {errors.length > 0 ? (
         <Card style={{ borderColor: colors.danger }}>
@@ -313,7 +313,7 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
         </Card>
       ) : null}
 
-      <Button label="ثبتِ فاکتور و رسیدِ تحویل" onPress={submit} loading={submitting} disabled={submitting || lines.length === 0} />
+      <Button label="ثبت فاکتور و رسید تحویل" onPress={submit} loading={submitting} disabled={submitting || lines.length === 0} />
     </ScrollView>
   );
 }

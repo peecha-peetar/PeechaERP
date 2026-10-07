@@ -1,7 +1,7 @@
-"""مدیریتِ نظرات/امتیازِ مشتریان -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ
-حیاتیِ PeechaSync -- مدیریتِ نظرات/امتیازِ مشتریان»): نظراتِ زنده از
-فروشگاهِ ووکامرس خوانده می‌شود (بدونِ ذخیره‌یِ محلی) و تایید/رد/حذف
-مستقیماً رویِ همان فروشگاه اِعمال می‌شود."""
+"""مدیریت نظرات/امتیاز مشتریان — طبق بازخورد صریح کاربر («امکانات
+حیاتی PeechaSync — مدیریت نظرات/امتیاز مشتریان»): نظرات زنده از
+فروشگاه ووکامرس خوانده می‌شود (بدون ذخیرهٔ محلی) و تایید/رد/حذف
+مستقیماً روی همان فروشگاه اعمال می‌شود."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin
 
-_STATUS_LABELS = {"approved": "تاییدشده", "hold": "درانتظارِ تایید", "spam": "اسپم", "trash": "زباله‌دان"}
+_STATUS_LABELS = {"approved": "تاییدشده", "hold": "درانتظار تایید", "spam": "اسپم", "trash": "زباله‌دان"}
 
 
 class CommercialReviewsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -36,7 +36,7 @@ class CommercialReviewsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("نظرات و امتیازِ مشتریان")
+        title = QLabel("نظرات و امتیاز مشتریان")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
@@ -54,14 +54,14 @@ class CommercialReviewsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["محصول", "کاربر", "متنِ نظر", "امتیاز", "وضعیت", ""])
+        self.table.setHorizontalHeaderLabels(["محصول", "کاربر", "متن نظر", "امتیاز", "وضعیت", ""])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
 
         self.set_field_help([
-            (self.connection_combo, "اتصالِ ووکامرسی که نظراتش را می‌خواهید ببینید/مدیریت کنید."),
+            (self.connection_combo, "اتصال ووکامرسی که نظراتش را می‌خواهید ببینید/مدیریت کنید."),
         ])
 
     def _company_id(self) -> int | None:
@@ -114,7 +114,7 @@ class CommercialReviewsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             approve_button.clicked.connect(lambda _checked=False, rid=review.external_review_id: self._approve(rid))
             actions.addWidget(approve_button)
             reject_button = QPushButton("⛔")
-            reject_button.setToolTip("درانتظارِ تایید")
+            reject_button.setToolTip("درانتظار تایید")
             reject_button.clicked.connect(lambda _checked=False, rid=review.external_review_id: self._reject(rid))
             actions.addWidget(reject_button)
             delete_button = QPushButton("🗑")
@@ -141,7 +141,7 @@ class CommercialReviewsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except Exception as exc:  # noqa: BLE001
             self.status_label.setText(str(exc))
             return
-        theme.set_status_label(self.status_label, "نظر به حالتِ درانتظار برگشت.", ok=True)
+        theme.set_status_label(self.status_label, "نظر به حالت درانتظار برگشت.", ok=True)
         self.refresh()
 
     def _delete(self, external_review_id: str) -> None:

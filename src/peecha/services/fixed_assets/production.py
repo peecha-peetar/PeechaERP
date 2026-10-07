@@ -1,8 +1,8 @@
-"""اتصالِ دارایی به تولید -- R264: ماشین ← مرکزِ کار ← ساعتِ کارکرد ← استهلاک ← نرخِ ماشین ← سفارشِ تولید.
+"""اتصال دارایی به تولید — R264: ماشین ← مرکز کار ← ساعت کارکرد ← استهلاک ← نرخ ماشین ← سفارش تولید.
 
-نرخِ هر ساعتِ ماشین در یک دوره = استهلاکِ ثبت‌شدهٔ همان دوره ÷ ساعتِ کارکردِ همان دوره
-(اگر «نرخِ ماشین» دستی تعیین شده باشد، همان مبنا است). تخصیص به سفارشِ تولید فقط ثبت می‌شود (fa.machine_cost_allocations)
-تا موتورِ بهایِ تولید در فازِ بعد مصرفش کند -- سندِ حسابداری نمی‌سازد (هزینهٔ استهلاک قبلاً با اجرایِ دوره ثبت شده).
+نرخ هر ساعت ماشین در یک دوره = استهلاک ثبت‌شدهٔ همان دوره ÷ ساعت کارکرد همان دوره
+(اگر «نرخ ماشین» دستی تعیین شده باشد، همان مبنا است). تخصیص به سفارش تولید فقط ثبت می‌شود (fa.machine_cost_allocations)
+تا موتور بهای تولید در فاز بعد مصرفش کند — سند حسابداری نمی‌سازد (هزینهٔ استهلاک قبلاً با اجرای دوره ثبت شده).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ ZERO = c.ZERO
 
 
 def machine_rate(company_id: int, asset_id: int, period_code: str) -> SimpleNamespace:
-    """(استهلاکِ دوره، ساعتِ کارکرد، نرخِ محاسبه‌شده، نرخِ مؤثر)."""
+    """(استهلاک دوره، ساعت کارکرد، نرخ محاسبه‌شده، نرخ مؤثر)."""
     code, start, end = c.period_from_code(period_code)
     with new_session() as session:
         asset = session.get(Asset, asset_id)
@@ -40,21 +40,21 @@ def machine_rate(company_id: int, asset_id: int, period_code: str) -> SimpleName
 
 def allocate_to_order(company_id: int, user_id: int | None, asset_id: int, period_code: str, production_order_ref: str,
                       hours: decimal.Decimal) -> SimpleNamespace:
-    """بهایِ ماشین برایِ یک سفارشِ تولید = نرخ × ساعت؛ جمعِ ساعت‌هایِ تخصیص از کارکردِ دوره بیشتر نمی‌شود."""
+    """بهای ماشین برای یک سفارش تولید = نرخ × ساعت؛ جمع ساعت‌های تخصیص از کارکرد دوره بیشتر نمی‌شود."""
     hours = decimal.Decimal(hours)
     if hours <= 0 or not (production_order_ref or "").strip():
-        raise ValueError("سفارشِ تولید و ساعتِ مثبت الزامی است.")
+        raise ValueError("سفارش تولید و ساعت مثبت الزامی است.")
     info = machine_rate(company_id, asset_id, period_code)
     if info.rate is None:
-        raise ValueError("نرخِ ماشین برایِ این دوره قابلِ‌محاسبه نیست (استهلاک یا کارکرد ثبت نشده).")
+        raise ValueError("نرخ ماشین برای این دوره قابل‌محاسبه نیست (استهلاک یا کارکرد ثبت نشده).")
     with new_session() as session:
         asset = c.lock_asset(session, asset_id, company_id)
         if not asset.is_production_machine:
-            raise ValueError("این دارایی «ماشینِ تولیدی» تعریف نشده است.")
+            raise ValueError("این دارایی «ماشین تولیدی» تعریف نشده است.")
         used = decimal.Decimal(session.scalar(select(func.coalesce(func.sum(MachineCostAllocation.hours), 0)).where(
             MachineCostAllocation.asset_id == asset_id, MachineCostAllocation.period_code == info.period_code)) or 0)
         if info.hours and used + hours > info.hours:
-            raise ValueError(f"ساعتِ تخصیص ({used + hours}) از کارکردِ ثبت‌شدهٔ دوره ({info.hours}) بیشتر است.")
+            raise ValueError(f"ساعت تخصیص ({used + hours}) از کارکرد ثبت‌شدهٔ دوره ({info.hours}) بیشتر است.")
         row = MachineCostAllocation(company_id=company_id, asset_id=asset_id, period_code=info.period_code,
                                     production_order_ref=production_order_ref.strip(), hours=hours, rate_per_hour=info.rate,
                                     amount=c.money(info.rate * hours),
@@ -68,7 +68,7 @@ def allocate_to_order(company_id: int, user_id: int | None, asset_id: int, perio
 
 
 def order_machine_cost(company_id: int, production_order_ref: str) -> decimal.Decimal:
-    """جمعِ بهایِ ماشینِ یک سفارشِ تولید -- نقطهٔ مصرفِ موتورِ بهایِ تولید."""
+    """جمع بهای ماشین یک سفارش تولید — نقطهٔ مصرف موتور بهای تولید."""
     with new_session() as session:
         return decimal.Decimal(session.scalar(select(func.coalesce(func.sum(MachineCostAllocation.amount), 0)).where(
             MachineCostAllocation.company_id == company_id, MachineCostAllocation.production_order_ref == production_order_ref)) or 0)

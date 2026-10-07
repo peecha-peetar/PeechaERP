@@ -1,6 +1,6 @@
-"""درختِ مسیر/منطقه‌یِ توزیع -- رویِ همان نوع‌بُعدِ تخصصیِ از قبل موجودِ
-DISTRIBUTION_ROUTE (detail_dimensions.py، استفاده‌شده در فیلترهایِ
-distribution_team.py از R177). هیچ مدل/جدولِ تازه‌ای برایِ «Route»
+"""درخت مسیر/منطقهٔ توزیع — روی همان نوع‌بُعد تخصصی از قبل موجود
+DISTRIBUTION_ROUTE (detail_dimensions.py، استفاده‌شده در فیلترهای
+distribution_team.py از R177). هیچ مدل/جدول تازه‌ای برای «Route»
 ساخته نمی‌شود."""
 
 from __future__ import annotations

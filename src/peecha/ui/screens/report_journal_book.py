@@ -1,5 +1,5 @@
-"""دفتر روزنامه — فهرستِ سند+سطر به‌ترتیبِ تاریخ/شماره، با کدهایِ حسابِ
-استانداردِ کنارِ نامِ حساب و شرحِ سند/سطر، برایِ تحریرِ دفاترِ قانونی."""
+"""دفتر روزنامه — فهرست سند+سطر به‌ترتیب تاریخ/شماره، با کدهای حساب
+استاندارد کنار نام حساب و شرح سند/سطر، برای تحریر دفاتر قانونی."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ class JournalBookScreen(ReportScreenBase):
             return numerals.format_money(value, self._currency_decimal_places, None)
 
         headers = [
-            "تاریخ", "شماره‌یِ سند", "کدِ حساب", "نامِ حساب", "تفصیلی", "مرکزِ هزینه", "پروژه", "مرکزِ سود", "شرح", "بدهکار", "بستانکار",
+            "تاریخ", "شمارهٔ سند", "کد حساب", "نام حساب", "تفصیلی", "مرکز هزینه", "پروژه", "مرکز سود", "شرح", "بدهکار", "بستانکار",
         ]
         rows: list[list] = []
         total_debit = decimal.Decimal(0)
@@ -79,12 +79,12 @@ class JournalBookScreen(ReportScreenBase):
                     fmt(ln.credit) if ln.credit else "",
                 ]
             )
-        footer = ["", "", "", "", "", "", "", "", "جمعِ کل", fmt(total_debit), fmt(total_credit)]
+        footer = ["", "", "", "", "", "", "", "", "جمع کل", fmt(total_debit), fmt(total_credit)]
         return headers, rows, footer
 
     def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
         if not self._rows:
-            QMessageBox.information(self, "گزارش", "داده‌ای برایِ چاپ وجود ندارد.")
+            QMessageBox.information(self, "گزارش", "داده‌ای برای چاپ وجود ندارد.")
             return None
 
         field_names = [

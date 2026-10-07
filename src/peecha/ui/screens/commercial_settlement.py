@@ -1,25 +1,25 @@
-"""مدیریتِ تسویه‌یِ فاکتورها — طبقِ درخواستِ صریح («هر دریافت و پرداخت
-رفرنسِ فاکتور را داشته باشد و مدیریتِ تسویه‌یِ فاکتورها را ایجاد کن»).
+"""مدیریت تسویهٔ فاکتورها — طبق درخواست صریح («هر دریافت و پرداخت
+رفرنس فاکتور را داشته باشد و مدیریت تسویهٔ فاکتورها را ایجاد کن»).
 
-طبقِ درخواستِ صریحِ کاربر (دورِ بعدی):
-۱) فرمِ فروش و خرید کاملاً جدا -- همین کلاس با پارامترِ invoice_type دوبار
+طبق درخواست صریح کاربر (دور بعدی):
+۱) فرم فروش و خرید کاملاً جدا — همین کلاس با پارامتر invoice_type دوبار
    نمونه‌سازی می‌شود (commercial_invoice_settlement_sales/_purchase).
-۲) تسویه‌یِ چند فاکتورِ هم‌زمان با یک سندِ دریافت/پرداختِ واحد -- هر ردیفِ
-   جدول فیلدِ «مبلغِ تسویه»یِ خودش را دارد؛ دکمه‌یِ «تسویه» همه‌یِ
-   ردیف‌هایِ دارایِ مبلغ را هم‌زمان می‌بَرد.
-۳) فیلترهایِ طرفِ‌حساب/کالا/تاریخِ سند/وضعیتِ سررسید.
-۴) بنرِ هشدارِ موعدِ تسویه (تنظیماتش در commercial_settings.py، ولی تا
-   پیش‌ازاین هیچ صفحه‌ای list_invoices_due_soon را صدا نمی‌زد -- این‌جا
-   اولین مصرف‌کننده‌یِ واقعی‌اش است).
-۵) زنجیره‌یِ Enter -- هم رویِ فیلترها، هم رویِ ستونِ مبلغِ هر ردیف (ردیف‌به‌ردیف
-   تا دکمه‌یِ تسویه)، هم رویِ ردیفِ عملیات.
+۲) تسویهٔ چند فاکتور هم‌زمان با یک سند دریافت/پرداخت واحد — هر ردیف
+   جدول فیلد «مبلغ تسویه»ی خودش را دارد؛ دکمهٔ «تسویه» همهٔ
+   ردیف‌های دارای مبلغ را هم‌زمان می‌بَرد.
+۳) فیلترهای طرف‌حساب/کالا/تاریخ سند/وضعیت سررسید.
+۴) بنر هشدار موعد تسویه (تنظیماتش در commercial_settings.py، ولی تا
+   پیش‌ازاین هیچ صفحه‌ای list_invoices_due_soon را صدا نمی‌زد — این‌جا
+   اولین مصرف‌کنندهٔ واقعی‌اش است).
+۵) زنجیرهٔ Enter — هم روی فیلترها، هم روی ستون مبلغ هر ردیف (ردیف‌به‌ردیف
+   تا دکمهٔ تسویه)، هم روی ردیف عملیات.
 
-چون رسیدِ خزانه‌داری همان سندِ حسابداری (acc.journal_entries، با
-entry_type_code یِ RECEIPT/PAYMENT) است، این صفحه یا یک سندِ ازقبل‌ثبت‌شده
-را به فاکتورهایِ انتخاب‌شده وصل می‌کند، یا (طبقِ رفعِ باگِ واقعی: «قبلاً
-باید سندِ دریافت/پرداخت از قبل ثبت شده باشد») مستقیماً فرمِ دریافت/پرداخت
-(treasury_voucher.py) را با اطلاعاتِ همان فاکتور(ها) باز می‌کند -- بعدِ
-ثبتِ موفقِ آن سند، خودکار به‌عنوانِ تسویه‌یِ همه‌شان هم ثبت می‌شود
+چون رسید خزانه‌داری همان سند حسابداری (acc.journal_entries، با
+entry_type_code ی RECEIPT/PAYMENT) است، این صفحه یا یک سند ازقبل‌ثبت‌شده
+را به فاکتورهای انتخاب‌شده وصل می‌کند، یا (طبق رفع باگ واقعی: «قبلاً
+باید سند دریافت/پرداخت از قبل ثبت شده باشد») مستقیماً فرم دریافت/پرداخت
+(treasury_voucher.py) را با اطلاعات همان فاکتور(ها) باز می‌کند — بعد
+ثبت موفق آن سند، خودکار به‌عنوان تسویهٔ همه‌شان هم ثبت می‌شود
 (treasury_voucher.py:prefill_for_invoice با settle_invoices)."""
 
 from __future__ import annotations
@@ -61,10 +61,10 @@ from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 _VOUCHER_NAV_CODE_BY_INVOICE_TYPE = {"SALES_INVOICE": "TREASURY_RECEIPT", "PURCHASE_INVOICE": "TREASURY_PAYMENT"}
 _INVOICE_EDIT_NAV_CODE_BY_TYPE = {"SALES_INVOICE": "SALES_INVOICE", "PURCHASE_INVOICE": "PURCH_INVOICE"}
 _VOUCHER_ENTRY_TYPE_BY_INVOICE_TYPE = {"SALES_INVOICE": ["RECEIPT"], "PURCHASE_INVOICE": ["PAYMENT"]}
-_DUE_STATUS_FILTER_OPTIONS = [("(همه)", None), ("معوقه", "OVERDUE"), ("نزدیکِ سررسید", "DUE_SOON")]
+_DUE_STATUS_FILTER_OPTIONS = [("(همه)", None), ("معوقه", "OVERDUE"), ("نزدیک سررسید", "DUE_SOON")]
 
-_INVOICE_COLUMNS = ["شماره", "طرفِ‌حساب", "موعدِ تسویه", "جمعِ کل", "تسویه‌شده", "مانده", "مبلغِ تسویه"]
-_SETTLEMENT_COLUMNS = ["تاریخ", "مبلغ", "سندِ حسابداری", "شمارهٔ مرجع", "توضیح", "عملیات"]
+_INVOICE_COLUMNS = ["شماره", "طرف‌حساب", "موعد تسویه", "جمع کل", "تسویه‌شده", "مانده", "مبلغ تسویه"]
+_SETTLEMENT_COLUMNS = ["تاریخ", "مبلغ", "سند حسابداری", "شمارهٔ مرجع", "توضیح", "عملیات"]
 
 
 class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
@@ -87,10 +87,10 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("تسویه‌یِ فاکتورهایِ فروش" if self._is_sales else "تسویه‌یِ فاکتورهایِ خرید")
+        title = QLabel("تسویهٔ فاکتورهای فروش" if self._is_sales else "تسویهٔ فاکتورهای خرید")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("فقط فاکتورهایِ ثبتِ‌نهایی‌شده که هنوز به‌طورِ کامل تسویه نشده‌اند نمایش داده می‌شوند."))
+        layout.addWidget(QLabel("فقط فاکتورهای ثبت‌نهایی‌شده که هنوز به‌طور کامل تسویه نشده‌اند نمایش داده می‌شوند."))
 
         # --- فیلترها: طبقِ درخواستِ صریح («فیلترها و جستجوی فاکتور بر
         # اساسِ شخص و کالا و تاریخ»). ---
@@ -107,7 +107,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         self.item_filter_combo.lineEdit().setPlaceholderText("(همه)")
         filters_row.addWidget(self.item_filter_combo)
 
-        self.date_filter_checkbox = QCheckBox("فیلترِ تاریخِ سند")
+        self.date_filter_checkbox = QCheckBox("فیلتر تاریخ سند")
         filters_row.addWidget(self.date_filter_checkbox)
         filters_row.addWidget(QLabel("از"))
         self.date_from_field = JalaliDateEdit()
@@ -125,7 +125,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         clear_filters_button = QPushButton("✕")
         clear_filters_button.setObjectName("iconButton")
         clear_filters_button.setFixedWidth(36)
-        clear_filters_button.setToolTip("پاک‌کردنِ فیلترها")
+        clear_filters_button.setToolTip("پاک‌کردن فیلترها")
         clear_filters_button.clicked.connect(self._clear_filters)
         filters_row.addWidget(clear_filters_button)
         filters_row.addStretch(1)
@@ -182,7 +182,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         # دابل‌کلیک رویِ هر ردیف، همان فاکتورِ واقعی را در فرمِ خودش
         # (فقط‌مشاهده اگر ثبتِ‌نهایی شده باشد) باز می‌کند -- هم‌الگو با
         # commercial_documents_list.py.
-        self.invoice_table.setToolTip("برایِ مشاهده‌یِ کاملِ فاکتور، رویِ ردیف دوبار کلیک کنید.")
+        self.invoice_table.setToolTip("برای مشاهدهٔ کامل فاکتور، روی ردیف دوبار کلیک کنید.")
         self.invoice_table.cellDoubleClicked.connect(self._open_invoice_document)
         layout.addWidget(self.invoice_table, stretch=2)
 
@@ -190,12 +190,12 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         # کند») -- ردیفِ اقدام: سندِ حسابداری/تاریخ/مرجع/توضیح مشترکِ کلِ
         # عملیات‌اند؛ مبلغِ هر فاکتور در خودِ جدولِ بالا (ستونِ آخر) است. ---
         add_row = QHBoxLayout()
-        add_row.addWidget(QLabel("سندِ دریافت/پرداخت"))
+        add_row.addWidget(QLabel("سند دریافت/پرداخت"))
         self.voucher_combo = _EnterComboBox()
         self.voucher_combo.setMinimumWidth(260)
         self.voucher_combo.setToolTip(
-            "برایِ صدورِ سندِ تازه (پیشنهادی)، همین گزینه را نگه دارید -- با کلیکِ «تسویه»، فرمِ دریافت/پرداخت با "
-            "طرفِ‌حساب و مجموعِ مبلغ‌هایِ واردشده باز می‌شود و بعدِ ثبتِ آن، خودکار به همان فاکتورها وصل می‌شود. اگر "
+            "برای صدور سند تازه (پیشنهادی)، همین گزینه را نگه دارید — با کلیک «تسویه»، فرم دریافت/پرداخت با "
+            "طرف‌حساب و مجموع مبلغ‌های واردشده باز می‌شود و بعد ثبت آن، خودکار به همان فاکتورها وصل می‌شود. اگر "
             "سندی از قبل ثبت شده، آن را از این فهرست انتخاب کنید تا فقط رفرنس داده شود."
         )
         add_row.addWidget(self.voucher_combo, stretch=1)
@@ -212,8 +212,8 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         add_button = QPushButton("🔗 تسویه")
         add_button.setObjectName("primaryButton")
         add_button.setToolTip(
-            "همه‌یِ ردیف‌هایِ جدولِ بالا که برایشان مبلغ وارد شده، هم‌زمان تسویه می‌شوند. اگر سندِ حسابداری انتخاب "
-            "نشده باشد، فرمِ دریافت/پرداخت با اطلاعاتِ همان فاکتور(ها) باز می‌شود؛ وگرنه فقط همین سندِ انتخابی "
+            "همهٔ ردیف‌های جدول بالا که برایشان مبلغ وارد شده، هم‌زمان تسویه می‌شوند. اگر سند حسابداری انتخاب "
+            "نشده باشد، فرم دریافت/پرداخت با اطلاعات همان فاکتور(ها) باز می‌شود؛ وگرنه فقط همین سند انتخابی "
             "رفرنس داده می‌شود."
         )
         add_button.clicked.connect(self._add_settlement)
@@ -230,7 +230,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        layout.addWidget(QLabel("تسویه‌هایِ فاکتورِ انتخاب‌شده"))
+        layout.addWidget(QLabel("تسویه‌های فاکتور انتخاب‌شده"))
         self.settlement_table = QTableWidget(0, len(_SETTLEMENT_COLUMNS))
         self.settlement_table.setHorizontalHeaderLabels(_SETTLEMENT_COLUMNS)
         self.settlement_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -240,19 +240,19 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.settlement_table, stretch=1)
 
         self.set_field_help([
-            (self.counterparty_filter_combo, "فقط فاکتورهایِ همین طرفِ‌حساب نشان داده شوند."),
-            (self.item_filter_combo, "فقط فاکتورهایی که شاملِ همین کالا هستند نشان داده شوند."),
-            (self.date_filter_checkbox, "فیلترِ بازه‌یِ تاریخِ سند را فعال/غیرِفعال می‌کند."),
-            (self.date_from_field, "ابتدایِ بازه‌یِ تاریخِ سند."),
-            (self.date_to_field, "انتهایِ بازه‌یِ تاریخِ سند."),
-            (self.due_status_filter_combo, "فقط فاکتورهایِ معوقه یا نزدیک‌به‌سررسید نشان داده شوند."),
+            (self.counterparty_filter_combo, "فقط فاکتورهای همین طرف‌حساب نشان داده شوند."),
+            (self.item_filter_combo, "فقط فاکتورهایی که شامل همین کالا هستند نشان داده شوند."),
+            (self.date_filter_checkbox, "فیلتر بازهٔ تاریخ سند را فعال/غیرفعال می‌کند."),
+            (self.date_from_field, "ابتدای بازهٔ تاریخ سند."),
+            (self.date_to_field, "انتهای بازهٔ تاریخ سند."),
+            (self.due_status_filter_combo, "فقط فاکتورهای معوقه یا نزدیک‌به‌سررسید نشان داده شوند."),
             (
                 self.voucher_combo,
-                "برایِ صدورِ سندِ تازه (پیشنهادی)، همین گزینه را نگه دارید؛ اگر سندی از قبل ثبت شده، آن را انتخاب کنید تا فقط رفرنس داده شود.",
+                "برای صدور سند تازه (پیشنهادی)، همین گزینه را نگه دارید؛ اگر سندی از قبل ثبت شده، آن را انتخاب کنید تا فقط رفرنس داده شود.",
             ),
-            (self.settlement_date_field, "تاریخِ ثبتِ این تسویه."),
-            (self.reference_field, "شماره/مرجعِ دلخواه برایِ این تسویه -- اختیاری."),
-            (self.description_field, "توضیحِ این تسویه."),
+            (self.settlement_date_field, "تاریخ ثبت این تسویه."),
+            (self.reference_field, "شماره/مرجع دلخواه برای این تسویه — اختیاری."),
+            (self.description_field, "توضیح این تسویه."),
         ])
 
     def _company_id(self) -> int | None:
@@ -301,7 +301,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
             company_id, entry_type_codes=_VOUCHER_ENTRY_TYPE_BY_INVOICE_TYPE[self._invoice_type],
         )
         self.voucher_combo.clear()
-        self.voucher_combo.addItem("🔗 صدورِ سندِ دریافت/پرداختِ تازه (پیشنهادی)", None)
+        self.voucher_combo.addItem("🔗 صدور سند دریافت/پرداخت تازه (پیشنهادی)", None)
         for entry in self._voucher_entries:
             label = f"#{numerals.to_persian_digits(str(entry.temporary_no))} — {numerals.format_jalali_date(entry.document_date)} — {entry.description or ''}"
             self.voucher_combo.addItem(label, entry.journal_entry_id)
@@ -463,7 +463,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
                 self.settlement_table.setItem(row_index, col_index, QTableWidgetItem(value))
             remove_button = QPushButton("🗑️")
             remove_button.setObjectName("dangerIconButton")
-            remove_button.setToolTip("حذفِ این تسویه")
+            remove_button.setToolTip("حذف این تسویه")
             remove_button.clicked.connect(lambda _checked=False, sid=settlement.settlement_id: self._remove_settlement(sid))
             self.settlement_table.setCellWidget(row_index, len(_SETTLEMENT_COLUMNS) - 1, remove_button)
         self.settlement_table.resizeRowsToContents()
@@ -483,7 +483,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         entries = self._collect_settlement_entries()
         if not entries:
             self.status_label.setObjectName("statusError")
-            self.status_label.setText("برایِ حداقل یک فاکتور، ستونِ «مبلغِ تسویه» را پر کنید.")
+            self.status_label.setText("برای حداقل یک فاکتور، ستون «مبلغ تسویه» را پر کنید.")
             return
         voucher_journal_entry_id = self.voucher_combo.currentData()
         if voucher_journal_entry_id is None:
@@ -519,31 +519,31 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         if errors:
             self.status_label.setObjectName("statusError")
             prefix = f"{numerals.to_persian_digits(str(succeeded))} تسویه ثبت شد؛ " if succeeded else ""
-            self.status_label.setText(prefix + "خطا برایِ برخی: " + " ؛ ".join(errors))
+            self.status_label.setText(prefix + "خطا برای برخی: " + " ؛ ".join(errors))
         else:
             self.status_label.setObjectName("statusSuccess")
             self.status_label.setText(
-                "تسویه ثبت شد." if succeeded == 1 else f"تسویه‌یِ هر {numerals.to_persian_digits(str(succeeded))} فاکتور ثبت شد."
+                "تسویه ثبت شد." if succeeded == 1 else f"تسویهٔ هر {numerals.to_persian_digits(str(succeeded))} فاکتور ثبت شد."
             )
 
     def _open_voucher_for_settlement(self, company_id: int, entries: list[tuple[int, decimal.Decimal]]) -> None:
         if self._main_window is None:
             self.status_label.setObjectName("statusError")
-            self.status_label.setText("امکانِ بازکردنِ فرمِ دریافت/پرداخت از این‌جا وجود ندارد.")
+            self.status_label.setText("امکان بازکردن فرم دریافت/پرداخت از این‌جا وجود ندارد.")
             return
         docs = []
         for document_id, _amount in entries:
             doc, _lines = self._document_lookup(company_id, document_id)
             if doc is None:
                 self.status_label.setObjectName("statusError")
-                self.status_label.setText("یکی از فاکتورهایِ انتخاب‌شده دیگر معتبر نیست.")
+                self.status_label.setText("یکی از فاکتورهای انتخاب‌شده دیگر معتبر نیست.")
                 return
             docs.append(doc)
         counterparties = {d.counterparty_detail_account_id for d in docs}
         if len(counterparties) > 1:
             self.status_label.setObjectName("statusError")
             self.status_label.setText(
-                "برایِ صدورِ یک سندِ دریافت/پرداختِ واحد، فقط فاکتورهایِ یک طرفِ‌حساب را هم‌زمان تسویه کنید."
+                "برای صدور یک سند دریافت/پرداخت واحد، فقط فاکتورهای یک طرف‌حساب را هم‌زمان تسویه کنید."
             )
             return
         nav_code = _VOUCHER_NAV_CODE_BY_INVOICE_TYPE[self._invoice_type]
@@ -574,7 +574,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ تسویه", "این تسویه حذف شود؟")
+        confirm = QMessageBox.question(self, "حذف تسویه", "این تسویه حذف شود؟")
         if confirm != QMessageBox.Yes:
             return
         try:

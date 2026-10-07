@@ -55,7 +55,7 @@ for code in ("COST_SETTINGS", "FA_SETUP", "PRD_SETTINGS"):
     check(flat[code].get("hidden_from_sidebar") is True, f"{code} hidden from sidebar (permission kept)")
 ss = SystemSettingsScreen()
 labels = [ss.tabs.tabText(i) for i in range(ss.tabs.count())]
-check(labels[10] == "دارایی‌هایِ ثابت" and labels[11] == "تولید", f"FA/PRD tabs in system settings {labels}")
+check(labels[10] == "دارایی‌های ثابت" and labels[11] == "تولید", f"FA/PRD tabs in system settings {labels}")
 ss.select_tab(11)
 check(ss.tabs.currentIndex() == 11, "gear jumps to production settings")
 ss.select_tab(7, "قیمت‌گذاری")
@@ -123,7 +123,7 @@ check(list(tabs) == ["تولید"], f"production-settings user sees only product
 _, tabs = visible_tabs(make_user("cost_only", ["costing_settings"]))
 check(tabs == {"انبار و موجودی": ["قیمت‌گذاری"]}, f"costing user sees only inventory > pricing {tabs}")
 _, tabs = visible_tabs(make_user("fa_users", ["fa_setup", "users"]))
-check(tabs == {"کاربران و دسترسی‌ها": ["کاربران"], "دارایی‌هایِ ثابت": ["طبقه‌ها، حساب‌ها، محل‌ها و سیاست‌ها"]}, f"mixed grants {tabs}")
+check(tabs == {"کاربران و دسترسی‌ها": ["کاربران"], "دارایی‌های ثابت": ["طبقه‌ها، حساب‌ها، محل‌ها و سیاست‌ها"]}, f"mixed grants {tabs}")
 scr_, tabs = visible_tabs(make_user("nobody", []))
 check(not tabs and not scr_.no_access_label.isHidden(), "no grants -> no settings, explanatory message")
 scr_.select_tab(11)
@@ -134,7 +134,7 @@ mgr = roles_setup.ensure_role_templates(company_id)["PRD_MANAGER"]
 u = make_user("prd_mgr", [])
 roles_service.set_user_role(u.user_id, mgr, company_id, True)
 _, tabs = visible_tabs(u)
-check("تولید" in tabs and "دارایی‌هایِ ثابت" not in tabs, "production manager template reaches production settings")
+check("تولید" in tabs and "دارایی‌های ثابت" not in tabs, "production manager template reaches production settings")
 sess.current_user = admin_user
 _, tabs = visible_tabs(admin_user)
 check(len(tabs) == 12, "admin sees all tabs")

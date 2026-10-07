@@ -1,11 +1,11 @@
-"""بازمحاسبهٔ بهایِ تمام‌شده -- R260.
+"""بازمحاسبهٔ بهای تمام‌شده — R260.
 
-دفترِ انبار تغییرناپذیر است؛ پس بازمحاسبه حرکت‌ها را به ترتیبِ زمانی دوباره «بازپخش» می‌کند و فقط اختلاف را
-با یک سندِ حسابداریِ اصلاحی (تاریخِ ثبت) + لاگِ تاریخ‌دارِ اصلاحِ بها ثبت می‌کند. لایه‌ها، تخصیص‌ها و میانگینِ مانده
-به مقدارِ جدید به‌روز می‌شوند و مبلغِ قبلی/جدیدِ هر ردیف در inv.cost_recalculation_lines می‌ماند.
+دفتر انبار تغییرناپذیر است؛ پس بازمحاسبه حرکت‌ها را به ترتیب زمانی دوباره «بازپخش» می‌کند و فقط اختلاف را
+با یک سند حسابداری اصلاحی (تاریخ ثبت) + لاگ تاریخ‌دار اصلاح بها ثبت می‌کند. لایه‌ها، تخصیص‌ها و میانگین مانده
+به مقدار جدید به‌روز می‌شوند و مبلغ قبلی/جدید هر ردیف در inv.cost_recalculation_lines می‌ماند.
 
-پشتیبانی: FIFO/LIFO/HIFO/LOFO (از تاریخِ شروع، با تخصیص‌هایِ ثبت‌شده) و میانگینِ متحرک (کلِ تاریخچه، به تفکیکِ مکان).
-شناساییِ ویژه، استاندارد و NIFO به ترتیبِ زمانی وابسته نیستند و بازمحاسبه نمی‌شوند.
+پشتیبانی: FIFO/LIFO/HIFO/LOFO (از تاریخ شروع، با تخصیص‌های ثبت‌شده) و میانگین متحرک (کل تاریخچه، به تفکیک مکان).
+شناسایی ویژه، استاندارد و NIFO به ترتیب زمانی وابسته نیستند و بازمحاسبه نمی‌شوند.
 """
 
 from __future__ import annotations
@@ -31,9 +31,9 @@ _Q2 = decimal.Decimal("0.01")
 _Q6 = decimal.Decimal("0.000001")
 RECALC_TAG = "RECALC"
 NOT_RECALCULATED = {
-    "SPECIFIC": "شناساییِ ویژه به ترتیبِ زمانی وابسته نیست",
-    "STANDARD": "بهایِ استاندارد از جدولِ بهایِ استاندارد می‌آید",
-    "NIFO": "NIFO بهایِ جایگزینیِ روزِ خروج است",
+    "SPECIFIC": "شناسایی ویژه به ترتیب زمانی وابسته نیست",
+    "STANDARD": "بهای استاندارد از جدول بهای استاندارد می‌آید",
+    "NIFO": "NIFO بهای جایگزینی روز خروج است",
 }
 # حسابِ طرفِ مقابلِ موجودی برایِ اختلافِ هر نوع سند (TRANSFER/امانی بی‌اثرِ حسابداری)
 _EXPENSE_ROLE = {"ISSUE": "COGS", "ADJUSTMENT": "INVENTORY_ADJUSTMENT_LOSS", "RETURN_IN": "COGS"}
@@ -86,7 +86,7 @@ class ItemResult:
 
 
 def _prior_deltas(session, item_id: int) -> dict[tuple[int, str, int], decimal.Decimal]:
-    """(ردیف، جهت، انبار) → جمعِ اصلاحاتِ بازمحاسبه‌هایِ قبلی (مبلغِ جاریِ ردیف = دفترِ انبار + این)."""
+    """(ردیف، جهت، انبار) → جمع اصلاحات بازمحاسبه‌های قبلی (مبلغ جاری ردیف = دفتر انبار + این)."""
     rows = session.execute(
         select(CostRecalculationLine.stock_document_line_id, CostRecalculationLine.movement_direction,
                CostRecalculationLine.warehouse_id, func.sum(CostRecalculationLine.delta_amount))
@@ -108,7 +108,7 @@ def _line_info(session, line_ids: set[int]) -> dict[int, SimpleNamespace]:
 
 
 def _ledger_groups(session, item_id: int, date_from: datetime.date | None = None) -> list[SimpleNamespace]:
-    """ردیف‌هایِ دفترِ انبار، گروه‌شده به (ردیفِ سند، جهت، انبار، مکان) به ترتیبِ زمانی."""
+    """ردیف‌های دفتر انبار، گروه‌شده به (ردیف سند، جهت، انبار، مکان) به ترتیب زمانی."""
     q = (select(StockLedger).where(StockLedger.item_id == item_id)
          .order_by(StockLedger.movement_date, StockLedger.ledger_id))
     if date_from is not None:
@@ -139,7 +139,7 @@ def _foreign_adjustments(session, item_id: int, date_from: datetime.date | None)
 def _replay_layers(session, item: Item, method: str, date_from: datetime.date, lock: bool) -> ItemResult:
     res = ItemResult(item.item_id, method, ok=False)
     if _foreign_adjustments(session, item.item_id, date_from):
-        res.message = "در بازه اصلاحِ بهایِ خرید ثبت شده است -- بازمحاسبه از تاریخی پس از آن ممکن است"
+        res.message = "در بازه اصلاح بهای خرید ثبت شده است — بازمحاسبه از تاریخی پس از آن ممکن است"
         return res
     q = (select(CostLayer, StockLedger.movement_date, StockLedger.ledger_id)
          .join(StockLedger, StockLedger.ledger_id == CostLayer.stock_ledger_id)
@@ -151,7 +151,7 @@ def _replay_layers(session, item: Item, method: str, date_from: datetime.date, l
         CostAllocation.item_id == item.item_id, CostAllocation.movement_date >= date_from)
         .order_by(CostAllocation.allocation_id)))
     if any(a.costing_method_code != method for a in allocs):
-        res.message = "روشِ ارزش‌گذاریِ کالا در این بازه تغییر کرده است -- تاریخِ شروع را پس از تغییرِ روش بگذارید"
+        res.message = "روش ارزش‌گذاری کالا در این بازه تغییر کرده است — تاریخ شروع را پس از تغییر روش بگذارید"
         return res
     out_groups = [g for g in _ledger_groups(session, item.item_id, date_from) if g.direction == "OUT"]
     allocs_by_key: dict[tuple[int, int], list[CostAllocation]] = defaultdict(list)
@@ -160,7 +160,7 @@ def _replay_layers(session, item: Item, method: str, date_from: datetime.date, l
     for g in out_groups:
         own = allocs_by_key.get((g.line_id, g.warehouse_id), [])
         if sum((a.quantity_base for a in own), _ZERO) != g.quantity:
-            res.message = "خروجِ بدونِ تخصیصِ کامل در بازه (حرکتِ پیش از R257 یا برگشتی) -- تاریخِ شروع را جلوتر بگذارید"
+            res.message = "خروج بدون تخصیص کامل در بازه (حرکت پیش از R257 یا برگشتی) — تاریخ شروع را جلوتر بگذارید"
             return res
     consumed_in_window: dict[int, decimal.Decimal] = defaultdict(lambda: _ZERO)
     for a in allocs:
@@ -171,7 +171,7 @@ def _replay_layers(session, item: Item, method: str, date_from: datetime.date, l
         start = layer.remaining_quantity + consumed_in_window[layer.cost_layer_id]
         in_window = layer.source_type_code != "OPENING_BALANCE" and mdate >= date_from
         if start > layer.original_quantity or (in_window and start != layer.original_quantity):
-            res.message = "لایه‌ها با تخصیص‌ها هم‌خوان نیستند -- بازمحاسبه برایِ این کالا ممکن نیست"
+            res.message = "لایه‌ها با تخصیص‌ها هم‌خوان نیستند — بازمحاسبه برای این کالا ممکن نیست"
             return res
         sims.append(SimpleNamespace(
             layer=layer, cost_layer_id=layer.cost_layer_id, warehouse_id=layer.warehouse_id, unit_cost=layer.unit_cost,
@@ -283,7 +283,7 @@ def _replay_layers(session, item: Item, method: str, date_from: datetime.date, l
     # موجودیِ منفیِ گذشته: لایهٔ رسیدِ بعدی کامل ساخته شده بود؛ بازپخش آن را با کمبود تسویه می‌کند و با ماندهٔ واقعی برابر می‌شود
     matches_balance = all(simulated.get(w, _ZERO) == max(decimal.Decimal(q or 0), _ZERO) for w, q in on_hand.items())
     if dict(actual) != dict(simulated) and not matches_balance:
-        res.message = "ماندهٔ بازپخش با ماندهٔ واقعیِ لایه‌ها یکی نشد -- بازمحاسبه برایِ این کالا ممکن نیست"
+        res.message = "ماندهٔ بازپخش با ماندهٔ واقعی لایه‌ها یکی نشد — بازمحاسبه برای این کالا ممکن نیست"
         res.lines.clear()
         return res
     res.ok = True
@@ -294,14 +294,14 @@ def _replay_layers(session, item: Item, method: str, date_from: datetime.date, l
 def _replay_average(session, item: Item, date_from: datetime.date) -> ItemResult:
     res = ItemResult(item.item_id, "WEIGHTED_AVERAGE", ok=False)
     if _foreign_adjustments(session, item.item_id, None):
-        res.message = "اصلاحِ بهایِ خرید برایِ این کالا ثبت شده است -- بازمحاسبهٔ میانگین ممکن نیست"
+        res.message = "اصلاح بهای خرید برای این کالا ثبت شده است — بازمحاسبهٔ میانگین ممکن نیست"
         return res
     groups = _ledger_groups(session, item.item_id)
     allocs = session.execute(
         select(CostAllocation.stock_document_line_id, CostAllocation.warehouse_id, CostAllocation.costing_method_code,
                CostAllocation.costing_status_code).where(CostAllocation.item_id == item.item_id)).all()
     if any(m != "WEIGHTED_AVERAGE" for _l, _w, m, _s in allocs):
-        res.message = "روشِ ارزش‌گذاریِ کالا قبلاً تغییر کرده است -- بازمحاسبهٔ میانگین ممکن نیست"
+        res.message = "روش ارزش‌گذاری کالا قبلاً تغییر کرده است — بازمحاسبهٔ میانگین ممکن نیست"
         return res
     alloc_keys = {(ln, w) for ln, w, _m, _s in allocs}
     pending_keys = {(ln, w) for ln, w, _m, st in allocs if st == "PENDING"}
@@ -389,7 +389,7 @@ def _compute(session, company_id: int, item_id: int | None, warehouse_id: int | 
 
 def preview(company_id: int, item_id: int | None = None, warehouse_id: int | None = None,
             date_from: datetime.date | None = None) -> list[ItemResult]:
-    """پیش‌نمایش (بدونِ تغییر): اختلافِ هر ردیف و کالاهایی که بازمحاسبه نمی‌شوند با علت."""
+    """پیش‌نمایش (بدون تغییر): اختلاف هر ردیف و کالاهایی که بازمحاسبه نمی‌شوند با علت."""
     with new_session() as session:
         return _compute(session, company_id, item_id, warehouse_id, date_from or datetime.date(1900, 1, 1), lock=False)
 
@@ -442,8 +442,8 @@ def _je_lines(session, company_id: int, results: list[ItemResult], description: 
 def recalculate(company_id: int, user_id: int | None, *, item_id: int | None = None, warehouse_id: int | None = None,
                 date_from: datetime.date | None = None, posting_date: datetime.date | None = None,
                 reason: str | None = None) -> CostRecalculationRun | None:
-    """اعمالِ بازمحاسبه: سندِ حسابداریِ اصلاحی (تاریخِ ثبت)، لاگِ اصلاحِ بها، به‌روزرسانیِ لایه/تخصیص/مانده، Audit.
-    None یعنی اختلافی نبود (فقط وضعیتِ «نیازمندِ بازمحاسبه» پاک می‌شود)."""
+    """اعمال بازمحاسبه: سند حسابداری اصلاحی (تاریخ ثبت)، لاگ اصلاح بها، به‌روزرسانی لایه/تخصیص/مانده، Audit.
+    None یعنی اختلافی نبود (فقط وضعیت «نیازمند بازمحاسبه» پاک می‌شود)."""
     from peecha.services import audit as audit_service
     from peecha.services import journal_entries as je_service
 
@@ -452,7 +452,7 @@ def recalculate(company_id: int, user_id: int | None, *, item_id: int | None = N
     with new_session() as session:
         results = [r for r in _compute(session, company_id, item_id, warehouse_id, date_from, lock=True) if r.ok]
         changed = [ln for r in results for ln in r.changed]
-        description = f"بازمحاسبهٔ بهایِ تمام‌شده{(' -- ' + reason) if reason else ''}"
+        description = f"بازمحاسبهٔ بهای تمام‌شده{(' -- ' + reason) if reason else ''}"
         je_lines = _je_lines(session, company_id, results, description) if changed else []
         journal_entry_id = None
         if je_lines:
@@ -517,7 +517,7 @@ def _apply(session, company_id: int, r: ItemResult, run: CostRecalculationRun | 
             a.quantity_base, a.unit_cost, a.costing_status_code = qty, cost, status
             if note and line_id in {ln.stock_line_id for ln in changed}:
                 a.note = note
-            elif a.note and a.note.startswith("سندِ عقب‌دار"):
+            elif a.note and a.note.replace(chr(0x650), "").startswith("سند عقب‌دار"):
                 a.note = None
             if a not in existing:
                 session.add(a)

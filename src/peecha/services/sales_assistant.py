@@ -1,15 +1,15 @@
-"""دستیارِ فروش (طبقِ درخواستِ صریحِ کاربر: «دستیار فروش داخل ERP»):
-هر بار که این پنل باز می‌شود، فهرستی از مهم‌ترین اقداماتِ امروز را از
-رویِ سابقه‌یِ اسنادِ فروشِ ثبت‌نهایی‌شده محاسبه می‌کند -- بدونِ هیچ مدلِ
-یادگیریِ ماشین، فقط آمارِ ساده‌یِ توصیفی رویِ همان جدول‌هایِ موجود:
+"""دستیار فروش (طبق درخواست صریح کاربر: «دستیار فروش داخل ERP»):
+هر بار که این پنل باز می‌شود، فهرستی از مهم‌ترین اقدامات امروز را از
+روی سابقهٔ اسناد فروش ثبت‌نهایی‌شده محاسبه می‌کند — بدون هیچ مدل
+یادگیری ماشین، فقط آمار سادهٔ توصیفی روی همان جدول‌های موجود:
 
-۱. ریسکِ ریزش (قرمز/زرد): فاصله‌یِ روزهایِ سپری‌شده از آخرین خرید نسبت
-   به میانگینِ فاصله‌یِ خریدهایِ همان مشتری بسیار بیشتر شده.
-۲. فروشِ مکمل (زرد): کالایی که در آخرین فاکتورِ مشتری بوده، طبقِ آمارِ
-   هم‌خریدی (همان suggest_frequently_bought_together) معمولاً با کالایِ
+۱. ریسک ریزش (قرمز/زرد): فاصلهٔ روزهای سپری‌شده از آخرین خرید نسبت
+   به میانگین فاصلهٔ خریدهای همان مشتری بسیار بیشتر شده.
+۲. فروش مکمل (زرد): کالایی که در آخرین فاکتور مشتری بوده، طبق آمار
+   هم‌خریدی (همان suggest_frequently_bought_together) معمولاً با کالای
    دیگری همراه است که این مشتری هنوز نخریده.
-۳. فرصتِ رشد (سبز): حجمِ خریدِ امسالِ مشتری (تا امروز) نسبت به مدتِ
-   مشابهِ سالِ قبل رشدِ قابل‌توجه داشته -- پیشنهادِ افزایشِ سقفِ اعتبار."""
+۳. فرصت رشد (سبز): حجم خرید امسال مشتری (تا امروز) نسبت به مدت
+   مشابه سال قبل رشد قابل‌توجه داشته — پیشنهاد افزایش سقف اعتبار."""
 
 from __future__ import annotations
 
@@ -73,8 +73,8 @@ def _churn_risk_item(
         title=f"مشتری «{customer_name}»",
         detail_lines=[
             f"آخرین خرید: {days_since_last} روز پیش",
-            f"میانگینِ فاصله‌یِ خرید: هر {round(avg_interval)} روز",
-            f"احتمالِ ریزش: {risk_percent:.0f}٪",
+            f"میانگین فاصلهٔ خرید: هر {round(avg_interval)} روز",
+            f"احتمال ریزش: {risk_percent:.0f}٪",
         ],
         suggested_action="تماس با مشتری",
         metric_percent=risk_percent,
@@ -82,11 +82,11 @@ def _churn_risk_item(
 
 
 def _jalali_year_bounds(today: datetime.date) -> tuple[datetime.date, datetime.date, datetime.date]:
-    """طبقِ همان مبنایِ سالِ مالیِ کلِ برنامه (که بر اساسِ تقویمِ جلالی
-    تعریف می‌شود، نه میلادی): «امسال»/«سالِ قبل» یعنی سالِ جلالیِ جاری و
-    ماقبلش -- وگرنه مرزِ ۱ ژانویه هیچ معنایی برایِ کاربرِ فارسی‌زبان و
-    برایِ سال‌هایِ مالیِ ثبت‌شده در دیتابیس ندارد. برمی‌گرداند:
-    (شروعِ سالِ جاری، شروعِ سالِ قبل، همان‌روزِ سالِ قبل)."""
+    """طبق همان مبنای سال مالی کل برنامه (که بر اساس تقویم جلالی
+    تعریف می‌شود، نه میلادی): «امسال»/«سال قبل» یعنی سال جلالی جاری و
+    ماقبلش — وگرنه مرز ۱ ژانویه هیچ معنایی برای کاربر فارسی‌زبان و
+    برای سال‌های مالی ثبت‌شده در دیتابیس ندارد. برمی‌گرداند:
+    (شروع سال جاری، شروع سال قبل، همان‌روز سال قبل)."""
     jalali_today = jdatetime.date.fromgregorian(date=today)
     year_start = jdatetime.date(jalali_today.year, 1, 1).togregorian()
     last_year_start = jdatetime.date(jalali_today.year - 1, 1, 1).togregorian()
@@ -105,8 +105,8 @@ def _compute_growth_percent(
     last_year_start: datetime.date,
     last_year_same_day: datetime.date,
 ) -> decimal.Decimal | None:
-    """درصدِ رشدِ خریدِ امسال (تا امروز) نسبت به همان بازه‌یِ سالِ قبل --
-    None یعنی مشتری سالِ قبل در این بازه خریدی نداشته (مبنایی برایِ
+    """درصد رشد خرید امسال (تا امروز) نسبت به همان بازهٔ سال قبل --
+    None یعنی مشتری سال قبل در این بازه خریدی نداشته (مبنایی برای
     مقایسه نیست)."""
     this_year_total = sum(
         (d.total_amount or decimal.Decimal(0) for d in docs_sorted if d.document_date and year_start <= d.document_date <= today),
@@ -141,9 +141,9 @@ def _growth_item(
     from peecha import numerals
 
     credit_line = (
-        f"سقفِ اعتبارِ فعلی: {numerals.format_company_amount(credit_limit_amount)}"
+        f"سقف اعتبار فعلی: {numerals.format_company_amount(credit_limit_amount)}"
         if credit_limit_amount
-        else "بدونِ سقفِ اعتبارِ تعریف‌شده"
+        else "بدون سقف اعتبار تعریف‌شده"
     )
     return ActionItem(
         severity="success",
@@ -152,10 +152,10 @@ def _growth_item(
         customer_name=customer_name,
         title=f"مشتری «{customer_name}»",
         detail_lines=[
-            f"رشدِ خرید نسبت به مدتِ مشابهِ سالِ قبل: {growth_percent:.0f}٪",
+            f"رشد خرید نسبت به مدت مشابه سال قبل: {growth_percent:.0f}٪",
             credit_line,
         ],
-        suggested_action="افزایشِ سقفِ اعتبارِ مشتری",
+        suggested_action="افزایش سقف اعتبار مشتری",
         metric_percent=growth_percent,
     )
 
@@ -205,11 +205,11 @@ def _cross_sell_item(company_id: int, customer_id: int, customer_name: str, docs
         customer_name=customer_name,
         title=f"مشتری «{customer_name}»",
         detail_lines=[
-            f"در خریدِ اخیر، «{source_name}» را خریداری کرده.",
-            f"«{best_suggestion.item_name}» معمولاً همراهِ آن خریداری می‌شود.",
-            f"احتمالِ خرید: {best_suggestion.confidence_percent:.0f}٪",
+            f"در خرید اخیر، «{source_name}» را خریداری کرده.",
+            f"«{best_suggestion.item_name}» معمولاً همراه آن خریداری می‌شود.",
+            f"احتمال خرید: {best_suggestion.confidence_percent:.0f}٪",
         ],
-        suggested_action=f"پیشنهادِ فروشِ مکملِ «{best_suggestion.item_name}»",
+        suggested_action=f"پیشنهاد فروش مکمل «{best_suggestion.item_name}»",
         metric_percent=best_suggestion.confidence_percent,
     )
 
@@ -217,12 +217,12 @@ def _cross_sell_item(company_id: int, customer_id: int, customer_name: str, docs
 def _credit_limit_exceeded_item(
     customer_id: int, customer_name: str, credit_limit_amount: decimal.Decimal, exposure: decimal.Decimal
 ) -> ActionItem | None:
-    """طبقِ گزارشِ صریحِ کاربر («اعتبار ۵۰ میلیون بوده، بدهی ۸۰ میلیون شده،
-    آیا نباید تاثیری داشته باشه؟»): طبقِ تصمیمِ طراحی، این یک هشدارِ
-    مالیِ فوری و *مستقل* از امتیازِ ۰-۱۰۰ است -- عبورِ موقتِ یک مشتریِ
-    باارزش از سقفِ اعتبار نباید امتیازِ کلیِ رابطه‌اش را پایین بیاورد،
-    ولی همچنان باید فوراً به فروشنده هشدار داده شود، پس یک اقدامِ
-    جداگانه با بالاترین اولویت (قرمز) در دستیارِ فروش می‌سازیم."""
+    """طبق گزارش صریح کاربر («اعتبار ۵۰ میلیون بوده، بدهی ۸۰ میلیون شده،
+    آیا نباید تاثیری داشته باشه؟»): طبق تصمیم طراحی، این یک هشدار
+    مالی فوری و *مستقل* از امتیاز ۰-۱۰۰ است — عبور موقت یک مشتری
+    باارزش از سقف اعتبار نباید امتیاز کلی رابطه‌اش را پایین بیاورد،
+    ولی همچنان باید فوراً به فروشنده هشدار داده شود، پس یک اقدام
+    جداگانه با بالاترین اولویت (قرمز) در دستیار فروش می‌سازیم."""
     if not credit_limit_amount or exposure <= credit_limit_amount:
         return None
     from peecha import numerals
@@ -236,19 +236,19 @@ def _credit_limit_exceeded_item(
         customer_name=customer_name,
         title=f"مشتری «{customer_name}»",
         detail_lines=[
-            f"سقفِ اعتبار: {numerals.format_company_amount(credit_limit_amount)}",
-            f"بدهیِ جاری: {numerals.format_company_amount(exposure)}",
+            f"سقف اعتبار: {numerals.format_company_amount(credit_limit_amount)}",
+            f"بدهی جاری: {numerals.format_company_amount(exposure)}",
             f"عبور از سقف: {numerals.format_company_amount(over_amount)} ({over_percent:.0f}٪)",
         ],
-        suggested_action="توقفِ فروشِ نسیه تا وصولِ بخشی از مطالبات",
+        suggested_action="توقف فروش نسیه تا وصول بخشی از مطالبات",
         metric_percent=over_percent,
     )
 
 
 def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
-    """فهرستِ رتبه‌بندی‌شده‌یِ مهم‌ترین اقداماتِ امروز -- طبقِ درخواستِ صریح
-    («۵ اقدامِ مهمِ امروز»)، ابتدا بر اساسِ شدت (قرمز > زرد > سبز) و سپس
-    بر اساسِ خودِ درصدِ معیار مرتب می‌شود."""
+    """فهرست رتبه‌بندی‌شدهٔ مهم‌ترین اقدامات امروز — طبق درخواست صریح
+    («۵ اقدام مهم امروز»)، ابتدا بر اساس شدت (قرمز > زرد > سبز) و سپس
+    بر اساس خود درصد معیار مرتب می‌شود."""
     today = datetime.date.today()
     year_start, last_year_start, last_year_same_day = _jalali_year_bounds(today)
 
@@ -312,9 +312,9 @@ def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
 # ---------------------------------------------------------------------
 _TIER_LABELS = {
     "VIP": "VIP",
-    "GROWING": "در حالِ رشد",
-    "NEEDS_ATTENTION": "نیازمندِ پیگیری",
-    "AT_RISK": "در معرضِ ریزش",
+    "GROWING": "در حال رشد",
+    "NEEDS_ATTENTION": "نیازمند پیگیری",
+    "AT_RISK": "در معرض ریزش",
     "LOW_VALUE": "کم‌ارزش",
 }
 _TIER_EMOJI = {"VIP": "🟢", "GROWING": "🔵", "NEEDS_ATTENTION": "🟡", "AT_RISK": "🔴", "LOW_VALUE": "⚫"}
@@ -360,15 +360,15 @@ def _percentile_rank(value: float, sorted_values: list[float]) -> float:
 
 
 def list_customer_scores(company_id: int) -> list[CustomerScoreRow]:
-    """امتیازی از ۰ تا ۱۰۰ برایِ هر مشتریِ فعال، از ترکیبِ چهار معیارِ
-    نرمال‌شده (صدک‌بندی‌شده در میانِ همان مشتریانِ فعال):
-      - تکرارِ خرید (۳۰٪): تعدادِ فاکتورِ پُست‌شده‌یِ ۱۲‌ماهِ اخیر.
-      - حجمِ مالی (۳۰٪): جمعِ مبلغِ فروشِ ۱۲‌ماهِ اخیر.
-      - تازگیِ خرید (۲۵٪): فاصله‌یِ آخرین خرید نسبت به میانگینِ تاریخیِ
-        خودِ همان مشتری (نه مقایسه با بقیه).
-      - رشد (۱۵٪): رشدِ خریدِ امسال نسبت به مدتِ مشابهِ سالِ قبل.
-    مشتریِ بدونِ هیچ فاکتورِ ۱۲‌ماهِ اخیر همیشه «کم‌ارزش» با امتیازِ صفر
-    است -- بدونِ فعالیتِ اخیر، محاسبه‌یِ صدک بی‌معناست."""
+    """امتیازی از ۰ تا ۱۰۰ برای هر مشتری فعال، از ترکیب چهار معیار
+    نرمال‌شده (صدک‌بندی‌شده در میان همان مشتریان فعال):
+      - تکرار خرید (۳۰٪): تعداد فاکتور پُست‌شدهٔ ۱۲‌ماه اخیر.
+      - حجم مالی (۳۰٪): جمع مبلغ فروش ۱۲‌ماه اخیر.
+      - تازگی خرید (۲۵٪): فاصلهٔ آخرین خرید نسبت به میانگین تاریخی
+        خود همان مشتری (نه مقایسه با بقیه).
+      - رشد (۱۵٪): رشد خرید امسال نسبت به مدت مشابه سال قبل.
+    مشتری بدون هیچ فاکتور ۱۲‌ماه اخیر همیشه «کم‌ارزش» با امتیاز صفر
+    است — بدون فعالیت اخیر، محاسبهٔ صدک بی‌معناست."""
     today = datetime.date.today()
     year_start, last_year_start, last_year_same_day = _jalali_year_bounds(today)
     twelve_months_ago = today - datetime.timedelta(days=365)

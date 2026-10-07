@@ -57,17 +57,17 @@ from peecha.services import users as users_service
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
 k1 = coa_service.create_account(company_id, "11", "صندوق", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-cash_gl = coa_service.create_account(company_id, "101", "صندوقِ اصلی", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
-k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+cash_gl = coa_service.create_account(company_id, "101", "صندوق اصلی", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 
 from peecha.services import inventory_engine as engine_service
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
@@ -81,19 +81,19 @@ treasury_service.set_account_mapping(company_id, "RECEIPT_CASH", cash_gl.account
 
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی",
+    company_id, "9101", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
+    company_id, "WH-1", "انبار آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
 )
-channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرمِ آزمایشی", "VAN_SALES")
+channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخش گرم آزمایشی", "VAN_SALES")
 
-customer_debtor = partners_service.create_customer(company_id, "C-1", "فروشگاهِ بدهکار", fast_track=True)
-customer_paid = partners_service.create_customer(company_id, "C-2", "فروشگاهِ تسویه‌شده", fast_track=True)
-customer_no_plan = partners_service.create_customer(company_id, "C-3", "فروشگاهِ بی‌ربط", fast_track=True)
+customer_debtor = partners_service.create_customer(company_id, "C-1", "فروشگاه بدهکار", fast_track=True)
+customer_paid = partners_service.create_customer(company_id, "C-2", "فروشگاه تسویه‌شده", fast_track=True)
+customer_no_plan = partners_service.create_customer(company_id, "C-3", "فروشگاه بی‌ربط", fast_track=True)
 
-visitor = users_service.create_user("visitor1", "ویزیتورِ یک", "secret123", None, lang_id, False, [company_id], company_id)
+visitor = users_service.create_user("visitor1", "ویزیتور یک", "secret123", None, lang_id, False, [company_id], company_id)
 
 field_sales_service.create_visit_plan(company_id, customer_debtor, 0, 1, visitor.user_id)
 field_sales_service.create_visit_plan(company_id, customer_paid, 0, 2, visitor.user_id)
@@ -138,25 +138,25 @@ token = resp.json()["access_token"]
 auth = {"Authorization": f"Bearer {token}"}
 
 resp = client.get("/collection/debtors", headers=auth)
-check(resp.status_code == 200, f"فهرستِ بدهکاران موفق بود (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"فهرست بدهکاران موفق بود (status={resp.status_code}, body={resp.text})")
 debtors = resp.json()
 debtor_ids = {d["detail_account_id"] for d in debtors}
-check(customer_debtor in debtor_ids, f"مشتریِ بدهکار در فهرست است (got {debtors})")
-check(customer_paid not in debtor_ids, "مشتریِ تسویه‌شده در فهرستِ بدهکاران نیست")
-check(customer_no_plan not in debtor_ids, "مشتریِ بدونِ برنامهٔ ویزیت در فهرستِ این ویزیتور نیست")
+check(customer_debtor in debtor_ids, f"مشتری بدهکار در فهرست است (got {debtors})")
+check(customer_paid not in debtor_ids, "مشتری تسویه‌شده در فهرست بدهکاران نیست")
+check(customer_no_plan not in debtor_ids, "مشتری بدون برنامهٔ ویزیت در فهرست این ویزیتور نیست")
 check(
     any(d["detail_account_id"] == customer_debtor and decimal.Decimal(d["balance_amount"]) == decimal.Decimal(300000) for d in debtors),
-    f"ماندهٔ مشتریِ بدهکار درست است (got {debtors})",
+    f"ماندهٔ مشتری بدهکار درست است (got {debtors})",
 )
 
 # ---------- رفعِ گزارشِ گمراه‌کننده‌یِ Aging (R222): «عقب‌افتاده» باید
 # واقعاً از رویِ سررسیدِ فاکتور (document_date + payment_term_days)
 # محاسبه شود، نه یک پرچمِ ثابت رویِ همه‌یِ بدهکاران. ----------
 customer_overdue = partners_service.create_customer(
-    company_id, "C-4", "فروشگاهِ عقب‌افتاده", fields=partners_service.CustomerProfileFields(payment_term_days=30), fast_track=True,
+    company_id, "C-4", "فروشگاه عقب‌افتاده", fields=partners_service.CustomerProfileFields(payment_term_days=30), fast_track=True,
 )
 customer_not_due_yet = partners_service.create_customer(
-    company_id, "C-5", "فروشگاهِ درمهلت", fields=partners_service.CustomerProfileFields(payment_term_days=30), fast_track=True,
+    company_id, "C-5", "فروشگاه درمهلت", fields=partners_service.CustomerProfileFields(payment_term_days=30), fast_track=True,
 )
 field_sales_service.create_visit_plan(company_id, customer_overdue, 0, 3, visitor.user_id)
 field_sales_service.create_visit_plan(company_id, customer_not_due_yet, 0, 4, visitor.user_id)
@@ -186,26 +186,26 @@ _invoice_on_date(customer_overdue, today - datetime.timedelta(days=40))
 _invoice_on_date(customer_not_due_yet, today)
 
 resp = client.get("/collection/debtors", headers=auth)
-check(resp.status_code == 200, f"فهرستِ بدهکاران بعدِ افزودنِ سناریوهایِ Aging موفق بود (status={resp.status_code})")
+check(resp.status_code == 200, f"فهرست بدهکاران بعد افزودن سناریوهای Aging موفق بود (status={resp.status_code})")
 debtors2 = {d["detail_account_id"]: d for d in resp.json()}
 check(
     customer_overdue in debtors2 and debtors2[customer_overdue]["is_overdue"] is True,
-    f"مشتریِ با سررسیدِ گذشته عقب‌افتاده است (got {debtors2.get(customer_overdue)})",
+    f"مشتری با سررسید گذشته عقب‌افتاده است (got {debtors2.get(customer_overdue)})",
 )
 check(
     customer_not_due_yet in debtors2 and debtors2[customer_not_due_yet]["is_overdue"] is False,
-    f"مشتریِ با سررسیدِ آینده عقب‌افتاده نیست (got {debtors2.get(customer_not_due_yet)})",
+    f"مشتری با سررسید آینده عقب‌افتاده نیست (got {debtors2.get(customer_not_due_yet)})",
 )
 check(
     debtors2[customer_overdue]["earliest_due_date"] == (today - datetime.timedelta(days=10)).isoformat(),
-    f"سررسیدِ واقعی محاسبه شد (got {debtors2[customer_overdue]['earliest_due_date']})",
+    f"سررسید واقعی محاسبه شد (got {debtors2[customer_overdue]['earliest_due_date']})",
 )
 
 resp = client.get("/collection/today", headers=auth)
-check(resp.status_code == 200, f"وصولِ امروز موفق بود (status={resp.status_code})")
+check(resp.status_code == 200, f"وصول امروز موفق بود (status={resp.status_code})")
 today_collections = resp.json()
-check(len(today_collections) == 1 and today_collections[0]["customer_name"] == "فروشگاهِ تسویه‌شده", f"وصولِ امروز درست است (got {today_collections})")
-check(decimal.Decimal(today_collections[0]["amount"]) == decimal.Decimal(300000), "مبلغِ وصولِ امروز درست است")
+check(len(today_collections) == 1 and today_collections[0]["customer_name"] == "فروشگاه تسویه‌شده", f"وصول امروز درست است (got {today_collections})")
+check(decimal.Decimal(today_collections[0]["amount"]) == decimal.Decimal(300000), "مبلغ وصول امروز درست است")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

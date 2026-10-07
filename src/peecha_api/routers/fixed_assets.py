@@ -1,6 +1,6 @@
-"""دارایی‌هایِ ثابت برایِ موبایل -- R265: اسکنِ QR/بارکد (مشاهدهٔ دارایی) و ثبتِ یافتن در شمارشِ فیزیکی.
+"""دارایی‌های ثابت برای موبایل — R265: اسکن QR/بارکد (مشاهدهٔ دارایی) و ثبت یافتن در شمارش فیزیکی.
 
-نازک: همهٔ منطق در services/fixed_assets؛ دسترسی با RBACِ موجود (فرم‌هایِ fa_assets و fa_physical_count).
+نازک: همهٔ منطق در services/fixed_assets؛ دسترسی با RBAC موجود (فرم‌های fa_assets و fa_physical_count).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ def _asset_dict(a, show_cost: bool) -> dict:
 
 @router.get("/lookup")
 def lookup(code: str, ctx: AuthContext = _VIEW) -> dict:
-    """اسکنِ QR یا بارکدِ دارایی → اطلاعاتِ دارایی (ارزش فقط با دسترسیِ «مشاهدهٔ بها»)."""
+    """اسکن QR یا بارکد دارایی → اطلاعات دارایی (ارزش فقط با دسترسی «مشاهدهٔ بها»)."""
     from peecha.services import roles as roles_service
 
     asset = fa.find_by_code(ctx.company_id, code)
@@ -59,7 +59,7 @@ class ScanIn(BaseModel):
 
 @router.post("/counts/{count_id}/scan")
 def scan(count_id: int, body: ScanIn, ctx: AuthContext = _COUNT, idempotency_key: str | None = _KEY) -> dict:
-    """ثبتِ یافتنِ دارایی در شمارش از موبایل (روش: MOBILE)؛ تکرارِ همان کلید پاسخِ قبلی را برمی‌گرداند."""
+    """ثبت یافتن دارایی در شمارش از موبایل (روش: MOBILE)؛ تکرار همان کلید پاسخ قبلی را برمی‌گرداند."""
     def compute():
         return fp.scan(ctx.company_id, count_id, body.code, body.found_location_id, body.found_custodian_employee_id,
                        damaged=body.damaged, method="MOBILE", note=body.note)

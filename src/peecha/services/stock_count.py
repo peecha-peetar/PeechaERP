@@ -1,10 +1,10 @@
-"""انبارگردانی (شمارشِ موجودی) با واحدِ شمارش -- R225.
+"""انبارگردانی (شمارش موجودی) با واحد شمارش — R225.
 
-کاربر هر کالا را با واحدِ دلخواه (مثلاً «۱۰ کارتن») می‌شمارد؛ مقدار با
-unit_conversion به واحدِ پایه تبدیل و اختلاف با موجودیِ دفتری به واحدِ پایه
-محاسبه می‌شود. در پایان، یک سندِ اصلاحِ انبار (ADJUSTMENT) برایِ مازاد و یکی
-برایِ کسری صادر و ثبت می‌شود -- همان موتورِ انبار/حسابداریِ موجود، بدونِ
-منطقِ تازهٔ موجودی.
+کاربر هر کالا را با واحد دلخواه (مثلاً «۱۰ کارتن») می‌شمارد؛ مقدار با
+unit_conversion به واحد پایه تبدیل و اختلاف با موجودی دفتری به واحد پایه
+محاسبه می‌شود. در پایان، یک سند اصلاح انبار (ADJUSTMENT) برای مازاد و یکی
+برای کسری صادر و ثبت می‌شود — همان موتور انبار/حسابداری موجود، بدون
+منطق تازهٔ موجودی.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def create_count_session(company_id: int, warehouse_id: int, created_by_user_id:
         if warehouse is None or warehouse.company_id != company_id:
             raise ValueError("انبار نامعتبر است.")
         if not warehouse.allow_cycle_count:
-            raise ValueError("انبارگردانی برایِ این انبار مجاز نشده است (تنظیماتِ انبار).")
+            raise ValueError("انبارگردانی برای این انبار مجاز نشده است (تنظیمات انبار).")
         if session_code is None:
             count = session.scalar(select(func.count()).select_from(CycleCountSession).where(CycleCountSession.company_id == company_id)) or 0
             session_code = f"CNT-{count + 1:05d}"
@@ -80,10 +80,10 @@ def create_count_session(company_id: int, warehouse_id: int, created_by_user_id:
 def record_count(
     session_id: int, company_id: int, item_id: int, uom_id: int, counted_quantity: decimal.Decimal,
 ) -> int:
-    """ثبت/جایگزینیِ شمارشِ یک کالا با واحدِ شمارش (مثلاً ۱۰ کارتن = ۲۴۰ عدد)."""
+    """ثبت/جایگزینی شمارش یک کالا با واحد شمارش (مثلاً ۱۰ کارتن = ۲۴۰ عدد)."""
     counted_quantity = decimal.Decimal(counted_quantity)
     if counted_quantity < 0:
-        raise ValueError("مقدارِ شمارش‌شده نمی‌تواند منفی باشد.")
+        raise ValueError("مقدار شمارش‌شده نمی‌تواند منفی باشد.")
     if counted_quantity > 0:
         uc.validate_quantity(item_id, uom_id, counted_quantity, purpose="INVENTORY", check_min_max=False)
     counted_base, factor = uc.convert_to_base(item_id, counted_quantity, uom_id)
@@ -94,7 +94,7 @@ def record_count(
         if count_session.status_code != "COUNTING":
             raise ValueError("این انبارگردانی بسته شده است.")
         if count_session.scope_type_code == "BY_BIN":  # R250: شمارشِ محل‌محور مسیرِ خودش را دارد
-            raise ValueError("این شمارشِ محل‌محور است؛ از «شمارشِ محل» ثبت کنید.")
+            raise ValueError("این شمارش محل‌محور است؛ از «شمارش محل» ثبت کنید.")
         bin_row = locations_service.get_default_bin_location(count_session.warehouse_id)
         if bin_row is None:
             raise ValueError("این انبار هیچ مکانی ندارد.")
@@ -118,7 +118,7 @@ def record_count(
 def record_count_tracking(
     session_id: int, company_id: int, item_id: int, entries: list[uc_tracking.TrackingEntry],
 ) -> int:
-    """R228: شمارش به تفکیکِ بچ/سریال -- مقدارِ شمارش = جمعِ ردیف‌ها (واحدِ پایه)."""
+    """R228: شمارش به تفکیک بچ/سریال — مقدار شمارش = جمع ردیف‌ها (واحد پایه)."""
     total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
     with new_session() as session:
         base_uom_id = session.scalar(select(Item.base_uom_id).where(Item.item_id == item_id))
@@ -155,18 +155,18 @@ def _reason_code(company_id: int) -> int:
     for row in inv_documents_service.list_reason_codes(company_id, "ADJUSTMENT", active_only=False):
         if row.code == _COUNT_REASON_CODE:
             return row.reason_code_id
-    return inv_documents_service.create_reason_code(company_id, "ADJUSTMENT", _COUNT_REASON_CODE, "اختلافِ انبارگردانی")
+    return inv_documents_service.create_reason_code(company_id, "ADJUSTMENT", _COUNT_REASON_CODE, "اختلاف انبارگردانی")
 
 
 def finalize_count_session(session_id: int, company_id: int, approved_by_user_id: int) -> list[int]:
-    """اختلافِ هر ردیف (به واحدِ پایه) را با سندِ اصلاحِ انبار ثبت می‌کند؛
-    شناسهٔ اسنادِ صادرشده را برمی‌گرداند (مازاد/کسری)."""
+    """اختلاف هر ردیف (به واحد پایه) را با سند اصلاح انبار ثبت می‌کند؛
+    شناسهٔ اسناد صادرشده را برمی‌گرداند (مازاد/کسری)."""
     data = get_count_session(session_id, company_id)
     if data.status_code != "COUNTING":
         raise ValueError("این انبارگردانی قبلاً بسته شده است.")
     with new_session() as session:
         if session.get(CycleCountSession, session_id).scope_type_code == "BY_BIN":
-            raise ValueError("این شمارشِ محل‌محور است؛ از «شمارشِ محل» نهایی کنید.")
+            raise ValueError("این شمارش محل‌محور است؛ از «شمارش محل» نهایی کنید.")
     # R228: ردیفِ شمرده‌شده به تفکیکِ بچ/سریال، اختلاف را هم به تفکیکِ همان بچ/سریال
     # ثبت می‌کند (ممکن است جمع برابر باشد ولی بچ‌ها جابه‌جا شده باشند).
     gains: list[tuple] = []   # (item_id, qty, entry|None, description)
@@ -219,7 +219,7 @@ def finalize_count_session(session_id: int, company_id: int, approved_by_user_id
         if not rows:
             continue
         header.reference_no = data.session_code
-        header.description = f"اختلافِ انبارگردانیِ {data.session_code}"
+        header.description = f"اختلاف انبارگردانی {data.session_code}"
         doc_id = inv_documents_service.create_stock_document(company_id, approved_by_user_id, "ADJUSTMENT", datetime.date.today(), header)
         for item_id, qty, entry, l in rows:
             stock_line_id = inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(

@@ -1,11 +1,11 @@
-"""گروه‌هایِ POS (مرحلهٔ ۹) — گروه‌بندیِ کاملاً مستقل از دسته‌بندیِ عمومیِ
-انبار (inv.item_categories)، فقط برایِ چیدمانِ تب‌هایِ دسترسیِ‌سریعِ
-صفحه‌یِ فروشِ حضوری. طبقِ بازخوردِ صریح («کالا باید یک فیلدِ
-دسته‌بندیِ مخصوصِ POS داشته باشد که با دسته‌بندی‌هایِ دیگر فرق کند»).
+"""گروه‌های POS (مرحلهٔ ۹) — گروه‌بندی کاملاً مستقل از دسته‌بندی عمومی
+انبار (inv.item_categories)، فقط برای چیدمان تب‌های دسترسی‌سریع
+صفحهٔ فروش حضوری. طبق بازخورد صریح («کالا باید یک فیلد
+دسته‌بندی مخصوص POS داشته باشد که با دسته‌بندی‌های دیگر فرق کند»).
 
-طبقِ بازخوردِ صریحِ دیگر («منویِ تازه اضافه نکن»)، این ویجت دیگر یک
-صفحه/مسیرِ ناوبریِ مستقل نیست -- به‌عنوانِ یک تب («تک‌فروشی») درونِ
-صفحه‌یِ تنظیماتِ فاکتورِ صندوق (commercial_pos_sessions.py) جاسازی
+طبق بازخورد صریح دیگر («منوی تازه اضافه نکن»)، این ویجت دیگر یک
+صفحه/مسیر ناوبری مستقل نیست — به‌عنوان یک تب («تک‌فروشی») درون
+صفحهٔ تنظیمات فاکتور صندوق (commercial_pos_sessions.py) جاسازی
 می‌شود."""
 
 from __future__ import annotations
@@ -45,21 +45,21 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(10)
 
-        title = QLabel("گروه‌هایِ POS (تب‌هایِ دسترسیِ‌سریعِ صفحه‌یِ فروش)")
+        title = QLabel("گروه‌های POS (تب‌های دسترسی‌سریع صفحهٔ فروش)")
         title.setObjectName("sectionTitle")
         outer.addWidget(title)
 
         hint = QLabel(
-            "این گروه‌بندی کاملاً مستقل از دسته‌بندیِ عمومیِ کالاست -- فقط تعیین می‌کند هر کالا "
-            "در کدام تبِ دسترسیِ‌سریعِ صفحه‌یِ «فروشِ حضوری» نمایش داده شود. (خودِ گروه به هر کالا "
-            "از تبِ POS در فرمِ کالا اختصاص داده می‌شود.)"
+            "این گروه‌بندی کاملاً مستقل از دسته‌بندی عمومی کالاست — فقط تعیین می‌کند هر کالا "
+            "در کدام تب دسترسی‌سریع صفحهٔ «فروش حضوری» نمایش داده شود. (خود گروه به هر کالا "
+            "از تب POS در فرم کالا اختصاص داده می‌شود.)"
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["نام", "ترتیب", "فعال", "پرینترِ مقصد"])
+        self.table.setHorizontalHeaderLabels(["نام", "ترتیب", "فعال", "چاپگر مقصد"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -69,7 +69,7 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
 
         form_row = QHBoxLayout()
         self.name_field = QLineEdit()
-        self.name_field.setPlaceholderText("نامِ گروه")
+        self.name_field.setPlaceholderText("نام گروه")
         form_row.addWidget(self.name_field, stretch=1)
         form_row.addWidget(QLabel("ترتیب"))
         self.order_field = QSpinBox()
@@ -81,7 +81,7 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
         # مختلف»): پرینترِ مقصدِ این گروه -- از پرینترهایِ نصب‌شدهٔ همین
         # سیستم؛ «(پیش‌فرض)» یعنی این گروه پرینترِ اختصاصی ندارد.
-        form_row.addWidget(QLabel("پرینترِ مقصد"))
+        form_row.addWidget(QLabel("چاپگر مقصد"))
         self.target_printer_combo = QComboBox()
         self.target_printer_combo.addItem("(پیش‌فرض)", None)
         for printer_name in QPrinterInfo.availablePrinterNames():
@@ -96,7 +96,7 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
         new_button = QPushButton("🆕")
         new_button.setObjectName("iconButton")
         new_button.setFixedWidth(44)
-        new_button.setToolTip("گروهِ تازه")
+        new_button.setToolTip("گروه تازه")
         new_button.clicked.connect(self._reset_form)
         form_row.addWidget(new_button)
         delete_button = QPushButton("🗑️")
@@ -118,10 +118,10 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
         root.addWidget(wrap_scrollable(page))
 
         self.set_field_help([
-            (self.name_field, "نامِ این تبِ دسترسیِ‌سریع در صفحه‌یِ فروشِ حضوری."),
-            (self.order_field, "ترتیبِ نمایشِ این تب در میانِ تب‌هایِ دیگر -- عددِ کوچک‌تر زودتر می‌آید."),
-            (self.active_checkbox, "گروه‌هایِ غیرِفعال دیگر در صفحه‌یِ فروشِ حضوری نمایش داده نمی‌شوند."),
-            (self.target_printer_combo, "فاکتورهایِ صادرشده با کالاهایِ این گروه، به همین پرینتر ارسال می‌شوند -- «پیش‌فرض» یعنی پرینترِ عمومیِ صندوق."),
+            (self.name_field, "نام این تب دسترسی‌سریع در صفحهٔ فروش حضوری."),
+            (self.order_field, "ترتیب نمایش این تب در میان تب‌های دیگر — عدد کوچک‌تر زودتر می‌آید."),
+            (self.active_checkbox, "گروه‌های غیرفعال دیگر در صفحهٔ فروش حضوری نمایش داده نمی‌شوند."),
+            (self.target_printer_combo, "فاکتورهای صادرشده با کالاهای این گروه، به همین چاپگر ارسال می‌شوند — «پیش‌فرض» یعنی چاپگر عمومی صندوق."),
         ])
 
     def _company_id(self) -> int | None:
@@ -185,7 +185,7 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
         if self._editing_id is None:
             self.status_label.setText("یک گروه را از فهرست انتخاب کنید.")
             return
-        confirm = QMessageBox.question(self, "حذفِ گروه", "این گروه حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف گروه", "این گروه حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:

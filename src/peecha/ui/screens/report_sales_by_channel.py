@@ -1,6 +1,6 @@
-"""گزارشِ فروش بر اساسِ کانال -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ
-حیاتیِ PeechaSync -- گزارشِ فروشِ اینترنتی بر اساسِ کانال»): برخلافِ
-گزارشِ فروشِ کالا-محور، این گزارش نشان می‌دهد چه سهمی از فروش از هر
+"""گزارش فروش بر اساس کانال — طبق بازخورد صریح کاربر («امکانات
+حیاتی PeechaSync — گزارش فروش اینترنتی بر اساس کانال»): برخلاف
+گزارش فروش کالا-محور، این گزارش نشان می‌دهد چه سهمی از فروش از هر
 کانال (POS/عمده/اینترنتی/نماینده/مارکت‌پلیس) آمده."""
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ from peecha.ui.screens.reports_common import ReportScreenBase
 _ZERO = decimal.Decimal("0")
 _CHANNEL_TYPE_LABELS = {
     "POS": "حضوری", "WHOLESALE": "عمده", "ONLINE": "اینترنتی", "AGENT": "نماینده", "MARKETPLACE": "مارکت‌پلیس",
-    "PRE_SALES": "پخشِ سرد", "VAN_SALES": "پخشِ گرم",
+    "PRE_SALES": "پخش سرد", "VAN_SALES": "پخش گرم",
 }
 
 
 class SalesReportByChannelScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("گزارشِ فروش بر اساسِ کانال")
+        super().__init__("گزارش فروش بر اساس کانال")
         self._currency_decimal_places = 0
         self.add_field_help([])
 
@@ -43,7 +43,7 @@ class SalesReportByChannelScreen(ReportScreenBase):
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         rows = documents_service.compute_sales_report_by_channel(company_id, date_from, date_to)
 
-        headers = ["کانال", "نوعِ کانال", "تعدادِ فاکتور", "تعدادِ فروخته‌شده", "فروشِ خالص"]
+        headers = ["کانال", "نوع کانال", "تعداد فاکتور", "تعداد فروخته‌شده", "فروش خالص"]
         table_rows = [
             [
                 r.channel_name,
@@ -59,7 +59,7 @@ class SalesReportByChannelScreen(ReportScreenBase):
         total_quantity = sum((r.quantity_sold for r in rows), _ZERO)
         total_revenue = sum((r.net_revenue for r in rows), _ZERO)
         footer = [
-            "جمعِ کل", "",
+            "جمع کل", "",
             numerals.to_persian_digits(str(total_invoices)), numerals.format_money(total_quantity, 2),
             self._fmt(total_revenue),
         ]

@@ -1,10 +1,10 @@
-"""فهرستِ اسنادِ حسابداری — معادلِ Qt برایِ journal_entries_list.py/.kv در Kivy.
+"""فهرست اسناد حسابداری — معادل Qt برای journal_entries_list.py/.kv در Kivy.
 
-طبقِ بازخوردِ صریح: ترتیبِ ستون‌ها (از راست) ردیف/شماره/تاریخِ شمسی/شرح/
-مبلغ (با جداکننده‌ی سه‌رقمی)/وضعیت/کاربرِ صادرکننده/نامِ شرکت/سالِ مالی است؛
-همچنین امکانِ «کپیِ مشابه» و «کپیِ معکوس» (جابه‌جاییِ بدهکار/بستانکارِ هر
-ردیف) از رویِ سندِ انتخاب‌شده اضافه شده — هر دو فرمِ صدورِ سند را با اقلامِ
-همان سند (به‌عنوانِ سندی کاملاً تازه، نه ویرایشِ همان سند) باز می‌کنند."""
+طبق بازخورد صریح: ترتیب ستون‌ها (از راست) ردیف/شماره/تاریخ شمسی/شرح/
+مبلغ (با جداکنندهٔ سه‌رقمی)/وضعیت/کاربر صادرکننده/نام شرکت/سال مالی است؛
+همچنین امکان «کپی مشابه» و «کپی معکوس» (جابه‌جایی بدهکار/بستانکار هر
+ردیف) از روی سند انتخاب‌شده اضافه شده — هر دو فرم صدور سند را با اقلام
+همان سند (به‌عنوان سندی کاملاً تازه، نه ویرایش همان سند) باز می‌کنند."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ _STATUS_LABELS = {
     "CANCELLED": "ابطال‌شده",
 }
 
-_COLUMNS = ["ردیف", "شماره", "تاریخ", "شرح", "مبلغِ کل", "وضعیت", "کاربرِ صادرکننده", "نامِ شرکت", "سالِ مالی"]
+_COLUMNS = ["ردیف", "شماره", "تاریخ", "شرح", "مبلغ کل", "وضعیت", "کاربر صادرکننده", "نام شرکت", "سال مالی"]
 _COL_ROW_NO = 0
 _COL_NUMBER = 1
 _COL_DATE = 2
@@ -56,15 +56,15 @@ _COL_FISCAL_YEAR = 8
 
 
 class _TransferDialog(QDialog):
-    """طبقِ آیتمِ ۳ («ارسال/انتقال/کپیِ سند بینِ شرکت‌ها، هر دو حالت،
-    انتخابی + کپیِ خودکارِ حساب‌هایِ نبود») — پیش‌نمایشِ حساب‌ها/تفصیلی‌هایِ
-    ناموجود در شرکتِ مقصد قبل از اجرا نشان داده می‌شود؛ اگر تفصیلیِ شخصی
-    (مشتری/تامین‌کننده/پرسنل) ناموجود باشد، دکمه‌ی تایید غیرفعال می‌ماند
+    """طبق آیتم ۳ («ارسال/انتقال/کپی سند بین شرکت‌ها، هر دو حالت،
+    انتخابی + کپی خودکار حساب‌های نبود») — پیش‌نمایش حساب‌ها/تفصیلی‌های
+    ناموجود در شرکت مقصد قبل از اجرا نشان داده می‌شود؛ اگر تفصیلی شخصی
+    (مشتری/تامین‌کننده/پرسنل) ناموجود باشد، دکمهٔ تایید غیرفعال می‌ماند
     (باید دستی در مقصد تعریف شود)."""
 
     def __init__(self, parent, source_company_id: int, journal_entry_ids: list[int], user_id: int) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ارسال/کپیِ سند به شرکتِ دیگر")
+        self.setWindowTitle("ارسال/کپی سند به شرکت دیگر")
         self.resize(640, 480)
         self._source_company_id = source_company_id
         self._journal_entry_ids = journal_entry_ids
@@ -77,7 +77,7 @@ class _TransferDialog(QDialog):
         layout = QVBoxLayout(self)
 
         company_row = QHBoxLayout()
-        company_row.addWidget(QLabel("شرکتِ مقصد:"))
+        company_row.addWidget(QLabel("شرکت مقصد:"))
         self.company_combo = QComboBox()
         for c in self._companies:
             self.company_combo.addItem(c.display_name or c.legal_name, c.company_id)
@@ -87,14 +87,14 @@ class _TransferDialog(QDialog):
 
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("حالت:"))
-        self.copy_radio = QRadioButton("کپی (سندِ اصلی در شرکتِ مبدأ دست‌نخورده می‌ماند)")
+        self.copy_radio = QRadioButton("کپی (سند اصلی در شرکت مبدأ دست‌نخورده می‌ماند)")
         self.copy_radio.setChecked(True)
-        self.transfer_radio = QRadioButton("انتقال (سندِ اصلی ابطال می‌شود — فقط اسنادِ موقت)")
+        self.transfer_radio = QRadioButton("انتقال (سند اصلی ابطال می‌شود — فقط اسناد موقت)")
         mode_row.addWidget(self.copy_radio)
         mode_row.addWidget(self.transfer_radio)
         layout.addLayout(mode_row)
 
-        layout.addWidget(QLabel("حساب‌ها/تفصیلی‌هایِ استفاده‌شده که در شرکتِ مقصد هنوز تعریف نشده‌اند:"))
+        layout.addWidget(QLabel("حساب‌ها/تفصیلی‌های استفاده‌شده که در شرکت مقصد هنوز تعریف نشده‌اند:"))
         self.preview_table = QTableWidget(0, 3)
         self.preview_table.setHorizontalHeaderLabels(["نوع", "کد", "نام"])
         self.preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -124,7 +124,7 @@ class _TransferDialog(QDialog):
         layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
 
         if not self._companies:
-            self.warning_label.setText("هیچ شرکتِ مقصدِ دیگری که به آن دسترسی داشته باشید یافت نشد.")
+            self.warning_label.setText("هیچ شرکت مقصد دیگری که به آن دسترسی داشته باشید یافت نشد.")
             self.confirm_button.setEnabled(False)
         else:
             self._refresh_preview()
@@ -137,9 +137,9 @@ class _TransferDialog(QDialog):
         self.preview_table.setRowCount(len(missing))
         blocking = False
         for row, m in enumerate(missing):
-            label = "حسابِ کدینگی" if m.kind == "GL" else m.dimension_label
+            label = "حساب کدینگی" if m.kind == "GL" else m.dimension_label
             if not m.copyable:
-                label += " — نیازمندِ تعریفِ دستی"
+                label += " — نیازمند تعریف دستی"
                 blocking = True
             for col, text in enumerate([label, m.full_code, m.name]):
                 item = QTableWidgetItem(text)
@@ -148,13 +148,13 @@ class _TransferDialog(QDialog):
                 self.preview_table.setItem(row, col, item)
         if blocking:
             self.warning_label.setText(
-                "برخی تفصیلی‌هایِ شخص (مشتری/تامین‌کننده/پرسنل) در شرکتِ مقصد تعریف نشده‌اند — "
-                "این‌ها هرگز خودکار کپی نمی‌شوند؛ باید پیش از ادامه، دستی در شرکتِ مقصد تعریف شوند."
+                "برخی تفصیلی‌های شخص (مشتری/تامین‌کننده/پرسنل) در شرکت مقصد تعریف نشده‌اند — "
+                "این‌ها هرگز خودکار کپی نمی‌شوند؛ باید پیش از ادامه، دستی در شرکت مقصد تعریف شوند."
             )
         elif missing:
-            self.warning_label.setText("موارد بالا هنگامِ انجام، خودکار در شرکتِ مقصد ساخته می‌شوند.")
+            self.warning_label.setText("موارد بالا هنگام انجام، خودکار در شرکت مقصد ساخته می‌شوند.")
         else:
-            self.warning_label.setText("همه‌یِ حساب‌ها/تفصیلی‌هایِ لازم از قبل در شرکتِ مقصد موجودند.")
+            self.warning_label.setText("همهٔ حساب‌ها/تفصیلی‌های لازم از قبل در شرکت مقصد موجودند.")
         self.confirm_button.setEnabled(not blocking)
 
     def _on_confirm(self) -> None:
@@ -181,7 +181,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         main_window,
         *,
         entry_type_codes: list[str] | None = None,
-        title: str = "اسنادِ حسابداری",
+        title: str = "اسناد حسابداری",
         new_entry_options: list[tuple[str, str]] | None = None,
         edit_screen_by_type: dict[str, str] | None = None,
     ) -> None:
@@ -192,7 +192,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         # صفحه‌یِ فهرستِ اسناد، با فیلترِ نوعِ سند و مسیریابیِ ویرایش/سندِ
         # جدیدِ متفاوت، برایِ فهرستِ اسنادِ خزانه‌داری (دریافت/پرداخت) هم
         # دوباره استفاده می‌شود — بدونِ کپی‌کردنِ کدِ فهرست.
-        self._new_entry_options = new_entry_options or [("+ سندِ جدید", "GL_JE")]
+        self._new_entry_options = new_entry_options or [("+ سند جدید", "GL_JE")]
         self._edit_screen_by_type = edit_screen_by_type or {}
         self._entries: list[je_service.JournalEntrySummary] = []
         self._currency_decimal_places = 0
@@ -211,14 +211,14 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             clean_label = button_label.lstrip("+ ").strip() or button_label
             new_button = QPushButton(f"➕ {clean_label}")
             new_button.setObjectName("primaryButton")
-            new_button.setToolTip(f"{clean_label}یِ تازه")
+            new_button.setToolTip(f"{clean_label}ی تازه")
             new_button.clicked.connect(lambda _checked=False, code=screen_code: self._open_new_entry(code))
             header.addWidget(new_button)
         layout.addLayout(header)
 
         search_row = QHBoxLayout()
         self.search_field = QLineEdit()
-        self.search_field.setPlaceholderText("جستجو در شماره‌ی سند، شرح یا شماره‌ی عطف")
+        self.search_field.setPlaceholderText("جستجو در شمارهٔ سند، شرح یا شمارهٔ عطف")
         self.search_field.textChanged.connect(self._apply_filter)
         search_row.addWidget(self.search_field, stretch=1)
 
@@ -226,7 +226,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         # زمانی») — فیلترِ بازه‌یِ تاریخ اختیاری است (پیش‌فرض غیرِفعال، تا
         # رفتارِ فعلیِ فهرست دست‌نخورده بماند)؛ وقتی فعال شود، فقط اسنادِ
         # همان بازه در جدول می‌مانند و انتخاب/ادغام رویِ همان‌ها انجام می‌شود.
-        self.date_filter_checkbox = QCheckBox("فیلترِ بازه‌یِ تاریخ:")
+        self.date_filter_checkbox = QCheckBox("فیلتر بازهٔ تاریخ:")
         self.date_filter_checkbox.stateChanged.connect(self._apply_filter)
         search_row.addWidget(self.date_filter_checkbox)
         self.date_from_field = JalaliDateEdit()
@@ -253,43 +253,43 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         copy_button = QPushButton("📋")
         copy_button.setObjectName("iconButton")
         copy_button.setFixedWidth(44)
-        copy_button.setToolTip("کپیِ سندِ انتخاب‌شده (مشابه)")
+        copy_button.setToolTip("کپی سند انتخاب‌شده (مشابه)")
         copy_button.clicked.connect(lambda: self._copy_selected(reverse=False))
 
         reverse_copy_button = QPushButton("🔄")
         reverse_copy_button.setObjectName("iconButton")
         reverse_copy_button.setFixedWidth(44)
-        reverse_copy_button.setToolTip("کپیِ معکوسِ سندِ انتخاب‌شده")
+        reverse_copy_button.setToolTip("کپی معکوس سند انتخاب‌شده")
         reverse_copy_button.clicked.connect(lambda: self._copy_selected(reverse=True))
 
         approve_button = QPushButton("✅")
         approve_button.setObjectName("iconButton")
         approve_button.setFixedWidth(44)
-        approve_button.setToolTip("تاییدِ سند (ارتقا به دائم)")
+        approve_button.setToolTip("تایید سند (ارتقا به دائم)")
         approve_button.clicked.connect(self._approve_selected)
 
         reverse_button = QPushButton("↩️")
         reverse_button.setObjectName("iconButton")
         reverse_button.setFixedWidth(44)
-        reverse_button.setToolTip("برگشت‌زدنِ سندِ دائم")
+        reverse_button.setToolTip("برگشت‌زدن سند دائم")
         reverse_button.clicked.connect(self._reverse_selected)
 
         merge_button = QPushButton("🔗")
         merge_button.setObjectName("iconButton")
         merge_button.setFixedWidth(44)
-        merge_button.setToolTip("ادغامِ اسنادِ انتخاب‌شده در یک سند")
+        merge_button.setToolTip("ادغام اسناد انتخاب‌شده در یک سند")
         merge_button.clicked.connect(self._merge_selected)
 
         transfer_button = QPushButton("📤")
         transfer_button.setObjectName("iconButton")
         transfer_button.setFixedWidth(44)
-        transfer_button.setToolTip("ارسال/کپی به شرکتِ دیگر")
+        transfer_button.setToolTip("ارسال/کپی به شرکت دیگر")
         transfer_button.clicked.connect(self._transfer_selected)
 
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
-        delete_button.setToolTip("حذفِ سندِ انتخاب‌شده (موقت/پیش‌نویس)")
+        delete_button.setToolTip("حذف سند انتخاب‌شده (موقت/پیش‌نویس)")
         delete_button.clicked.connect(self._delete_selected)
 
         # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
@@ -302,11 +302,11 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.search_field,
-                "جستجو در شماره‌ی سند، شرح یا شماره‌ی عطف. برایِ بازکردنِ خودِ سند، رویِ ردیفش دابل‌کلیک کنید.",
+                "جستجو در شمارهٔ سند، شرح یا شمارهٔ عطف. برای بازکردن خود سند، روی ردیفش دابل‌کلیک کنید.",
             ),
             (
                 self.date_filter_checkbox,
-                "فقط اسنادِ یک بازه‌یِ تاریخِ مشخص نشان داده شوند — مثلاً پیش از ادغامِ چند سندِ یک روز/هفته.",
+                "فقط اسناد یک بازهٔ تاریخ مشخص نشان داده شوند — مثلاً پیش از ادغام چند سند یک روز/هفته.",
             ),
         ])
 
@@ -398,7 +398,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ سند", "این سند حذف شود؟ این کار قابلِ بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
+            self, "حذف سند", "این سند حذف شود؟ این کار قابل بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -421,8 +421,8 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         if cartable_service.has_active_workflow(company_id, "journal_entry"):
             confirm = QMessageBox.question(
                 self,
-                "ارسالِ سند برایِ تایید",
-                "این سند برایِ زنجیره‌ی تاییدِ کارتابل ارسال شود؟",
+                "ارسال سند برای تایید",
+                "این سند برای زنجیرهٔ تایید کارتابل ارسال شود؟",
                 QMessageBox.Yes | QMessageBox.No,
             )
             if confirm != QMessageBox.Yes:
@@ -433,15 +433,15 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
                 company_id, "journal_entry", journal_entry_id, "CREATE", session.current_user.user_id, amount=amount
             )
             QMessageBox.information(
-                self, "ارسال شد", "سند برایِ تاییدِ کارتابل ارسال شد؛ بعدِ تاییدِ همه‌ی مراحل، خودکار دائم می‌شود."
+                self, "ارسال شد", "سند برای تایید کارتابل ارسال شد؛ بعد تایید همهٔ مراحل، خودکار دائم می‌شود."
             )
             self.refresh()
             return
 
         confirm = QMessageBox.question(
             self,
-            "تاییدِ سند",
-            "این سند تایید و به دائم ارتقا یابد؟ بعدِ تایید، سند دیگر قابلِ ویرایش/حذف نیست و شماره‌ی دائمش تغییرناپذیر می‌شود.",
+            "تایید سند",
+            "این سند تایید و به دائم ارتقا یابد؟ بعد تایید، سند دیگر قابل ویرایش/حذف نیست و شمارهٔ دائمش تغییرناپذیر می‌شود.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -451,7 +451,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
-        QMessageBox.information(self, "تایید شد", f"سند با شماره‌ی دائمِ {numerals.to_persian_digits(str(permanent_no))} تایید شد.")
+        QMessageBox.information(self, "تایید شد", f"سند با شمارهٔ دائم {numerals.to_persian_digits(str(permanent_no))} تایید شد.")
         self.refresh()
 
     def _reverse_selected(self) -> None:
@@ -464,8 +464,8 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             return
         confirm = QMessageBox.question(
             self,
-            "برگشت‌زدنِ سند",
-            "یک سندِ تازه با بدهکار/بستانکارِ معکوسِ این سند ساخته می‌شود تا اثرش را خنثی کند. ادامه می‌دهید؟",
+            "برگشت‌زدن سند",
+            "یک سند تازه با بدهکار/بستانکار معکوس این سند ساخته می‌شود تا اثرش را خنثی کند. ادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -478,10 +478,10 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         self.refresh()
 
     def _merge_selected(self) -> None:
-        """طبقِ درخواستِ صریح («ادغامِ اسناد در لیستِ اسناد، بر اساسِ تاریخ
-        و فیلترهایِ زمانی و نوعِ سند، در یک سندِ واحدِ جدید») — فیلترهایِ
-        بالایِ همین فهرست (جستجو + بازه‌یِ تاریخ) و انتخابِ چندتاییِ
-        کاربر با هم مشخص می‌کنند کدام اسناد ادغام شوند؛ نوعِ سند در همان
+        """طبق درخواست صریح («ادغام اسناد در لیست اسناد، بر اساس تاریخ
+        و فیلترهای زمانی و نوع سند، در یک سند واحد جدید») — فیلترهای
+        بالای همین فهرست (جستجو + بازهٔ تاریخ) و انتخاب چندتایی
+        کاربر با هم مشخص می‌کنند کدام اسناد ادغام شوند؛ نوع سند در همان
         merge_journal_entries اعتبارسنجی می‌شود (باید همه یک نوع باشند)."""
         selected_rows = {item.row() for item in self.table.selectedItems()}
         journal_entry_ids = list({self.table.item(row, 0).data(Qt.UserRole) for row in selected_rows})
@@ -493,9 +493,9 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             return
         confirm = QMessageBox.question(
             self,
-            "ادغامِ اسناد",
-            f"{len(journal_entry_ids)} سندِ انتخاب‌شده در یک سندِ تازه ادغام شوند؟ "
-            "اسنادِ اصلی حذف نمی‌شوند، فقط به وضعیتِ «ابطال‌شده» تغییر می‌کنند.",
+            "ادغام اسناد",
+            f"{len(journal_entry_ids)} سند انتخاب‌شده در یک سند تازه ادغام شوند؟ "
+            "اسناد اصلی حذف نمی‌شوند، فقط به وضعیت «ابطال‌شده» تغییر می‌کنند.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -506,14 +506,14 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             QMessageBox.warning(self, "خطا", str(exc))
             return
         QMessageBox.information(
-            self, "ادغام شد", f"سندِ تازه با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد."
+            self, "ادغام شد", f"سند تازه با شمارهٔ موقت {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد."
         )
         self.refresh()
 
     def _transfer_selected(self) -> None:
-        """طبقِ آیتمِ ۳ («ارسال/انتقال/کپیِ سند بینِ شرکت‌ها، هر دو حالت،
-        انتخابی»): انتخابِ چندتاییِ همین فهرست، بدونِ نیاز به فیلترِ نوعِ
-        سند (بر خلافِ ادغام) — چون کپی/انتقال محدود به یک نوعِ سند نیست."""
+        """طبق آیتم ۳ («ارسال/انتقال/کپی سند بین شرکت‌ها، هر دو حالت،
+        انتخابی»): انتخاب چندتایی همین فهرست، بدون نیاز به فیلتر نوع
+        سند (بر خلاف ادغام) — چون کپی/انتقال محدود به یک نوع سند نیست."""
         selected_rows = {item.row() for item in self.table.selectedItems()}
         journal_entry_ids = list({self.table.item(row, 0).data(Qt.UserRole) for row in selected_rows})
         if not journal_entry_ids:
@@ -525,6 +525,6 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         dialog = _TransferDialog(self, company_id, journal_entry_ids, session.current_user.user_id)
         if dialog.exec() == QDialog.Accepted:
             QMessageBox.information(
-                self, "انجام شد", f"{numerals.to_persian_digits(str(len(dialog.new_entry_ids)))} سند در شرکتِ مقصد ساخته شد."
+                self, "انجام شد", f"{numerals.to_persian_digits(str(len(dialog.new_entry_ids)))} سند در شرکت مقصد ساخته شد."
             )
             self.refresh()

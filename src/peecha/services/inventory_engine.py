@@ -1,12 +1,12 @@
-"""موتورِ پستِ اسنادِ انبار (inv.stock_documents → stock_ledger → stock_balance).
+"""موتور پست اسناد انبار (inv.stock_documents → stock_ledger → stock_balance).
 
-طبقِ سندِ معماری (مرحله‌هایِ ۵، ۶، ۸): تنها نقطهٔ نوشتنِ inv.stock_ledger/
-stock_balance همین‌جاست — هیچ کدِ دیگری مستقیماً این دو جدول را تغییر
-نمی‌دهد. سه روشِ قیمت‌گذاری (FIFO/میانگینِ موزون/استاندارد) دقیقاً درونِ
-همین گامِ Post اجرا می‌شوند، نه یک مرحلهٔ جدا. هر Postِ موفق، سندِ
-حسابداریِ خودکار را از رویِ inv.account_mappings می‌سازد؛ اگر کلیدِ لازم
-نگاشت نشده باشد، Post متوقف می‌شود و پیامِ روشن نمایش داده می‌شود، نه
-سکوت — دقیقاً همان اصلی که برایِ خزانه‌داری اجرا شده."""
+طبق سند معماری (مرحله‌های ۵، ۶، ۸): تنها نقطهٔ نوشتن inv.stock_ledger/
+stock_balance همین‌جاست — هیچ کد دیگری مستقیماً این دو جدول را تغییر
+نمی‌دهد. سه روش قیمت‌گذاری (FIFO/میانگین موزون/استاندارد) دقیقاً درون
+همین گام Post اجرا می‌شوند، نه یک مرحلهٔ جدا. هر Post موفق، سند
+حسابداری خودکار را از روی inv.account_mappings می‌سازد؛ اگر کلید لازم
+نگاشت نشده باشد، Post متوقف می‌شود و پیام روشن نمایش داده می‌شود، نه
+سکوت — دقیقاً همان اصلی که برای خزانه‌داری اجرا شده."""
 
 from __future__ import annotations
 
@@ -47,31 +47,31 @@ _Q2 = decimal.Decimal("0.01")
 _ZERO = decimal.Decimal(0)
 
 MAPPING_LABELS: dict[str, str] = {
-    "INVENTORY_ASSET": "داراییِ موجودیِ کالا",
-    "COGS": "بهایِ تمام‌شدهٔ کالایِ فروخته/مصرف‌شده",
-    "INVENTORY_ADJUSTMENT_GAIN": "مازادِ اصلاحِ موجودی",
-    "INVENTORY_ADJUSTMENT_LOSS": "کسریِ اصلاحِ موجودی",
-    "INVENTORY_COST_VARIANCE": "مغایرتِ بهایِ استاندارد",
-    "INVENTORY_REVALUATION": "تسعیر/اصلاحِ ماندهٔ ریالیِ موجودیِ صفر",
-    "SUPPLIER_PAYABLE": "حساب‌هایِ پرداختنیِ تامین‌کنندگان",
-    "CUSTOMER_RECEIVABLE": "حساب‌هایِ دریافتنیِ مشتریان",
-    "PURCHASE_TAX_RECEIVABLE": "مالياتِ خرید — قابلِ مطالبه",
+    "INVENTORY_ASSET": "دارایی موجودی کالا",
+    "COGS": "بهای تمام‌شدهٔ کالای فروخته/مصرف‌شده",
+    "INVENTORY_ADJUSTMENT_GAIN": "مازاد اصلاح موجودی",
+    "INVENTORY_ADJUSTMENT_LOSS": "کسری اصلاح موجودی",
+    "INVENTORY_COST_VARIANCE": "مغایرت بهای استاندارد",
+    "INVENTORY_REVALUATION": "تسعیر/اصلاح ماندهٔ ریالی موجودی صفر",
+    "SUPPLIER_PAYABLE": "حساب‌های پرداختنی تامین‌کنندگان",
+    "CUSTOMER_RECEIVABLE": "حساب‌های دریافتنی مشتریان",
+    "PURCHASE_TAX_RECEIVABLE": "مالیات خرید — قابل مطالبه",
     # طبقِ درخواستِ صریح («برای برگشت از خرید و برگشت از فروش هم به همین
     # صورت انجام بشه»): سندِ RETURN_IN (برگشت از فروش) کاملاً درونِ همین
     # موتور ساخته می‌شود (برخلافِ فاکتورِ فروش که یک سندِ حسابداریِ جداگانه
     # در commercial_documents.py دارد) — پس نگاشتِ «مالياتِ فروش-پرداختنی»
     # این‌جا هم (جدا از نگاشتِ هم‌نامِ خودِ تنظیماتِ بازرگانی که فاکتورِ
     # فروش از آن استفاده می‌کند) لازم است.
-    "SALES_TAX_PAYABLE": "مالياتِ فروشِ پرداختنی (برایِ برگشت از فروش)",
+    "SALES_TAX_PAYABLE": "مالیات فروش پرداختنی (برای برگشت از فروش)",
     # R237: کاهشِ درآمد در برگشت از فروش (اگر تعریف نشود: خودِ «درآمدِ فروش» در تنظیماتِ بازرگانی)
-    "SALES_RETURNS": "برگشت از فروش (کاهشِ درآمد)",
+    "SALES_RETURNS": "برگشت از فروش (کاهش درآمد)",
     # R266: نقش‌هایِ ماژولِ تولید (production/common.py)
-    "PRODUCTION_WIP": "کالایِ در جریانِ ساخت (WIP)",
-    "PRODUCTION_LABOR_APPLIED": "دستمزدِ جذب‌شدهٔ تولید",
-    "PRODUCTION_MACHINE_APPLIED": "هزینهٔ ماشینِ جذب‌شدهٔ تولید",
-    "PRODUCTION_OVERHEAD_APPLIED": "سربارِ جذب‌شدهٔ تولید",
-    "PRODUCTION_VARIANCE": "انحرافِ بهایِ تولید",
-    "PRODUCTION_SCRAP_LOSS": "زیانِ ضایعاتِ غیرعادیِ تولید",
+    "PRODUCTION_WIP": "کالای در جریان ساخت (WIP)",
+    "PRODUCTION_LABOR_APPLIED": "دستمزد جذب‌شدهٔ تولید",
+    "PRODUCTION_MACHINE_APPLIED": "هزینهٔ ماشین جذب‌شدهٔ تولید",
+    "PRODUCTION_OVERHEAD_APPLIED": "سربار جذب‌شدهٔ تولید",
+    "PRODUCTION_VARIANCE": "انحراف بهای تولید",
+    "PRODUCTION_SCRAP_LOSS": "زیان ضایعات غیرعادی تولید",
 }
 
 
@@ -98,9 +98,9 @@ def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
 
 
 def get_account_mapping_detail(company_id: int, mapping_key: str) -> int | None:
-    """تفصیلیِ ثابتِ ازپیش‌تخصیص‌یافته (اگر تنظیم شده باشد) برایِ این
-    حسابِ نقش‌محور -- طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی
-    می‌خواهد ولی جایی برایِ انتخابش نیست»)."""
+    """تفصیلی ثابت ازپیش‌تخصیص‌یافته (اگر تنظیم شده باشد) برای این
+    حساب نقش‌محور — طبق رفع باگ واقعی («حساب مالیات خرید تفصیلی
+    می‌خواهد ولی جایی برای انتخابش نیست»)."""
     with new_session() as session:
         row = session.get(InventoryAccountMapping, (company_id, mapping_key))
         return row.detail_account_id if row is not None else None
@@ -108,7 +108,7 @@ def get_account_mapping_detail(company_id: int, mapping_key: str) -> int | None:
 
 def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلیدِ نگاشتِ نامعتبر است.")
+        raise ValueError("کلید نگاشت نامعتبر است.")
     with new_session() as session:
         row = session.get(InventoryAccountMapping, (company_id, mapping_key))
         if row is None:
@@ -150,7 +150,7 @@ def _resolve_role_account(session, company_id: int, mapping_key: str) -> int:
 
         return commercial_settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
     if row is None:
-        raise ValueError(f"حسابِ «{MAPPING_LABELS.get(mapping_key, mapping_key)}» هنوز در تنظیماتِ انبار مشخص نشده است.")
+        raise ValueError(f"حساب «{MAPPING_LABELS.get(mapping_key, mapping_key)}» هنوز در تنظیمات انبار مشخص نشده است.")
     return row.account_id
 
 
@@ -174,20 +174,20 @@ def get_negative_stock_policy(company_id: int) -> str:
 def set_costing_settings(company_id: int, default_costing_method_code: str, allow_item_override: bool = True,
                          negative_stock_policy: str | None = None, user_id: int | None = None, reason: str | None = None,
                          nifo_price_sources: list[str] | None = None) -> None:
-    """R257: + سیاستِ موجودیِ منفی؛ هر تغییر با کاربر/مقدارِ قبلی و جدید/علت در Auditِ موجود ثبت می‌شود."""
+    """R257: + سیاست موجودی منفی؛ هر تغییر با کاربر/مقدار قبلی و جدید/علت در Audit موجود ثبت می‌شود."""
     from peecha.services import audit as audit_service
 
     if negative_stock_policy is not None and negative_stock_policy not in costing_engine.NEGATIVE_POLICIES:
-        raise ValueError("سیاستِ موجودیِ منفی نامعتبر است.")
+        raise ValueError("سیاست موجودی منفی نامعتبر است.")
     if nifo_price_sources is not None and (not nifo_price_sources or any(
             src not in costing_replacement.SOURCES for src in nifo_price_sources)):
-        raise ValueError("ترتیبِ منابعِ بهایِ جایگزینی نامعتبر است.")
+        raise ValueError("ترتیب منابع بهای جایگزینی نامعتبر است.")
     if default_costing_method_code in costing_engine.NOT_YET_AVAILABLE:
         raise ValueError(costing_engine.NOT_YET_AVAILABLE[default_costing_method_code])
     with new_session() as session:
         method = session.scalar(select(CostingMethod).where(CostingMethod.code == default_costing_method_code))
         if method is None:
-            raise ValueError("روشِ قیمت‌گذاری نامعتبر است.")
+            raise ValueError("روش قیمت‌گذاری نامعتبر است.")
         row = session.get(CompanyCostingSettings, company_id)
         old = costing_engine.company_settings(session, company_id) if row is not None else None
         if row is None:
@@ -255,12 +255,12 @@ def set_feature_enabled(company_id: int, feature_code: str, is_enabled: bool) ->
     with new_session() as session:
         definition = session.get(FeatureDefinition, feature_code)
         if definition is None:
-            raise ValueError("ویژگیِ نامعتبر است.")
+            raise ValueError("ویژگی نامعتبر است.")
         if is_enabled and definition.requires_feature_code is not None:
             dep_row = session.get(CompanyFeature, (company_id, definition.requires_feature_code))
             if dep_row is None or not dep_row.is_enabled:
                 dep = session.get(FeatureDefinition, definition.requires_feature_code)
-                raise ValueError(f"ابتدا باید ویژگیِ «{dep.name}» فعال شود.")
+                raise ValueError(f"ابتدا باید ویژگی «{dep.name}» فعال شود.")
         row = session.get(CompanyFeature, (company_id, feature_code))
         if row is None:
             session.add(CompanyFeature(company_id=company_id, feature_code=feature_code, is_enabled=is_enabled))
@@ -324,8 +324,8 @@ class WarehouseStockRow:
 
 
 def get_item_stock_by_warehouse(company_id: int, item_id: int) -> list[WarehouseStockRow]:
-    """موجودیِ یک کالا در هر انبار -- برخلافِ list_balances، بدونِ فیلترِ
-    batch_id تا موجودیِ ردیابی‌شده بر اساسِ بچ هم در جمعِ هر انبار بیاید."""
+    """موجودی یک کالا در هر انبار — برخلاف list_balances، بدون فیلتر
+    batch_id تا موجودی ردیابی‌شده بر اساس بچ هم در جمع هر انبار بیاید."""
     with new_session() as session:
         rows = session.execute(
             select(Warehouse.warehouse_id, Warehouse.name, func.coalesce(func.sum(StockBalance.quantity_on_hand), 0))
@@ -358,31 +358,31 @@ def list_item_ledger(
     company_id: int, item_id: int, warehouse_id: int | None = None,
     date_from: datetime.date | None = None, date_to: datetime.date | None = None,
 ) -> list[ItemLedgerRow]:
-    """کاردکسِ یک کالا -- مانده‌یِ رواگرد (مقداری و ریالی) همیشه با جمعِ
-    *همه‌یِ* حرکاتِ تاریخی تا date_to محاسبه می‌شود (نه فقط ردیف‌هایِ
-    نمایش‌داده‌شده)، و فقط پس‌ازآن ردیف‌هایِ زودتر از date_from از خروجی
-    کنار گذاشته می‌شوند -- وگرنه مانده‌یِ نمایش‌داده‌شده از همان ابتدایِ
+    """کاردکس یک کالا — ماندهٔ رواگرد (مقداری و ریالی) همیشه با جمع
+    *همهٔ* حرکات تاریخی تا date_to محاسبه می‌شود (نه فقط ردیف‌های
+    نمایش‌داده‌شده)، و فقط پس‌ازآن ردیف‌های زودتر از date_from از خروجی
+    کنار گذاشته می‌شوند — وگرنه ماندهٔ نمایش‌داده‌شده از همان ابتدای
     بازه غلط می‌شد.
 
-    طبقِ درخواستِ صریح («کاردکسِ ریالی بهایِ تمام‌شدهٔ ورودی/خروجی و برایِ
-    فاکتورهایِ فروش یک ستونِ قیمتِ فروش داشته باشه»): value_in/value_out
-    مبلغِ کلِ همان حرکت (مقدار × بهایِ واحد) است، و sale_unit_price فقط
-    برایِ حرکاتِ خروجی‌ای پر می‌شود که از یک فاکتورِ فروش آمده باشند --
-    از طریقِ لینکِ comm.commercial_document_lines.stock_document_line_id
-    که در post کردنِ فاکتور ذخیره شده (متمایز از unit_cost که همان
-    بهایِ تمام‌شده/COGSِ داخلی است، نه قیمتِ فروش به مشتری).
+    طبق درخواست صریح («کاردکس ریالی بهای تمام‌شدهٔ ورودی/خروجی و برای
+    فاکتورهای فروش یک ستون قیمت فروش داشته باشه»): value_in/value_out
+    مبلغ کل همان حرکت (مقدار × بهای واحد) است، و sale_unit_price فقط
+    برای حرکات خروجی‌ای پر می‌شود که از یک فاکتور فروش آمده باشند --
+    از طریق لینک comm.commercial_document_lines.stock_document_line_id
+    که در post کردن فاکتور ذخیره شده (متمایز از unit_cost که همان
+    بهای تمام‌شده/COGS داخلی است، نه قیمت فروش به مشتری).
 
-    طبقِ درخواستِ صریحِ بعدی («کالاهایِ اصلی هم کاردکس داشته باشند --
-    اگر متغیر دارند، مجموعِ مقدار/مبلغِ متغیرها در ردیفِ کاردکسِ کالا
-    ثبت بشه»): خودِ کالایِ اصلیِ دارایِ متغیر هرگز مستقیماً معامله
-    نمی‌شود (فقط متغیرهایش)، پس وقتی این تابع برایِ چنین کالایی صدا
-    زده شود، حرکاتِ همه‌یِ متغیرهایش هم واکشی می‌شود و ردیف‌هایی که به
-    یک سندِ انبارِ واحد (و جهت/انبارِ یکسان) تعلق دارند -- مثلاً یک
-    فاکتورِ خرید با چند ردیفِ متغیرِ رنگِ مختلف -- در یک ردیفِ ترکیبیِ
-    واحد با مقدار/مبلغِ مجموع ادغام می‌شوند. برایِ یک کالایِ عادی، یا
-    وقتی مستقیماً خودِ یک متغیرِ خاص صدا زده شود، این گروه‌بندی هیچ
-    اثری ندارد -- هر خط هم‌چنان دقیقاً یک ردیفِ مستقل می‌ماند (متغیرها
-    کاردکسِ کاملاً مستقلِ خودشان را هم حفظ می‌کنند)."""
+    طبق درخواست صریح بعدی («کالاهای اصلی هم کاردکس داشته باشند --
+    اگر متغیر دارند، مجموع مقدار/مبلغ متغیرها در ردیف کاردکس کالا
+    ثبت بشه»): خود کالای اصلی دارای متغیر هرگز مستقیماً معامله
+    نمی‌شود (فقط متغیرهایش)، پس وقتی این تابع برای چنین کالایی صدا
+    زده شود، حرکات همهٔ متغیرهایش هم واکشی می‌شود و ردیف‌هایی که به
+    یک سند انبار واحد (و جهت/انبار یکسان) تعلق دارند — مثلاً یک
+    فاکتور خرید با چند ردیف متغیر رنگ مختلف — در یک ردیف ترکیبی
+    واحد با مقدار/مبلغ مجموع ادغام می‌شوند. برای یک کالای عادی، یا
+    وقتی مستقیماً خود یک متغیر خاص صدا زده شود، این گروه‌بندی هیچ
+    اثری ندارد — هر خط هم‌چنان دقیقاً یک ردیف مستقل می‌ماند (متغیرها
+    کاردکس کاملاً مستقل خودشان را هم حفظ می‌کنند)."""
     with new_session() as session:
         variant_item_ids = session.scalars(
             select(Item.item_id).where(Item.variant_parent_item_id == item_id)
@@ -505,12 +505,12 @@ class ItemCostHistoryRow:
 def list_item_cost_history(
     company_id: int, item_id: int, counterparty_detail_account_id: int, limit: int = 10,
 ) -> list[ItemCostHistoryRow]:
-    """طبقِ درخواستِ صریح («۱۰ قیمتِ آخرِ کالا به طرفِ‌حساب» -- در فرم‌هایِ
-    انبار معادلِ آن بهایِ واحدِ رسیدهایِ ثبت‌شده از همان طرفِ‌حساب است).
-    طبقِ رفعِ باگِ واقعیِ بعدی («بهایِ تمام‌شده باید با احتسابِ مالياتِ
-    فاکتور نمایش داده شود»)، بهایِ برگردانده‌شده، بهایِ رواگرد به‌اضافه‌یِ
-    سهمِ هرواحد از مالياتِ همان ردیف است -- فقط برایِ نمایش، بدونِ تغییر
-    در بهایِ خالصی که در حسابداری/موجودی ثبت شده."""
+    """طبق درخواست صریح («۱۰ قیمت آخر کالا به طرف‌حساب» — در فرم‌های
+    انبار معادل آن بهای واحد رسیدهای ثبت‌شده از همان طرف‌حساب است).
+    طبق رفع باگ واقعی بعدی («بهای تمام‌شده باید با احتساب مالیات
+    فاکتور نمایش داده شود»)، بهای برگردانده‌شده، بهای رواگرد به‌اضافهٔ
+    سهم هرواحد از مالیات همان ردیف است — فقط برای نمایش، بدون تغییر
+    در بهای خالصی که در حسابداری/موجودی ثبت شده."""
     with new_session() as session:
         rows = session.execute(
             select(
@@ -554,22 +554,22 @@ def _standard_cost(session, item_id: int, as_of_date: datetime.date) -> decimal.
         .order_by(StandardCost.effective_date.desc())
     )
     if row is None:
-        raise ValueError("بهایِ استانداردی برایِ این کالا تعریف نشده است.")
+        raise ValueError("بهای استانداردی برای این کالا تعریف نشده است.")
     return row.standard_unit_cost
 
 
 def get_last_known_unit_cost(item_id: int) -> decimal.Decimal | None:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۸ -- داشبوردِ
-    بالایِ فرمِ مشتری، «سود»): نسخه‌یِ عمومیِ _last_known_unit_cost برایِ
-    برآوردِ سودِ ناخالص (نه سودِ دقیقِ حسابداری‌شده‌یِ همان لحظه‌یِ فروش --
-    آن نیاز به اتصال به آرتیکل‌هایِ واقعیِ بهایِ‌تمام‌شده در دفترِ روزنامه
-    دارد که فراتر از این گزارشِ خلاصه است)."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۱۸ — داشبورد
+    بالای فرم مشتری، «سود»): نسخهٔ عمومی _last_known_unit_cost برای
+    برآورد سود ناخالص (نه سود دقیق حسابداری‌شدهٔ همان لحظهٔ فروش --
+    آن نیاز به اتصال به آرتیکل‌های واقعی بهای‌تمام‌شده در دفتر روزنامه
+    دارد که فراتر از این گزارش خلاصه است)."""
     with new_session() as session:
         return _last_known_unit_cost(session, item_id)
 
 
 def _current_average_cost(session, item_id: int, warehouse_id: int) -> decimal.Decimal | None:
-    """میانگینِ بهایِ فعلیِ کالا در انبار (یا همهٔ انبارها) -- None اگر موجودی نیست."""
+    """میانگین بهای فعلی کالا در انبار (یا همهٔ انبارها) — None اگر موجودی نیست."""
     for condition in ((StockBalance.warehouse_id == warehouse_id,), ()):
         qty, value = session.execute(
             select(func.sum(StockBalance.quantity_on_hand), func.sum(StockBalance.quantity_on_hand * StockBalance.average_unit_cost))
@@ -581,15 +581,15 @@ def _current_average_cost(session, item_id: int, warehouse_id: int) -> decimal.D
 
 
 def _last_known_unit_cost(session, item_id: int) -> decimal.Decimal | None:
-    """آخرین بهایِ واحدِ واقعاً ثبت‌شده برایِ این کالا در دفترِ انبار —
-    وقتی سندِ مستقیمِ انبار (رسید/برگشت) بدونِ بهایِ واحد ثبتِ نهایی
-    می‌شود و روشِ قیمت‌گذاری STANDARD نیست، به‌جایِ خطایِ سخت، همین
-    مقدار جایگزین می‌شود. طبقِ رفعِ باگِ واقعی («سندِ حسابداریِ بهایِ
-    تمام‌شده/موجودی هیچ‌وقت ساخته نمی‌شود»): فقط بهایِ *مثبت* یک سابقهٔ
-    واقعی حساب می‌شود — قبلاً صفر هم قبول می‌شد، یعنی اگر یک اصلاحِ
-    موجودیِ بدونِ‌بها زودتر همین کالا را با بهایِ ۰ ثبت کرده بود، آن صفر
-    برایِ همیشه به‌عنوانِ «آخرین بهایِ شناخته‌شده» تکرار می‌شد و موجودی/
-    بهایِ‌تمام‌شده تا ابد صفر (و بی‌اثر در حسابداری) می‌ماند."""
+    """آخرین بهای واحد واقعاً ثبت‌شده برای این کالا در دفتر انبار —
+    وقتی سند مستقیم انبار (رسید/برگشت) بدون بهای واحد ثبت نهایی
+    می‌شود و روش قیمت‌گذاری STANDARD نیست، به‌جای خطای سخت، همین
+    مقدار جایگزین می‌شود. طبق رفع باگ واقعی («سند حسابداری بهای
+    تمام‌شده/موجودی هیچ‌وقت ساخته نمی‌شود»): فقط بهای *مثبت* یک سابقهٔ
+    واقعی حساب می‌شود — قبلاً صفر هم قبول می‌شد، یعنی اگر یک اصلاح
+    موجودی بدون‌بها زودتر همین کالا را با بهای ۰ ثبت کرده بود، آن صفر
+    برای همیشه به‌عنوان «آخرین بهای شناخته‌شده» تکرار می‌شد و موجودی/
+    بهای‌تمام‌شده تا ابد صفر (و بی‌اثر در حسابداری) می‌ماند."""
     row = session.scalar(
         select(StockLedger.unit_cost)
         .where(StockLedger.item_id == item_id, StockLedger.unit_cost > 0)
@@ -602,7 +602,7 @@ def _last_known_unit_cost(session, item_id: int) -> decimal.Decimal | None:
 def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
     rows = session.scalars(select(StockLedger).where(StockLedger.stock_document_line_id == source_line_id)).all()
     if not rows:
-        raise ValueError("ردیفِ سندِ مرجع هنوز ثبتِ نهایی نشده یا حرکتی ندارد.")
+        raise ValueError("ردیف سند مرجع هنوز ثبت نهایی نشده یا حرکتی ندارد.")
     total_qty = sum((r.quantity_base for r in rows), _ZERO)
     total_cost = sum(((r.unit_cost or _ZERO) * r.quantity_base for r in rows), _ZERO)
     return (total_cost / total_qty) if total_qty else _ZERO
@@ -615,9 +615,9 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
     if doc is None or doc.company_id != company_id:
         raise ValueError("سند نامعتبر است.")
     if doc.status_code == "POSTED":
-        raise ValueError("این سند قبلاً ثبتِ نهایی شده است.")
+        raise ValueError("این سند قبلاً ثبت نهایی شده است.")
     if doc.status_code != "CONFIRMED":
-        raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
+        raise ValueError("فقط سند تاییدشده قابل‌ثبت‌نهایی است.")
 
     lines = session.scalars(
         select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
@@ -770,10 +770,10 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
 
     def consume_out(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, movement_date: datetime.date,
                     line: StockDocumentLine | None = None, preferred_source_line_id: int | None = None) -> list[tuple[decimal.Decimal, decimal.Decimal]]:
-        """موجودی را کم می‌کند و لیستِ بخش‌هایِ (unit_cost, quantity)
-        مصرف‌شده را برمی‌گرداند — برایِ درجِ ردیف(هایِ) Ledger و برایِ
-        بازتولیدِ عینیِ همان بهایِ خروجی در مقصدِ TRANSFER.
-        R257: بهایِ روش‌هایِ لایه‌ای از costing.engine؛ تخصیصِ هر بخش در inv.cost_allocations ثبت می‌شود."""
+        """موجودی را کم می‌کند و لیست بخش‌های (unit_cost, quantity)
+        مصرف‌شده را برمی‌گرداند — برای درج ردیف(های) Ledger و برای
+        بازتولید عینی همان بهای خروجی در مقصد TRANSFER.
+        R257: بهای روش‌های لایه‌ای از costing.engine؛ تخصیص هر بخش در inv.cost_allocations ثبت می‌شود."""
         bal = get_or_create_balance(item.item_id, warehouse_id, bin_location_id)
         warehouse = warehouses_by_id[warehouse_id]
         item_label = item_codes.get(item.item_id, str(item.item_id))
@@ -781,7 +781,7 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
         short_status = costing_engine.negative_outcome(negative_policy, warehouse.allow_negative_stock, shortage)
         if short_status is None:
             raise ValueError(
-                f"موجودیِ کافی در انبار «{warehouse.name}» برایِ کالایِ «{item_label}» وجود ندارد "
+                f"موجودی کافی در انبار «{warehouse.name}» برای کالای «{item_label}» وجود ندارد "
                 f"(موجود: {bal.quantity_on_hand}، درخواستی: {quantity_base})."
             )
 
@@ -821,9 +821,9 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
                 found = costing_replacement.replacement_cost(session, company_id, item.item_id, warehouse_id, movement_date, nifo_sources)
                 if found is not None:
                     issue_cost, source = found
-                    nifo_note = f"NIFO: {costing_replacement.SOURCES.get(source, source)}؛ بهایِ دفتری {cost.normalize()}"
+                    nifo_note = f"NIFO: {costing_replacement.SOURCES.get(source, source)}؛ بهای دفتری {cost.normalize()}"
                 else:
-                    nifo_note = "NIFO: منبعِ بهایِ جایگزینی یافت نشد -- بهایِ دفتری"
+                    nifo_note = "NIFO: منبع بهای جایگزینی یافت نشد — بهای دفتری"
                 nifo_issue["amount"] = _money(issue_cost * quantity_base)
             if shortage > 0 and short_status != "CALCULATED":
                 covered = quantity_base - shortage
@@ -837,7 +837,7 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
                     session, company_id=company_id, stock_line_id=line.line_id, item_id=item.item_id,
                     warehouse_id=warehouse_id, method=method, quantity=qty, unit_cost=cost, movement_date=movement_date,
                     layer_id=layer_id, status=status,
-                    note=("کمبودِ موجودی -- بهایِ جایگزین" if layer_id is None and status != "CALCULATED"
+                    note=("کمبود موجودی — بهای جایگزین" if layer_id is None and status != "CALCULATED"
                           else (nifo_note if method == "NIFO" and doc_type == "ISSUE" else None)))
 
         bal.quantity_on_hand -= quantity_base
@@ -873,7 +873,7 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
     movement_date = doc.document_date
 
     def return_variance_role(difference: decimal.Decimal) -> str:
-        """R235: حسابِ اختلافِ مبلغِ برگشت با بهایِ تمام‌شده."""
+        """R235: حساب اختلاف مبلغ برگشت با بهای تمام‌شده."""
         if get_account_mapping(company_id, "INVENTORY_COST_VARIANCE") is not None:
             return "INVENTORY_COST_VARIANCE"
         if difference > 0 and get_account_mapping(company_id, "INVENTORY_ADJUSTMENT_GAIN") is not None:
@@ -883,15 +883,15 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
     for line in sorted_lines:
         item = items_by_id.get(line.item_id)
         if item is None or item.company_id != company_id:
-            raise ValueError("کالایِ ردیف نامعتبر است.")
+            raise ValueError("کالای ردیف نامعتبر است.")
         if item.lifecycle_status_code != "ACTIVE":
-            raise ValueError(f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» در وضعیتِ فعال نیست و قابلِ‌ثبت در سند نیست.")
+            raise ValueError(f"کالای «{item_codes.get(item.item_id, item.item_id)}» در وضعیت فعال نیست و قابل‌ثبت در سند نیست.")
         if not item.is_stock_tracked:
             raise ValueError("این کالا موجودی‌محور نیست.")
         if item.item_id in variant_parent_item_ids:
             raise ValueError(
-                f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» خودِ کالای اصلیِ دارایِ متغیر است -- "
-                "فقط متغیرهایِ زیرمجموعه‌اش قابلِ‌انتخاب/موجودی‌گیری هستند."
+                f"کالای «{item_codes.get(item.item_id, item.item_id)}» خود کالای اصلی دارای متغیر است -- "
+                "فقط متغیرهای زیرمجموعه‌اش قابل‌انتخاب/موجودی‌گیری هستند."
             )
         je_item_detail_account_id = je_dimension_account_id(item)
 
@@ -938,8 +938,8 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
                         actual_cost = _last_known_unit_cost(session, item.item_id)
                         if actual_cost is None:
                             raise ValueError(
-                                f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» هنوز هیچ بهایِ "
-                                "ثبت‌شده‌ای در سابقه نیست — واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
+                                f"برای کالای «{item_codes.get(item.item_id, item.item_id)}» هنوز هیچ بهای "
+                                "ثبت‌شده‌ای در سابقه نیست — واردکردن بهای واحد برای این ردیف الزامی است."
                             )
 
             ledger_unit_cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else actual_cost
@@ -1141,8 +1141,8 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
                         unit_cost = _last_known_unit_cost(session, item.item_id)
                         if unit_cost is None:
                             raise ValueError(
-                                f"برایِ افزایشِ موجودیِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» که "
-                                "هنوز هیچ بهایِ ثبت‌شده‌ای ندارد، واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
+                                f"برای افزایش موجودی کالای «{item_codes.get(item.item_id, item.item_id)}» که "
+                                "هنوز هیچ بهای ثبت‌شده‌ای ندارد، واردکردن بهای واحد برای این ردیف الزامی است."
                             )
                 in_ledger = insert_ledger(
                     stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
@@ -1169,8 +1169,8 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
             method = costing_method(item)
             if line.unit_cost is None:
                 raise ValueError(
-                    f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» در امانیِ ورودی، "
-                    "واردکردنِ بهایِ توافق‌شده الزامی است."
+                    f"برای کالای «{item_codes.get(item.item_id, item.item_id)}» در امانی ورودی، "
+                    "واردکردن بهای توافق‌شده الزامی است."
                 )
             unit_cost = line.unit_cost
             in_ledger = insert_ledger(
@@ -1196,7 +1196,7 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
                     movement_date=movement_date,
                 )
         else:
-            raise ValueError("نوعِ سند نامعتبر است.")
+            raise ValueError("نوع سند نامعتبر است.")
 
     person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
@@ -1228,7 +1228,7 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
         return any(r.dimension_type_id == item_dim_type_id for r in required)
 
     je_lines: list[je_service.LineInput] = []
-    description = doc.description or f"سندِ انبار #{doc.document_no}"
+    description = doc.description or f"سند انبار #{doc.document_no}"
 
     # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی
     # جایی برایِ انتخابش نیست»): بعضی حساب‌هایِ نقش‌محور یک تفصیلیِ
@@ -1302,9 +1302,9 @@ def post_stock_document(
     extra_je_lines: list[je_service.LineInput] | None = None, *, session=None,
     role_overrides: dict[str, str] | None = None,
 ) -> PostResult:
-    """R266: با session، موجودی و سندِ حسابداری در همان تراکنشِ فراخواننده ثبت می‌شوند (بدونِ commit)؛
-    role_overrides نقشِ حساب را فقط برایِ همین سند عوض می‌کند (مثلاً COGS ← PRODUCTION_WIP در حوالهٔ تولید).
-    بدونِ این دو پارامتر رفتار دقیقاً همان قبلی است."""
+    """R266: با session، موجودی و سند حسابداری در همان تراکنش فراخواننده ثبت می‌شوند (بدون commit)؛
+    role_overrides نقش حساب را فقط برای همین سند عوض می‌کند (مثلاً COGS ← PRODUCTION_WIP در حوالهٔ تولید).
+    بدون این دو پارامتر رفتار دقیقاً همان قبلی است."""
     if session is not None:
         doc, je_lines, description = _post_stock_document_core(
             session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides)
@@ -1341,33 +1341,33 @@ def post_stock_document(
 
 
 def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> PostResult:
-    """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ ثبت‌شده باید عیناً برگشت بخورد،
-    نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود»): دقیقاً هم‌الگو با
-    journal_entries.reverse_journal_entry -- یک سندِ انبارِ *تازه* با نوعِ
-    معکوس (RECEIPT<->ISSUE)، همان کالا/مقدار/انبار/مکان، در تاریخِ *امروز*
-    ساخته و بلافاصله ثبتِ نهایی می‌شود؛ سندِ اصلی هرگز دست‌کاری نمی‌شود
-    (stock_ledger هم طبقِ طراحیِ دیتابیس Append-Only است).
+    """طبق درخواست صریح («اصلاح فاکتور ثبت‌شده باید عیناً برگشت بخورد،
+    نه اینکه سند اصلی با تاریخ عقب‌دار دست‌کاری شود»): دقیقاً هم‌الگو با
+    journal_entries.reverse_journal_entry — یک سند انبار *تازه* با نوع
+    معکوس (RECEIPT<->ISSUE)، همان کالا/مقدار/انبار/مکان، در تاریخ *امروز*
+    ساخته و بلافاصله ثبت نهایی می‌شود؛ سند اصلی هرگز دست‌کاری نمی‌شود
+    (stock_ledger هم طبق طراحی دیتابیس Append-Only است).
 
-    برخلافِ post_stock_document، این‌جا میانگینِ موزونِ جدید با فرمولِ
-    معکوسِ همان فرمولِ apply_in محاسبه می‌شود -- نه از طریقِ یک ردیفِ
-    عادیِ ISSUE/RECEIPT، چون ISSUE هرگز average_unit_cost را تغییر
-    نمی‌دهد و نمی‌تواند اثرِ یک RECEیPT را واقعاً خنثی کند.
+    برخلاف post_stock_document، این‌جا میانگین موزون جدید با فرمول
+    معکوس همان فرمول apply_in محاسبه می‌شود — نه از طریق یک ردیف
+    عادی ISSUE/RECEIPT، چون ISSUE هرگز average_unit_cost را تغییر
+    نمی‌دهد و نمی‌تواند اثر یک RECEیPT را واقعاً خنثی کند.
 
-    محدودیتِ آگاهانه: فقط برایِ کالاهایِ میانگینِ موزون/استاندارد (نه
-    FIFO، که ردیابیِ دقیقِ لایه‌به‌لایه لازم دارد) و فقط وقتی این سند
-    هنوز *آخرین* حرکتِ انبار برایِ کالاهایِ خودش باشد -- وگرنه برگشت‌زدنِ
-    آن ترتیبِ محاسبه‌یِ هزینه‌یِ سندهایِ بعدی را به‌هم می‌ریزد. سندِ
-    حسابداریِ خودش را هم نمی‌سازد -- بازتابِ حسابداریِ درست از طریقِ
-    برگشت‌زدنِ عینیِ سندِ حسابداریِ *سندِ اصلی* (journal_entries.
-    reverse_journal_entry، توسطِ تماس‌گیرنده) به‌دست می‌آید."""
+    محدودیت آگاهانه: فقط برای کالاهای میانگین موزون/استاندارد (نه
+    FIFO، که ردیابی دقیق لایه‌به‌لایه لازم دارد) و فقط وقتی این سند
+    هنوز *آخرین* حرکت انبار برای کالاهای خودش باشد — وگرنه برگشت‌زدن
+    آن ترتیب محاسبهٔ هزینهٔ سندهای بعدی را به‌هم می‌ریزد. سند
+    حسابداری خودش را هم نمی‌سازد — بازتاب حسابداری درست از طریق
+    برگشت‌زدن عینی سند حسابداری *سند اصلی* (journal_entries.
+    reverse_journal_entry، توسط تماس‌گیرنده) به‌دست می‌آید."""
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code != "POSTED":
-            raise ValueError("فقط سندهایِ ثبت‌نهایی‌شده قابلِ برگشت‌اند.")
+            raise ValueError("فقط سندهای ثبت‌نهایی‌شده قابل برگشت‌اند.")
         if doc.document_type_code not in ("RECEIPT", "ISSUE"):
-            raise ValueError("برگشت‌زدنِ این نوعِ سندِ انبار فعلاً پشتیبانی نمی‌شود.")
+            raise ValueError("برگشت‌زدن این نوع سند انبار فعلاً پشتیبانی نمی‌شود.")
 
         lines = session.scalars(
             select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
@@ -1380,7 +1380,7 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
             select(StockLedger).where(StockLedger.stock_document_line_id.in_(line_ids))
         ).all()
         if len(original_ledger_rows) != len(lines):
-            raise ValueError("سند هنوز کاملاً به دفترِ انبار منتقل نشده — برگشت‌زدن ممکن نیست.")
+            raise ValueError("سند هنوز کاملاً به دفتر انبار منتقل نشده — برگشت‌زدن ممکن نیست.")
 
         item_ids = {r.item_id for r in original_ledger_rows}
         items_by_id = {it.item_id: it for it in session.scalars(select(Item).where(Item.item_id.in_(item_ids)))}
@@ -1395,7 +1395,7 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
             method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
             if costing_strategies.is_layer_method(method):
                 raise ValueError(
-                    f"برگشت‌زدنِ سند برایِ کالایی که با روشِ لایه‌ایِ {method} قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود."
+                    f"برگشت‌زدن سند برای کالایی که با روش لایه‌ای {method} قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود."
                 )
 
         is_receipt = doc.document_type_code == "RECEIPT"
@@ -1415,8 +1415,8 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
             )
             if later_count:
                 raise ValueError(
-                    "این سند دیگر آخرین حرکتِ انبار برایِ یکی از کالاهایش نیست — سندهایِ دیگری "
-                    "بعد از آن رویِ همین کالا/انبار ثبت شده‌اند، پس اصلاحِ آن دیگر ایمن نیست."
+                    "این سند دیگر آخرین حرکت انبار برای یکی از کالاهایش نیست — سندهای دیگری "
+                    "بعد از آن روی همین کالا/انبار ثبت شده‌اند، پس اصلاح آن دیگر ایمن نیست."
                 )
 
         fiscal_year = session.scalar(
@@ -1427,7 +1427,7 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
             )
         )
         if fiscal_year is None:
-            raise ValueError("سالِ مالیِ امروز تعریف نشده است.")
+            raise ValueError("سال مالی امروز تعریف نشده است.")
 
         original_warehouse_id = doc.destination_warehouse_id if is_receipt else doc.source_warehouse_id
         reversal_type = "ISSUE" if is_receipt else "RECEIPT"
@@ -1450,7 +1450,7 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
             cost_center_detail_account_id=doc.cost_center_detail_account_id,
             project_detail_account_id=doc.project_detail_account_id,
             reference_no=f"REVERSAL-{stock_document_id}",
-            description=f"سندِ برگشتیِ سندِ انبارِ شماره‌ی {doc.document_no}",
+            description=f"سند برگشتی سند انبار شماره‌ی {doc.document_no}",
             created_by_user_id=reversed_by_user_id,
         )
         session.add(reversal_doc)
@@ -1465,7 +1465,7 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
                 ).with_for_update()
             )
             if bal is None:
-                raise ValueError("موجودیِ این کالا/انبار یافت نشد.")
+                raise ValueError("موجودی این کالا/انبار یافت نشد.")
 
             method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
             q = r.quantity_base
@@ -1513,11 +1513,11 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
 
 
 def get_effective_costing_method(item_id: int, company_id: int) -> str:
-    """روشِ قیمت‌گذاریِ واقعاً مؤثرِ این کالا (خودِ کالا، وگرنه پیش‌فرضِ
-    شرکت) -- طبقِ رفعِ باگِ واقعی («اصلاحِ فاکتوری که شاملِ کالایِ FIFO
+    """روش قیمت‌گذاری واقعاً مؤثر این کالا (خود کالا، وگرنه پیش‌فرض
+    شرکت) — طبق رفع باگ واقعی («اصلاح فاکتوری که شامل کالای FIFO
     است، نیمه‌کاره حسابداری‌اش را برگشت می‌زند و بعد با خطا متوقف
-    می‌شود»): این تابع اجازه می‌دهد اهلیتِ FIFO پیش از هر نوشتنی
-    (برگشت‌زدنِ سند یا ساختِ سندِ تازه) بررسی شود، نه وسطِ کار."""
+    می‌شود»): این تابع اجازه می‌دهد اهلیت FIFO پیش از هر نوشتنی
+    (برگشت‌زدن سند یا ساخت سند تازه) بررسی شود، نه وسط کار."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None:
@@ -1531,13 +1531,13 @@ def get_effective_costing_method(item_id: int, company_id: int) -> str:
 
 
 def get_recent_consumption_cost(stock_document_id: int, item_id: int, quantity: decimal.Decimal) -> decimal.Decimal:
-    """میانگینِ وزنیِ بهایِ *آخرین* quantity واحدِ مصرف‌شده (OUT) برایِ این
-    کالا در همین سندِ انبار -- به‌ترتیبِ معکوسِ ثبت (جدیدترین بخشِ
-    مصرف‌شده اول). طبقِ درخواستِ صریح («اصلاحِ فاکتور برایِ کالایِ FIFO
-    هم پیاده شود»): وقتی اصلاحِ فاکتورِ فروش تعدادِ فروخته‌شده‌یِ یک
-    کالایِ FIFO را *کم* می‌کند (یعنی چند واحد باید «برگردانده» شوند)،
-    میانگینِ فعلیِ کالا معنایی برایِ FIFO ندارد -- به‌جایش بهایِ صادقانه‌یِ
-    همان واحدهایی که واقعاً در همین فاکتور مصرف شده بودند از رویِ خودِ
+    """میانگین وزنی بهای *آخرین* quantity واحد مصرف‌شده (OUT) برای این
+    کالا در همین سند انبار — به‌ترتیب معکوس ثبت (جدیدترین بخش
+    مصرف‌شده اول). طبق درخواست صریح («اصلاح فاکتور برای کالای FIFO
+    هم پیاده شود»): وقتی اصلاح فاکتور فروش تعداد فروخته‌شدهٔ یک
+    کالای FIFO را *کم* می‌کند (یعنی چند واحد باید «برگردانده» شوند)،
+    میانگین فعلی کالا معنایی برای FIFO ندارد — به‌جایش بهای صادقانهٔ
+    همان واحدهایی که واقعاً در همین فاکتور مصرف شده بودند از روی خود
     Ledger خوانده می‌شود."""
     with new_session() as session:
         line_ids = list(
@@ -1563,7 +1563,7 @@ def get_recent_consumption_cost(stock_document_id: int, item_id: int, quantity: 
             total_qty += take
             remaining -= take
         if total_qty == 0:
-            raise ValueError("سابقه‌یِ مصرفِ این کالا در سندِ انبارِ اصلی یافت نشد.")
+            raise ValueError("سابقهٔ مصرف این کالا در سند انبار اصلی یافت نشد.")
         return total_value / total_qty
 
 
@@ -1580,31 +1580,31 @@ def adjust_stock_quantity(
     item_id: int, warehouse_id: int, bin_location_id: int | None, company_id: int, quantity_delta: decimal.Decimal,
     created_by_user_id: int, reference_no: str, description: str, in_unit_cost: decimal.Decimal | None = None,
 ) -> AdjustmentResult:
-    """طبقِ درخواستِ صریح («اصلاحِ فاکتوری که آخرین حرکتِ انبار نیست هم
-    فکری بشود»): برخلافِ reverse_stock_document (که تلاش می‌کند دقیقاً
-    یک حرکتِ خاصِ گذشته را خنثی کند و برایِ همین به قاعده‌یِ «هنوز آخرین
+    """طبق درخواست صریح («اصلاح فاکتوری که آخرین حرکت انبار نیست هم
+    فکری بشود»): برخلاف reverse_stock_document (که تلاش می‌کند دقیقاً
+    یک حرکت خاص گذشته را خنثی کند و برای همین به قاعدهٔ «هنوز آخرین
     حرکت باشد» نیاز دارد)، این تابع هرگز به گذشته کاری ندارد — فقط یک
-    حرکتِ *تازه* و رو به جلو ثبت می‌کند؛ دقیقاً مثلِ این‌که همین امروز یک
-    فروش/خریدِ معمولیِ کوچک اتفاق افتاده باشد. پس هیچ‌وقت به «آخرین حرکت
+    حرکت *تازه* و رو به جلو ثبت می‌کند؛ دقیقاً مثل این‌که همین امروز یک
+    فروش/خرید معمولی کوچک اتفاق افتاده باشد. پس هیچ‌وقت به «آخرین حرکت
     بودن» نیاز ندارد و همیشه امن است.
 
-    quantity_delta مثبت یعنی مصرفِ بیشتر (OUT — مثلِ افزایشِ مقدارِ
-    فروخته‌شده)، منفی یعنی افزودن (IN — مثلِ کاهشِ مقدارِ فروخته‌شده، یا
-    افزایشِ مقدارِ خریداری‌شده).
+    quantity_delta مثبت یعنی مصرف بیشتر (OUT — مثل افزایش مقدار
+    فروخته‌شده)، منفی یعنی افزودن (IN — مثل کاهش مقدار فروخته‌شده، یا
+    افزایش مقدار خریداری‌شده).
 
-    برایِ میانگینِ موزون/استاندارد: OUT همیشه با میانگینِ *فعلی* (بدونِ
-    تغییرِ میانگین)؛ IN بدونِ in_unit_cost یعنی بازگرداندنِ خنثی (دقیقاً
-    در قیمتِ خودِ میانگین وارد می‌شود)، با in_unit_cost یعنی یک apply_in
-    واقعی با همان بهایِ مشخص.
+    برای میانگین موزون/استاندارد: OUT همیشه با میانگین *فعلی* (بدون
+    تغییر میانگین)؛ IN بدون in_unit_cost یعنی بازگرداندن خنثی (دقیقاً
+    در قیمت خود میانگین وارد می‌شود)، با in_unit_cost یعنی یک apply_in
+    واقعی با همان بهای مشخص.
 
-    برایِ FIFO: OUT دقیقاً مثلِ consume_out معمولی از لایه‌هایِ موجود
-    (قدیمی‌ترین اول) مصرف می‌کند -- رو به جلو و کاملاً امن، چون به هیچ
-    لایه‌یِ گذشته‌ای دست نمی‌زند. IN برایِ FIFO همیشه به in_unit_cost نیاز
-    دارد (میانگینی برایِ بلندکردن وجود ندارد) و یک لایه‌یِ هزینه‌یِ *تازه*
-    می‌سازد -- دقیقاً مثلِ یک رسیدِ معمولیِ امروز؛ لایه‌هایِ قدیمی هرگز
+    برای FIFO: OUT دقیقاً مثل consume_out معمولی از لایه‌های موجود
+    (قدیمی‌ترین اول) مصرف می‌کند — رو به جلو و کاملاً امن، چون به هیچ
+    لایهٔ گذشته‌ای دست نمی‌زند. IN برای FIFO همیشه به in_unit_cost نیاز
+    دارد (میانگینی برای بلندکردن وجود ندارد) و یک لایهٔ هزینهٔ *تازه*
+    می‌سازد — دقیقاً مثل یک رسید معمولی امروز؛ لایه‌های قدیمی هرگز
     دست‌کاری نمی‌شوند."""
     if quantity_delta == 0:
-        raise ValueError("مقدارِ تفاوت نمی‌تواند صفر باشد.")
+        raise ValueError("مقدار تفاوت نمی‌تواند صفر باشد.")
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None:
@@ -1615,14 +1615,14 @@ def adjust_stock_quantity(
 
         method = get_effective_costing_method(item_id, company_id)
         if costing_strategies.is_layer_method(method) and quantity_delta < 0 and in_unit_cost is None:
-            raise ValueError(f"برایِ کالایِ {method}، بازگرداندن/افزایشِ مقدار بدونِ مشخص‌کردنِ بهایِ واحد ممکن نیست.")
+            raise ValueError(f"برای کالای {method}، بازگرداندن/افزایش مقدار بدون مشخص‌کردن بهای واحد ممکن نیست.")
 
         if bin_location_id is None:
             default_bin = session.scalar(
                 select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
             )
             if default_bin is None:
-                raise ValueError("مکانِ انبارِ پیش‌فرض یافت نشد.")
+                raise ValueError("مکان انبار پیش‌فرض یافت نشد.")
             bin_location_id = default_bin.bin_location_id
 
         bal = session.scalar(
@@ -1649,8 +1649,8 @@ def adjust_stock_quantity(
             qty = quantity_delta
             if bal.quantity_on_hand < qty and not warehouse.allow_negative_stock:
                 raise ValueError(
-                    f"موجودیِ کافی برایِ اعمالِ این اصلاح در انبار «{warehouse.name}» وجود ندارد "
-                    f"(موجود: {bal.quantity_on_hand}، نیاز به کاهشِ: {qty})."
+                    f"موجودی کافی برای اعمال این اصلاح در انبار «{warehouse.name}» وجود ندارد "
+                    f"(موجود: {bal.quantity_on_hand}، نیاز به کاهش: {qty})."
                 )
             direction = "OUT"
             if costing_strategies.is_layer_method(method):
@@ -1699,7 +1699,7 @@ def adjust_stock_quantity(
             )
         )
         if fiscal_year is None:
-            raise ValueError("سالِ مالیِ امروز تعریف نشده است.")
+            raise ValueError("سال مالی امروز تعریف نشده است.")
 
         doc_type = "ISSUE" if direction == "OUT" else "RECEIPT"
         next_no = (
@@ -1770,7 +1770,7 @@ class CostCorrectionResult:
 
 def _log_cost_adjustment(session, company_id, item_id, warehouse_id, method, unit_cost_delta, quantity_remaining,
                          quantity_consumed, inventory_value_delta, variance_value_delta) -> None:
-    """R247: فقط ثبتِ تاریخ‌دارِ همان اصلاحی که بالا اعمال شد (برایِ ارزشِ تاریخیِ موجودی)؛ در محاسبه اثری ندارد."""
+    """R247: فقط ثبت تاریخ‌دار همان اصلاحی که بالا اعمال شد (برای ارزش تاریخی موجودی)؛ در محاسبه اثری ندارد."""
     from peecha.db.models.inventory import CostAdjustmentLog
 
     if not inventory_value_delta and not variance_value_delta:
@@ -1787,19 +1787,19 @@ def apply_purchase_cost_correction(
     item_id: int, warehouse_id: int, bin_location_id: int | None, company_id: int,
     original_quantity: decimal.Decimal, unit_cost_delta: decimal.Decimal,
 ) -> CostCorrectionResult:
-    """طبقِ رویه‌یِ استانداردِ صنعت (مشابهِ حسابِ Purchase/Invoice Price
-    Variance در ERPهایِ بزرگ): وقتی فقط بهایِ واحدِ یک فاکتورِ خریدِ
-    قدیمی (که دیگر آخرین حرکتِ انبار نیست) اصلاح می‌شود، بدونِ بازمحاسبه‌
-    یِ کاملِ زنجیره نمی‌شود دقیقاً تشخیص داد کدام واحدها هنوز مانده‌اند و
-    کدام قبلاً مصرف/فروخته شده‌اند -- پس اختلافِ ارزش دو‌تکه می‌شود: سهمِ
-    مقداری که هنوز در انبار مانده (طبقِ نسبتِ فعلی، مستقیم در میانگینِ
-    موجودی بلند می‌شود) و سهمِ مقداری که قبلاً مصرف شده (چون نمی‌شود
-    فروش‌هایِ گذشته را دوباره نوشت، به‌جایش با یک حسابِ مغایرتِ بها ثبت
-    می‌شود -- شفاف و جداگانه، نه قاطی‌شده در بهایِ‌تمام‌شده‌یِ امروز).
-    برایِ کالایِ استاندارد-قیمت‌گذاری، ارزشِ موجودی همیشه با بهایِ
-    استاندارد ثابت می‌ماند -- پس کلِ اختلاف به حسابِ مغایرت می‌رود، دقیقاً
-    هم‌الگو با نحوه‌یِ رفتارِ خودِ post_stock_document با اختلافِ بهایِ
-    واقعی/استاندارد در لحظه‌یِ رسیدِ اصلی."""
+    """طبق رویهٔ استاندارد صنعت (مشابه حساب Purchase/Invoice Price
+    Variance در ERPهای بزرگ): وقتی فقط بهای واحد یک فاکتور خرید
+    قدیمی (که دیگر آخرین حرکت انبار نیست) اصلاح می‌شود، بدون بازمحاسبه‌
+    ی کامل زنجیره نمی‌شود دقیقاً تشخیص داد کدام واحدها هنوز مانده‌اند و
+    کدام قبلاً مصرف/فروخته شده‌اند — پس اختلاف ارزش دو‌تکه می‌شود: سهم
+    مقداری که هنوز در انبار مانده (طبق نسبت فعلی، مستقیم در میانگین
+    موجودی بلند می‌شود) و سهم مقداری که قبلاً مصرف شده (چون نمی‌شود
+    فروش‌های گذشته را دوباره نوشت، به‌جایش با یک حساب مغایرت بها ثبت
+    می‌شود — شفاف و جداگانه، نه قاطی‌شده در بهای‌تمام‌شدهٔ امروز).
+    برای کالای استاندارد-قیمت‌گذاری، ارزش موجودی همیشه با بهای
+    استاندارد ثابت می‌ماند — پس کل اختلاف به حساب مغایرت می‌رود، دقیقاً
+    هم‌الگو با نحوهٔ رفتار خود post_stock_document با اختلاف بهای
+    واقعی/استاندارد در لحظهٔ رسید اصلی."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None:
@@ -1811,7 +1811,7 @@ def apply_purchase_cost_correction(
             default_costing_method_code = method_row.code if method_row is not None else None
         method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
         if costing_strategies.is_layer_method(method):
-            raise ValueError(f"اصلاحِ بهایِ واحد برایِ کالایِ {method} از مسیرِ لایه‌ای (apply_purchase_cost_correction_fifo) انجام می‌شود.")
+            raise ValueError(f"اصلاح بهای واحد برای کالای {method} از مسیر لایه‌ای (apply_purchase_cost_correction_fifo) انجام می‌شود.")
 
         if bin_location_id is None:
             default_bin = session.scalar(
@@ -1849,15 +1849,15 @@ def apply_purchase_cost_correction(
 def apply_purchase_cost_correction_fifo(
     original_stock_document_id: int, item_id: int, unit_cost_delta: decimal.Decimal,
 ) -> CostCorrectionResult:
-    """هم‌ارزِ apply_purchase_cost_correction، ولی برایِ FIFO -- و در واقع
+    """هم‌ارز apply_purchase_cost_correction، ولی برای FIFO — و در واقع
     *دقیق‌تر*: چون FIFO هر رسید را در یک CostLayer جداگانه ردیابی
-    می‌کند (نه یک میانگینِ سراسری)، اینجا لازم نیست نسبتِ «هنوز مانده به
-    مصرف‌شده» را از رویِ موجودیِ کلِ کالا حدس زد -- خودِ لایه‌یِ دقیقِ
-    همین رسید (از طریقِ ردیفِ آن در سندِ انبار -> ردیفِ Ledgerِ IN -> خودِ
-    CostLayer) پیدا و مستقیماً اصلاح می‌شود: سهمِ هنوز-باقی‌مانده
-    (remaining_quantity) با تغییرِ unit_cost خودِ لایه (بدونِ لمسِ
-    مقدارش -- پس اثری رویِ مصرفِ آینده جز بهایِ درست ندارد)، سهمِ
-    قبلاً-مصرف‌شده هم مثلِ حالتِ میانگینِ موزون، به حسابِ مغایرتِ بها."""
+    می‌کند (نه یک میانگین سراسری)، اینجا لازم نیست نسبت «هنوز مانده به
+    مصرف‌شده» را از روی موجودی کل کالا حدس زد — خود لایهٔ دقیق
+    همین رسید (از طریق ردیف آن در سند انبار -> ردیف Ledger IN -> خود
+    CostLayer) پیدا و مستقیماً اصلاح می‌شود: سهم هنوز-باقی‌مانده
+    (remaining_quantity) با تغییر unit_cost خود لایه (بدون لمس
+    مقدارش — پس اثری روی مصرف آینده جز بهای درست ندارد)، سهم
+    قبلاً-مصرف‌شده هم مثل حالت میانگین موزون، به حساب مغایرت بها."""
     with new_session() as session:
         lines = session.scalars(
             select(StockDocumentLine).where(
@@ -1865,7 +1865,7 @@ def apply_purchase_cost_correction_fifo(
             )
         ).all()
         if not lines:
-            raise ValueError("ردیفِ این کالا در سندِ رسیدِ اصلی یافت نشد.")
+            raise ValueError("ردیف این کالا در سند رسید اصلی یافت نشد.")
         layers = []
         for ln in lines:
             ledger_row = session.scalar(
@@ -1881,7 +1881,7 @@ def apply_purchase_cost_correction_fifo(
             if layer is not None:
                 layers.append(layer)
         if not layers:
-            raise ValueError("لایه‌یِ هزینه‌یِ این رسید یافت نشد.")
+            raise ValueError("لایهٔ هزینهٔ این رسید یافت نشد.")
 
         total_remaining = sum((layer.remaining_quantity for layer in layers), _ZERO)
         total_original = sum((layer.original_quantity for layer in layers), _ZERO)
@@ -1929,7 +1929,7 @@ def list_category_account_mappings(category_id: int) -> list[CategoryAccountMapp
 
 def set_category_account_mapping(category_id: int, mapping_key: str, account_id: int) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلیدِ نگاشت نامعتبر است.")
+        raise ValueError("کلید نگاشت نامعتبر است.")
     with new_session() as session:
         row = session.get(CategoryAccountMapping, (category_id, mapping_key))
         if row is None:
@@ -1969,7 +1969,7 @@ def list_warehouse_account_mappings(warehouse_id: int) -> list[WarehouseAccountM
 
 def set_warehouse_account_mapping(warehouse_id: int, mapping_key: str, account_id: int) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلیدِ نگاشت نامعتبر است.")
+        raise ValueError("کلید نگاشت نامعتبر است.")
     with new_session() as session:
         row = session.get(WarehouseAccountMapping, (warehouse_id, mapping_key))
         if row is None:

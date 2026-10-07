@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -198,40 +198,40 @@ def layer_value(item_id):
         return s.scalar(select(sa_func.sum(CostLayer.remaining_quantity * CostLayer.unit_cost)).where(CostLayer.item_id == item_id))
 q, v = bal(fi)
 check(q == 50 and abs(v - D(10000)) < D("0.01") and abs(layer_value(fi) - D(10000)) < D("0.01"),
-      f"FIFO: ارزشِ مانده = ارزشِ لایه‌ها = ۵۰×۲۰۰ ({v})")
+      f"FIFO: ارزش مانده = ارزش لایه‌ها = ۵۰×۲۰۰ ({v})")
 q, v = bal(li)
-check(q == 15 and abs(v - layer_value(li)) < D("0.01") and abs(v - D(10 * 50 + 5 * 80)) < D("0.01"), f"LIFO: ارزشِ مانده = لایه‌ها ({v})")
+check(q == 15 and abs(v - layer_value(li)) < D("0.01") and abs(v - D(10 * 50 + 5 * 80)) < D("0.01"), f"LIFO: ارزش مانده = لایه‌ها ({v})")
 
 # --- ۲) ارزش‌گذاری در تاریخ (snapshot) ----------------------------------------------------
 pos = cv.positions(company_id, d0, item_id=fi)
-check(pos[(fi, wh)] == (D(100), D("10000.00")), "ارزش در تاریخِ رسیدِ اول: ۱۰۰ × ۱۰۰")
+check(pos[(fi, wh)] == (D(100), D("10000.00")), "ارزش در تاریخ رسید اول: ۱۰۰ × ۱۰۰")
 pos = cv.positions(company_id, d1, item_id=fi)
-check(pos[(fi, wh)] == (D(200), D("30000.00")), "ارزش در تاریخِ رسیدِ دوم: ۳۰٬۰۰۰")
+check(pos[(fi, wh)] == (D(200), D("30000.00")), "ارزش در تاریخ رسید دوم: ۳۰٬۰۰۰")
 pos = cv.positions(company_id, today, item_id=fi)
-check(pos[(fi, wh)] == (D(50), D("10000.00")), "ارزشِ امروز: ۵۰ × ۲۰۰")
+check(pos[(fi, wh)] == (D(50), D("10000.00")), "ارزش امروز: ۵۰ × ۲۰۰")
 total_now = sum((v[1] for v in cv.positions(company_id).values()), D(0))
 with new_session() as s:
     gl = s.scalar(select(sa_func.sum(JournalEntryLine.debit_amount_base - JournalEntryLine.credit_amount_base)).where(
         JournalEntryLine.account_id == inv_gl.account_id))
-check(abs(total_now - gl) < D("0.05"), f"ارزش‌گذاری = ماندهٔ حسابِ موجودی در دفترِ کل ({total_now} / {gl})")
+check(abs(total_now - gl) < D("0.05"), f"ارزش‌گذاری = ماندهٔ حساب موجودی در دفتر کل ({total_now} / {gl})")
 
 # --- ۳) اطلاعاتِ بهایِ کالا و تاریخچه --------------------------------------------------------
 info = cv.item_cost_info(company_id, fi)
 check(info.method == "FIFO" and info.current_cost == 200 and info.average_cost == 200 and info.last_purchase_cost == 200
-      and info.quantity == 50 and info.inventory_value == D("10000.00"), "اطلاعاتِ بها: روش، بهایِ جاری، میانگین، آخرین خرید")
+      and info.quantity == 50 and info.inventory_value == D("10000.00"), "اطلاعات بها: روش، بهای جاری، میانگین، آخرین خرید")
 info = cv.item_cost_info(company_id, li)
-check(info.current_cost == 80 and info.last_purchase_cost == 80, "LIFO: بهایِ جاری = لایهٔ بعدیِ خروج (۸۰، ماندهٔ لایهٔ آخر)")
+check(info.current_cost == 80 and info.last_purchase_cost == 80, "LIFO: بهای جاری = لایهٔ بعدی خروج (۸۰، ماندهٔ لایهٔ آخر)")
 hist = cv.cost_history(company_id, fi)
 check([(h.direction, round(h.unit_cost, 2)) for h in hist] == [("IN", 100), ("IN", 200), ("OUT", D("133.33"))],
-      f"تاریخچهٔ بها به ترتیبِ زمان ({[(h.direction, h.unit_cost) for h in hist]})")
+      f"تاریخچهٔ بها به ترتیب زمان ({[(h.direction, h.unit_cost) for h in hist]})")
 
 # --- ۴) بهایِ جایگزینی (ثبتِ دستی + audit) ---------------------------------------------------
-crep.set_replacement_cost(company_id, fi, D(260), today, note="قیمتِ بازار", user_id=user.user_id)
-check(cv.item_cost_info(company_id, fi).replacement_cost == 260, "بهایِ جایگزینیِ دستی در اطلاعاتِ کالا")
+crep.set_replacement_cost(company_id, fi, D(260), today, note="قیمت بازار", user_id=user.user_id)
+check(cv.item_cost_info(company_id, fi).replacement_cost == 260, "بهای جایگزینی دستی در اطلاعات کالا")
 
 # --- ۵) همهٔ گزارش‌ها اجرا می‌شوند و منو/ثبت دارند ---------------------------------------------
 codes = [r.code for r in cr.COSTING_REPORTS]
-check(len(codes) >= 8 and all(c in wr.WAREHOUSE_REPORTS_BY_CODE for c in codes), "۸ گزارشِ بهایِ تمام‌شده در فهرستِ گزارش‌هایِ انبار")
+check(len(codes) >= 8 and all(c in wr.WAREHOUSE_REPORTS_BY_CODE for c in codes), "۸ گزارش بهای تمام‌شده در فهرست گزارش‌های انبار")
 f = PurchaseFilters(today - datetime.timedelta(days=60), today, side="INVENTORY")
 results = {}
 for r in cr.COSTING_REPORTS:
@@ -241,72 +241,72 @@ for r in cr.COSTING_REPORTS:
     except Exception as exc:  # noqa: BLE001
         ok = False
         print("   ", r.code, exc)
-    check(ok, f"گزارشِ {r.code} اجرا شد")
+    check(ok, f"گزارش {r.code} اجرا شد")
 val = results["COST_VALUATION"]
-check(any(numerals.to_persian_digits("V-FIFO") in str(row[0]) or "V-FIFO" in str(row[0]) for row in val.rows), "ارزش‌گذاری: ردیفِ کالا")
+check(any(numerals.to_persian_digits("V-FIFO") in str(row[0]) or "V-FIFO" in str(row[0]) for row in val.rows), "ارزش‌گذاری: ردیف کالا")
 lay = results["COST_LAYERS"]
 check(len([row for row in lay.rows if "V-FIFO" in str(row[0])]) == 1, "لایه‌ها: فقط لایهٔ باز (پیش‌فرض)")
 f_all = PurchaseFilters(f.date_from, f.date_to, side="INVENTORY", options={"status": "ALL"})
 check(len([row for row in cr.cost_layers(company_id, f_all).rows if "V-FIFO" in str(row[0])]) == 2, "لایه‌ها: همه")
 alloc = results["COST_ALLOCATION"]
-check(len([row for row in alloc.rows if "V-FIFO" in str(row)]) == 2, "تخصیص: دو ردیف برایِ خروجِ FIFO")
+check(len([row for row in alloc.rows if "V-FIFO" in str(row)]) == 2, "تخصیص: دو ردیف برای خروج FIFO")
 rep = results["COST_REPLACEMENT"]
-check(any("V-FIFO" in str(row[0]) and row[3] == 260 for row in rep.rows), "گزارشِ جایگزینی: ۲۶۰ برایِ V-FIFO")
+check(any("V-FIFO" in str(row[0]) and row[3] == 260 for row in rep.rows), "گزارش جایگزینی: ۲۶۰ برای V-FIFO")
 lot = cr.cost_valuation(company_id, PurchaseFilters(f.date_from, f.date_to, side="INVENTORY", options={"by": "LOT"}))
-check(len(lot.rows) >= 2, "ارزش‌گذاری به تفکیکِ بچ/سریال اجرا شد")
+check(len(lot.rows) >= 2, "ارزش‌گذاری به تفکیک بچ/سریال اجرا شد")
 
 # --- ۶) داشبورد ------------------------------------------------------------------------
 kpis, charts = cd.dashboard(company_id, f.date_from, f.date_to)
 k = {x.code: x for x in kpis}
 check(set(k) == {"VALUE", "COGS", "AVG", "VARIANCE", "REPLACEMENT", "LAYERS", "PENDING"}, "داشبورد: ۷ شاخص")
-check(abs(k["VALUE"].value - total_now) < D("0.05"), "داشبورد: ارزشِ موجودی = ارزش‌گذاری")
+check(abs(k["VALUE"].value - total_now) < D("0.05"), "داشبورد: ارزش موجودی = ارزش‌گذاری")
 check(set(charts) == {c[0] for c in cd.CHART_TITLES}, "داشبورد: ۵ نمودار")
-check(all(x.report_code in wr.WAREHOUSE_REPORTS_BY_CODE for x in kpis), "هر شاخص به گزارشِ مبدأ وصل است")
+check(all(x.report_code in wr.WAREHOUSE_REPORTS_BY_CODE for x in kpis), "هر شاخص به گزارش مبدأ وصل است")
 
 # --- ۷) صفحه‌ها (دسکتاپ) ----------------------------------------------------------------
 sess.current_user = user
 from peecha.ui.screens import costing as costing_ui
 dash = costing_ui.CostingDashboard()
 dash.refresh() if hasattr(dash, "refresh") else dash.reload()
-check(dash.cards["VALUE"]._title_label.text() == "ارزشِ موجودی", "صفحهٔ داشبوردِ بهایِ تمام‌شده")
+check(dash.cards["VALUE"]._title_label.text() == "ارزش موجودی", "صفحهٔ داشبورد بهای تمام‌شده")
 settings_screen = costing_ui.CostingSettingsScreen()
 settings_screen.refresh()
 check(all(b.isEnabled() for b in settings_screen.tab.findChildren(costing_ui.QPushButton)), "تنظیمات: مدیر اجازهٔ ویرایش دارد")
 rs = costing_ui.ReplacementCostScreen()
 rs.refresh()
 rs.item_combo.setCurrentIndex(rs.item_combo.findData(li))
-check(rs.uom_combo.count() >= 1, "بهایِ جایگزینی: واحدهایِ کالا")
+check(rs.uom_combo.count() >= 1, "بهای جایگزینی: واحدهای کالا")
 rs.cost_field.setValue(95)
-rs.note_field.setText("آزمونِ صفحه")
-check(rs.save() and crep.get_replacement_cost(company_id, li)[0] == 95, "ثبتِ بهایِ جایگزینی از صفحه")
-check(rs.table.rowCount() == 2, "فهرستِ بهایِ جایگزینی")
+rs.note_field.setText("آزمون صفحه")
+check(rs.save() and crep.get_replacement_cost(company_id, li)[0] == 95, "ثبت بهای جایگزینی از صفحه")
+check(rs.table.rowCount() == 2, "فهرست بهای جایگزینی")
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel
 panel = ItemDetailPanel(); panel.refresh(company_id)
 panel.load(next(i for i in catalog_service.list_items(company_id) if i.item_id == fi))
 check(panel.tabs.isTabVisible(panel.tab_indexes["cost"]) and panel.cost_history_table.rowCount() == 3
-      and "FIFO" in panel.cost_labels["method_label"].text(), "فرمِ کالا: تبِ اطلاعاتِ بها")
-check(numerals.to_persian_digits("260") in panel.cost_labels["replacement_cost"].text(), "فرمِ کالا: بهایِ جایگزینی")
+      and "FIFO" in panel.cost_labels["method_label"].text(), "فرم کالا: تب اطلاعات بها")
+check(numerals.to_persian_digits("260") in panel.cost_labels["replacement_cost"].text(), "فرم کالا: بهای جایگزینی")
 
 # --- ۸) دسترسی‌ها ------------------------------------------------------------------------
 forms = {fo.code for fo in roles_service.list_forms()}
-check({"costing_dashboard", "costing_settings", "costing_replacement"} <= forms, "سه فرمِ بهایِ تمام‌شده در فهرستِ دسترسی‌ها")
+check({"costing_dashboard", "costing_settings", "costing_replacement"} <= forms, "سه فرم بهای تمام‌شده در فهرست دسترسی‌ها")
 clerk = users_service.create_user("clerk259", "انباردار", "secret123", None, company.default_language_id, False, [company_id], company_id)
 sess.current_user = clerk
-check(not costing_ui.can("costing_settings", "EDIT") and not costing_ui.can("costing_dashboard", "VIEW"), "کاربرِ بدونِ نقش: بدونِ دسترسی")
+check(not costing_ui.can("costing_settings", "EDIT") and not costing_ui.can("costing_dashboard", "VIEW"), "کاربر بدون نقش: بدون دسترسی")
 role = roles_service.create_role(company_id, "COSTVIEW", None)
 fid = {fo.code: fo.form_id for fo in roles_service.list_forms()}
 roles_service.set_role_permission(role.role_id, fid["costing_dashboard"], "VIEW", True)
 roles_service.set_user_role(clerk.user_id, role.role_id, company_id, True)
-check(costing_ui.can("costing_dashboard", "VIEW") and not costing_ui.can("costing_settings", "EDIT"), "نقش: مشاهده بله، ویرایشِ تنظیمات نه")
+check(costing_ui.can("costing_dashboard", "VIEW") and not costing_ui.can("costing_settings", "EDIT"), "نقش: مشاهده بله، ویرایش تنظیمات نه")
 settings_screen.refresh()
-check(not any(b.isEnabled() for b in settings_screen.tab.findChildren(costing_ui.QPushButton)), "تنظیمات: دکمه‌ها برایِ کاربرِ فاقدِ EDIT غیرفعال")
+check(not any(b.isEnabled() for b in settings_screen.tab.findChildren(costing_ui.QPushButton)), "تنظیمات: دکمه‌ها برای کاربر فاقد EDIT غیرفعال")
 rs.refresh()
-check(not rs.save_button.isEnabled(), "بهایِ جایگزینی: ثبت برایِ کاربرِ فاقدِ EDIT غیرفعال")
+check(not rs.save_button.isEnabled(), "بهای جایگزینی: ثبت برای کاربر فاقد EDIT غیرفعال")
 panel.load(next(i for i in catalog_service.list_items(company_id) if i.item_id == fi))
-check(panel.tabs.isTabVisible(panel.tab_indexes["cost"]), "تبِ بها برایِ دارندهٔ VIEW داشبورد")
+check(panel.tabs.isTabVisible(panel.tab_indexes["cost"]), "تب بها برای دارندهٔ VIEW داشبورد")
 roles_service.set_role_permission(role.role_id, fid["costing_dashboard"], "VIEW", False)
 panel.load(next(i for i in catalog_service.list_items(company_id) if i.item_id == fi))
-check(not panel.tabs.isTabVisible(panel.tab_indexes["cost"]), "تبِ بها برایِ کاربرِ بدونِ دسترسی پنهان")
+check(not panel.tabs.isTabVisible(panel.tab_indexes["cost"]), "تب بها برای کاربر بدون دسترسی پنهان")
 sess.current_user = user
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")

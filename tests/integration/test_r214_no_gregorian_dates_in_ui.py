@@ -1,9 +1,9 @@
-"""طبقِ درخواستِ صریحِ کاربر («همه‌جا فقط تاریخِ شمسی باشه»): این تست
-دیتابیس لازم ندارد -- فقط یک نگهبانِ سبک است که کدِ src/peecha/ui/ را
-برایِ الگوهایِ شناخته‌شده‌یِ نمایشِ تاریخِ میلادی به کاربر (که قبلاً
-پیدا و رفع شدند) می‌گردد، تا این باگ در آینده به‌صورتِ خاموش برنگردد.
-عمداً در همین پوشه‌یِ tests/integration/ است تا با run_all.sh یکجا اجرا
-شود؛ گروهِ PEECHA_DB_NAME هم دارد (خالی) که اسکریپت به مشکل نخورد،
+"""طبق درخواست صریح کاربر («همه‌جا فقط تاریخ شمسی باشه»): این تست
+دیتابیس لازم ندارد — فقط یک نگهبان سبک است که کد src/peecha/ui/ را
+برای الگوهای شناخته‌شدهٔ نمایش تاریخ میلادی به کاربر (که قبلاً
+پیدا و رفع شدند) می‌گردد، تا این باگ در آینده به‌صورت خاموش برنگردد.
+عمداً در همین پوشهٔ tests/integration/ است تا با run_all.sh یکجا اجرا
+شود؛ گروه PEECHA_DB_NAME هم دارد (خالی) که اسکریپت به مشکل نخورد،
 هرچند اصلاً به دیتابیس وصل نمی‌شود."""
 import os, re, sys
 # دیتابیس لازم ندارد، ولی run_all.sh بر اساسِ همین الگوی دقیق (نه
@@ -42,7 +42,7 @@ def _check_file(path: str) -> list[str]:
         for m in re.finditer(r"\.strftime\(([^)]*)\)", line):
             if _TIME_ONLY_STRFTIME.search(f".strftime({m.group(1)})"):
                 continue
-            findings.append(f"{path}:{line_no}: strftime(...) با فرمتِ غیرِ-فقط-ساعت -- {line.strip()}")
+            findings.append(f"{path}:{line_no}: strftime(...) با قالب غیر-فقط-ساعت -- {line.strip()}")
     return findings
 
 
@@ -53,7 +53,7 @@ for dirpath, _dirnames, filenames in os.walk(_UI_ROOT):
             all_findings.extend(_check_file(os.path.join(dirpath, filename)))
 
 detail = ("\n  " + "\n  ".join(all_findings)) if all_findings else ""
-check(len(all_findings) == 0, f"بدونِ isoformat()/QDateEdit(/strftimeِ تاریخ‌دار در src/peecha/ui/{detail}")
+check(len(all_findings) == 0, f"بدون isoformat()/QDateEdit(/strftime تاریخ‌دار در src/peecha/ui/{detail}")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

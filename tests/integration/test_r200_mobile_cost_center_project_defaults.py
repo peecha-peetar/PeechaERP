@@ -52,16 +52,16 @@ from peecha.services import detail_dimensions as dimensions_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
-k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
@@ -70,21 +70,21 @@ csettings_service.set_account_mapping(company_id, "SALES_REVENUE", revenue_gl.ac
 
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی",
+    company_id, "9101", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 
 warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ اصلی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
+    company_id, "WH-1", "انبار اصلی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
 )
-channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرمِ آزمایشی", "VAN_SALES")
-customer = partners_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی", fast_track=True)
+channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخش گرم آزمایشی", "VAN_SALES")
+customer = partners_service.create_customer(company_id, "C-1", "مشتری آزمایشی", fast_track=True)
 
 # طبقِ گزارشِ واقعیِ کاربر: «برای حساب ۱-۱۳-۱۳۰۴ انتخاب مرکز هزینه و
 # پروژه الزامی است» -- یعنی حسابِ نقش‌محورِ CUSTOMER_RECEIVABLE این
 # شرکت، مرکزِ هزینه را الزامی کرده. این‌جا همان حالت را می‌سازیم.
 cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
-cost_center = dimensions_service.create_detail_account(company_id, cost_center_type_id, "CC-1", "مرکزِ هزینهٔ فروشِ سیار")
+cost_center = dimensions_service.create_detail_account(company_id, cost_center_type_id, "CC-1", "مرکز هزینهٔ فروش سیار")
 dimensions_service.set_account_dimension_types(ar_gl.account_id, company_id, [cost_center_type_id])
 
 from fastapi.testclient import TestClient
@@ -116,8 +116,8 @@ base_order = {
 # ۱. بدونِ ارسالِ cost_center_detail_account_id (رفتارِ موبایلِ قبل از
 # این رفع): باید همان خطایِ واقعیِ کاربر را بگیریم -- نه یک ۵۰۰ِ خام.
 resp = client.post("/orders", headers=auth(admin_token), json=base_order)
-check(resp.status_code == 400, f"بدونِ مرکزِ هزینه -> ۴۰۰ (status={resp.status_code}, body={resp.text})")
-check("مرکز هزینه" in resp.text or "مرکزِ هزینه" in resp.text, f"پیامِ خطا دربارهٔ مرکزِ هزینه است (body={resp.text})")
+check(resp.status_code == 400, f"بدون مرکز هزینه -> ۴۰۰ (status={resp.status_code}, body={resp.text})")
+check("مرکز هزینه" in resp.text or "مرکز هزینه" in resp.text, f"پیام خطا دربارهٔ مرکز هزینه است (body={resp.text})")
 
 # ۲. تنظیمِ پیش‌فرضِ کانال (شبیه‌سازیِ اقدامِ مدیر در تبِ کانال‌هایِ
 # دسکتاپ) -- باید در GET /pricing/channels هم منعکس شود.
@@ -128,14 +128,14 @@ channels = resp.json()
 van_channel = next(c for c in channels if c["channel_code"] == channel_code)
 check(
     van_channel["default_cost_center_detail_account_id"] == cost_center.detail_account_id,
-    f"پیش‌فرضِ مرکزِ هزینه در پاسخ برگشت (got {van_channel})",
+    f"پیش‌فرض مرکز هزینه در پاسخ برگشت (got {van_channel})",
 )
 
 # ۳. حالا موبایل (طبقِ کدِ جدیدِ App.tsx) همین مقدار را در سفارش
 # می‌فرستد -- باید موفق شود.
 order_with_default = dict(base_order, cost_center_detail_account_id=cost_center.detail_account_id)
 resp = client.post("/orders", headers=auth(admin_token), json=order_with_default)
-check(resp.status_code == 200, f"سفارش با مرکزِ هزینهٔ پیش‌فرض موفق بود (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"سفارش با مرکز هزینهٔ پیش‌فرض موفق بود (status={resp.status_code}, body={resp.text})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

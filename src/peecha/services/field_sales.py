@@ -1,9 +1,9 @@
-"""پخشِ سرد/گرم -- R129، بخشِ برنامهٔ مراجعه و ویزیتِ واقعی. طبقِ طرحِ
-تاییدشده: این فاز فقط دیتامدل+منطقِ سرویس است -- بدونِ UI دسکتاپی/موبایل/
-API، که در فازهایِ بعدی (R130+) اضافه می‌شوند.
+"""پخش سرد/گرم — R129، بخش برنامهٔ مراجعه و ویزیت واقعی. طبق طرح
+تاییدشده: این فاز فقط دیتامدل+منطق سرویس است — بدون UI دسکتاپی/موبایل/
+API، که در فازهای بعدی (R130+) اضافه می‌شوند.
 
-برنامهٔ مراجعه (VisitPlan) یعنی «این مشتری این روزِ هفته باید دیده
-شود»؛ ویزیتِ واقعی (CustomerVisit) یک حضورِ واقعی است -- یا از رویِ
+برنامهٔ مراجعه (VisitPlan) یعنی «این مشتری این روز هفته باید دیده
+شود»؛ ویزیت واقعی (CustomerVisit) یک حضور واقعی است — یا از روی
 همان برنامه، یا بی‌برنامه (visit_plan_id=None)."""
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def create_visit_plan(
     sequence_order: int = 0, assigned_visitor_user_id: int | None = None,
 ) -> int:
     if not (0 <= visit_day_of_week <= 6):
-        raise ValueError("روزِ هفته باید بینِ ۰ تا ۶ باشد.")
+        raise ValueError("روز هفته باید بین ۰ تا ۶ باشد.")
     with new_session() as session:
         existing = session.scalar(
             select(VisitPlan).where(
@@ -45,7 +45,7 @@ def create_visit_plan(
             )
         )
         if existing is not None:
-            raise ValueError("برنامهٔ مراجعه برایِ این مشتری در این روز از قبل وجود دارد.")
+            raise ValueError("برنامهٔ مراجعه برای این مشتری در این روز از قبل وجود دارد.")
         plan = VisitPlan(
             company_id=company_id, customer_detail_account_id=customer_detail_account_id,
             visit_day_of_week=visit_day_of_week, sequence_order=sequence_order,
@@ -102,14 +102,14 @@ def list_visit_plans(
 
 
 def is_customer_assigned_to_user(company_id: int, customer_detail_account_id: int, user_id: int) -> bool:
-    """طبقِ درخواستِ صریحِ کاربر («فقط مشتریانِ خودش، محدودتر/امن‌تر»):
-    ثبتِ سفارش/وصولی از موبایل فقط برایِ مشتری‌ای مجاز است که حداقل
-    یک برنامهٔ مراجعهٔ فعال به همین کاربر اختصاص داشته باشد -- تا یک
-    ویزیتور نتواند برایِ مشتریِ ویزیتورِ دیگر (که برنامهٔ مراجعه‌اش به
-    شخصِ دیگری اختصاص دارد) سفارش/وصولی ثبت کند. اگر این مشتری اصلاً
-    هنوز به هیچ ویزیتوری اختصاص نیافته (تازه تایید شده/بدونِ مسیر)،
-    True برمی‌گردد -- وگرنه مشتریانِ تازه تا مسیریابیِ دستی برایِ همه
-    غیرِقابلِ‌دسترس می‌ماندند."""
+    """طبق درخواست صریح کاربر («فقط مشتریان خودش، محدودتر/امن‌تر»):
+    ثبت سفارش/وصولی از موبایل فقط برای مشتری‌ای مجاز است که حداقل
+    یک برنامهٔ مراجعهٔ فعال به همین کاربر اختصاص داشته باشد — تا یک
+    ویزیتور نتواند برای مشتری ویزیتور دیگر (که برنامهٔ مراجعه‌اش به
+    شخص دیگری اختصاص دارد) سفارش/وصولی ثبت کند. اگر این مشتری اصلاً
+    هنوز به هیچ ویزیتوری اختصاص نیافته (تازه تایید شده/بدون مسیر)،
+    True برمی‌گردد — وگرنه مشتریان تازه تا مسیریابی دستی برای همه
+    غیرقابل‌دسترس می‌ماندند."""
     with new_session() as session:
         any_assignment = session.scalar(
             select(VisitPlan.visit_plan_id).where(
@@ -149,8 +149,8 @@ class CustomerVisitRow:
 
 
 def _haversine_distance_m(lat1: decimal.Decimal, lon1: decimal.Decimal, lat2: decimal.Decimal, lon2: decimal.Decimal) -> decimal.Decimal:
-    """فاصلهٔ خط‌مستقیمِ رویِ کرهٔ زمین (متر) -- برایِ تشخیصِ «ویزیتِ صوری»
-    کافی است، بدونِ نیازِ به PostGIS."""
+    """فاصلهٔ خط‌مستقیم روی کرهٔ زمین (متر) — برای تشخیص «ویزیت صوری»
+    کافی است، بدون نیاز به PostGIS."""
     earth_radius_m = 6_371_000
     phi1, phi2 = math.radians(float(lat1)), math.radians(float(lat2))
     d_phi = math.radians(float(lat2) - float(lat1))
@@ -213,7 +213,7 @@ def start_visit(
             )
         )
         if existing_in_progress is not None:
-            raise ValueError("یک ویزیتِ بازِ دیگر برایِ همین مشتری دارید -- ابتدا آن را تکمیل یا رد کنید.")
+            raise ValueError("یک ویزیت باز دیگر برای همین مشتری دارید — ابتدا آن را تکمیل یا رد کنید.")
         visit = CustomerVisit(
             company_id=company_id, visit_plan_id=visit_plan_id, customer_detail_account_id=customer_detail_account_id,
             visitor_user_id=visitor_user_id, check_in_latitude=check_in_latitude, check_in_longitude=check_in_longitude,
@@ -225,8 +225,8 @@ def start_visit(
 
 
 def get_visit_geofence_status(customer_visit_id: int) -> bool | None:
-    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۴/۹): فقط برایِ
-    نمایشِ هشدارِ غیرِمسدودکننده به موبایل، بلافاصله بعدِ start_visit."""
+    """طبق بازبینی ساختار «تعریف مشتری» (R219، بخش ۴/۹): فقط برای
+    نمایش هشدار غیرمسدودکننده به موبایل، بلافاصله بعد start_visit."""
     with new_session() as session:
         visit = session.get(CustomerVisit, customer_visit_id)
         return visit.is_outside_geofence if visit is not None else None
@@ -257,7 +257,7 @@ def complete_visit(
 
 def skip_visit(customer_visit_id: int, company_id: int, skip_reason: str) -> None:
     if not skip_reason.strip():
-        raise ValueError("دلیلِ ردِ ویزیت را وارد کنید.")
+        raise ValueError("دلیل رد ویزیت را وارد کنید.")
     with new_session() as session:
         visit = session.get(CustomerVisit, customer_visit_id)
         if visit is None or visit.company_id != company_id:
@@ -275,11 +275,11 @@ def list_customer_visits(
     status_code: str | None = None, date_from: datetime.date | None = None, date_to: datetime.date | None = None,
     route_detail_account_id: int | None = None,
 ) -> list[CustomerVisitRow]:
-    """date_from/date_to (طبقِ R134، برایِ داشبوردِ سرپرست) رویِ
-    checked_in_at فیلتر می‌کنند -- شاملِ کلِ آن روز (بدونِ نیاز به دانستنِ
-    ساعتِ دقیق). route_detail_account_id (طبقِ R189، فیلترِ مسیرِ توزیعِ
-    داشبوردِ مدیریت) با joinِ CustomerProfile.distribution_route_detail_account_id
-    اعمال می‌شود -- نه یک ستونِ مستقیمِ رویِ CustomerVisit."""
+    """date_from/date_to (طبق R134، برای داشبورد سرپرست) روی
+    checked_in_at فیلتر می‌کنند — شامل کل آن روز (بدون نیاز به دانستن
+    ساعت دقیق). route_detail_account_id (طبق R189، فیلتر مسیر توزیع
+    داشبورد مدیریت) با join CustomerProfile.distribution_route_detail_account_id
+    اعمال می‌شود — نه یک ستون مستقیم روی CustomerVisit."""
     with new_session() as session:
         stmt = select(CustomerVisit).where(CustomerVisit.company_id == company_id)
         if visitor_user_id is not None:

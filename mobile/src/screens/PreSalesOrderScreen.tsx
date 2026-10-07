@@ -117,8 +117,8 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>سفارشِ پخشِ سرد — {customer.name}</Text>
-      <SearchBar value={search} onChangeText={setSearch} placeholder="جستجویِ کالا..." />
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>سفارش پخش سرد — {customer.name}</Text>
+      <SearchBar value={search} onChangeText={setSearch} placeholder="جستجوی کالا..." />
 
       <FlatList
         data={filteredItems}
@@ -180,7 +180,7 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
       />
 
       <Button
-        label={submitting ? "در حالِ ثبت..." : `ثبتِ سفارش (${lineCount} قلم)`}
+        label={submitting ? "در حال ثبت..." : `ثبت سفارش (${lineCount} قلم)`}
         onPress={submit}
         loading={submitting}
         disabled={submitting || lineCount === 0}

@@ -1,13 +1,13 @@
-"""فهرستِ بدهکاران و وصولِ امروزِ خودِ کاربر (Phase 5، تکمیل) -- رویِ
-همان field_sales.list_visit_plans (برایِ دانستنِ کدام مشتری‌ها به این
+"""فهرست بدهکاران و وصول امروز خود کاربر (Phase 5، تکمیل) — روی
+همان field_sales.list_visit_plans (برای دانستن کدام مشتری‌ها به این
 کاربر تخصیص دارند) + treasury.get_counterparty_balances_bulk/
 list_vouchers_for_user_on_date موجود.
 
-طبقِ رفعِ گزارشِ گمراه‌کننده‌یِ کاربر («همه‌یِ بدهکاران overdue نشان داده
-می‌شوند»): Agingِ واقعی حالا رویِ همان
-commercial_settlements.list_unsettled_invoices سوار است -- هر فاکتورِ
-تسویه‌نشده due_dateِ واقعی‌اش (از rooی payment_term_days طرفِ‌حساب) را
-دارد؛ اگر قدیمی‌ترین سررسیدِ بازِ مشتری گذشته باشد، «عقب‌افتاده» است."""
+طبق رفع گزارش گمراه‌کنندهٔ کاربر («همهٔ بدهکاران overdue نشان داده
+می‌شوند»): Aging واقعی حالا روی همان
+commercial_settlements.list_unsettled_invoices سوار است — هر فاکتور
+تسویه‌نشده due_date واقعی‌اش (از rooی payment_term_days طرف‌حساب) را
+دارد؛ اگر قدیمی‌ترین سررسید باز مشتری گذشته باشد، «عقب‌افتاده» است."""
 
 from __future__ import annotations
 

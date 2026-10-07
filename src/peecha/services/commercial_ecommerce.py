@@ -1,6 +1,6 @@
-"""فروشِ اینترنتی و Omnichannel (مرحلهٔ ۸): لایهٔ اتصال‌گرِ انتزاعی و
-مسیریابیِ توزیع‌شدهٔ سفارش. سفارشِ آنلاین دقیقاً همان SALES_ORDER است —
-این فایل فقط نگاشت/ایمپورت/مسیریابی را اضافه می‌کند."""
+"""فروش اینترنتی و Omnichannel (مرحلهٔ ۸): لایهٔ اتصال‌گر انتزاعی و
+مسیریابی توزیع‌شدهٔ سفارش. سفارش آنلاین دقیقاً همان SALES_ORDER است —
+این فایل فقط نگاشت/ورود/مسیریابی را اضافه می‌کند."""
 
 from __future__ import annotations
 
@@ -45,11 +45,11 @@ def list_connections(company_id: int) -> list[MarketplaceConnection]:
 
 def create_connection(company_id: int, platform_code: str, store_url: str, channel_code: str, warehouse_id: int | None = None) -> int:
     if platform_code not in ("WOOCOMMERCE", "PRESTASHOP", "TOROB", "OTHER"):
-        raise ValueError("پلتفرمِ نامعتبر است.")
+        raise ValueError("پلتفرم نامعتبر است.")
     with new_session() as session:
         channel = session.get(Channel, (channel_code, company_id))
         if channel is None:
-            raise ValueError("کانالِ نامعتبر است.")
+            raise ValueError("کانال نامعتبر است.")
         row = MarketplaceConnection(company_id=company_id, platform_code=platform_code, store_url=store_url, channel_code=channel_code, warehouse_id=warehouse_id)
         session.add(row)
         session.commit()
@@ -66,14 +66,14 @@ def disconnect(connection_id: int) -> None:
 
 
 def test_connection(connection_id: int) -> tuple[bool, str]:
-    """طبقِ ادامه‌یِ اولویت‌بندی («بررسیِ سلامتِ سایت»): برخلافِ
-    اتصال‌هایِ تلگرام/بله/وردپرس (که از ابتدا دکمه‌یِ آزمایش داشتند)،
-    این قابلیت برایِ ووکامرس/پرستاشاپ در لایه‌یِ کلاینت (wc_client/
+    """طبق ادامهٔ اولویت‌بندی («بررسی سلامت سایت»): برخلاف
+    اتصال‌های تلگرام/بله/وردپرس (که از ابتدا دکمهٔ آزمایش داشتند)،
+    این قابلیت برای ووکامرس/پرستاشاپ در لایهٔ کلاینت (wc_client/
     presta_client.check_connection) از قبل نوشته شده بود ولی هیچ‌جا
-    صدا زده نمی‌شد -- این‌جا وصل می‌شود."""
+    صدا زده نمی‌شد — این‌جا وصل می‌شود."""
     connection = _get_connection(connection_id)
     if connection.platform_code == "TOROB":
-        return False, "ترب اتصالِ زنده ندارد -- فقط فایلِ فیدِ XML تولید می‌شود."
+        return False, "ترب اتصال زنده ندارد — فقط فایل فید XML تولید می‌شود."
     client_module = _client_module_for_platform(connection.platform_code)
     store_client = _build_store_client(connection)
     ok, message = client_module.check_connection(store_client)
@@ -82,13 +82,13 @@ def test_connection(connection_id: int) -> tuple[bool, str]:
 
 
 def set_auto_sync(connection_id: int, enabled: bool, interval_minutes: int) -> None:
-    """طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): به‌جایِ اجباریِ فشردنِ
-    دکمهٔ «سینکِ الان»، هر اتصال می‌تواند خودش را طوری تنظیم کند که هر
-    N دقیقه یک‌بار خودکار سینک شود -- بررسیِ واقعیِ «الان وقتِ سینکه یا
+    """طبق درخواست صریح («زمان‌بندی خودکار همگام‌سازی»): به‌جای اجباری فشردن
+    دکمهٔ «همگام‌سازی الان»، هر اتصال می‌تواند خودش را طوری تنظیم کند که هر
+    N دقیقه یک‌بار خودکار همگام‌سازی شود — بررسی واقعی «الان وقت همگام‌سازیه یا
     نه» در run_due_auto_syncs انجام می‌شود، این‌جا فقط تنظیمات ذخیره
     می‌شود."""
     if interval_minutes < 1:
-        raise ValueError("فاصله‌یِ زمانی باید حداقل ۱ دقیقه باشد.")
+        raise ValueError("فاصلهٔ زمانی باید حداقل ۱ دقیقه باشد.")
     with new_session() as session:
         row = session.get(MarketplaceConnection, connection_id)
         if row is None:
@@ -99,13 +99,13 @@ def set_auto_sync(connection_id: int, enabled: bool, interval_minutes: int) -> N
 
 
 def set_connection_credentials(connection_id: int, credentials: dict) -> None:
-    """طبقِ درخواستِ صریح («کدامِ کاربردیِ PeechaSync را به ERP اضافه کن»):
-    کلیدِ API/رازِ اتصال (مثلاً Consumer Key/Secretِ ووکامرس، یا بعداً
-    نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس برایِ آپلودِ تصویر) قبل از
-    ذخیره در ستونِ credentials_encrypted رمزنگاری می‌شود. طبقِ رفعِ
-    باگِ واقعیِ بالقوه: مقادیرِ تازه با موجودی *ادغام* می‌شوند (نه
-    جایگزینیِ کامل) -- وگرنه ذخیره‌یِ بعدیِ فقط WP_USERNAME/APP_PASSWORD
-    (برایِ آپلودِ تصویر)، کلیدِ ووکامرسِ ذخیره‌شده‌یِ قبلی را پاک می‌کرد."""
+    """طبق درخواست صریح («کدام کاربردی PeechaSync را به ERP اضافه کن»):
+    کلید API/راز اتصال (مثلاً Consumer Key/Secret ووکامرس، یا بعداً
+    نام‌کاربری/گذرواژهٔ‌برنامه‌ای وردپرس برای بارگذاری تصویر) قبل از
+    ذخیره در ستون credentials_encrypted رمزنگاری می‌شود. طبق رفع
+    باگ واقعی بالقوه: مقادیر تازه با موجودی *ادغام* می‌شوند (نه
+    جایگزینی کامل) — وگرنه ذخیرهٔ بعدی فقط WP_USERNAME/APP_PASSWORD
+    (برای بارگذاری تصویر)، کلید ووکامرس ذخیره‌شدهٔ قبلی را پاک می‌کرد."""
     from peecha.services import ecommerce_credentials
 
     with new_session() as session:
@@ -145,10 +145,10 @@ def list_item_mappings(connection_id: int) -> list[MarketplaceItemMapping]:
 
 
 def list_item_mappings_for_item(item_id: int) -> list[MarketplaceItemMapping]:
-    """طبقِ بازخوردِ صریحِ کاربر («نگاشتِ SKU باید در فرمِ تعریفِ کالا
-    باشد»): برخلافِ list_item_mappings (بر اساسِ یک اتصال)، این تابع
-    همه‌یِ نگاشت‌هایِ یک کالایِ خاص را در همه‌یِ اتصال‌ها برمی‌گرداند --
-    برایِ نمایش در تبِ «فروشگاهیِ اینترنتی»ِ فرمِ کالا."""
+    """طبق بازخورد صریح کاربر («نگاشت کد کالا باید در فرم تعریف کالا
+    باشد»): برخلاف list_item_mappings (بر اساس یک اتصال)، این تابع
+    همهٔ نگاشت‌های یک کالای خاص را در همهٔ اتصال‌ها برمی‌گرداند --
+    برای نمایش در تب «فروشگاهی اینترنتی» فرم کالا."""
     with new_session() as session:
         return list(session.scalars(select(MarketplaceItemMapping).where(MarketplaceItemMapping.item_id == item_id)))
 
@@ -162,13 +162,13 @@ def unmap_item(connection_id: int, item_id: int) -> None:
 
 
 def search_external_product(connection_id: int, external_sku: str) -> str | None:
-    """طبقِ بازخوردِ صریحِ کاربر («نگاشتِ SKU در فرمِ تعریفِ کالا، با
-    دکمه‌یِ اتصال/جست‌وجو»): پیش از نگاشت، وجودِ واقعیِ آن SKU در
-    فروشگاه را بررسی می‌کند و نامِ محصول را برمی‌گرداند -- تا کاربر
-    کورکورانه یک SKUِ اشتباه را ثبت نکند."""
+    """طبق بازخورد صریح کاربر («نگاشت کد کالا در فرم تعریف کالا، با
+    دکمهٔ اتصال/جست‌وجو»): پیش از نگاشت، وجود واقعی آن کد کالا در
+    فروشگاه را بررسی می‌کند و نام محصول را برمی‌گرداند — تا کاربر
+    کورکورانه یک کد کالا اشتباه را ثبت نکند."""
     connection = _get_connection(connection_id)
     if connection.platform_code == "TOROB":
-        raise ValueError("ترب اتصالِ زنده ندارد -- جست‌وجویِ محصول ممکن نیست.")
+        raise ValueError("ترب اتصال زنده ندارد — جست‌وجوی محصول ممکن نیست.")
     store_client = _build_store_client(connection)
     if connection.platform_code == "PRESTASHOP":
         from peecha.integrations.ecommerce import presta_client
@@ -235,15 +235,15 @@ def import_order(
 
     customer_id = resolve_customer(connection_id, external_customer_id)
     if customer_id is None:
-        _log_sync(connection_id, external_order_id, None, "FAILED", "مشتریِ خارجی به هیچ مشتریِ داخلی نگاشت نشده است.")
-        return ImportResult(sync_status="FAILED", document_id=None, error_message="مشتریِ خارجی نگاشت نشده است.")
+        _log_sync(connection_id, external_order_id, None, "FAILED", "مشتری خارجی به هیچ مشتری داخلی نگاشت نشده است.")
+        return ImportResult(sync_status="FAILED", document_id=None, error_message="مشتری خارجی نگاشت نشده است.")
 
     resolved_lines: list[tuple[int, decimal.Decimal, int]] = []
     for ext_line in lines:
         item_id = resolve_item(connection_id, ext_line.external_sku)
         if item_id is None:
-            _log_sync(connection_id, external_order_id, None, "FAILED", f"SKUِ «{ext_line.external_sku}» نگاشت نشده است.")
-            return ImportResult(sync_status="FAILED", document_id=None, error_message=f"SKUِ «{ext_line.external_sku}» نگاشت نشده است.")
+            _log_sync(connection_id, external_order_id, None, "FAILED", f"کد کالا «{ext_line.external_sku}» نگاشت نشده است.")
+            return ImportResult(sync_status="FAILED", document_id=None, error_message=f"کد کالا «{ext_line.external_sku}» نگاشت نشده است.")
         resolved_lines.append((item_id, ext_line.quantity, ext_line.uom_id))
 
     document_id = None
@@ -317,9 +317,9 @@ def list_pricing_rules(connection_id: int) -> list[EcommercePricingRule]:
 
 def create_pricing_rule(connection_id: int, scope_type_code: str, scope_id: int, markup_type_code: str, markup_value: decimal.Decimal) -> int:
     if scope_type_code not in ("CATEGORY", "BRAND"):
-        raise ValueError("نوعِ محدوده‌یِ نامعتبر است.")
+        raise ValueError("نوع محدودهٔ نامعتبر است.")
     if markup_type_code not in ("PERCENT", "AMOUNT"):
-        raise ValueError("نوعِ افزایشِ نامعتبر است.")
+        raise ValueError("نوع افزایش نامعتبر است.")
     with new_session() as session:
         row = session.scalar(
             select(EcommercePricingRule).where(
@@ -341,14 +341,14 @@ def delete_pricing_rule(rule_id: int) -> None:
     with new_session() as session:
         row = session.get(EcommercePricingRule, rule_id)
         if row is None:
-            raise ValueError("قاعده‌یِ نامعتبر است.")
+            raise ValueError("قاعدهٔ نامعتبر است.")
         session.delete(row)
         session.commit()
 
 
 def apply_pricing_markup(connection_id: int, item, base_price: decimal.Decimal) -> decimal.Decimal:
-    """طبقِ اولویتِ اعلام‌شده: برند > دسته -- اگر کالایی هم برند و هم
-    دسته‌یِ دارایِ قاعده داشته باشد، فقط قاعده‌یِ برند اعمال می‌شود."""
+    """طبق اولویت اعلام‌شده: برند > دسته — اگر کالایی هم برند و هم
+    دستهٔ دارای قاعده داشته باشد، فقط قاعدهٔ برند اعمال می‌شود."""
     with new_session() as session:
         rule = None
         if item.brand_id is not None:
@@ -385,7 +385,7 @@ def _decrypt_connection_credentials(connection: MarketplaceConnection) -> dict:
     from peecha.services import ecommerce_credentials
 
     if connection.platform_code not in _SUPPORTED_SYNC_PLATFORMS:
-        raise ValueError(f"سینک برایِ پلتفرمِ «{connection.platform_code}» هنوز پیاده‌سازی نشده است.")
+        raise ValueError(f"همگام‌سازی برای پلتفرم «{connection.platform_code}» هنوز پیاده‌سازی نشده است.")
     return ecommerce_credentials.decrypt_credentials(connection.credentials_encrypted)
 
 
@@ -461,9 +461,9 @@ class ProductImageInfo:
 
 
 def list_product_images(connection_id: int, external_sku: str) -> list[ProductImageInfo]:
-    """طبقِ درخواستِ صریح (پورتِ «مدیرِ تصاویرِ سایت»ِ PeechaSync): فهرستِ
-    واقعیِ عکس‌هایِ یک محصول در فروشگاه -- برایِ اینکه کاربر بدونِ ورود
-    به پنلِ فروشگاه بتواند یک عکسِ خاص را حذف کند."""
+    """طبق درخواست صریح (پورت «مدیر تصاویر سایت» PeechaSync): فهرست
+    واقعی عکس‌های یک محصول در فروشگاه — برای اینکه کاربر بدون ورود
+    به پنل فروشگاه بتواند یک عکس خاص را حذف کند."""
     connection = _get_connection(connection_id)
     store_client = _build_store_client(connection)
     if connection.platform_code == "PRESTASHOP":
@@ -516,11 +516,11 @@ class ReconciliationEntry:
 
 
 def compute_catalog_reconciliation(connection_id: int) -> list[ReconciliationEntry]:
-    """طبقِ درخواستِ صریحِ کاربر («تطبیقِ کالایِ ووکامرس/پرستاشاپ و ERP...
-    مثلِ برنامه‌یِ همگام‌ساز»): برخلافِ نگاشتِ تک‌به‌تکِ موجود (فیلدِ SKU
-    در تبِ اتصالات)، این‌جا کلِ کاتالوگِ فروشگاه در برابرِ کلِ کاتالوگِ
-    ERP قرار می‌گیرد -- سه وضعیت: نگاشته‌شده، فقط‌در‌فروشگاه (با
-    پیشنهادِ خودکار اگر SKU/کدش با یک کالایِ ERP یکی باشد)، فقط‌در‌ERP."""
+    """طبق درخواست صریح کاربر («تطبیق کالای ووکامرس/پرستاشاپ و ERP...
+    مثل برنامهٔ همگام‌ساز»): برخلاف نگاشت تک‌به‌تک موجود (فیلد کد کالا
+    در تب اتصالات)، این‌جا کل کاتالوگ فروشگاه در برابر کل کاتالوگ
+    ERP قرار می‌گیرد — سه وضعیت: نگاشته‌شده، فقط‌در‌فروشگاه (با
+    پیشنهاد خودکار اگر کد کالا/کدش با یک کالای ERP یکی باشد)، فقط‌در‌ERP."""
     from peecha.services import inventory_catalog as catalog_service
 
     connection = _get_connection(connection_id)
@@ -576,9 +576,9 @@ def _append_reconciliation_entry(entries: list, existing_mappings: dict, items_b
 
 
 def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
-    """طبقِ ویژگیِ «واریانت» -- برایِ هر متغیر، نگاشتِ نامِ ویژگی به مقدارش
-    (مثلاً {«سایز»: «M»، «رنگ»: «قرمز»}) که مستقیماً شکلِ attributeِ
-    واریانتِ ووکامرس است."""
+    """طبق ویژگی «واریانت» — برای هر متغیر، نگاشت نام ویژگی به مقدارش
+    (مثلاً {«سایز»: «M»، «رنگ»: «قرمز»}) که مستقیماً شکل attribute
+    واریانت ووکامرس است."""
     if not item_ids:
         return {}
     with new_session() as session:
@@ -595,11 +595,11 @@ def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
 
 
 def _attach_photo_if_missing(wcapi, connection: MarketplaceConnection, product_id: int, item_detail_account_id: int, wp_creds: dict | None, has_images: bool) -> None:
-    """طبقِ درخواستِ صریح («واریانت + تصویرِ کالا»): فقط وقتی محصول در
-    فروشگاه هنوز هیچ تصویری ندارد آپلود می‌کند -- تا هر سینکِ بعدی
-    (که معمولاً تصویر عوض نمی‌شود) دوباره همان فایل را آپلود نکند.
-    نیازمندِ نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس است (جدا از کلیدِ
-    APIِ ووکامرس) -- اگر تنظیم نشده باشد، بی‌سروصدا رد می‌شود."""
+    """طبق درخواست صریح («واریانت + تصویر کالا»): فقط وقتی محصول در
+    فروشگاه هنوز هیچ تصویری ندارد بارگذاری می‌کند — تا هر همگام‌سازی بعدی
+    (که معمولاً تصویر عوض نمی‌شود) دوباره همان فایل را بارگذاری نکند.
+    نیازمند نام‌کاربری/گذرواژهٔ‌برنامه‌ای وردپرس است (جدا از کلید
+    API ووکامرس) — اگر تنظیم نشده باشد، بی‌سروصدا رد می‌شود."""
     if has_images or not wp_creds or not wp_creds.get("wp_username") or not wp_creds.get("wp_app_password"):
         return
     from pathlib import Path
@@ -629,10 +629,10 @@ class CatalogSyncResult:
 
 
 def _format_store_price(value: decimal.Decimal) -> str:
-    """طبقِ رفعِ باگِ واقعیِ کشف‌شده حینِ تست: چون unit_price در ERP با
-    دقتِ ۶ رقمِ اعشار ذخیره می‌شود (Numeric(18,6))، str() خام رشته‌ای
-    مثلِ «250000.000000» تولید می‌کرد -- درست کار می‌کند ولی برایِ فیلدِ
-    قیمتِ فروشگاه غیرِضروری/شلخته است. این‌جا به دو رقمِ اعشارِ متداولِ
+    """طبق رفع باگ واقعی کشف‌شده حین تست: چون unit_price در ERP با
+    دقت ۶ رقم اعشار ذخیره می‌شود (Numeric(18,6))، str() خام رشته‌ای
+    مثل «250000.000000» تولید می‌کرد — درست کار می‌کند ولی برای فیلد
+    قیمت فروشگاه غیرضروری/شلخته است. این‌جا به دو رقم اعشار متداول
     قیمت گرد می‌شود."""
     return f"{value.quantize(decimal.Decimal('0.01')):f}"
 
@@ -666,14 +666,14 @@ def _apply_stock_mode(payload: dict, stock_mode: str, actual_qty: int) -> None:
 # فیدِ ترب (Torob)
 # ---------------------------------------------------------------------
 def generate_torob_feed_xml(connection_id: int) -> str:
-    """طبقِ ادامه‌یِ اولویت‌بندی («مقایسه‌یِ قیمت با ترب»): ترب برخلافِ
-    ووکامرس/پرستاشاپ APIِ Push ندارد -- یک فایلِ XML طبقِ فرمتِ استانداردِ
-    فیدِ محصولاتِ ترب می‌سازد که خودِ فروشگاه میزبانی می‌کند و کراولرِ
-    ترب دوره‌ای آن را می‌خواند. store_url این‌جا آدرسِ پایه‌یِ صفحاتِ
-    محصول است (مثلاً «https://shop.example.com/product»)؛ آدرسِ هر
-    محصول از پیوندِ سئویِ خودِ کالا (seo_url_slug، اگر باشد) یا کد/SKU
-    ساخته می‌شود. فقط کالاهایِ سادهٔ فروختنیِ دارایِ قیمت شامل می‌شوند --
-    مثلِ بقیه‌یِ سینک‌ها، کالاهایِ متغیر (parent/child) پشتیبانی نمی‌شوند."""
+    """طبق ادامهٔ اولویت‌بندی («مقایسهٔ قیمت با ترب»): ترب برخلاف
+    ووکامرس/پرستاشاپ API Push ندارد — یک فایل XML طبق قالب استاندارد
+    فید محصولات ترب می‌سازد که خود فروشگاه میزبانی می‌کند و کراولر
+    ترب دوره‌ای آن را می‌خواند. store_url این‌جا آدرس پایهٔ صفحات
+    محصول است (مثلاً «https://shop.example.com/product»)؛ آدرس هر
+    محصول از پیوند سئوی خود کالا (seo_url_slug، اگر باشد) یا کد/کد کالا
+    ساخته می‌شود. فقط کالاهای سادهٔ فروختنی دارای قیمت شامل می‌شوند --
+    مثل بقیهٔ همگام‌سازی‌ها، کالاهای متغیر (parent/child) پشتیبانی نمی‌شوند."""
     import xml.etree.ElementTree as ET
 
     from peecha.services import commercial_pricing as pricing_service
@@ -681,10 +681,10 @@ def generate_torob_feed_xml(connection_id: int) -> str:
 
     connection = _get_connection(connection_id)
     if connection.platform_code != "TOROB":
-        raise ValueError("این اتصال از نوعِ ترب نیست.")
+        raise ValueError("این اتصال از نوع ترب نیست.")
     price_list_id = _channel_default_price_list(connection)
     if price_list_id is None:
-        raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
+        raise ValueError("کانال این اتصال فهرست قیمت پیش‌فرض ندارد — در تنظیمات کانال یک فهرست قیمت مشخص کنید.")
 
     price_by_item = {
         row.item_id: row.unit_price for row in pricing_service.list_price_list_items(price_list_id) if row.min_quantity == 1
@@ -717,11 +717,11 @@ def generate_torob_feed_xml(connection_id: int) -> str:
 
 
 def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decimal) -> None:
-    """طبقِ رفعِ باگِ واقعیِ بالقوه (کشف‌شده حینِ تست): چون PUTِ ووکامرس
-    یک به‌روزرسانیِ جزئی است، اگر sale_price را وقتی تخفیف تمام شده
-    اصلاً در payload نگذاریم، مقدارِ حراجِ قدیمی رویِ فروشگاه دست‌نخورده
-    و گمراه‌کننده باقی می‌ماند. پس همیشه صراحتاً فرستاده می‌شود -- یا
-    قیمتِ حراجِ تازه، یا رشتهٔ خالی برایِ پاک‌کردنِ صریحِ حراجِ قبلی."""
+    """طبق رفع باگ واقعی بالقوه (کشف‌شده حین تست): چون PUT ووکامرس
+    یک به‌روزرسانی جزئی است، اگر sale_price را وقتی تخفیف تمام شده
+    اصلاً در payload نگذاریم، مقدار حراج قدیمی روی فروشگاه دست‌نخورده
+    و گمراه‌کننده باقی می‌ماند. پس همیشه صراحتاً فرستاده می‌شود — یا
+    قیمت حراج تازه، یا رشتهٔ خالی برای پاک‌کردن صریح حراج قبلی."""
     from peecha.services import commercial_pricing as pricing_service
 
     sale_price = pricing_service.resolve_sale_price(company_id, base_price)
@@ -729,11 +729,11 @@ def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decima
 
 
 def _apply_wc_seo(payload: dict, item) -> None:
-    """طبقِ درخواستِ صریحِ کاربر («قسمتِ سئو»): فیلدهایِ سئویِ خودِ کالا
-    (که در فرمِ کالا از قبل وجود داشتند) این‌جا به فروشگاه فرستاده
-    می‌شوند -- نامکِ آدرس با فیلدِ بومیِ slug، و عنوان/توضیحات/کلیدواژه
-    با meta_data (هم کلیدهایِ Yoast، هم Rank Math، چون معلوم نیست
-    کدام‌یک رویِ فروشگاه نصب است -- افزونه‌یِ نصب‌نشده کلیدِ خودش را
+    """طبق درخواست صریح کاربر («قسمت سئو»): فیلدهای سئوی خود کالا
+    (که در فرم کالا از قبل وجود داشتند) این‌جا به فروشگاه فرستاده
+    می‌شوند — نامک آدرس با فیلد بومی slug، و عنوان/توضیحات/کلیدواژه
+    با meta_data (هم کلیدهای Yoast، هم Rank Math، چون معلوم نیست
+    کدام‌یک روی فروشگاه نصب است — افزونهٔ نصب‌نشده کلید خودش را
     نادیده می‌گیرد)."""
     if item.seo_url_slug:
         payload["slug"] = item.seo_url_slug
@@ -751,9 +751,9 @@ def _apply_wc_seo(payload: dict, item) -> None:
 
 
 def _presta_seo_fields(item) -> dict:
-    """معادلِ _apply_wc_seo برایِ پرستاشاپ -- این‌جا نیازی به حدس‌زدنِ
+    """معادل _apply_wc_seo برای پرستاشاپ — این‌جا نیازی به حدس‌زدن
     افزونه نیست، چون link_rewrite/meta_title/meta_description/
-    meta_keywords فیلدهایِ بومیِ خودِ محصول‌اند."""
+    meta_keywords فیلدهای بومی خود محصول‌اند."""
     fields = {}
     if item.seo_url_slug:
         fields["link_rewrite"] = item.seo_url_slug
@@ -767,10 +767,10 @@ def _presta_seo_fields(item) -> dict:
 
 
 def _apply_presta_sale_price(papi, product_id: int, company_id: int, base_price: decimal.Decimal, product_attribute_id: int = 0) -> None:
-    """طبقِ تکمیلِ توازیِ پرستاشاپ با ووکامرس -- S3 قیمتِ حراج را فقط برایِ
-    ووکامرس اضافه کرده بود. پرستاشاپ به‌جایِ فیلدِ ساده‌یِ sale_price، از
-    رکوردِ specific_price استفاده می‌کند -- همیشه صراحتاً ست/پاک می‌شود
-    (همان انضباطِ _apply_sale_price)."""
+    """طبق تکمیل توازی پرستاشاپ با ووکامرس — S3 قیمت حراج را فقط برای
+    ووکامرس اضافه کرده بود. پرستاشاپ به‌جای فیلد سادهٔ sale_price، از
+    رکورد specific_price استفاده می‌کند — همیشه صراحتاً ست/پاک می‌شود
+    (همان انضباط _apply_sale_price)."""
     from peecha.integrations.ecommerce import presta_client
     from peecha.services import commercial_pricing as pricing_service
 
@@ -805,11 +805,11 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
 
 
 def _delete_orphaned_variations(wcapi, parent_id: int) -> None:
-    """طبقِ رفعِ باگِ واقعیِ ساختاری: اگر این کالا در سینکِ قبلی «متغیر»
-    بوده و حالا در ERP دیگر هیچ متغیری ندارد، این‌جا به‌عنوانِ محصولِ
-    ساده سینک می‌شود -- ولی بدونِ این پاک‌سازی، واریانت‌هایِ قدیمیِ
-    فروشگاه یتیم می‌مانند و ووکامرس (به‌خاطرِ وجودِ همین واریانت‌ها)
-    قیمتِ سطحِ محصول را نادیده می‌گیرد."""
+    """طبق رفع باگ واقعی ساختاری: اگر این کالا در همگام‌سازی قبلی «متغیر»
+    بوده و حالا در ERP دیگر هیچ متغیری ندارد، این‌جا به‌عنوان محصول
+    ساده همگام‌سازی می‌شود — ولی بدون این پاک‌سازی، واریانت‌های قدیمی
+    فروشگاه یتیم می‌مانند و ووکامرس (به‌خاطر وجود همین واریانت‌ها)
+    قیمت سطح محصول را نادیده می‌گیرد."""
     from peecha.integrations.ecommerce import wc_client
 
     for variation in wc_client.list_variations(wcapi, parent_id):
@@ -820,11 +820,11 @@ def _push_variant_product(
     wcapi, connection: MarketplaceConnection, connection_id: int, item, sku: str, children: list,
     price_by_item: dict[int, decimal.Decimal], wp_creds: dict | None,
 ) -> tuple[int, int, list[str]]:
-    """طبقِ درخواستِ صریحِ کاربر («واریانت + تصویرِ کالا»): کالایِ اصلی به‌عنوانِ
-    یک محصولِ «متغیر» (type=variable) ساخته می‌شود -- با یک attributeِ محلی
-    (نه global taxonomyِ ووکامرس، که نیازمندِ فراخوانی/کشِ جداگانه‌ای بود)
-    به‌ازایِ هر ویژگیِ کالا (مثلاً «سایز»)، و هر متغیرِ ERP یک واریانتِ
-    جداگانه در ووکامرس می‌شود -- با SKU/قیمت/موجودیِ خودش."""
+    """طبق درخواست صریح کاربر («واریانت + تصویر کالا»): کالای اصلی به‌عنوان
+    یک محصول «متغیر» (type=variable) ساخته می‌شود — با یک attribute محلی
+    (نه global taxonomy ووکامرس، که نیازمند فراخوانی/کش جداگانه‌ای بود)
+    به‌ازای هر ویژگی کالا (مثلاً «سایز»)، و هر متغیر ERP یک واریانت
+    جداگانه در ووکامرس می‌شود — با کد کالا/قیمت/موجودی خودش."""
     from peecha.integrations.ecommerce import wc_client
 
     pushed = failed = 0
@@ -839,7 +839,7 @@ def _push_variant_product(
             if value_name not in options:
                 options.append(value_name)
     if not attribute_options:
-        return 0, 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدارِ ویژگی ندارند -- سینک نشد."]
+        return 0, 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدار ویژگی ندارند — همگام‌سازی نشد."]
 
     category_external_id = _resolve_category_external_id(wcapi, "WOOCOMMERCE", connection_id, item.category_id)
     parent_payload = {
@@ -854,7 +854,7 @@ def _push_variant_product(
     try:
         parent_data = wc_client.upsert_product(wcapi, sku, parent_payload)
     except Exception as exc:  # noqa: BLE001
-        return 0, len(children) + 1, [f"{sku} (کالایِ اصلیِ متغیر): {exc}"]
+        return 0, len(children) + 1, [f"{sku} (کالای اصلی متغیر): {exc}"]
     parent_external_id = parent_data["id"]
     _attach_photo_if_missing(wcapi, connection, parent_external_id, item.item_detail_account_id, wp_creds, bool(parent_data.get("images")))
     map_item(connection_id, sku, item.item_id)
@@ -864,17 +864,17 @@ def _push_variant_product(
         child_sku = (child.sku or child.code or "").strip()
         if not child_sku:
             failed += 1
-            errors.append(f"{sku}: یکی از متغیرها SKU/کد ندارد -- رد شد.")
+            errors.append(f"{sku}: یکی از متغیرها کد کالا/کد ندارد — رد شد.")
             continue
         child_attrs = attrs_by_item.get(child.item_id)
         if not child_attrs:
             failed += 1
-            errors.append(f"{child_sku}: مقدارِ ویژگی ندارد -- رد شد.")
+            errors.append(f"{child_sku}: مقدار ویژگی ندارد — رد شد.")
             continue
         price = price_by_item.get(child.item_id)
         if price is None:
             failed += 1
-            errors.append(f"{child_sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            errors.append(f"{child_sku}: قیمتی در فهرست قیمت کانال یافت نشد — همگام‌سازی نشد.")
             continue
         try:
             stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)
@@ -895,9 +895,9 @@ def _push_variant_product(
 
 
 def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
-    """طبقِ گزارشِ کاربر: کالا/قیمت/موجودی/دسته/تصویرِ همینِ ERP را به
-    فروشگاه می‌فرستد -- کالاهایِ دارایِ چند متغیر هم چه در ووکامرس (به‌شکلِ
-    محصولِ «متغیر») و چه در پرستاشاپ (به‌شکلِ combination) پشتیبانی
+    """طبق گزارش کاربر: کالا/قیمت/موجودی/دسته/تصویر همین ERP را به
+    فروشگاه می‌فرستد — کالاهای دارای چند متغیر هم چه در ووکامرس (به‌شکل
+    محصول «متغیر») و چه در پرستاشاپ (به‌شکل combination) پشتیبانی
     می‌شوند."""
     connection = _get_connection(connection_id)
     if connection.platform_code == "PRESTASHOP":
@@ -913,15 +913,15 @@ def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
 
 
 def _sync_catalog_to_wc_store(connection: MarketplaceConnection, connection_id: int) -> CatalogSyncResult:
-    """قیمت از فهرستِ قیمتِ پیش‌فرضِ کانالِ همین اتصال خوانده می‌شود.
-    کالاهایِ دارایِ چند متغیر به‌عنوانِ یک محصولِ «متغیر» (variable) با
-    یک واریانت به‌ازایِ هر ترکیبِ ERP سینک می‌شوند."""
+    """قیمت از فهرست قیمت پیش‌فرض کانال همین اتصال خوانده می‌شود.
+    کالاهای دارای چند متغیر به‌عنوان یک محصول «متغیر» (variable) با
+    یک واریانت به‌ازای هر ترکیب ERP همگام‌سازی می‌شوند."""
     from peecha.services import commercial_pricing as pricing_service
     from peecha.services import inventory_catalog as catalog_service
 
     price_list_id = _channel_default_price_list(connection)
     if price_list_id is None:
-        raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
+        raise ValueError("کانال این اتصال فهرست قیمت پیش‌فرض ندارد — در تنظیمات کانال یک فهرست قیمت مشخص کنید.")
 
     creds = _decrypt_connection_credentials(connection)
     wp_creds = {"wp_username": creds.get("wp_username"), "wp_app_password": creds.get("wp_app_password")}
@@ -968,7 +968,7 @@ def _sync_catalog_to_wc_store(connection: MarketplaceConnection, connection_id: 
         price = price_by_item.get(item.item_id)
         if price is None:
             skipped += 1
-            errors.append(f"{sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            errors.append(f"{sku}: قیمتی در فهرست قیمت کانال یافت نشد — همگام‌سازی نشد.")
             continue
         try:
             _push_simple_product(wcapi, connection, connection_id, item, sku, price, wp_creds)
@@ -981,11 +981,11 @@ def _sync_catalog_to_wc_store(connection: MarketplaceConnection, connection_id: 
 
 
 def _attach_presta_photo_if_missing(papi, connection: MarketplaceConnection, product_id: int, item_detail_account_id: int, has_images: bool) -> None:
-    """طبقِ درخواستِ صریح («واریانت + تصویر برایِ پرستاشاپ»): برخلافِ
-    ووکامرس، آپلودِ تصویرِ پرستاشاپ به هیچ اعتبارِ جداگانه‌ای نیاز ندارد
-    (همان کلیدِ APIِ خودِ اتصال کافی است) -- پس اگر عکسِ اصلیِ کالا در
+    """طبق درخواست صریح («واریانت + تصویر برای پرستاشاپ»): برخلاف
+    ووکامرس، بارگذاری تصویر پرستاشاپ به هیچ اعتبار جداگانه‌ای نیاز ندارد
+    (همان کلید API خود اتصال کافی است) — پس اگر عکس اصلی کالا در
     ERP موجود باشد، همیشه تلاش می‌شود (نه فقط وقتی کاربر چیزی جدا تنظیم
-    کرده باشد). فقط وقتی محصول هنوز هیچ تصویری ندارد آپلود می‌کند."""
+    کرده باشد). فقط وقتی محصول هنوز هیچ تصویری ندارد بارگذاری می‌کند."""
     if has_images:
         return
     from pathlib import Path
@@ -1026,11 +1026,11 @@ def _push_variant_product_to_presta(
     papi, connection: MarketplaceConnection, connection_id: int, item, sku: str, children: list,
     price_by_item: dict[int, decimal.Decimal],
 ) -> tuple[int, int, list[str]]:
-    """طبقِ درخواستِ صریح («واریانت + تصویر برایِ پرستاشاپ»): برخلافِ
-    ووکامرس، ویژگی/مقدارِ ویژگی (product_options/product_option_values)
-    در سطحِ کلِ فروشگاه ساخته می‌شوند (نه رویِ خودِ محصول) و قیمتِ رویِ
-    هر combination «افزوده» نسبت به قیمتِ پایه‌یِ محصول است -- پس قیمتِ
-    اولین متغیر به‌عنوانِ قیمتِ پایه انتخاب می‌شود و بقیه نسبت به آن
+    """طبق درخواست صریح («واریانت + تصویر برای پرستاشاپ»): برخلاف
+    ووکامرس، ویژگی/مقدار ویژگی (product_options/product_option_values)
+    در سطح کل فروشگاه ساخته می‌شوند (نه روی خود محصول) و قیمت روی
+    هر combination «افزوده» نسبت به قیمت پایهٔ محصول است — پس قیمت
+    اولین متغیر به‌عنوان قیمت پایه انتخاب می‌شود و بقیه نسبت به آن
     محاسبه می‌شوند."""
     from peecha.integrations.ecommerce import presta_client
 
@@ -1040,7 +1040,7 @@ def _push_variant_product_to_presta(
     attrs_by_item = _variant_attribute_map(child_ids)
     priced_children = [c for c in children if attrs_by_item.get(c.item_id) and price_by_item.get(c.item_id) is not None]
     if not priced_children:
-        return 0, len(children) + 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدارِ ویژگی/قیمتِ معتبر ندارند -- سینک نشد."]
+        return 0, len(children) + 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدار ویژگی/قیمت معتبر ندارند — همگام‌سازی نشد."]
 
     base_price = apply_pricing_markup(connection_id, item, price_by_item[priced_children[0].item_id])
     category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
@@ -1051,7 +1051,7 @@ def _push_variant_product_to_presta(
     try:
         parent_data = presta_client.upsert_product(papi, sku, fields)
     except Exception as exc:  # noqa: BLE001
-        return 0, len(children) + 1, [f"{sku} (کالایِ اصلیِ متغیر): {exc}"]
+        return 0, len(children) + 1, [f"{sku} (کالای اصلی متغیر): {exc}"]
     parent_id = parent_data["id"]
     _attach_presta_photo_if_missing(papi, connection, parent_id, item.item_detail_account_id, presta_client.product_has_images(papi, parent_id))
     map_item(connection_id, sku, item.item_id)
@@ -1066,17 +1066,17 @@ def _push_variant_product_to_presta(
         child_sku = (child.sku or child.code or "").strip()
         if not child_sku:
             failed += 1
-            errors.append(f"{sku}: یکی از متغیرها SKU/کد ندارد -- رد شد.")
+            errors.append(f"{sku}: یکی از متغیرها کد کالا/کد ندارد — رد شد.")
             continue
         child_attrs = attrs_by_item.get(child.item_id)
         if not child_attrs:
             failed += 1
-            errors.append(f"{child_sku}: مقدارِ ویژگی ندارد -- رد شد.")
+            errors.append(f"{child_sku}: مقدار ویژگی ندارد — رد شد.")
             continue
         price = price_by_item.get(child.item_id)
         if price is None:
             failed += 1
-            errors.append(f"{child_sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            errors.append(f"{child_sku}: قیمتی در فهرست قیمت کانال یافت نشد — همگام‌سازی نشد.")
             continue
         try:
             option_value_ids = []
@@ -1102,15 +1102,15 @@ def _push_variant_product_to_presta(
 
 
 def _sync_catalog_to_presta_store(connection: MarketplaceConnection, connection_id: int) -> CatalogSyncResult:
-    """طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ» + «واریانت + تصویر برایِ
-    پرستاشاپ»): کالایِ ساده و کالایِ دارایِ واریانت هردو پشتیبانی
+    """طبق درخواست صریح («پشتیبانی پرستاشاپ» + «واریانت + تصویر برای
+    پرستاشاپ»): کالای ساده و کالای دارای واریانت هردو پشتیبانی
     می‌شوند."""
     from peecha.services import commercial_pricing as pricing_service
     from peecha.services import inventory_catalog as catalog_service
 
     price_list_id = _channel_default_price_list(connection)
     if price_list_id is None:
-        raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
+        raise ValueError("کانال این اتصال فهرست قیمت پیش‌فرض ندارد — در تنظیمات کانال یک فهرست قیمت مشخص کنید.")
 
     papi = _build_store_client(connection)
     price_by_item: dict[int, decimal.Decimal] = {
@@ -1148,7 +1148,7 @@ def _sync_catalog_to_presta_store(connection: MarketplaceConnection, connection_
         price = price_by_item.get(item.item_id)
         if price is None:
             skipped += 1
-            errors.append(f"{sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            errors.append(f"{sku}: قیمتی در فهرست قیمت کانال یافت نشد — همگام‌سازی نشد.")
             continue
         try:
             _push_simple_product_to_presta(papi, connection, connection_id, item, sku, price)
@@ -1169,10 +1169,10 @@ class CustomerPullResult:
 
 
 def pull_new_customers(connection_id: int) -> CustomerPullResult:
-    """طبقِ گزارشِ کاربر: مشتریانِ تازه‌ثبت‌شده در فروشگاه را می‌خواند --
-    فقط مشتریانِ سفارش‌هایِ اخیر (نه کلِ مشتریانِ فروشگاه، که ممکن است
+    """طبق گزارش کاربر: مشتریان تازه‌ثبت‌شده در فروشگاه را می‌خواند --
+    فقط مشتریان سفارش‌های اخیر (نه کل مشتریان فروشگاه، که ممکن است
     خیلی زیاد و نامرتبط باشند). با ووکامرس و پرستاشاپ هردو کار می‌کند
-    (client_module بر اساسِ platform_code تعیین می‌شود)."""
+    (client_module بر اساس platform_code تعیین می‌شود)."""
     from peecha.services import commercial_partners as partners_service
 
     connection = _get_connection(connection_id)
@@ -1192,9 +1192,9 @@ def pull_new_customers(connection_id: int) -> CustomerPullResult:
             customer = client_module.fetch_customer(store_client, external_customer_id)
             if customer is None:
                 failed += 1
-                errors.append(f"مشتریِ #{external_customer_id}: در فروشگاه یافت نشد.")
+                errors.append(f"مشتری #{external_customer_id}: در فروشگاه یافت نشد.")
                 continue
-            full_name = f"{customer.first_name} {customer.last_name}".strip() or customer.email or f"مشتریِ فروشگاه #{external_customer_id}"
+            full_name = f"{customer.first_name} {customer.last_name}".strip() or customer.email or f"مشتری فروشگاه #{external_customer_id}"
             customer_detail_account_id = partners_service.create_customer(
                 connection.company_id, f"{id_prefix}-{external_customer_id}", full_name,
                 partners_service.CustomerProfileFields(), fast_track=True,
@@ -1203,7 +1203,7 @@ def pull_new_customers(connection_id: int) -> CustomerPullResult:
             created += 1
         except Exception as exc:  # noqa: BLE001
             failed += 1
-            errors.append(f"مشتریِ #{external_customer_id}: {exc}")
+            errors.append(f"مشتری #{external_customer_id}: {exc}")
     return CustomerPullResult(created=created, already_mapped=already_mapped, failed=failed, errors=errors)
 
 
@@ -1216,13 +1216,13 @@ class OrderPullResult:
 
 
 def pull_new_orders(connection_id: int, created_by_user_id: int, currency_id: int) -> OrderPullResult:
-    """طبقِ گزارشِ کاربر: سفارش‌هایِ پرداخت‌شدهٔ تازه را از فروشگاه
-    می‌خواند و از طریقِ import_order (که از قبل در ERP آماده بود) به
-    سفارشِ فروش تبدیل می‌کند. با ووکامرس و پرستاشاپ هردو کار می‌کند."""
+    """طبق گزارش کاربر: سفارش‌های پرداخت‌شدهٔ تازه را از فروشگاه
+    می‌خواند و از طریق import_order (که از قبل در ERP آماده بود) به
+    سفارش فروش تبدیل می‌کند. با ووکامرس و پرستاشاپ هردو کار می‌کند."""
     connection = _get_connection(connection_id)
     price_list_id = _channel_default_price_list(connection)
     if price_list_id is None or connection.warehouse_id is None:
-        raise ValueError("این اتصال باید هم انبار و هم فهرستِ قیمتِ پیش‌فرض (رویِ کانال) داشته باشد.")
+        raise ValueError("این اتصال باید هم انبار و هم فهرست قیمت پیش‌فرض (روی کانال) داشته باشد.")
 
     client_module = _client_module_for_platform(connection.platform_code)
     store_client = _build_store_client(connection)
@@ -1242,7 +1242,7 @@ def pull_new_orders(connection_id: int, created_by_user_id: int, currency_id: in
             lines.append(ExternalOrderLine(external_sku=line["sku"], quantity=decimal.Decimal(str(line["quantity"])), uom_id=uom_id))
         if unmapped_sku is not None:
             failed += 1
-            errors.append(f"سفارشِ #{order.external_order_id}: SKUِ «{unmapped_sku}» نگاشت نشده است.")
+            errors.append(f"سفارش #{order.external_order_id}: کد کالا «{unmapped_sku}» نگاشت نشده است.")
             continue
         result = import_order(
             connection_id, order.external_order_id, order.external_customer_id, connection.company_id,
@@ -1254,7 +1254,7 @@ def pull_new_orders(connection_id: int, created_by_user_id: int, currency_id: in
             duplicate += 1
         else:
             failed += 1
-            errors.append(f"سفارشِ #{order.external_order_id}: {result.error_message}")
+            errors.append(f"سفارش #{order.external_order_id}: {result.error_message}")
     return OrderPullResult(imported=imported, duplicate=duplicate, failed=failed, errors=errors)
 
 
@@ -1266,8 +1266,8 @@ class FullSyncResult:
 
 
 def sync_now(connection_id: int, created_by_user_id: int, currency_id: int) -> FullSyncResult:
-    """دکمهٔ «سینکِ الان» -- کاتالوگ → مشتریانِ تازه → سفارش‌هایِ تازه، به
-    همین ترتیب (سفارش به نگاشتِ مشتری نیاز دارد)."""
+    """دکمهٔ «همگام‌سازی الان» — کاتالوگ → مشتریان تازه → سفارش‌های تازه، به
+    همین ترتیب (سفارش به نگاشت مشتری نیاز دارد)."""
     catalog = sync_catalog_to_store(connection_id)
     customers = pull_new_customers(connection_id)
     orders = pull_new_orders(connection_id, created_by_user_id, currency_id)
@@ -1306,10 +1306,10 @@ class AutoSyncTickResult:
 
 
 def _record_connection_health(connection_id: int, error_message: str | None) -> None:
-    """طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): قبل از این، شکستِ
-    تیکِ خودکارِ سینک کاملاً بی‌صدا رد می‌شد -- نه در دیتابیس اثری
+    """طبق ادامهٔ اولویت‌بندی («نگهبان اتصال»): قبل از این، شکست
+    تیک خودکار همگام‌سازی کاملاً بی‌صدا رد می‌شد — نه در دیتابیس اثری
     می‌گذاشت، نه به کاربر نشان داده می‌شد. حالا هر تیک (موفق یا ناموفق)
-    این‌جا ثبت می‌شود؛ شکستِ پیاپی صفحه‌یِ «نگهبانِ اتصال» را قرمز
+    این‌جا ثبت می‌شود؛ شکست پیاپی صفحهٔ «نگهبان اتصال» را قرمز
     می‌کند، موفقیت شمارنده را صفر می‌کند."""
     with new_session() as session:
         row = session.get(MarketplaceConnection, connection_id)
@@ -1326,10 +1326,10 @@ def _record_connection_health(connection_id: int, error_message: str | None) -> 
 
 
 def run_due_auto_syncs(company_id: int, created_by_user_id: int, currency_id: int, now: datetime.datetime | None = None) -> list[AutoSyncTickResult]:
-    """طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): تیکِ دوره‌ایِ برنامه
-    (مثلاً یک تایمرِ Qt در سطحِ پنجرهٔ اصلی) این تابع را صدا می‌زند --
-    فقط اتصال‌هایی که auto_sync_enabled دارند و فاصله‌یِ زمانیِ تنظیم‌شده
-    از آخرین سینک گذشته، سینک می‌شوند. خطایِ یک اتصال نباید بقیه را
+    """طبق درخواست صریح («زمان‌بندی خودکار همگام‌سازی»): تیک دوره‌ای برنامه
+    (مثلاً یک تایمر Qt در سطح پنجرهٔ اصلی) این تابع را صدا می‌زند --
+    فقط اتصال‌هایی که auto_sync_enabled دارند و فاصلهٔ زمانی تنظیم‌شده
+    از آخرین همگام‌سازی گذشته، همگام‌سازی می‌شوند. خطای یک اتصال نباید بقیه را
     متوقف کند (هرکدام مستقل ثبت می‌شود)."""
     results: list[AutoSyncTickResult] = []
     for connection in list_due_auto_sync_connections(company_id, now):
@@ -1357,7 +1357,7 @@ def list_routing_rules(company_id: int) -> list[FulfillmentRoutingRule]:
 
 def create_routing_rule(company_id: int, strategy_code: str, fallback_warehouse_id: int, channel_code: str | None = None, priority: int = 100) -> int:
     if strategy_code not in ("MOST_STOCK", "REGION_MATCH", "LOWEST_COST", "FIXED_WAREHOUSE"):
-        raise ValueError("استراتژیِ نامعتبر است.")
+        raise ValueError("استراتژی نامعتبر است.")
     with new_session() as session:
         row = FulfillmentRoutingRule(company_id=company_id, channel_code=channel_code, strategy_code=strategy_code, fallback_warehouse_id=fallback_warehouse_id, priority=priority)
         session.add(row)
@@ -1366,8 +1366,8 @@ def create_routing_rule(company_id: int, strategy_code: str, fallback_warehouse_
 
 
 def resolve_fulfillment_warehouse(company_id: int, item_id: int, channel_code: str | None, warehouse_provinces: dict[int, str], customer_province: str | None = None) -> int:
-    """warehouse_provinces: نگاشتِ warehouse_id → نامِ استان (چون این
-    اطلاعات رویِ خودِ آدرسِ انبار است، نه این سرویس)."""
+    """warehouse_provinces: نگاشت warehouse_id → نام استان (چون این
+    اطلاعات روی خود آدرس انبار است، نه این سرویس)."""
     with new_session() as session:
         rules = session.scalars(
             select(FulfillmentRoutingRule)
@@ -1405,11 +1405,11 @@ _COUPON_WC_DISCOUNT_TYPE = {"PERCENT": "percent", "FIXED_CART": "fixed_cart", "F
 
 
 def _require_woocommerce(connection: MarketplaceConnection) -> None:
-    """طبقِ محدودیتِ صریحِ همین دور: کوپن/نظراتِ مشتری فقط برایِ
-    ووکامرس پیاده شده -- پرستاشاپ endpointِ بومیِ سرراستی برایِ این‌ها
-    ندارد (cart_rules/بدونِ سیستمِ نظرِ محصولِ استاندارد)."""
+    """طبق محدودیت صریح همین دور: کوپن/نظرات مشتری فقط برای
+    ووکامرس پیاده شده — پرستاشاپ endpoint بومی سرراستی برای این‌ها
+    ندارد (cart_rules/بدون سیستم نظر محصول استاندارد)."""
     if connection.platform_code != "WOOCOMMERCE":
-        raise ValueError("این قابلیت فقط برایِ اتصالِ ووکامرس در دسترس است.")
+        raise ValueError("این قابلیت فقط برای اتصال ووکامرس در دسترس است.")
 
 
 def create_coupon(
@@ -1417,7 +1417,7 @@ def create_coupon(
     valid_from: datetime.date | None = None, valid_until: datetime.date | None = None, usage_limit: int | None = None,
 ) -> int:
     if discount_type_code not in _COUPON_DISCOUNT_TYPES:
-        raise ValueError("نوعِ تخفیف نامعتبر است.")
+        raise ValueError("نوع تخفیف نامعتبر است.")
     _require_woocommerce(_get_connection(connection_id))
     with new_session() as session:
         row = OnlineCoupon(
@@ -1459,9 +1459,9 @@ def delete_coupon(coupon_id: int) -> None:
 
 
 def sync_coupon(coupon_id: int) -> None:
-    """طبقِ الگویِ upsert_product: کوپن را به فروشگاه پوش می‌کند --
-    اولین‌بار می‌سازد، دفعاتِ بعد همان کوپنِ ساخته‌شده را به‌روزرسانی
-    می‌کند (external_coupon_id راهنمایِ این تشخیص است)."""
+    """طبق الگوی upsert_product: کوپن را به فروشگاه پوش می‌کند --
+    اولین‌بار می‌سازد، دفعات بعد همان کوپن ساخته‌شده را به‌روزرسانی
+    می‌کند (external_coupon_id راهنمای این تشخیص است)."""
     from peecha.integrations.ecommerce import wc_client
 
     with new_session() as session:

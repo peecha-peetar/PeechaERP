@@ -1,9 +1,9 @@
-"""تسویهٔ پایانِ روزِ خودرو (فازِ ۲، بخشِ ۲ از پخشِ گرم) -- طبقِ درخواستِ
-صریحِ کاربر: «تسویه آخر روز باید بصورت انتخابی به یک نفر از ۳ تا نقش
-واگذار بشه و تسویه را باید به تاییدِ انبار و حسابداری برسونه». هم‌الگو
-با گیتِ warehouse_approved_at/weighing_approved_atِ پخشِ سرد
-(commercial_documents.convert_to_invoice): دو تاییدِ مستقل، هرکدام
-توسطِ یک نقشِ سازمانیِ متفاوت، پیش از قطعی‌شدنِ اثرِ انبار."""
+"""تسویهٔ پایان روز خودرو (فاز ۲، بخش ۲ از پخش گرم) — طبق درخواست
+صریح کاربر: «تسویه آخر روز باید بصورت انتخابی به یک نفر از ۳ تا نقش
+واگذار بشه و تسویه را باید به تایید انبار و حسابداری برسونه». هم‌الگو
+با گیت warehouse_approved_at/weighing_approved_at پخش سرد
+(commercial_documents.convert_to_invoice): دو تایید مستقل، هرکدام
+توسط یک نقش سازمانی متفاوت، پیش از قطعی‌شدن اثر انبار."""
 
 from __future__ import annotations
 
@@ -48,9 +48,9 @@ def set_settlement_role(company_id: int, role_code: str) -> None:
 
 
 def get_settlement_vehicle_for_user(user_id: int, company_id: int) -> int | None:
-    """هم‌الگو با can_submit_settlement، ولی بدونِ دانستنِ خودرو از قبل --
-    اپِ موبایل/API این را صدا می‌زند تا بفهمد این کاربر (با هر نقشی که
-    مسئولِ تسویه است) به کدام خودرو وصل است."""
+    """هم‌الگو با can_submit_settlement، ولی بدون دانستن خودرو از قبل --
+    برنامهٔ موبایل/API این را صدا می‌زند تا بفهمد این کاربر (با هر نقشی که
+    مسئول تسویه است) به کدام خودرو وصل است."""
     role_code = get_settlement_role(company_id)
     if role_code is None:
         return None
@@ -58,9 +58,9 @@ def get_settlement_vehicle_for_user(user_id: int, company_id: int) -> int | None
 
 
 def can_submit_settlement(user_id: int, company_id: int, vehicle_warehouse_id: int) -> bool:
-    """طبقِ درخواستِ صریح: فقط کسی که هم نقشِ تعیین‌شده (تنظیماتِ بالا)
+    """طبق درخواست صریح: فقط کسی که هم نقش تعیین‌شده (تنظیمات بالا)
     را دارد و هم واقعاً به همین خودرو (با همان نقش) وصل است، اجازهٔ
-    ثبتِ تسویه دارد."""
+    ثبت تسویه دارد."""
     role_code = get_settlement_role(company_id)
     if role_code is None:
         return False
@@ -80,15 +80,15 @@ def compute_today_summary(
     vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date,
     after: datetime.datetime | None = None,
 ) -> list[SettlementLineSummary]:
-    """طبقِ نیازِ واقعیِ کاربر («سیستم پیشنهاد بدهد») -- بارگیریِ
-    تاییدشدهٔ همین خودرو در همین تاریخ (loaded) در برابرِ فاکتورهایِ
-    پست‌شده از همین انبار در همین تاریخ (sold). کسری/اضافیِ نهایی =
-    loaded - sold - returnedِ اعلام‌شده (returned در submit_settlement
+    """طبق نیاز واقعی کاربر («سیستم پیشنهاد بدهد») — بارگیری
+    تاییدشدهٔ همین خودرو در همین تاریخ (loaded) در برابر فاکتورهای
+    پست‌شده از همین انبار در همین تاریخ (sold). کسری/اضافی نهایی =
+    loaded - sold - returned اعلام‌شده (returned در submit_settlement
     گرفته می‌شود، نه این‌جا).
 
-    after (طبقِ درخواستِ صریحِ کاربر «چند بار پخشِ گرم و تسویه در یک
+    after (طبق درخواست صریح کاربر «چند بار پخش گرم و تسویه در یک
     روز»): وقتی خودرو همان روز قبلاً یک‌بار تسویه شده، این تسویهٔ تازه
-    فقط بارگیری/فروشِ *بعدِ* آن تسویهٔ قبلی را حساب می‌کند -- نه کلِ
+    فقط بارگیری/فروش *بعد* آن تسویهٔ قبلی را حساب می‌کند — نه کل
     روز را دوباره (get_open_window_start همین مقدار را می‌دهد)."""
     with new_session() as session:
         loaded_stmt = (
@@ -153,11 +153,11 @@ def compute_invoiced_amount(
 
 
 def get_open_window_start(vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date) -> datetime.datetime | None:
-    """طبقِ درخواستِ صریحِ کاربر («برایِ هر راننده در روز بتوانیم چند بار
-    پخشِ گرم انجام و تسویه کنیم»): زمانِ ثبتِ آخرین تسویهٔ همین خودرو در
-    همین تاریخ (هر وضعیتی) -- اگر امروز هنوز تسویه‌ای نداشته، None یعنی
-    کلِ روز. today-summary (پیش‌نمایش) و submit_settlement (ثبتِ واقعی)
-    باید دقیقاً همین پنجره را ببینند، وگرنه پیش‌نمایشِ موبایل با مبلغِ
+    """طبق درخواست صریح کاربر («برای هر راننده در روز بتوانیم چند بار
+    پخش گرم انجام و تسویه کنیم»): زمان ثبت آخرین تسویهٔ همین خودرو در
+    همین تاریخ (هر وضعیتی) — اگر امروز هنوز تسویه‌ای نداشته، None یعنی
+    کل روز. today-summary (پیش‌نمایش) و submit_settlement (ثبت واقعی)
+    باید دقیقاً همین پنجره را ببینند، وگرنه پیش‌نمایش موبایل با مبلغ
     واقعاً ثبت‌شده فرق می‌کند."""
     with new_session() as session:
         return _last_settlement_submitted_at(session, vehicle_warehouse_id, company_id, settlement_date)
@@ -223,7 +223,7 @@ def get_settlement(vehicle_settlement_id: int, company_id: int) -> SettlementRow
     with new_session() as session:
         s = session.get(VehicleSettlement, vehicle_settlement_id)
         if s is None or s.company_id != company_id:
-            raise ValueError("سندِ تسویه نامعتبر است.")
+            raise ValueError("سند تسویه نامعتبر است.")
         lines = session.scalars(
             select(VehicleSettlementLine).where(VehicleSettlementLine.vehicle_settlement_id == vehicle_settlement_id)
         ).all()
@@ -245,7 +245,7 @@ def submit_settlement(
     lines: list[SettlementLineInput], declared_cash_amount: decimal.Decimal,
 ) -> int:
     if not can_submit_settlement(submitted_by_user_id, company_id, vehicle_warehouse_id):
-        raise ValueError("شما مجازِ ثبتِ تسویهٔ این خودرو نیستید.")
+        raise ValueError("شما مجاز ثبت تسویهٔ این خودرو نیستید.")
     with new_session() as session:
         # طبقِ درخواستِ صریحِ کاربر («برایِ هر راننده در روز بتوانیم چند
         # بار پخشِ گرم انجام و تسویه کنیم»): دیگر یک تسویهٔ قطعیِ یکتا در
@@ -265,7 +265,7 @@ def submit_settlement(
             .order_by(VehicleLoading.vehicle_loading_id.desc())
         )
         if last_loading is None:
-            raise ValueError("برایِ این خودرو در این تاریخ هیچ بارگیریِ تاییدشده‌ای ثبت نشده است.")
+            raise ValueError("برای این خودرو در این تاریخ هیچ بارگیری تاییدشده‌ای ثبت نشده است.")
 
         invoiced_amount = compute_invoiced_amount(vehicle_warehouse_id, company_id, settlement_date, after=window_start)
         settlement = VehicleSettlement(
@@ -292,9 +292,9 @@ def approve_warehouse(vehicle_settlement_id: int, company_id: int, approved_by_u
     with new_session() as session:
         s = session.get(VehicleSettlement, vehicle_settlement_id)
         if s is None or s.company_id != company_id:
-            raise ValueError("سندِ تسویه نامعتبر است.")
+            raise ValueError("سند تسویه نامعتبر است.")
         if s.status_code != "SUBMITTED":
-            raise ValueError("این تسویه در وضعیتِ قابلِ‌تاییدِ انبار نیست.")
+            raise ValueError("این تسویه در وضعیت قابل‌تایید انبار نیست.")
         s.status_code = "WAREHOUSE_APPROVED"
         s.warehouse_approved_by_user_id = approved_by_user_id
         s.warehouse_approved_at = datetime.datetime.now()
@@ -302,22 +302,22 @@ def approve_warehouse(vehicle_settlement_id: int, company_id: int, approved_by_u
 
 
 def approve_accounting(vehicle_settlement_id: int, company_id: int, approved_by_user_id: int) -> int | None:
-    """تاییدِ نهایی -- طبقِ درخواستِ صریح («تسویه را باید به تاییدِ انبار
-    و حسابداری برسونه»): فقط بعدِ این تایید، سندِ TRANSFERِ واقعی (خودرو
-    -> انبارِ مقصد) ساخته/تایید/پست می‌شود -- عمداً TRANSFER است، نه
-    RETURN_IN: این کالاها هرگز فروخته نشده‌اند (پس «برگشتِ کالایِ
-    فروخته‌شده» نیستند، صرفاً جابه‌جاییِ فیزیکی‌اند)، هم‌الگو با
+    """تایید نهایی — طبق درخواست صریح («تسویه را باید به تایید انبار
+    و حسابداری برسونه»): فقط بعد این تایید، سند TRANSFER واقعی (خودرو
+    -> انبار مقصد) ساخته/تایید/پست می‌شود — عمداً TRANSFER است، نه
+    RETURN_IN: این کالاها هرگز فروخته نشده‌اند (پس «برگشت کالای
+    فروخته‌شده» نیستند، صرفاً جابه‌جایی فیزیکی‌اند)، هم‌الگو با
     vehicle_loading.confirm_vehicle_loading (که همان مسیر را برعکس طی
-    می‌کند) -- بدونِ نیاز به کدِ دلیل یا بهایِ واحدِ دستی، چون میانگینِ
-    بهایِ موجود رویِ خودِ انبارِ خودرو حفظ می‌شود. اگر هیچ ردیفی مقدارِ
-    برگشتی نداشته باشد (همه فروخته/کسری)، سندِ انبار لازم نیست -- None
+    می‌کند) — بدون نیاز به کد دلیل یا بهای واحد دستی، چون میانگین
+    بهای موجود روی خود انبار خودرو حفظ می‌شود. اگر هیچ ردیفی مقدار
+    برگشتی نداشته باشد (همه فروخته/کسری)، سند انبار لازم نیست — None
     برمی‌گردد."""
     with new_session() as session:
         s = session.get(VehicleSettlement, vehicle_settlement_id)
         if s is None or s.company_id != company_id:
-            raise ValueError("سندِ تسویه نامعتبر است.")
+            raise ValueError("سند تسویه نامعتبر است.")
         if s.status_code != "WAREHOUSE_APPROVED":
-            raise ValueError("این تسویه هنوز تاییدِ انبار نگرفته است.")
+            raise ValueError("این تسویه هنوز تایید انبار نگرفته است.")
         vehicle_warehouse_id = s.vehicle_warehouse_id
         return_destination_warehouse_id = s.return_destination_warehouse_id
         lines = [

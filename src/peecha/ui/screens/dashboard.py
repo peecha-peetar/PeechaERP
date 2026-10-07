@@ -1,15 +1,15 @@
-"""داشبورد — معادلِ Qt برایِ dashboard.py/dashboard.kv در Kivy.
+"""داشبورد — معادل Qt برای dashboard.py/dashboard.kv در Kivy.
 
-طبقِ درخواستِ صریح («برایِ هر ماژول داشبوردِ مخصوصِ خودش در فرمِ داشبورد
-تبِ جدا»): داشبوردِ قدیمی (یک صفحه‌یِ تک) به یک QTabWidget تبدیل شد --
-تبِ «کلی» همان خلاصه‌یِ سراسری (شرکت‌ها/کاربران + بنرِ هشدارِ تسویه) را
-نگه می‌دارد، و هر ماژول (حسابداری/خزانه‌داری/انبار/فروش/خرید/منابعِ‌
-انسانی) تبِ اختصاصیِ خودش را با KPIها/نمودارهایِ واقعیِ همان ماژول دارد.
-طبقِ همان اصلِ سرویسِ dashboard.py («همه واقعی رویِ دیتابیس، بدونِ
-داده‌یِ ساختگی»)، هیچ‌کدام از این تب‌ها داده‌یِ نمونه ندارند.
+طبق درخواست صریح («برای هر ماژول داشبورد مخصوص خودش در فرم داشبورد
+تب جدا»): داشبورد قدیمی (یک صفحهٔ تک) به یک QTabWidget تبدیل شد --
+تب «کلی» همان خلاصهٔ سراسری (شرکت‌ها/کاربران + بنر هشدار تسویه) را
+نگه می‌دارد، و هر ماژول (حسابداری/خزانه‌داری/انبار/فروش/خرید/منابع‌
+انسانی) تب اختصاصی خودش را با KPIها/نمودارهای واقعی همان ماژول دارد.
+طبق همان اصل سرویس dashboard.py («همه واقعی روی دیتابیس، بدون
+دادهٔ ساختگی»)، هیچ‌کدام از این تب‌ها دادهٔ نمونه ندارند.
 
-برایِ کارایی، هر تب فقط وقتی که فعال می‌شود (یا کلِ داشبورد تازه باز
-می‌شود) رفرش می‌شود -- نه هر شش/هفت تب هربار که کاربر فقط می‌خواهد
+برای کارایی، هر تب فقط وقتی که فعال می‌شود (یا کل داشبورد تازه باز
+می‌شود) رفرش می‌شود — نه هر شش/هفت تب هربار که کاربر فقط می‌خواهد
 داشبورد را ببیند."""
 
 from __future__ import annotations
@@ -53,9 +53,9 @@ def _company_id() -> int | None:
 # آن‌ها استفاده کند.
 # ---------------------------------------------------------------------
 def build_chart_card(title_text: str) -> tuple[QWidget, QChartView]:
-    """کارتِ شیشه‌ایِ خودمان دورِ نمودار — تیتر با تایپوگرافیِ یکدستِ
-    برنامه (نه تیترِ بومیِ QChart)، و QChartView بدونِ بردر/پس‌زمینه‌یِ
-    خودش تا کاملاً درونِ همین کارت شناور به‌نظر برسد."""
+    """کارت شیشه‌ای خودمان دور نمودار — تیتر با تایپوگرافی یکدست
+    برنامه (نه تیتر بومی QChart)، و QChartView بدون بردر/پس‌زمینهٔ
+    خودش تا کاملاً درون همین کارت شناور به‌نظر برسد."""
     card = QWidget()
     card.setObjectName("card")
     card.setMinimumHeight(320)
@@ -191,7 +191,7 @@ def _kpi_grid(layout: QVBoxLayout, cards: list[QWidget], columns: int = 4) -> No
 
 
 def _module_links(layout: QVBoxLayout, main_window, links: list[tuple[str, str]]) -> list[QPushButton]:
-    """R276: پیوند به داشبوردهایِ تخصصیِ هر ماژول (که در منویِ همان ماژول پراکنده بودند)."""
+    """R276: پیوند به داشبوردهای تخصصی هر ماژول (که در منوی همان ماژول پراکنده بودند)."""
     row = QHBoxLayout()
     row.setSpacing(8)
     buttons = []
@@ -210,7 +210,7 @@ def _module_links(layout: QVBoxLayout, main_window, links: list[tuple[str, str]]
 
 
 def _scrollable(tab: QWidget) -> QVBoxLayout:
-    """محتوایِ تب داخلِ اسکرول، تا کارت‌ها و نمودارها در پنجرهٔ کوچک له نشوند."""
+    """محتوای تب داخل اسکرول، تا کارت‌ها و نمودارها در پنجرهٔ کوچک له نشوند."""
     holder = QVBoxLayout(tab)
     holder.setContentsMargins(0, 0, 0, 0)
     scroll = QScrollArea()
@@ -226,13 +226,13 @@ def _scrollable(tab: QWidget) -> QVBoxLayout:
 
 
 MODULE_DASHBOARD_LINKS = [
-    ("داشبوردِ مدیریتیِ خرید", "PURCH_RPT_DASH_EXEC"),
-    ("استثناهایِ خرید", "PURCH_RPT_DASH_EXCEPTIONS"),
-    ("داشبوردِ انبار", "INV_RPT_DASHBOARD"),
-    ("داشبوردِ بهایِ تمام‌شده", "COST_DASHBOARD"),
-    ("داشبوردِ تولید", "PRD_DASHBOARD"),
-    ("داشبوردِ دارایی‌ها", "FA_DASHBOARD"),
-    ("دستیارِ فروش", "SALES_ASSISTANT"),
+    ("داشبورد مدیریتی خرید", "PURCH_RPT_DASH_EXEC"),
+    ("استثناهای خرید", "PURCH_RPT_DASH_EXCEPTIONS"),
+    ("داشبورد انبار", "INV_RPT_DASHBOARD"),
+    ("داشبورد بهای تمام‌شده", "COST_DASHBOARD"),
+    ("داشبورد تولید", "PRD_DASHBOARD"),
+    ("داشبورد دارایی‌ها", "FA_DASHBOARD"),
+    ("دستیار فروش", "SALES_ASSISTANT"),
 ]
 
 
@@ -246,9 +246,9 @@ def _kpi_row(layout: QVBoxLayout, cards: list[QWidget]) -> None:
 
 
 class _OverviewTab(QWidget):
-    """تبِ «کلی» -- خلاصه‌یِ سراسری (نه مخصوصِ یک ماژول): شمارشِ
-    شرکت‌ها/کاربران (که به هیچ ماژولِ خاصی تعلق ندارند) و بنرِ هشدارِ
-    موعدِ تسویه (چون اولین صفحه‌ای‌ست که کاربر می‌بیند)."""
+    """تب «کلی» — خلاصهٔ سراسری (نه مخصوص یک ماژول): شمارش
+    شرکت‌ها/کاربران (که به هیچ ماژول خاصی تعلق ندارند) و بنر هشدار
+    موعد تسویه (چون اولین صفحه‌ای‌ست که کاربر می‌بیند)."""
 
     def __init__(self, main_window=None) -> None:
         super().__init__()
@@ -258,7 +258,7 @@ class _OverviewTab(QWidget):
 
         outer = _scrollable(self)
 
-        subtitle = QLabel("خلاصه‌یِ سراسریِ سیستم")
+        subtitle = QLabel("خلاصهٔ سراسری سیستم")
         subtitle.setObjectName("sectionHint")
         outer.addWidget(subtitle)
 
@@ -282,14 +282,14 @@ class _OverviewTab(QWidget):
 
         # R276: نمایِ مدیریتیِ همهٔ ماژول‌ها (قبلاً فقط شرکت‌ها/کاربران).
         self._exec_cards = {
-            "sales_this_month": KpiCard("فروشِ این ماه", "🧾", theme.ACCENT),
-            "purchases_this_month": KpiCard("خریدِ این ماه", "🛒", theme.CHART_PURPLE),
-            "receivables": KpiCard("مطالباتِ تسویه‌نشده", "📥", theme.WARNING),
-            "payables": KpiCard("بدهیِ تسویه‌نشده", "📤", theme.DANGER),
-            "inventory_value": KpiCard("ارزشِ موجودیِ انبار", "📦", theme.CHART_TEAL),
-            "received_checks_amount": KpiCard("چک‌هایِ دریافتیِ درجریان", "🏦", theme.ACCENT),
-            "open_production_orders": _KpiCard("دستورهایِ تولیدِ باز", "🏭", theme.CHART_PURPLE),
-            "fixed_assets_book_value": KpiCard("ارزشِ دفتریِ دارایی‌ها", "🏗️", theme.CHART_TEAL),
+            "sales_this_month": KpiCard("فروش این ماه", "🧾", theme.ACCENT),
+            "purchases_this_month": KpiCard("خرید این ماه", "🛒", theme.CHART_PURPLE),
+            "receivables": KpiCard("مطالبات تسویه‌نشده", "📥", theme.WARNING),
+            "payables": KpiCard("بدهی تسویه‌نشده", "📤", theme.DANGER),
+            "inventory_value": KpiCard("ارزش موجودی انبار", "📦", theme.CHART_TEAL),
+            "received_checks_amount": KpiCard("چک‌های دریافتی درجریان", "🏦", theme.ACCENT),
+            "open_production_orders": _KpiCard("دستورهای تولید باز", "🏭", theme.CHART_PURPLE),
+            "fixed_assets_book_value": KpiCard("ارزش دفتری دارایی‌ها", "🏗️", theme.CHART_TEAL),
         }
         _kpi_grid(outer, list(self._exec_cards.values()))
 
@@ -297,13 +297,13 @@ class _OverviewTab(QWidget):
         charts_layout.setSpacing(16)
         charts_layout.setColumnStretch(0, 3)
         charts_layout.setColumnStretch(1, 2)
-        trend_card, self.trend_chart_view = build_chart_card("فروش و خرید در ۶ ماهِ اخیر")
+        trend_card, self.trend_chart_view = build_chart_card("فروش و خرید در ۶ ماه اخیر")
         charts_layout.addWidget(trend_card, 0, 0)
-        stock_card, self.stock_chart_view = build_chart_card("ارزشِ موجودی به تفکیکِ انبار")
+        stock_card, self.stock_chart_view = build_chart_card("ارزش موجودی به تفکیک انبار")
         charts_layout.addWidget(stock_card, 0, 1)
         outer.addLayout(charts_layout)
 
-        links_title = QLabel("داشبوردهایِ تخصصیِ ماژول‌ها")
+        links_title = QLabel("داشبوردهای تخصصی ماژول‌ها")
         links_title.setObjectName("cardTitle")
         outer.addWidget(links_title)
         self.module_link_buttons = _module_links(outer, main_window, MODULE_DASHBOARD_LINKS)
@@ -338,7 +338,7 @@ class _OverviewTab(QWidget):
 
         severity_colors = {"danger": theme.DANGER, "warning": theme.WARNING}
         for alert in dashboard_service.list_smart_alerts(company_id):
-            button = QPushButton(f"🔔 {alert.title} — برایِ مشاهده کلیک کنید.")
+            button = QPushButton(f"🔔 {alert.title} — برای مشاهده کلیک کنید.")
             button.setCursor(Qt.PointingHandCursor)
             color = severity_colors.get(alert.severity, theme.WARNING)
             button.setStyleSheet(
@@ -371,8 +371,8 @@ class _OverviewTab(QWidget):
             return
         self.alarm_banner.setText(
             f"⏰ {_to_persian_digits(str(total))} فاکتور تا {_to_persian_digits(str(alarm_settings.alarm_days_before))} "
-            f"روزِ دیگر (یا پیش‌ازاین) به موعدِ تسویه می‌رسند — {_to_persian_digits(str(self._due_sales_count))} فروش، "
-            f"{_to_persian_digits(str(self._due_purchase_count))} خرید. برایِ مشاهده کلیک کنید."
+            f"روز دیگر (یا پیش‌ازاین) به موعد تسویه می‌رسند — {_to_persian_digits(str(self._due_sales_count))} فروش، "
+            f"{_to_persian_digits(str(self._due_purchase_count))} خرید. برای مشاهده کلیک کنید."
         )
         self.alarm_banner.setStyleSheet(
             f"background-color: {theme.WARNING}; color: white; font-weight: bold; padding: 10px 14px; "
@@ -388,7 +388,7 @@ class _OverviewTab(QWidget):
 
 
 class _ModuleTab(QWidget):
-    """پایهٔ تب‌هایِ ماژول: اسکرول + ردیفِ پیوند به داشبوردِ کاملِ همان ماژول."""
+    """پایهٔ تب‌های ماژول: اسکرول + ردیف پیوند به داشبورد کامل همان ماژول."""
 
     LINKS: list[tuple[str, str]] = []
 
@@ -410,7 +410,7 @@ def _format_kpi(kpi) -> str:
 
 
 class _ServiceDashboardTab(_ModuleTab):
-    """R276: خلاصهٔ داشبوردِ تخصصیِ ماژول (تولید/دارایی) از همان سرویسِ خودش، در یک تب."""
+    """R276: خلاصهٔ داشبورد تخصصی ماژول (تولید/دارایی) از همان سرویس خودش، در یک تب."""
 
     KPI_CODES: tuple[str, ...] = ()
     CHARTS: tuple[tuple[str, str], ...] = ()
@@ -457,16 +457,16 @@ class _ServiceDashboardTab(_ModuleTab):
                 render_bar_chart(view, [str(x) for x in chart["labels"]], values, next(iter(chart["series"]), "مقدار"))
         self.alerts_label.setText(
             "هشدارها: " + "، ".join(f"{label} ({_to_persian_digits(str(n))})" for label, n in alert_rows)
-            if alert_rows else "هشدارِ فعالی وجود ندارد."
+            if alert_rows else "هشدار فعالی وجود ندارد."
         )
 
 
 class _ProductionTab(_ServiceDashboardTab):
-    LINKS = [("داشبوردِ کاملِ تولید", "PRD_DASHBOARD")]
-    KPI_CODES = (("ORDERS", "دستورهایِ تولید"), ("IN_PROGRESS", "در حالِ تولید"), ("DELAYED", "عقب‌افتاده"),
-                 ("SHORTAGE", "کمبودِ مواد"), ("VALUE", "ارزشِ تولید"), ("ACTUAL", "بهایِ واقعی"),
-                 ("VARIANCE", "انحرافِ بها"), ("SCRAP", "ضایعات"))
-    CHARTS = (("by_period", "تولید به تفکیکِ دوره"), ("elements", "عناصرِ بهایِ تمام‌شده"))
+    LINKS = [("داشبورد کامل تولید", "PRD_DASHBOARD")]
+    KPI_CODES = (("ORDERS", "دستورهای تولید"), ("IN_PROGRESS", "در حال تولید"), ("DELAYED", "عقب‌افتاده"),
+                 ("SHORTAGE", "کمبود مواد"), ("VALUE", "ارزش تولید"), ("ACTUAL", "بهای واقعی"),
+                 ("VARIANCE", "انحراف بها"), ("SCRAP", "ضایعات"))
+    CHARTS = (("by_period", "تولید به تفکیک دوره"), ("elements", "عناصر بهای تمام‌شده"))
 
     def _load(self, company_id, date_from, date_to):
         from peecha.services.production import dashboard as prd_dashboard
@@ -475,11 +475,11 @@ class _ProductionTab(_ServiceDashboardTab):
 
 
 class _FixedAssetsTab(_ServiceDashboardTab):
-    LINKS = [("داشبوردِ کاملِ دارایی‌ها", "FA_DASHBOARD")]
-    KPI_CODES = (("COUNT", "تعدادِ دارایی‌ها"), ("GROSS", "بهایِ تمام‌شده"), ("ACCUM", "استهلاکِ انباشته"),
-                 ("NBV", "ارزشِ دفتری"), ("IN_SERVICE", "در بهره‌برداری"), ("MAINTENANCE", "در تعمیر"),
+    LINKS = [("داشبورد کامل دارایی‌ها", "FA_DASHBOARD")]
+    KPI_CODES = (("COUNT", "تعداد دارایی‌ها"), ("GROSS", "بهای تمام‌شده"), ("ACCUM", "استهلاک انباشته"),
+                 ("NBV", "ارزش دفتری"), ("IN_SERVICE", "در بهره‌برداری"), ("MAINTENANCE", "در تعمیر"),
                  ("FULLY_DEPRECIATED", "کاملاً مستهلک"), ("DISPOSED", "واگذارشده"))
-    CHARTS = (("by_category", "ارزشِ دفتری به تفکیکِ طبقه"), ("status", "وضعیتِ دارایی‌ها"))
+    CHARTS = (("by_category", "ارزش دفتری به تفکیک طبقه"), ("status", "وضعیت دارایی‌ها"))
 
     def _load(self, company_id, date_from, date_to):
         from peecha.services.fixed_assets import dashboard as fa_dashboard
@@ -488,8 +488,8 @@ class _FixedAssetsTab(_ServiceDashboardTab):
 
 
 class _AccountingTab(QWidget):
-    """تبِ «حسابداری»: حساب‌هایِ کدینگ، اسنادِ حسابداری، سالِ مالیِ باز،
-    و همان دو نموداری که پیش‌تر در تبِ کلی بودند (چون کاملاً حسابداری‌اند،
+    """تب «حسابداری»: حساب‌های کدینگ، اسناد حسابداری، سال مالی باز،
+    و همان دو نموداری که پیش‌تر در تب کلی بودند (چون کاملاً حسابداری‌اند،
     نه سراسری)."""
 
     def __init__(self) -> None:
@@ -498,18 +498,18 @@ class _AccountingTab(QWidget):
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(20)
 
-        self.card_accounts = _KpiCard("حساب‌هایِ کدینگ", "📚", theme.CHART_PURPLE)
-        self.card_entries = _KpiCard("اسنادِ حسابداری", "🧾", theme.WARNING)
-        self.card_open_years = _KpiCard("سالِ مالیِ باز", "📅", theme.CHART_TEAL)
+        self.card_accounts = _KpiCard("حساب‌های کدینگ", "📚", theme.CHART_PURPLE)
+        self.card_entries = _KpiCard("اسناد حسابداری", "🧾", theme.WARNING)
+        self.card_open_years = _KpiCard("سال مالی باز", "📅", theme.CHART_TEAL)
         _kpi_row(outer, [self.card_accounts, self.card_entries, self.card_open_years])
 
         charts_layout = QGridLayout()
         charts_layout.setSpacing(16)
         charts_layout.setColumnStretch(0, 1)
         charts_layout.setColumnStretch(1, 1)
-        entries_card, self.entries_chart_view = build_chart_card("تعدادِ اسناد در ۶ ماهِ اخیر")
+        entries_card, self.entries_chart_view = build_chart_card("تعداد اسناد در ۶ ماه اخیر")
         charts_layout.addWidget(entries_card, 0, 0)
-        status_card, self.status_chart_view = build_chart_card("وضعیتِ اسنادِ حسابداری")
+        status_card, self.status_chart_view = build_chart_card("وضعیت اسناد حسابداری")
         charts_layout.addWidget(status_card, 0, 1)
         outer.addLayout(charts_layout, stretch=1)
 
@@ -524,15 +524,15 @@ class _AccountingTab(QWidget):
         self.card_open_years.set_value(dashboard_service.open_fiscal_years_count(company_id))
 
         labels, values = dashboard_service.journal_entries_per_month(company_id)
-        render_bar_chart(self.entries_chart_view, labels, values, "تعدادِ اسناد")
+        render_bar_chart(self.entries_chart_view, labels, values, "تعداد اسناد")
 
         by_status = dashboard_service.journal_entries_by_status(company_id)
         render_donut_chart(self.status_chart_view, by_status)
 
 
 class _TreasuryTab(QWidget):
-    """تبِ «خزانه‌داری»: چک‌هایِ دریافتیِ نزدِ صندوق، چک‌هایِ پرداختیِ
-    درجریان، و مبلغ/تعدادِ اقساطِ معوقه."""
+    """تب «خزانه‌داری»: چک‌های دریافتی نزد صندوق، چک‌های پرداختی
+    درجریان، و مبلغ/تعداد اقساط معوقه."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -540,15 +540,15 @@ class _TreasuryTab(QWidget):
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(20)
 
-        self.card_received_checks = _KpiCard("چک‌هایِ دریافتیِ نزدِ صندوق", "📥", theme.CHART_TEAL)
-        self.card_issued_checks = _KpiCard("چک‌هایِ پرداختیِ درجریان", "📤", theme.WARNING)
-        self.card_overdue_count = _KpiCard("تعدادِ اقساطِ معوقه", "⏰", theme.DANGER)
-        self.card_overdue_amount = KpiCard("مبلغِ اقساطِ معوقه", "💸", theme.DANGER)
+        self.card_received_checks = _KpiCard("چک‌های دریافتی نزد صندوق", "📥", theme.CHART_TEAL)
+        self.card_issued_checks = _KpiCard("چک‌های پرداختی درجریان", "📤", theme.WARNING)
+        self.card_overdue_count = _KpiCard("تعداد اقساط معوقه", "⏰", theme.DANGER)
+        self.card_overdue_amount = KpiCard("مبلغ اقساط معوقه", "💸", theme.DANGER)
         _kpi_row(outer, [
             self.card_received_checks, self.card_issued_checks, self.card_overdue_count, self.card_overdue_amount,
         ])
 
-        chart_card, self.checks_chart_view = build_chart_card("مبلغِ چک‌هایِ درجریان (دریافتی/پرداختی)")
+        chart_card, self.checks_chart_view = build_chart_card("مبلغ چک‌های درجریان (دریافتی/پرداختی)")
         outer.addWidget(chart_card, stretch=1)
 
     def refresh(self) -> None:
@@ -565,14 +565,14 @@ class _TreasuryTab(QWidget):
         self.card_overdue_amount.set_value(numerals.format_company_amount(summary.overdue_installments_amount))
 
         render_bar_chart(
-            self.checks_chart_view, ["دریافتیِ درجریان", "پرداختیِ درجریان"],
+            self.checks_chart_view, ["دریافتی درجریان", "پرداختی درجریان"],
             [summary.pending_received_checks_amount, summary.pending_issued_checks_amount], "مبلغ",
         )
 
 
 class _InventoryTab(QWidget):
-    """تبِ «انبار»: ارزشِ کلِ موجودی، تعدادِ کالا/انبارِ فعال، ردیف‌هایِ
-    موجودیِ منفی، و ارزشِ موجودی به تفکیکِ انبار."""
+    """تب «انبار»: ارزش کل موجودی، تعداد کالا/انبار فعال، ردیف‌های
+    موجودی منفی، و ارزش موجودی به تفکیک انبار."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -580,13 +580,13 @@ class _InventoryTab(QWidget):
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(20)
 
-        self.card_value = KpiCard("ارزشِ کلِ موجودی", "💰", theme.ACCENT)
-        self.card_items = _KpiCard("کالایِ فعال", "📦", theme.CHART_TEAL)
-        self.card_warehouses = _KpiCard("انبارِ فعال", "🏬", theme.CHART_PURPLE)
-        self.card_negative = _KpiCard("ردیف‌هایِ موجودیِ منفی", "⚠️", theme.DANGER)
+        self.card_value = KpiCard("ارزش کل موجودی", "💰", theme.ACCENT)
+        self.card_items = _KpiCard("کالای فعال", "📦", theme.CHART_TEAL)
+        self.card_warehouses = _KpiCard("انبار فعال", "🏬", theme.CHART_PURPLE)
+        self.card_negative = _KpiCard("ردیف‌های موجودی منفی", "⚠️", theme.DANGER)
         _kpi_row(outer, [self.card_value, self.card_items, self.card_warehouses, self.card_negative])
 
-        chart_card, self.value_chart_view = build_chart_card("ارزشِ موجودی به تفکیکِ انبار")
+        chart_card, self.value_chart_view = build_chart_card("ارزش موجودی به تفکیک انبار")
         outer.addWidget(chart_card, stretch=1)
 
     def refresh(self) -> None:
@@ -607,7 +607,7 @@ class _InventoryTab(QWidget):
 
 
 class _CommercialTab(QWidget):
-    """تبِ «فروش»/«خرید» -- هردو دقیقاً یک الگو دارند، فقط نوعِ سند
+    """تب «فروش»/«خرید» — هردو دقیقاً یک الگو دارند، فقط نوع سند
     (SALES_INVOICE/PURCHASE_INVOICE) و برچسب‌ها فرق می‌کند."""
 
     def __init__(self, document_type_code: str, month_title: str, party_title: str, main_window=None) -> None:
@@ -621,8 +621,8 @@ class _CommercialTab(QWidget):
         outer.setSpacing(20)
 
         self.card_month = KpiCard(month_title, "🧾", theme.ACCENT)
-        self.card_unsettled_count = _KpiCard("فاکتورهایِ تسویه‌نشده", "⏳", theme.WARNING)
-        self.card_unsettled_amount = KpiCard("مبلغِ تسویه‌نشده", "💳", theme.WARNING)
+        self.card_unsettled_count = _KpiCard("فاکتورهای تسویه‌نشده", "⏳", theme.WARNING)
+        self.card_unsettled_amount = KpiCard("مبلغ تسویه‌نشده", "💳", theme.WARNING)
         _kpi_row(outer, [self.card_month, self.card_unsettled_count, self.card_unsettled_amount])
 
         if self._is_sales:
@@ -631,9 +631,9 @@ class _CommercialTab(QWidget):
             # پیشخوانِ فروش تبدیل می‌شود -- سه محورِ هوشِ فروشِ ازپیش‌
             # ساخته‌شده (پیش‌بینی از R79، اقداماتِ پیشنهادی از R70/R74،
             # سودآورترین مشتری از R78) کنارِ هم قرار می‌گیرند.
-            self.card_forecast = KpiCard("پیش‌بینیِ فروشِ ماهِ بعد", "🔮", theme.CHART_PURPLE)
-            self.card_actions = _KpiCard("اقداماتِ پیشنهادیِ امروز", "📋", theme.DANGER)
-            self.card_top_profit = KpiCard("سودآورترین مشتریِ این ماه", "🏆", theme.CHART_TEAL)
+            self.card_forecast = KpiCard("پیش‌بینی فروش ماه بعد", "🔮", theme.CHART_PURPLE)
+            self.card_actions = _KpiCard("اقدامات پیشنهادی امروز", "📋", theme.DANGER)
+            self.card_top_profit = KpiCard("سودآورترین مشتری این ماه", "🏆", theme.CHART_TEAL)
             _kpi_row(outer, [self.card_forecast, self.card_actions, self.card_top_profit])
 
             self.top_action_banner = QPushButton("")
@@ -646,7 +646,7 @@ class _CommercialTab(QWidget):
         charts_layout.setSpacing(16)
         charts_layout.setColumnStretch(0, 1)
         charts_layout.setColumnStretch(1, 1)
-        trend_card, self.trend_chart_view = build_chart_card("روندِ ۶ ماهِ اخیر")
+        trend_card, self.trend_chart_view = build_chart_card("روند ۶ ماه اخیر")
         charts_layout.addWidget(trend_card, 0, 0)
         top_card, self.top_chart_view = build_chart_card(party_title)
         charts_layout.addWidget(top_card, 0, 1)
@@ -695,7 +695,7 @@ class _CommercialTab(QWidget):
         severity_colors = {"danger": theme.DANGER, "warning": theme.WARNING, "success": theme.CHART_TEAL}
         color = severity_colors.get(center.top_action_severity, theme.WARNING)
         self.top_action_banner.setText(
-            f"🧠 مهم‌ترین اقدامِ پیشنهادیِ امروز: {center.top_action_title} — برایِ مشاهده‌یِ کامل کلیک کنید."
+            f"🧠 مهم‌ترین اقدام پیشنهادی امروز: {center.top_action_title} — برای مشاهدهٔ کامل کلیک کنید."
         )
         self.top_action_banner.setStyleSheet(
             f"background-color: {color}; color: white; font-weight: bold; padding: 10px 14px; "
@@ -709,9 +709,9 @@ class _CommercialTab(QWidget):
 
 
 class _HrTab(QWidget):
-    """تبِ «منابعِ‌انسانی» -- طبقِ همان اصلِ «فقط چیزهایی که واقعاً
-    قابلِ‌محاسبه‌اند» (این ماژول هنوز جوان‌تر از بقیه است)، فقط شمارشِ
-    کارکنان، بدونِ نمودارِ اضافی."""
+    """تب «منابع‌انسانی» — طبق همان اصل «فقط چیزهایی که واقعاً
+    قابل‌محاسبه‌اند» (این ماژول هنوز جوان‌تر از بقیه است)، فقط شمارش
+    کارکنان، بدون نمودار اضافی."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -719,10 +719,10 @@ class _HrTab(QWidget):
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(20)
 
-        self.card_total = _KpiCard("کلِ کارکنان", "👤", theme.ACCENT)
-        self.card_active = _KpiCard("کارکنانِ فعال", "✅", theme.CHART_TEAL)
+        self.card_total = _KpiCard("کل کارکنان", "👤", theme.ACCENT)
+        self.card_active = _KpiCard("کارکنان فعال", "✅", theme.CHART_TEAL)
         _kpi_row(outer, [self.card_total, self.card_active])
-        units_card, self.units_chart_view = build_chart_card("کارکنانِ فعال به تفکیکِ واحدِ سازمانی")
+        units_card, self.units_chart_view = build_chart_card("کارکنان فعال به تفکیک واحد سازمانی")
         outer.addWidget(units_card, stretch=1)
 
     def refresh(self) -> None:
@@ -755,27 +755,27 @@ class DashboardScreen(QWidget):
         self.tabs.addTab(self._overview_tab, "کلی")
         self._accounting_tab = _AccountingTab()
         self._add_module_tab(self._accounting_tab, "حسابداری", [
-            ("اسنادِ حسابداری", "GL_JE_LIST"), ("تفصیلی‌ها", "GL_TAFSILI"), ("کدینگ", "GL_COA")])
+            ("اسناد حسابداری", "GL_JE_LIST"), ("تفصیلی‌ها", "GL_TAFSILI"), ("کدینگ", "GL_COA")])
         self._treasury_tab = _TreasuryTab()
         self._add_module_tab(self._treasury_tab, "خزانه‌داری", [
-            ("چک‌هایِ درجریان", "TREASURY_CHECKS_DUE"), ("اقساط", "TREASURY_INSTALLMENTS"),
-            ("تسویهٔ فاکتورهایِ فروش", "TREASURY_SETTLEMENT_SALES")])
+            ("چک‌های درجریان", "TREASURY_CHECKS_DUE"), ("اقساط", "TREASURY_INSTALLMENTS"),
+            ("تسویهٔ فاکتورهای فروش", "TREASURY_SETTLEMENT_SALES")])
         self._inventory_tab = _InventoryTab()
         self._add_module_tab(self._inventory_tab, "انبار", [
-            ("داشبوردِ کاملِ انبار", "INV_RPT_DASHBOARD"), ("داشبوردِ بهایِ تمام‌شده", "COST_DASHBOARD")])
-        self._sales_tab = _CommercialTab("SALES_INVOICE", "فروشِ این ماه", "پُرفروش‌ترین مشتریان", main_window)
+            ("داشبورد کامل انبار", "INV_RPT_DASHBOARD"), ("داشبورد بهای تمام‌شده", "COST_DASHBOARD")])
+        self._sales_tab = _CommercialTab("SALES_INVOICE", "فروش این ماه", "پُرفروش‌ترین مشتریان", main_window)
         self._add_module_tab(self._sales_tab, "فروش", [
-            ("دستیارِ فروش", "SALES_ASSISTANT"), ("اسنادِ فروش", "SALES_DOCUMENTS_LIST")])
-        self._purchase_tab = _CommercialTab("PURCHASE_INVOICE", "خریدِ این ماه", "پُرخریدترین تامین‌کنندگان")
+            ("دستیار فروش", "SALES_ASSISTANT"), ("اسناد فروش", "SALES_DOCUMENTS_LIST")])
+        self._purchase_tab = _CommercialTab("PURCHASE_INVOICE", "خرید این ماه", "پُرخریدترین تامین‌کنندگان")
         self._add_module_tab(self._purchase_tab, "خرید", [
-            ("داشبوردِ مدیریتیِ خرید", "PURCH_RPT_DASH_EXEC"), ("استثناهایِ خرید", "PURCH_RPT_DASH_EXCEPTIONS")])
+            ("داشبورد مدیریتی خرید", "PURCH_RPT_DASH_EXEC"), ("استثناهای خرید", "PURCH_RPT_DASH_EXCEPTIONS")])
         self._production_tab = _ProductionTab(main_window)
         self.tabs.addTab(self._production_tab, "تولید")
         self._fixed_assets_tab = _FixedAssetsTab(main_window)
-        self.tabs.addTab(self._fixed_assets_tab, "دارایی‌هایِ ثابت")
+        self.tabs.addTab(self._fixed_assets_tab, "دارایی‌های ثابت")
         self._hr_tab = _HrTab()
-        self._add_module_tab(self._hr_tab, "منابعِ‌انسانی", [
-            ("واحدهایِ سازمانی", "HR_ORG_UNITS"), ("محاسبهٔ حقوق", "HR_PAYROLL_RUN"),
+        self._add_module_tab(self._hr_tab, "منابع‌انسانی", [
+            ("واحدهای سازمانی", "HR_ORG_UNITS"), ("محاسبهٔ حقوق", "HR_PAYROLL_RUN"),
             ("خلاصهٔ کارکرد", "HR_ATTENDANCE_SUMMARY")])
 
         self._tabs_in_order = [
@@ -796,7 +796,7 @@ class DashboardScreen(QWidget):
         self.alarm_banner = self._overview_tab.alarm_banner
 
     def _add_module_tab(self, tab: QWidget, title: str, links: list[tuple[str, str]]) -> None:
-        """R276: هر تبِ ماژول پیوندِ مستقیم به داشبورد/فرم‌هایِ تخصصیِ همان ماژول دارد."""
+        """R276: هر تب ماژول پیوند مستقیم به داشبورد/فرم‌های تخصصی همان ماژول دارد."""
         wrapper = QWidget()
         layout = QVBoxLayout(wrapper)
         layout.setContentsMargins(24, 12, 24, 0)
@@ -810,7 +810,7 @@ class DashboardScreen(QWidget):
         self.tabs.addTab(wrapper, title)
 
     def refresh(self) -> None:
-        """طبقِ بازطراحیِ تب‌به‌تب: فقط تبِ فعلاً فعال رفرش می‌شود -- نه
+        """طبق بازطراحی تب‌به‌تب: فقط تب فعلاً فعال رفرش می‌شود — نه
         هر هفت تب هربار که کاربر داشبورد را باز می‌کند (کارایی)."""
         self._refresh_tab(self.tabs.currentIndex())
 

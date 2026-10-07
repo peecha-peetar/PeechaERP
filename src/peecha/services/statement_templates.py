@@ -1,7 +1,7 @@
-"""سرویسِ الگوهایِ گزارشِ سفارشی (طراحِ گزارش، فازِ ۲) — CRUدِ ساده‌یِ
-الگو/ردیف + جایگزینیِ کاملِ اجزایِ هر ردیف (چه حسابی چه فرمولی).
+"""سرویس الگوهای گزارش سفارشی (طراح گزارش، فاز ۲) — CRUد سادهٔ
+الگو/ردیف + جایگزینی کامل اجزای هر ردیف (چه حسابی چه فرمولی).
 
-هیچ محاسبه‌ای این‌جا انجام نمی‌شود — فقط تعریف/نگه‌داریِ ساختار. محاسبه
+هیچ محاسبه‌ای این‌جا انجام نمی‌شود — فقط تعریف/نگه‌داری ساختار. محاسبه
 (`compute_custom_statement`) در reports.py است، چون آن ماژول از قبل
 `compute_account_balances` را دارد."""
 
@@ -29,10 +29,10 @@ class StatementTemplateRow:
 
 @dataclass
 class AccountRefInfo:
-    """جزءِ حسابیِ یک ردیفِ ACCOUNTS — گزارش‌سازِ پیشرفته: به‌جایِ فقط
-    دستی‌چین‌کردنِ تک‌تکِ حساب‌ها (ACCOUNT)، می‌تواند یک بازه‌یِ کد در یک
-    سطح (RANGE) یا کلِ یک طبقه (دارایی/بدهی/...) در یک سطح (CATEGORY)
-    هم باشد؛ فقط فیلدهایِ مربوط به همان selector_type پر می‌شوند."""
+    """جزء حسابی یک ردیف ACCOUNTS — گزارش‌ساز پیشرفته: به‌جای فقط
+    دستی‌چین‌کردن تک‌تک حساب‌ها (ACCOUNT)، می‌تواند یک بازهٔ کد در یک
+    سطح (RANGE) یا کل یک طبقه (دارایی/بدهی/...) در یک سطح (CATEGORY)
+    هم باشد؛ فقط فیلدهای مربوط به همان selector_type پر می‌شوند."""
 
     selector_type: str  # ACCOUNT | RANGE | CATEGORY
     sign: int
@@ -219,7 +219,7 @@ def reorder_rows(template_id: int, ordered_row_ids: list[int]) -> None:
 
 
 def set_row_accounts(row_id: int, refs: list[AccountRefInfo]) -> None:
-    """جایگزینیِ کاملِ اجزایِ حسابیِ یک ردیف."""
+    """جایگزینی کامل اجزای حسابی یک ردیف."""
     with new_session() as session:
         session.execute(delete(StatementRowAccount).where(StatementRowAccount.row_id == row_id))
         for ref in refs:
@@ -239,7 +239,7 @@ def set_row_accounts(row_id: int, refs: list[AccountRefInfo]) -> None:
 
 
 def set_row_formula_refs(row_id: int, refs: list[tuple[int, int]]) -> None:
-    """جایگزینیِ کاملِ اجزایِ فرمولیِ یک ردیف. `refs` = [(ref_row_id, sign), ...]."""
+    """جایگزینی کامل اجزای فرمولی یک ردیف. `refs` = [(ref_row_id, sign), ...]."""
     with new_session() as session:
         session.execute(delete(StatementRowRef).where(StatementRowRef.row_id == row_id))
         for ref_row_id, sign in refs:

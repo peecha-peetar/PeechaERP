@@ -1,7 +1,7 @@
-"""مدل‌های اطلاعاتِ پایه و قوانینِ حقوق و دستمزد (payroll.*).
+"""مدل‌های اطلاعات پایه و قوانین حقوق و دستمزد (payroll.*).
 
-معادل db/schema/044_payroll_core.sql (فصلِ ۴ و ۵) و
-db/schema/045_payroll_pay_items_engine.sql (فصلِ ۶ تا ۱۱).
+معادل db/schema/044_payroll_core.sql (فصل ۴ و ۵) و
+db/schema/045_payroll_pay_items_engine.sql (فصل ۶ تا ۱۱).
 """
 
 from __future__ import annotations
@@ -101,8 +101,8 @@ class PayItemDefinition(Base):
 
 
 class PayrollDescriptionTemplate(Base):
-    """شرحِ خودکارِ ردیف‌هایِ سندِ حقوق برایِ حساب‌هایی که به یک pay_item
-    خاص وصل نیستند (حقوقِ پرداختنی/بانک، سهمِ کارفرمایِ بیمه) — هم‌الگو
+    """شرح خودکار ردیف‌های سند حقوق برای حساب‌هایی که به یک pay_item
+    خاص وصل نیستند (حقوق پرداختنی/بانک، سهم کارفرمای بیمه) — هم‌الگو
     با treasury.description_templates."""
 
     __tablename__ = "description_templates"

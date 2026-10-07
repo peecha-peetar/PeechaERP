@@ -1,9 +1,9 @@
-"""بازاریابی/کمپینِ پیامکِ زمان‌بندی‌شده -- طبقِ درخواستِ صریحِ کاربر
-(«یک تب برایِ بازاریابی و ارسالِ پیامکِ زمان‌بندی‌شده»). طبقِ تصمیمِ
-طراحیِ MVP، گیرندگانِ هر کمپین در لحظهٔ ساخت از فهرستِ مشتریانِ
-اختصاص‌یافته به کاربرِ سازنده (telesales.list_assigned_customers، R135)
-عکس‌برداری می‌شوند -- بدونِ ساختِ یک فرمِ فیلترِ مشتریِ جداگانه؛
-ارسالِ واقعی هم از همان sms_gateway.send_sms (R139) عبور می‌کند."""
+"""بازاریابی/کمپین پیامک زمان‌بندی‌شده — طبق درخواست صریح کاربر
+(«یک تب برای بازاریابی و ارسال پیامک زمان‌بندی‌شده»). طبق تصمیم
+طراحی MVP، گیرندگان هر کمپین در لحظهٔ ساخت از فهرست مشتریان
+اختصاص‌یافته به کاربر سازنده (telesales.list_assigned_customers، R135)
+عکس‌برداری می‌شوند — بدون ساخت یک فرم فیلتر مشتری جداگانه؛
+ارسال واقعی هم از همان sms_gateway.send_sms (R139) عبور می‌کند."""
 
 from __future__ import annotations
 
@@ -37,9 +37,9 @@ def create_campaign(
     name = name.strip()
     message_text = message_text.strip()
     if not name:
-        raise ValueError("نامِ کمپین نمی‌تواند خالی باشد.")
+        raise ValueError("نام کمپین نمی‌تواند خالی باشد.")
     if not message_text:
-        raise ValueError("متنِ پیامک نمی‌تواند خالی باشد.")
+        raise ValueError("متن پیامک نمی‌تواند خالی باشد.")
 
     assigned = telesales_service.list_assigned_customers(company_id, created_by_user_id)
     customers_by_id = {c["detail_account_id"]: c for c in dimensions_service.list_customers(company_id)}
@@ -52,7 +52,7 @@ def create_campaign(
         if phone_number:
             recipients.append((row.customer_detail_account_id, phone_number))
     if not recipients:
-        raise ValueError("هیچ‌کدام از مشتریانِ اختصاص‌یافته به شما شماره‌تماس ندارند.")
+        raise ValueError("هیچ‌کدام از مشتریان اختصاص‌یافته به شما شماره‌تماس ندارند.")
 
     with new_session() as session:
         campaign = SmsCampaign(
@@ -95,9 +95,9 @@ def list_campaigns(company_id: int) -> list[CampaignRow]:
 
 
 def run_due_campaigns(company_id: int) -> None:
-    """طبقِ همان الگویِ commercial_ecommerce.run_due_auto_syncs/
-    commercial_social.run_due_posts -- با تیکِ QTimerِ shell_window.py
-    صدا زده می‌شود؛ هیچ‌وقت raise نمی‌کند تا تیکِ پس‌زمینه‌ای برنامه را
+    """طبق همان الگوی commercial_ecommerce.run_due_auto_syncs/
+    commercial_social.run_due_posts — با تیک QTimer shell_window.py
+    صدا زده می‌شود؛ هیچ‌وقت raise نمی‌کند تا تیک پس‌زمینه‌ای برنامه را
     متوقف نکند."""
     gateway = sms_gateway_service.get_sms_gateway(company_id)
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -119,7 +119,7 @@ def run_due_campaigns(company_id: int) -> None:
             for recipient in recipients:
                 if gateway is None or not gateway.is_active:
                     recipient.status_code = "FAILED"
-                    recipient.error_message = "درگاهِ پیامک تنظیم نشده یا غیرفعال است."
+                    recipient.error_message = "درگاه پیامک تنظیم نشده یا غیرفعال است."
                     continue
                 result = sms_gateway_service.send_sms(
                     gateway.request_template, gateway.http_method, recipient.phone_number, campaign.message_text,

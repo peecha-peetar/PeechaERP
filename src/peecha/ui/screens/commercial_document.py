@@ -1,10 +1,10 @@
-"""فرمِ اسنادِ بازرگانی — سفارش/فاکتور/برگشت (خرید و فروش)، همه رویِ
-همان اسکلتِ سرِسند+ردیفِ واحدِ comm.commercial_documents/commercial_document_lines
+"""فرم اسناد بازرگانی — سفارش/فاکتور/برگشت (خرید و فروش)، همه روی
+همان اسکلت سرسند+ردیف واحد comm.commercial_documents/commercial_document_lines
 (services/commercial_documents.py).
 
-طبقِ اسکوپِ آگاهانهٔ این دور: تبدیلِ واحد (هر ردیف با واحدِ پایهٔ کالا)،
-بچ/سریال، نمایندهٔ فروش/کمیسیون، و بُعدِ مرکزِ هزینه/پروژه رویِ سرِسند،
-به دورهایِ بعدی موکول شده‌اند."""
+طبق اسکوپ آگاهانهٔ این دور: تبدیل واحد (هر ردیف با واحد پایهٔ کالا)،
+بچ/سریال، نمایندهٔ فروش/کمیسیون، و بُعد مرکز هزینه/پروژه روی سرسند،
+به دورهای بعدی موکول شده‌اند."""
 
 from __future__ import annotations
 
@@ -89,23 +89,23 @@ from peecha.ui.widgets import (
 _PURCHASE_TYPE_DOCS = ("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE")
 _PURCHASE_ORG_DOCS = _PURCHASE_TYPE_DOCS + ("PURCHASE_RETURN", "CONSIGNMENT_IN")
 DOC_TYPE_TITLES = {
-    "SALES_ORDER": "سفارشِ فروش",
-    "SALES_PROFORMA": "پیش‌فاکتورِ فروش",
-    "SALES_INVOICE": "فاکتورِ فروش",
+    "SALES_ORDER": "سفارش فروش",
+    "SALES_PROFORMA": "پیش‌فاکتور فروش",
+    "SALES_INVOICE": "فاکتور فروش",
     "SALES_RETURN": "برگشت از فروش",
-    "PURCHASE_ORDER": "سفارشِ خرید",
-    "PURCHASE_PROFORMA": "پیش‌فاکتورِ خرید",
-    "PURCHASE_INVOICE": "فاکتورِ خرید",
+    "PURCHASE_ORDER": "سفارش خرید",
+    "PURCHASE_PROFORMA": "پیش‌فاکتور خرید",
+    "PURCHASE_INVOICE": "فاکتور خرید",
     "PURCHASE_RETURN": "برگشت به تامین‌کننده",
     # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ خروجی
     # (کالایِ خودمان نزدِ نماینده/مشتری تا فروش) و امانیِ ورودی (کالایِ
     # تامین‌کننده نزدِ ما تا مصرف/فروش) -- خودِ سند بدونِ اثرِ حسابداری،
     # تسویه از طریقِ همان دکمه‌یِ «تبدیل به فاکتور».
-    "CONSIGNMENT_OUT": "امانیِ خروجی",
-    "CONSIGNMENT_IN": "امانیِ ورودی",
+    "CONSIGNMENT_OUT": "امانی خروجی",
+    "CONSIGNMENT_IN": "امانی ورودی",
 }
 STATUS_LABELS = {
-    "DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبتِ‌نهایی‌شده",
+    "DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبت‌نهایی‌شده",
     "CANCELLED": "لغوشده", "CORRECTED": "اصلاح‌شده",
 }
 # امانیِ خروجی از نظرِ طرفِ‌حساب (مشتری/نماینده) و کانالِ فروش، هم‌الگویِ
@@ -123,7 +123,7 @@ _STOCK_OUTBOUND_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "CONS
 _CONVERTIBLE_TO_INVOICE_TYPES = (
     "SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA", "CONSIGNMENT_OUT", "CONSIGNMENT_IN",
 )
-_POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبتِ نهایی — قطعی و برگشت‌ناپذیر؛ سندِ انبار/حسابداریِ واقعی همین‌جا ساخته می‌شود"
+_POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبت نهایی — قطعی و برگشت‌ناپذیر؛ سند انبار/حسابداری واقعی همین‌جا ساخته می‌شود"
 # طبقِ درخواستِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید هم در دو مرحله
 # باشه: تاییدِ کاربر و تاییدِ مدیر؛ برایِ پیش‌فاکتورِ خرید هم همین کارو
 # بکن»): برایِ این دو نوعِ سند، ثبتِ نهایی دیگر با CONFIRMED به‌تنهایی
@@ -144,10 +144,10 @@ _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT"
 # یک ستونِ «عملیات» (ویرایش/حذفِ همان ردیف) در انتها، به‌جایِ خوشه‌یِ
 # جداگانه‌یِ دکمه‌هایِ زیرِ جدول که قبلاً روی «ردیفِ انتخاب‌شده»یِ کلی
 # عمل می‌کرد -- حالا هر دکمه دقیقاً برایِ همان ردیفی است که رویش است.
-_LINE_COLUMNS = ["#", "کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح", "مکان", "عملیات"]
+_LINE_COLUMNS = ["#", "کالا", "مقدار", "بهای واحد", "تخفیف", "درصد مالیات", "مالیات", "جمع ردیف", "توضیح", "مکان", "عملیات"]
 _BIN_COL = _LINE_COLUMNS.index("مکان")
 _ACTIONS_COL = len(_LINE_COLUMNS) - 1
-_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمعِ کل"]
+_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمع کل"]
 
 
 # طبقِ درخواستِ صریح («به‌جایِ خلاصهٔ فاکتور، پرینتِ فاکتور را نمایش
@@ -193,19 +193,19 @@ def _build_invoice_print_html(
       </div>
       <table width="100%" style="margin-bottom:12px;">
         <tr>
-          <td>شماره‌یِ سند: {numerals.to_persian_digits(str(doc.document_no))}</td>
+          <td>شمارهٔ سند: {numerals.to_persian_digits(str(doc.document_no))}</td>
           <td style="text-align:center;">تاریخ: {numerals.format_jalali_date(doc.document_date)}</td>
-          <td style="text-align:left;">طرفِ‌حساب: {esc(counterparty_label)}</td>
+          <td style="text-align:left;">طرف‌حساب: {esc(counterparty_label)}</td>
         </tr>
       </table>
       <table width="100%" border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;">
         <tr style="background:#eee; font-weight:bold;">
-          <td>کالا</td><td>مقدار</td><td>بهایِ واحد</td><td>تخفیف</td><td>مالیات</td><td>جمعِ ردیف</td>
+          <td>کالا</td><td>مقدار</td><td>بهای واحد</td><td>تخفیف</td><td>مالیات</td><td>جمع ردیف</td>
         </tr>
         {rows_html}
       </table>
       <div style="text-align:left; margin-top:12px; font-weight:bold;">
-        جمعِ کل: {numerals.format_money(total, decimal_places)}
+        جمع کل: {numerals.format_money(total, decimal_places)}
       </div>
       {footer_html}
     </body></html>
@@ -213,10 +213,10 @@ def _build_invoice_print_html(
 
 
 def _score_gradient_color(score: int) -> str:
-    """طبقِ درخواستِ صریح («فیلدِ مشتری بر اساسِ امتیاز رنگ‌آمیزی شود --
-    از قرمز تا سبز»): امتیازِ ۰ تا ۱۰۰ را به یک رنگِ پیوسته (قرمز →
-    زرد → سبز، مثلِ چراغ‌راهنما) تبدیل می‌کند -- مستقل از قالبِ روشن/
-    تیره، چون این رنگ همیشه باید همان معنایِ «خطر/میانه/خوب» را برساند."""
+    """طبق درخواست صریح («فیلد مشتری بر اساس امتیاز رنگ‌آمیزی شود --
+    از قرمز تا سبز»): امتیاز ۰ تا ۱۰۰ را به یک رنگ پیوسته (قرمز →
+    زرد → سبز، مثل چراغ‌راهنما) تبدیل می‌کند — مستقل از قالب روشن/
+    تیره، چون این رنگ همیشه باید همان معنای «خطر/میانه/خوب» را برساند."""
     score = max(0, min(100, score))
     if score <= 50:
         ratio = score / 50
@@ -237,20 +237,20 @@ def _money_or_blank(value: decimal.Decimal | None, decimal_places: int) -> str:
 
 
 def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> tuple[list[dict], dict]:
-    """طبقِ درخواستِ صریح («طراحیِ فاکتورِ حرفه‌ای»): دیتایِ کاملِ سند --
-    اطلاعاتِ شرکت (شناسه‌یِ ملی/کدِ اقتصادی)، اطلاعاتِ کاملِ طرفِ‌حساب
-    (تلفن/موبایل/آدرس)، واحدِ شمارشِ هر ردیف، و جمعِ کل (شاملِ هزینه‌یِ
-    حمل -- که در نسخه‌یِ قبلیِ HTML سهواً از جمعِ چاپی جا افتاده بود) --
-    برایِ قالبِ templates/invoice.jrxml آماده می‌کند."""
+    """طبق درخواست صریح («طراحی فاکتور حرفه‌ای»): دیتای کامل سند --
+    اطلاعات شرکت (شناسهٔ ملی/کد اقتصادی)، اطلاعات کامل طرف‌حساب
+    (تلفن/موبایل/آدرس)، واحد شمارش هر ردیف، و جمع کل (شامل هزینهٔ
+    حمل — که در نسخهٔ قبلی HTML سهواً از جمع چاپی جا افتاده بود) --
+    برای قالب templates/invoice.jrxml آماده می‌کند."""
     decimal_places = companies_service.get_base_currency_decimal_places(company_id)
     company = companies_service.get_company_model(company_id)
     company_ids_parts = []
     if company.national_id:
-        company_ids_parts.append(f"شناسه‌یِ ملی: {numerals.to_persian_digits(company.national_id)}")
+        company_ids_parts.append(f"شناسهٔ ملی: {numerals.to_persian_digits(company.national_id)}")
     if company.economic_code:
-        company_ids_parts.append(f"کدِ اقتصادی: {numerals.to_persian_digits(company.economic_code)}")
+        company_ids_parts.append(f"کد اقتصادی: {numerals.to_persian_digits(company.economic_code)}")
     if company.registration_no:
-        company_ids_parts.append(f"شماره‌یِ ثبت: {numerals.to_persian_digits(company.registration_no)}")
+        company_ids_parts.append(f"شمارهٔ ثبت: {numerals.to_persian_digits(company.registration_no)}")
 
     is_customer_side = doc.document_type_code in _SALES_TYPES
     party_rows = dimensions_service.list_customers(company_id) if is_customer_side else dimensions_service.list_suppliers(company_id)
@@ -258,9 +258,9 @@ def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> t
     counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
     counterparty_ids_parts = []
     if party_detail and party_detail.get("national_id"):
-        counterparty_ids_parts.append(f"شناسه‌یِ ملی: {numerals.to_persian_digits(party_detail['national_id'])}")
+        counterparty_ids_parts.append(f"شناسهٔ ملی: {numerals.to_persian_digits(party_detail['national_id'])}")
     if party_detail and party_detail.get("economic_code"):
-        counterparty_ids_parts.append(f"کدِ اقتصادی: {numerals.to_persian_digits(party_detail['economic_code'])}")
+        counterparty_ids_parts.append(f"کد اقتصادی: {numerals.to_persian_digits(party_detail['economic_code'])}")
     counterparty_contact_parts = []
     if party_detail and party_detail.get("phone"):
         counterparty_contact_parts.append(f"تلفن: {numerals.to_persian_digits(party_detail['phone'])}")
@@ -409,13 +409,13 @@ def _show_invoice_print(
             fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_invoice_")
             os.close(fd)
             jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, tmp_path, "pdf")
-            dialog = JasperReportPreviewDialog(parent, jrxml_path, print_rows, params, "فاکتور", title="پیش‌نمایشِ فاکتور", pdf_path=tmp_path)
+            dialog = JasperReportPreviewDialog(parent, jrxml_path, print_rows, params, "فاکتور", title="پیش‌نمایش فاکتور", pdf_path=tmp_path)
             dialog.exec()
             return
         except Exception as exc:
             QMessageBox.warning(
-                parent, "چاپِ حرفه‌ای",
-                f"ساختِ فاکتورِ حرفه‌ای ناموفق بود؛ نسخه‌یِ ساده نمایش داده می‌شود.\n{exc}",
+                parent, "چاپ حرفه‌ای",
+                f"ساخت فاکتور حرفه‌ای ناموفق بود؛ نسخهٔ ساده نمایش داده می‌شود.\n{exc}",
             )
 
     # طبقِ حفظِ سازگاری: اگر موتورِ چاپِ حرفه‌ای هنوز build نشده (یا خطا
@@ -443,12 +443,12 @@ def _set_initial_visibility(widget, visible: bool) -> None:
         widget.show()
 
 class _CounterpartyHistoryDialog(QDialog):
-    """طبقِ درخواستِ صریح: مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب -- با تعدادِ
-    ردیفِ قابلِ‌تنظیم. دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سند را نمایش
-    می‌دهد -- طبقِ رفعِ باگِ واقعی، ناوبریِ مستقیم به آن سند از این‌جا
-    عمداً حذف شده، چون آن صفحه (به‌ازایِ هر نوعِ سند) نمونه‌یِ واحد و
-    مشترکِ همه‌جایِ برنامه است و چنین ناوبری‌ای هر ویرایشِ درحال‌انجامِ
-    کاربر رویِ همان صفحه را پاک می‌کرد."""
+    """طبق درخواست صریح: مثلاً ۱۰ فاکتور آخر طرف‌حساب — با تعداد
+    ردیف قابل‌تنظیم. دابل‌کلیک روی هر ردیف، خلاصهٔ همان سند را نمایش
+    می‌دهد — طبق رفع باگ واقعی، ناوبری مستقیم به آن سند از این‌جا
+    عمداً حذف شده، چون آن صفحه (به‌ازای هر نوع سند) نمونهٔ واحد و
+    مشترک همه‌جای برنامه است و چنین ناوبری‌ای هر ویرایش درحال‌انجام
+    کاربر روی همان صفحه را پاک می‌کرد."""
 
     def __init__(
         self, parent: QWidget, company_id: int, counterparty_id: int, counterparty_label: str,
@@ -458,7 +458,7 @@ class _CounterpartyHistoryDialog(QDialog):
         self._company_id = company_id
         self._counterparty_id = counterparty_id
         self._counterparty_label = counterparty_label
-        self.setWindowTitle(f"آخرین اسنادِ «{counterparty_label}»")
+        self.setWindowTitle(f"آخرین اسناد «{counterparty_label}»")
         self.setMinimumWidth(600)
         self.setMinimumHeight(420)
         layout = QVBoxLayout(self)
@@ -468,9 +468,9 @@ class _CounterpartyHistoryDialog(QDialog):
         # (فاکتور) قرار می‌گیرد، ولی این فیلتر برایِ دیدنِ بقیه‌یِ انواع
         # هم قابلِ‌تغییر است.
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("نوعِ سند:"))
+        filter_row.addWidget(QLabel("نوع سند:"))
         self.type_combo = _EnterComboBox()
-        self.type_combo.addItem("همه‌یِ انواع", None)
+        self.type_combo.addItem("همهٔ انواع", None)
         for code, title in DOC_TYPE_TITLES.items():
             self.type_combo.addItem(title, code)
         default_index = self.type_combo.findData(default_document_type_code)
@@ -478,7 +478,7 @@ class _CounterpartyHistoryDialog(QDialog):
         self.type_combo.currentIndexChanged.connect(self._refresh)
         filter_row.addWidget(self.type_combo)
         filter_row.addSpacing(16)
-        filter_row.addWidget(QLabel("تعدادِ ردیفِ نمایش‌داده‌شده:"))
+        filter_row.addWidget(QLabel("تعداد ردیف نمایش‌داده‌شده:"))
         self.count_spin = QSpinBox()
         self.count_spin.setRange(1, 500)
         self.count_spin.setValue(10)
@@ -536,23 +536,23 @@ class _CounterpartyHistoryDialog(QDialog):
         _show_invoice_print(self, self._company_id, doc.document_id, self._counterparty_label)
 
 
-_RETURN_INVOICE_PICKER_COLUMNS = ["شماره", "تاریخ", "مبلغِ کل", "وضعیت"]
+_RETURN_INVOICE_PICKER_COLUMNS = ["شماره", "تاریخ", "مبلغ کل", "وضعیت"]
 
 
 class _ReturnInvoicePickerDialog(QDialog):
-    """طبقِ گزارشِ صریحِ کاربر («در فرمِ برگشت، بعدِ انتخابِ طرفِ‌حساب
-    لیستی از فاکتورهایِ قبلی نمایش بده»): مرحلهٔ اول از دو مرحله --
-    فقط فاکتورهایِ ثبتِ‌نهایی‌شده (POSTED) همین طرفِ‌حساب و همین جهت
+    """طبق گزارش صریح کاربر («در فرم برگشت، بعد انتخاب طرف‌حساب
+    لیستی از فاکتورهای قبلی نمایش بده»): مرحلهٔ اول از دو مرحله --
+    فقط فاکتورهای ثبت‌نهایی‌شده (POSTED) همین طرف‌حساب و همین جهت
     (خرید/فروش) نمایش داده می‌شوند."""
 
     def __init__(self, parent: QWidget, company_id: int, counterparty_id: int, counterparty_label: str, invoice_type_code: str) -> None:
         super().__init__(parent)
         self._company_id = company_id
-        self.setWindowTitle(f"انتخابِ فاکتور برایِ برگشت — «{counterparty_label}»")
+        self.setWindowTitle(f"انتخاب فاکتور برای برگشت — «{counterparty_label}»")
         self.setMinimumWidth(600)
         self.setMinimumHeight(380)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("فاکتورِ موردِنظر را انتخاب کنید (دابل‌کلیک یا دکمهٔ «انتخاب»):"))
+        layout.addWidget(QLabel("فاکتور مورد نظر را انتخاب کنید (دابل‌کلیک یا دکمهٔ «انتخاب»):"))
 
         self.table = QTableWidget(0, len(_RETURN_INVOICE_PICKER_COLUMNS))
         self.table.setHorizontalHeaderLabels(_RETURN_INVOICE_PICKER_COLUMNS)
@@ -583,7 +583,7 @@ class _ReturnInvoicePickerDialog(QDialog):
                 self.table.setItem(row_index, col_index, item)
         self.table.resizeRowsToContents()
         if not self._invoices:
-            layout.addWidget(QLabel("هیچ فاکتورِ ثبتِ‌نهایی‌شده‌ای برایِ این طرفِ‌حساب یافت نشد."))
+            layout.addWidget(QLabel("هیچ فاکتور ثبت‌نهایی‌شده‌ای برای این طرف‌حساب یافت نشد."))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("انتخاب")
@@ -596,26 +596,26 @@ class _ReturnInvoicePickerDialog(QDialog):
     def _accept_selected(self) -> None:
         row_index = self.table.currentRow()
         if row_index < 0 or row_index >= len(self._invoices):
-            QMessageBox.information(self, "انتخابِ فاکتور", "یک فاکتور را انتخاب کنید.")
+            QMessageBox.information(self, "انتخاب فاکتور", "یک فاکتور را انتخاب کنید.")
             return
         self.selected_document_id = self._invoices[row_index].document_id
         self.accept()
 
 
 class _ReturnLinesPickerDialog(QDialog):
-    """مرحلهٔ دوم: از رویِ اقلامِ فاکتورِ انتخاب‌شده (مرحلهٔ اول)، کاربر
-    اقلام/مقدارها را برایِ افزودن به سندِ برگشتِ جاری انتخاب می‌کند --
-    طبقِ همان مقدارِ قابلِ‌برگشتِ واقعی (منهایِ آنچه قبلاً برگشت داده
-    شده، هم‌الگو با get_line_fulfillment که برایِ تبدیلِ سفارش به فاکتور
+    """مرحلهٔ دوم: از روی اقلام فاکتور انتخاب‌شده (مرحلهٔ اول)، کاربر
+    اقلام/مقدارها را برای افزودن به سند برگشت جاری انتخاب می‌کند --
+    طبق همان مقدار قابل‌برگشت واقعی (منهای آنچه قبلاً برگشت داده
+    شده، هم‌الگو با get_line_fulfillment که برای تبدیل سفارش به فاکتور
     هم استفاده می‌شود)."""
 
     def __init__(self, parent: QWidget, company_id: int, source_document_id: int, decimal_places: int) -> None:
         super().__init__(parent)
-        self.setWindowTitle("انتخابِ اقلامِ برگشتی")
+        self.setWindowTitle("انتخاب اقلام برگشتی")
         self.setMinimumWidth(640)
         self.setMinimumHeight(360)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("ردیف‌هایی را که باید برگشت بخورند علامت بزنید و مقدارِ برگشتی را در صورتِ نیاز تغییر دهید:"))
+        layout.addWidget(QLabel("ردیف‌هایی را که باید برگشت بخورند علامت بزنید و مقدار برگشتی را در صورت نیاز تغییر دهید:"))
 
         _doc, lines = documents_service.get_document(source_document_id, company_id)
         fulfillment_by_line = {f.line_id: f for f in documents_service.get_line_fulfillment(source_document_id, company_id)}
@@ -623,7 +623,7 @@ class _ReturnLinesPickerDialog(QDialog):
         uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
 
         self.table = QTableWidget(len(lines), 5)
-        self.table.setHorizontalHeaderLabels(["", "کالا", "مقدارِ فاکتور", "قبلاً برگشتی", "مقدارِ برگشتی"])
+        self.table.setHorizontalHeaderLabels(["", "کالا", "مقدار فاکتور", "قبلاً برگشتی", "مقدار برگشتی"])
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -655,7 +655,7 @@ class _ReturnLinesPickerDialog(QDialog):
         layout.addWidget(self.table, stretch=1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("افزودنِ ردیف‌هایِ انتخاب‌شده")
+        buttons.button(QDialogButtonBox.Ok).setText("افزودن ردیف‌های انتخاب‌شده")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -672,7 +672,7 @@ class _ReturnLinesPickerDialog(QDialog):
                 continue
             if qty > returnable:
                 label = item.code if item is not None else str(ln.item_id)
-                QMessageBox.warning(self, "خطا", f"مقدارِ برگشتیِ «{label}» از مقدارِ قابلِ‌برگشت بیشتر است.")
+                QMessageBox.warning(self, "خطا", f"مقدار برگشتی «{label}» از مقدار قابل‌برگشت بیشتر است.")
                 return
             result.append({
                 "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": qty, "quantity_base": qty,
@@ -680,31 +680,31 @@ class _ReturnLinesPickerDialog(QDialog):
                 "description": ln.description,
             })
         if not result:
-            QMessageBox.information(self, "انتخابِ اقلام", "حداقل یک ردیف را علامت بزنید.")
+            QMessageBox.information(self, "انتخاب اقلام", "حداقل یک ردیف را علامت بزنید.")
             return
         self.result_lines = result
         self.accept()
 
 
-_PRICE_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
+_PRICE_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهای واحد"]
 
 
 class _ItemPriceHistoryDialog(QDialog):
-    """طبقِ درخواستِ صریح: ۱۰ قیمتِ آخرِ این کالا به همین طرفِ‌حساب --
-    با کلیک رویِ هر ردیف، خلاصهٔ همان سند نمایش داده می‌شود (بدونِ
-    بستنِ خودِ دیالوگِ ردیف که این پنجره از آن باز شده)."""
+    """طبق درخواست صریح: ۱۰ قیمت آخر این کالا به همین طرف‌حساب --
+    با کلیک روی هر ردیف، خلاصهٔ همان سند نمایش داده می‌شود (بدون
+    بستن خود دیالوگ ردیف که این پنجره از آن باز شده)."""
 
     def __init__(self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str) -> None:
         super().__init__(parent)
         self._company_id = company_id
         self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
-        self.setWindowTitle(f"قیمت‌هایِ قبلیِ «{item_label}»")
+        self.setWindowTitle(f"قیمت‌های قبلی «{item_label}»")
         self.setMinimumWidth(480)
         layout = QVBoxLayout(self)
 
         self._rows = documents_service.list_item_price_history(company_id, item_id, counterparty_id)
         if not self._rows:
-            layout.addWidget(QLabel("برایِ این کالا و این طرفِ‌حساب هنوز سابقه‌یِ قیمتی ثبت نشده است."))
+            layout.addWidget(QLabel("برای این کالا و این طرف‌حساب هنوز سابقهٔ قیمتی ثبت نشده است."))
 
         self.table = QTableWidget(0, len(_PRICE_HISTORY_COLUMNS))
         self.table.setHorizontalHeaderLabels(_PRICE_HISTORY_COLUMNS)
@@ -713,7 +713,7 @@ class _ItemPriceHistoryDialog(QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.cellDoubleClicked.connect(self._show_summary)
         layout.addWidget(self.table, stretch=1)
-        layout.addWidget(QLabel("برایِ دیدنِ خلاصهٔ سند، رویِ ردیفِ موردِنظر دابل‌کلیک کنید."))
+        layout.addWidget(QLabel("برای دیدن خلاصهٔ سند، روی ردیف مورد نظر دابل‌کلیک کنید."))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -748,7 +748,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         lock_price: bool = False, lock_discount: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ردیفِ فاکتور")
+        self.setWindowTitle("ردیف فاکتور")
         self.setMinimumWidth(380)
         self._company_id = company_id
         self._counterparty_id = counterparty_id
@@ -780,7 +780,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         item_row_layout.setSpacing(3)
         self.item_combo = _make_searchable_combo(item_options)
         item_row_layout.addWidget(self.item_combo, stretch=1)
-        add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
+        add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریف کالای تازه")
 
         self.variant_combo = _make_searchable_combo([])
         # طبقِ درخواستِ صریح («وقتی کالای دارایِ چند متغیر را وارد
@@ -853,10 +853,10 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.kardex_button.setEnabled(False)
         self.kardex_button.clicked.connect(self._open_kardex)
         stock_row_layout.addWidget(self.kardex_button)
-        self.price_history_button = QPushButton("🕘 قیمت‌هایِ قبلی")
+        self.price_history_button = QPushButton("🕘 قیمت‌های قبلی")
         self.price_history_button.setObjectName("flatButton")
         self.price_history_button.setEnabled(False)
-        self.price_history_button.setToolTip("۱۰ قیمتِ آخرِ این کالا به همین طرفِ‌حساب")
+        self.price_history_button.setToolTip("۱۰ قیمت آخر این کالا به همین طرف‌حساب")
         self.price_history_button.clicked.connect(self._open_price_history)
         stock_row_layout.addWidget(self.price_history_button)
 
@@ -930,12 +930,12 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.warehouse_combo: _EnterComboBox | None = None
         field_specs = [
             FieldSpec("item", "کالا", item_row_widget, span=2),
-            FieldSpec("variant", "متغیرِ کالا", self.variant_area, span=3),
+            FieldSpec("variant", "متغیر کالا", self.variant_area, span=3),
             FieldSpec("stock_info", "", stock_row_widget, span=3),
             FieldSpec("quantity", "مقدار / واحد", quantity_row_widget, span=1),
-            FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
+            FieldSpec("unit_price", "بهای واحد (پیشنهادی از فهرست قیمت — قابل‌ویرایش)", self.unit_price_field, span=1),
             FieldSpec("discount", "تخفیف", discount_row_widget, span=1),
-            FieldSpec("tax_percent", "درصدِ مالیات (بعدِ تخفیف)", self.tax_percent_field, span=1),
+            FieldSpec("tax_percent", "درصد مالیات (بعد تخفیف)", self.tax_percent_field, span=1),
             FieldSpec("price_suggestion", "", self.price_suggestion_label, span=3),
         ]
         if per_line_warehouse_enabled:
@@ -944,7 +944,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             warehouse_row_layout.setContentsMargins(0, 0, 0, 0)
             warehouse_row_layout.setSpacing(3)
             self.warehouse_combo = _EnterComboBox()
-            self.warehouse_combo.addItem("(انبارِ پیش‌فرضِ سند)", None)
+            self.warehouse_combo.addItem("(انبار پیش‌فرض سند)", None)
             for w in warehouses or []:
                 self.warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
             if default_warehouse_id is not None:
@@ -952,7 +952,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
                 if index >= 0:
                     self.warehouse_combo.setCurrentIndex(index)
             warehouse_row_layout.addWidget(self.warehouse_combo, stretch=1)
-            add_quick_add_button(warehouse_row_layout, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+            add_quick_add_button(warehouse_row_layout, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
             field_specs.append(FieldSpec("warehouse", "انبار", warehouse_row_widget, span=1))
         field_specs.append(FieldSpec("description", "توضیح", self.description_field, span=3))
 
@@ -1043,7 +1043,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             if initial.get("quantity_locked"):
                 self.quantity_field.setEnabled(False)
                 self.uom_combo.setEnabled(False)
-                self.quantity_field.setToolTip("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌تغییر نیست.")
+                self.quantity_field.setToolTip("مقدار این ردیف را انباردار در رسید کالا تایید کرده — قابل‌تغییر نیست.")
             self.unit_price_field.setValue(float(initial["unit_price"]))
             # طبقِ رفعِ باگِ واقعی: اگر ردیف قبلاً با تخفیفِ درصدی ذخیره شده
             # (discount_percent > 0)، همان درصد دوباره نمایش داده شود -- نه
@@ -1121,22 +1121,22 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._refresh_price_suggestion()
 
     def _selected_item_id(self) -> int | None:
-        """طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید مستقیم
-        ثبت شود؛ متغیرش انتخاب شود»): کالایِ *واقعیِ* این ردیف -- اگر
-        کالایِ انتخاب‌شده در کمبویِ اصلی دارایِ متغیر باشد، این همان
-        متغیرِ انتخاب‌شده در کمبویِ دوم است (یا None اگر هنوز انتخاب
-        نشده)، وگرنه همان کالایِ کمبویِ اصلی. در حالتِ جدولیِ چندمتغیره
-        (bulk_variant_mode) این تابع بی‌معناست -- آن‌جا هر ردیفِ جدول
-        کالایِ خودش را دارد، نه یک کالایِ واحد."""
+        """طبق درخواست صریح («کالای اصلی دارای متغیر نباید مستقیم
+        ثبت شود؛ متغیرش انتخاب شود»): کالای *واقعی* این ردیف — اگر
+        کالای انتخاب‌شده در فهرست اصلی دارای متغیر باشد، این همان
+        متغیر انتخاب‌شده در فهرست دوم است (یا None اگر هنوز انتخاب
+        نشده)، وگرنه همان کالای فهرست اصلی. در حالت جدولی چندمتغیره
+        (bulk_variant_mode) این تابع بی‌معناست — آن‌جا هر ردیف جدول
+        کالای خودش را دارد، نه یک کالای واحد."""
         parent_id = self.item_combo.currentData()
         if parent_id in self._variant_parent_ids:
             return self.variant_combo.currentData()
         return parent_id
 
     def _bulk_variant_mode(self) -> bool:
-        """طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): فقط
-        برایِ ردیفِ *تازه* (نه ویرایشِ ردیفِ ازپیش‌ذخیره‌شده -- که ذاتاً
-        تک‌کالایی است) و فقط وقتی کالایِ انتخاب‌شده خودش دارایِ متغیر
+        """طبق درخواست صریح («جلوی هر متغیر مقدار وارد کنیم»): فقط
+        برای ردیف *تازه* (نه ویرایش ردیف ازپیش‌ذخیره‌شده — که ذاتاً
+        تک‌کالایی است) و فقط وقتی کالای انتخاب‌شده خودش دارای متغیر
         باشد."""
         return self._is_new_row and self.item_combo.currentData() in self._variant_parent_ids
 
@@ -1159,11 +1159,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
         return bool(warehouse.fields.allow_negative_stock) if warehouse is not None else False
 
     def _populate_variant_table(self, parent_id: int) -> None:
-        """طبقِ درخواستِ صریح («اگر اجازهٔ موجودیِ منفی باشد لیستِ همهٔ
+        """طبق درخواست صریح («اگر اجازهٔ موجودی منفی باشد لیست همهٔ
         متغیرها و اگر نباشد فقط آن‌هایی که موجودی دارند نشان داده
-        شود»): فیلترِ موجودی فقط برایِ اسنادی اعمال می‌شود که موجودی را
-        کم می‌کنند (_STOCK_OUTBOUND_TYPES) -- برایِ خرید/برگشت از خرید و
-        امانیِ ورودی، همیشه همه‌یِ متغیرها نشان داده می‌شوند."""
+        شود»): فیلتر موجودی فقط برای اسنادی اعمال می‌شود که موجودی را
+        کم می‌کنند (_STOCK_OUTBOUND_TYPES) — برای خرید/برگشت از خرید و
+        امانی ورودی، همیشه همهٔ متغیرها نشان داده می‌شوند."""
         variants = variants_service.list_item_variants(self._company_id, parent_id)
         stock_by_item: dict[int, decimal.Decimal] = {}
         warehouse_id = self._effective_warehouse_id()
@@ -1221,7 +1221,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self.variant_table.setCellWidget(row, 3, qty_field)
             row_price_fields.append(price_field)
             row_qty_fields.append(qty_field)
-        self.status_label.setText("" if variants else "هیچ متغیری با موجودیِ مثبت برایِ این کالا یافت نشد.")
+        self.status_label.setText("" if variants else "هیچ متغیری با موجودی مثبت برای این کالا یافت نشد.")
 
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فوکوس در حالتِ جدولیِ
         # چندمتغیره بلاتکلیف است -- تمامِ فیلدها حتی ردیفِ متغیرها باید
@@ -1305,12 +1305,12 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._on_selection_changed()
 
     def _update_entry_state(self) -> None:
-        """طبقِ درخواستِ صریح («از ابتدا که کالای اصلی انتخاب میشه باید
-        جلوش گرفته بشه، نه بعدِ تاییدِ نهایی -- تمامِ کنترل‌ها در هنگامِ
-        ورودِ اطلاعات چک بشه»): به‌محضِ انتخابِ کالایِ اصلیِ دارایِ متغیر
-        (قبل از انتخابِ خودِ متغیر)، بلافاصله فیلدهایِ ورودِ اطلاعات و
-        دکمهٔ تایید غیرفعال و پیامِ خطا نمایش داده می‌شود -- نه اینکه
-        کاربر همه‌چیز را پر کند و فقط با زدنِ تایید متوجهِ رد شدن شود."""
+        """طبق درخواست صریح («از ابتدا که کالای اصلی انتخاب میشه باید
+        جلوش گرفته بشه، نه بعد تایید نهایی — تمام کنترل‌ها در هنگام
+        ورود اطلاعات چک بشه»): به‌محض انتخاب کالای اصلی دارای متغیر
+        (قبل از انتخاب خود متغیر)، بلافاصله فیلدهای ورود اطلاعات و
+        دکمهٔ تایید غیرفعال و پیام خطا نمایش داده می‌شود — نه اینکه
+        کاربر همه‌چیز را پر کند و فقط با زدن تایید متوجه رد شدن شود."""
         bulk = self._bulk_variant_mode()
         # طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): در حالتِ
         # جدولی، فیلدِ مقدار/بهایِ واحدِ مشترک اصلاً معنا ندارد (هر ردیفِ
@@ -1352,7 +1352,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             has_any_qty = any(self._variant_table_quantity(row) > 0 for row in range(self.variant_table.rowCount()))
             self.ok_button.setEnabled(has_any_qty)
             if self.variant_table.rowCount() > 0:
-                self.status_label.setText("" if has_any_qty else "برایِ حداقل یک متغیر مقدار وارد کنید.")
+                self.status_label.setText("" if has_any_qty else "برای حداقل یک متغیر مقدار وارد کنید.")
             return
 
         parent_id = self.item_combo.currentData()
@@ -1372,15 +1372,15 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.discount_type_combo.setEnabled(not needs_variant and not self._lock_discount)
         self.ok_button.setEnabled(not needs_variant)
         self.status_label.setText(
-            "این کالا دارایِ چند متغیر است؛ لطفاً یکی از متغیرها را انتخاب کنید." if needs_variant else ""
+            "این کالا دارای چند متغیر است؛ لطفاً یکی از متغیرها را انتخاب کنید." if needs_variant else ""
         )
 
     def _on_selection_changed(self) -> None:
-        """طبقِ درخواستِ صریح: درصدِ مالیات با اولویتِ کالا -> تنظیماتِ
-        کلیِ شرکت پیش‌پر می‌شود — فقط برایِ ردیفِ *تازه* (initial=None)،
-        نه هنگامِ ویرایشِ ردیفِ ازپیش‌ذخیره‌شده که مقدارِ ثبت‌شده‌اش را
-        نباید بازنویسی کند. در حالتِ جدولیِ چندمتغیره، تک‌کالایی معنا
-        ندارد -- هر ردیفِ جدول بهایِ خودش را در result_fields_list
+        """طبق درخواست صریح: درصد مالیات با اولویت کالا -> تنظیمات
+        کلی شرکت پیش‌پر می‌شود — فقط برای ردیف *تازه* (initial=None)،
+        نه هنگام ویرایش ردیف ازپیش‌ذخیره‌شده که مقدار ثبت‌شده‌اش را
+        نباید بازنویسی کند. در حالت جدولی چندمتغیره، تک‌کالایی معنا
+        ندارد — هر ردیف جدول بهای خودش را در result_fields_list
         جداگانه می‌گیرد."""
         self._update_entry_state()
         self._refresh_stock_info()
@@ -1419,7 +1419,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         else:
             total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
             per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_money(r.quantity_on_hand, qty_decimals)}" for r in nonzero)
-            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_money(total, qty_decimals)} ({per_warehouse})")
+            self.stock_info_label.setText(f"موجودی کل: {numerals.format_money(total, qty_decimals)} ({per_warehouse})")
         self.kardex_button.setEnabled(True)
         self.price_history_button.setEnabled(self._counterparty_id is not None)
 
@@ -1436,7 +1436,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.setWindowTitle("کاردکس کالا")
         dialog.resize(900, 560)
         dialog_layout = QVBoxLayout(dialog)
         dialog_layout.setContentsMargins(0, 0, 0, 0)
@@ -1458,12 +1458,12 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._price_manually_edited = True
 
     def _suggest_price(self) -> None:
-        """طبقِ رفعِ باگِ واقعی («قیمتِ کالا از لیستِ قیمت پیشنهاد
-        نمی‌شود»): قبلاً این مقدار فقط داخلِ سرویس (add_line) و در
+        """طبق رفع باگ واقعی («قیمت کالا از لیست قیمت پیشنهاد
+        نمی‌شود»): قبلاً این مقدار فقط داخل سرویس (add_line) و در
         سکوت محاسبه می‌شد — کاربر پیش از ذخیره هرگز آن را نمی‌دید. حالا
         همان منطق (commercial_pricing.resolve_price) این‌جا هم صدا زده
-        می‌شود تا بهایِ واحد، همین که کالا/مقدار مشخص شد، در فیلد نمایش
-        داده شود — هنوز کاملاً قابلِ‌ویرایشِ دستی."""
+        می‌شود تا بهای واحد، همین که کالا/مقدار مشخص شد، در فیلد نمایش
+        داده شود — هنوز کاملاً قابل‌ویرایش دستی."""
         if not self._is_new_row or self._price_manually_edited:
             return
         item_id = self._selected_item_id()
@@ -1485,7 +1485,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             # افزودن) متوجه نمی‌شد که باید خودش قیمت را وارد کند. حالا
             # همین‌جا -- از همان لحظه که کالا انتخاب می‌شود -- روشن
             # می‌گوید که باید دستی وارد شود.
-            self.status_label.setText("قیمتی از قراردادِ فعال یا فهرستِ قیمت یافت نشد -- قیمت را دستی وارد کنید.")
+            self.status_label.setText("قیمتی از قرارداد فعال یا فهرست قیمت یافت نشد — قیمت را دستی وارد کنید.")
             return
         self.status_label.setText("")
         self.unit_price_field.setValue(float(resolved.unit_price))
@@ -1493,11 +1493,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self.discount_field.setValue(float(resolved.discount_amount))
 
     def _estimate_item_cost(self, item_id: int) -> decimal.Decimal | None:
-        """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت... قیمتِ خرید»): چون
-        این پروژه یک تابعِ آماده‌یِ «بهایِ فعلی» ندارد، این‌جا میانگینِ
-        موزونِ average_unit_cost را از رویِ موجودیِ همه‌یِ انبارها
-        می‌سازیم -- همان بهایی که موتورِ انبار خودش برایِ محاسبه‌یِ
-        بهایِ تمام‌شده استفاده می‌کند."""
+        """طبق درخواست صریح («موتور پیشنهاد قیمت... قیمت خرید»): چون
+        این پروژه یک تابع آمادهٔ «بهای فعلی» ندارد، این‌جا میانگین
+        موزون average_unit_cost را از روی موجودی همهٔ انبارها
+        می‌سازیم — همان بهایی که موتور انبار خودش برای محاسبهٔ
+        بهای تمام‌شده استفاده می‌کند."""
         balances = engine_service.list_balances(self._company_id, item_id=item_id)
         total_qty = sum((b.quantity_on_hand for b in balances), decimal.Decimal(0))
         if total_qty <= 0:
@@ -1506,10 +1506,10 @@ class _LineDialog(LayoutEditMixin, QDialog):
         return total_value / total_qty
 
     def _refresh_price_suggestion(self) -> None:
-        """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت»): بهایِ تمام‌شدهٔ
-        تخمینی، حاشیهٔ سود در قیمتِ فعلی، حداکثرِ تخفیفِ مجاز (طبقِ
-        حداقلِ حاشیهٔ سودِ تنظیم‌شده در تنظیماتِ بازرگانی)، و هشدارِ زنده
-        اگر تخفیفِ واردشده سود را زیرِ آن حد ببرد."""
+        """طبق درخواست صریح («موتور پیشنهاد قیمت»): بهای تمام‌شدهٔ
+        تخمینی، حاشیهٔ سود در قیمت فعلی، حداکثر تخفیف مجاز (طبق
+        حداقل حاشیهٔ سود تنظیم‌شده در تنظیمات بازرگانی)، و هشدار زنده
+        اگر تخفیف واردشده سود را زیر آن حد ببرد."""
         if self._document_type_code not in _SALES_TYPES or self._bulk_variant_mode():
             self.price_suggestion_label.setVisible(False)
             return
@@ -1536,7 +1536,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
 
         margin_percent = (unit_price - unit_cost) / unit_price * 100
         parts = [
-            f"بهایِ تمام‌شدهٔ تخمینی: {numerals.format_money(unit_cost, self._decimal_places)}",
+            f"بهای تمام‌شدهٔ تخمینی: {numerals.format_money(unit_cost, self._decimal_places)}",
             f"حاشیهٔ سود در این قیمت: {numerals.format_money(margin_percent, 1)}٪",
         ]
 
@@ -1547,7 +1547,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             if floor_ratio > 0:
                 min_price = unit_cost / floor_ratio
                 max_discount_percent = max(decimal.Decimal(0), (1 - min_price / unit_price) * 100)
-                parts.append(f"حداکثرِ تخفیفِ مجاز: {numerals.format_money(max_discount_percent, 1)}٪")
+                parts.append(f"حداکثر تخفیف مجاز: {numerals.format_money(max_discount_percent, 1)}٪")
 
             no_discount_profit = unit_price - unit_cost
             discounted_profit = effective_price - unit_cost
@@ -1556,7 +1556,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             )
             if effective_margin_percent < floor and no_discount_profit > 0:
                 profit_drop_percent = (1 - discounted_profit / no_discount_profit) * 100
-                parts.append(f"⚠️ این تخفیف سودِ این ردیف را {numerals.format_money(profit_drop_percent, 0)}٪ کاهش می‌دهد.")
+                parts.append(f"⚠️ این تخفیف سود این ردیف را {numerals.format_money(profit_drop_percent, 0)}٪ کاهش می‌دهد.")
 
         self.price_suggestion_label.setText("  |  ".join(parts))
         self.price_suggestion_label.setVisible(True)
@@ -1571,7 +1571,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             # حالتِ جدولی، کافی‌ست حداقل یک ردیف مقدار داشته باشد -- بقیه
             # نادیده گرفته می‌شوند (result_fields_list خودش فیلتر می‌کند).
             if not any(self._variant_table_quantity(row) > 0 for row in range(self.variant_table.rowCount())):
-                self.status_label.setText("برایِ حداقل یک متغیر مقدار وارد کنید.")
+                self.status_label.setText("برای حداقل یک متغیر مقدار وارد کنید.")
                 return
             self.accept()
             return
@@ -1579,7 +1579,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # ثبت مستقیم بدهد»): اگر کالا خودش دارایِ متغیر است، انتخابِ یکی
         # از متغیرها الزامی است -- بدونِ آن، ثبتِ ردیف رد می‌شود.
         if parent_id in self._variant_parent_ids and self.variant_combo.currentData() is None:
-            self.status_label.setText("این کالا دارایِ چند متغیر است؛ لطفاً یکی از متغیرها را انتخاب کنید.")
+            self.status_label.setText("این کالا دارای چند متغیر است؛ لطفاً یکی از متغیرها را انتخاب کنید.")
             return
         if self.quantity_field.value() <= 0:
             self.status_label.setText("مقدار باید بزرگ‌تر از صفر باشد.")
@@ -1587,14 +1587,14 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.accept()
 
     def result_fields_list(self) -> list[dict]:
-        """طبقِ درخواستِ صریح («جلویِ هر متغیر مقدارِ خرید/فروش را وارد
-        کنیم»): در حالتِ جدولیِ چندمتغیره، به‌ازایِ هر متغیرِ دارایِ
-        مقدارِ مثبت یک ردیفِ کاملاً مستقل برمی‌گردد -- بهایِ واحد و
-        درصدِ مالیات به‌صورتِ خودکار برایِ همان متغیرِ خاص محاسبه
-        می‌شوند (نه یک مقدارِ مشترک برایِ همه)؛ فقط تخفیف/توضیح/انبار
-        بینِ همه‌یِ ردیف‌هایِ تولیدشده مشترک است. برایِ حالتِ عادی (کالایِ
-        بدونِ متغیر، یا ویرایشِ یک ردیفِ ازپیش‌ذخیره‌شده)، همان یک نتیجهٔ
-        result_fields در یک لیستِ تک‌عضوی برمی‌گردد."""
+        """طبق درخواست صریح («جلوی هر متغیر مقدار خرید/فروش را وارد
+        کنیم»): در حالت جدولی چندمتغیره، به‌ازای هر متغیر دارای
+        مقدار مثبت یک ردیف کاملاً مستقل برمی‌گردد — بهای واحد و
+        درصد مالیات به‌صورت خودکار برای همان متغیر خاص محاسبه
+        می‌شوند (نه یک مقدار مشترک برای همه)؛ فقط تخفیف/توضیح/انبار
+        بین همهٔ ردیف‌های تولیدشده مشترک است. برای حالت عادی (کالای
+        بدون متغیر، یا ویرایش یک ردیف ازپیش‌ذخیره‌شده)، همان یک نتیجهٔ
+        result_fields در یک لیست تک‌عضوی برمی‌گردد."""
         if not self._bulk_variant_mode():
             return [self.result_fields()]
         is_percent_discount = self.discount_type_combo.currentData() == "PERCENT"
@@ -1667,13 +1667,13 @@ class _LineDialog(LayoutEditMixin, QDialog):
 
 
 class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
-    """طبقِ درخواستِ صریح («صرفِ دکمه‌یِ تبدیلِ یک‌باره خیلی ساده است»):
-    به‌جایِ تبدیلِ کاملِ خودکارِ همه‌یِ ردیف‌ها با یک کلیک، این دیالوگ
-    مقدارِ سفارش‌شده/فاکتورشده/مانده‌یِ هر ردیف را نشان می‌دهد و اجازه
-    می‌دهد کاربر برایِ همین‌بار مقدارِ کمتری (تبدیلِ مرحله‌ای) وارد کند —
-    پیش‌فرضِ هر ردیف، کلِ مانده‌اش است."""
+    """طبق درخواست صریح («صرف دکمهٔ تبدیل یک‌باره خیلی ساده است»):
+    به‌جای تبدیل کامل خودکار همهٔ ردیف‌ها با یک کلیک، این دیالوگ
+    مقدار سفارش‌شده/فاکتورشده/ماندهٔ هر ردیف را نشان می‌دهد و اجازه
+    می‌دهد کاربر برای همین‌بار مقدار کمتری (تبدیل مرحله‌ای) وارد کند —
+    پیش‌فرض هر ردیف، کل مانده‌اش است."""
 
-    _COLUMNS = ["کالا", "سفارشِ اولیه", "تحویلیِ انبار", "فاکتورشده", "مانده", "مقدارِ این‌بار", "انبار"]
+    _COLUMNS = ["کالا", "سفارش اولیه", "تحویلی انبار", "فاکتورشده", "مانده", "مقدار این‌بار", "انبار"]
 
     def __init__(
         self, parent: QWidget, fulfillment: list, items_by_id: dict, uom_decimal_places: dict | None = None,
@@ -1691,8 +1691,8 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
 
         layout = QVBoxLayout(self)
         info = QLabel(
-            "مقدارِ این‌بار برایِ هر ردیف را مشخص کنید -- پیش‌فرض، مقدارِ تحویلیِ ثبت‌شده توسطِ انبار است "
-            "(اگر ثبت نشده باشد، همان مقدارِ سفارشِ اولیه)."
+            "مقدار این‌بار برای هر ردیف را مشخص کنید — پیش‌فرض، مقدار تحویلی ثبت‌شده توسط انبار است "
+            "(اگر ثبت نشده باشد، همان مقدار سفارش اولیه)."
         )
         info.setWordWrap(True)
         layout.addWidget(info)
@@ -1718,7 +1718,7 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
             qty_field.setValue(float(f.remaining_quantity))
             if quantity_locked:
                 qty_field.setEnabled(False)
-                qty_field.setToolTip("مقدار را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌تغییر نیست.")
+                qty_field.setToolTip("مقدار را انباردار در رسید کالا تایید کرده — قابل‌تغییر نیست.")
             self._qty_fields[f.line_id] = qty_field
             table.setCellWidget(row_index, 5, qty_field)
             wh_combo = QComboBox()
@@ -1758,11 +1758,11 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
     def _on_accept(self) -> None:
         quantities = {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items()}
         if all(q <= 0 for q in quantities.values()):
-            self.status_label.setText("حداقل برایِ یک ردیف مقداری وارد کنید.")
+            self.status_label.setText("حداقل برای یک ردیف مقداری وارد کنید.")
             return
         for f in self._fulfillment:
             if quantities[f.line_id] > f.remaining_quantity:
-                self.status_label.setText("مقدارِ واردشده برایِ یک ردیف از مانده‌اش بیشتر است.")
+                self.status_label.setText("مقدار واردشده برای یک ردیف از مانده‌اش بیشتر است.")
                 return
         self.accept()
 
@@ -1778,7 +1778,7 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
 
 
 def convert_warehouse_context(document_id: int | None, company_id: int | None) -> dict:
-    """گزینه‌هایِ انبار برایِ دیالوگِ تبدیل: اگر انبار در رسید تعیین شده، قفل است."""
+    """گزینه‌های انبار برای دیالوگ تبدیل: اگر انبار در رسید تعیین شده، قفل است."""
     if document_id is None or company_id is None:
         return {"options": [], "line_warehouses": {}, "default": None, "editable": False}
     doc, lines = documents_service.get_document(document_id, company_id)
@@ -1792,19 +1792,19 @@ def convert_warehouse_context(document_id: int | None, company_id: int | None) -
 
 
 class _SettlementPlanDialog(QDialog):
-    """طبقِ درخواستِ صریح («یک دکمه سمت راست... نحوه تسویه که ممکنه نقد/
-    نسیه/بانک یا همون کارتخوان/بن/کالابرگ/تخفیف... و با تاییدِ مدیر»):
-    ترکیبِ چند روشِ هم‌زمان + مانده‌یِ خودکار به‌عنوانِ نسیه؛ ذخیره‌یِ
-    دوباره (حتی بعدِ تاییدِ قبلی) تاییدِ قبلی را باطل می‌کند -- ترکیبِ
+    """طبق درخواست صریح («یک دکمه سمت راست... نحوه تسویه که ممکنه نقد/
+    نسیه/بانک یا همون کارتخوان/بن/کالابرگ/تخفیف... و با تایید مدیر»):
+    ترکیب چند روش هم‌زمان + ماندهٔ خودکار به‌عنوان نسیه؛ ذخیرهٔ
+    دوباره (حتی بعد تایید قبلی) تایید قبلی را باطل می‌کند — ترکیب
     تازه باید دوباره تاییدشود.
 
-    طبقِ گزارشِ صریحِ کاربر («روالِ ثبتِ فاکتور خیلی سخت شد... مدیر فقط
-    دیدن و کارِ ثبتِ نهایی انجام دهد»): این دیالوگ دیگر دکمهٔ جداگانه‌یِ
-    «تاییدِ مدیر» ندارد -- فقط واردکردن/ذخیره‌یِ ترکیبِ تسویه (یا کلیکِ
-    نسیه). تاییدِ نحوه‌یِ تسویه از این پس فقط از طریقِ همان دکمهٔ ثبتِ
-    نهاییِ فرمِ اصلی (CommercialDocumentScreen._post) انجام می‌شود -- تا
-    مدیر نیازی به بازکردنِ این دیالوگ نداشته باشد؛ approve_settlement_
-    plan (که فقط برایِ مدیر مجاز است) همان‌جا صدا زده می‌شود."""
+    طبق گزارش صریح کاربر («روال ثبت فاکتور خیلی سخت شد... مدیر فقط
+    دیدن و کار ثبت نهایی انجام دهد»): این دیالوگ دیگر دکمهٔ جداگانهٔ
+    «تایید مدیر» ندارد — فقط واردکردن/ذخیرهٔ ترکیب تسویه (یا کلیک
+    نسیه). تایید نحوهٔ تسویه از این پس فقط از طریق همان دکمهٔ ثبت
+    نهایی فرم اصلی (CommercialDocumentScreen._post) انجام می‌شود — تا
+    مدیر نیازی به بازکردن این دیالوگ نداشته باشد؛ approve_settlement_
+    plan (که فقط برای مدیر مجاز است) همان‌جا صدا زده می‌شود."""
 
     def __init__(
         self, document_id: int, company_id: int, document_type_code: str,
@@ -1813,7 +1813,7 @@ class _SettlementPlanDialog(QDialog):
         seed_lines: list[tuple] | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("نحوه‌یِ تسویه‌یِ فاکتور")
+        self.setWindowTitle("نحوهٔ تسویهٔ فاکتور")
         # طبقِ گزارشِ صریح («اندازهٔ فونت‌ها و فیلدها کمی بزرگ‌تر باشه»):
         # فونتِ کلِ دیالوگ یک واحد بزرگ‌تر از فونتِ پیش‌فرضِ برنامه -- باید
         # پیش از ساختِ هر ویجتِ فرزند تنظیم شود تا رویِ همه اثر بگذارد.
@@ -1863,7 +1863,7 @@ class _SettlementPlanDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        total_label = QLabel(f"مبلغِ کلِ فاکتور: {numerals.format_money(total_amount, decimal_places)}")
+        total_label = QLabel(f"مبلغ کل فاکتور: {numerals.format_money(total_amount, decimal_places)}")
         total_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(total_label)
 
@@ -1923,8 +1923,8 @@ class _SettlementPlanDialog(QDialog):
         # این دکمه همان کار را با یک کلیکِ صریح انجام می‌دهد -- همه‌یِ
         # مبالغِ واردشده را صفر می‌کند و ذخیره می‌کند، تا از همان لحظه‌یِ
         # بازکردنِ دیالوگ روشن باشد که نسیه هم یک گزینه‌یِ مستقیم است.
-        self.full_credit_button = QPushButton("🔖 ثبتِ کامل به‌عنوانِ نسیه")
-        self.full_credit_button.setToolTip("هیچ دریافتی الان انجام نمی‌شود -- کلِ مبلغِ فاکتور به‌عنوانِ نسیه ثبت می‌شود.")
+        self.full_credit_button = QPushButton("🔖 ثبت کامل به‌عنوان نسیه")
+        self.full_credit_button.setToolTip("هیچ دریافتی الان انجام نمی‌شود — کل مبلغ فاکتور به‌عنوان نسیه ثبت می‌شود.")
         self.full_credit_button.setAutoDefault(False)
         self.full_credit_button.clicked.connect(self._save_as_full_credit)
         buttons_row.addWidget(self.full_credit_button)
@@ -1958,7 +1958,7 @@ class _SettlementPlanDialog(QDialog):
         if row_index is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("انتخابِ تفصیلی")
+        dialog.setWindowTitle("انتخاب تفصیلی")
         dialog.resize(420, 140)
         dialog_layout = QVBoxLayout(dialog)
         combo_options = [(None, "— هیچ‌کدام —")] + [
@@ -2046,7 +2046,7 @@ class _SettlementPlanDialog(QDialog):
             add_button = QPushButton("➕")
             add_button.setAutoDefault(False)
             add_button.setFixedWidth(34)
-            add_button.setToolTip("افزودنِ ردیفِ دیگری با همین روش")
+            add_button.setToolTip("افزودن ردیف دیگری با همین روش")
             add_button.clicked.connect(lambda _checked=False, mc=method_code: self._add_row(mc))
             self.table.setCellWidget(row_index, 3, add_button)
 
@@ -2127,8 +2127,8 @@ class _SettlementPlanDialog(QDialog):
         if plan is None:
             if self._require_manager_approval:
                 self.status_banner.setText(
-                    "هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است. اگر بخشی نقد/بانکی دریافت شده، مبلغش را جلویِ همان روش "
-                    "وارد کنید و 💾 بزنید؛ اگر کاملاً نسیه است، مبلغی وارد نکنید و «🔖 ثبتِ کامل به‌عنوانِ نسیه» را بزنید."
+                    "هنوز نحوهٔ تسویه‌ای ذخیره نشده است. اگر بخشی نقد/بانکی دریافت شده، مبلغش را جلوی همان روش "
+                    "وارد کنید و 💾 بزنید؛ اگر کاملاً نسیه است، مبلغی وارد نکنید و «🔖 ثبت کامل به‌عنوان نسیه» را بزنید."
                 )
         else:
             self._apply_plan_status(plan)
@@ -2147,12 +2147,12 @@ class _SettlementPlanDialog(QDialog):
         self.table.setEnabled(not plan.is_approved)
         if plan.is_approved:
             approved_at = numerals.format_jalali_datetime(plan.approved_at) if plan.approved_at else ""
-            self.status_banner.setText(f"✅ نحوه‌یِ تسویه تاییدِ مدیر شد. ({approved_at})")
+            self.status_banner.setText(f"✅ نحوهٔ تسویه تایید مدیر شد. ({approved_at})")
             self.status_banner.setStyleSheet("color: #15803d; font-weight: bold;")
         else:
             self.status_banner.setText(
-                "⏳ ذخیره شد. تاییدِ نحوه‌یِ تسویه و ثبتِ نهایی، هر دو با هم، از طریقِ دکمهٔ 🔒 «ثبتِ نهایی» "
-                "در فرمِ اصلیِ فاکتور توسطِ مدیر انجام می‌شود -- نیازی به بازکردنِ دوبارهٔ همین دیالوگ نیست."
+                "⏳ ذخیره شد. تایید نحوهٔ تسویه و ثبت نهایی، هر دو با هم، از طریق دکمهٔ 🔒 «ثبت نهایی» "
+                "در فرم اصلی فاکتور توسط مدیر انجام می‌شود — نیازی به بازکردن دوبارهٔ همین دیالوگ نیست."
             )
             self.status_banner.setStyleSheet("color: #b45309; font-weight: bold;")
 
@@ -2168,7 +2168,7 @@ class _SettlementPlanDialog(QDialog):
         plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
         self._apply_plan_status(plan)
         if self._require_manager_approval:
-            QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد؛ برایِ ثبتِ نهایی نیازِ تاییدِ مدیر دارد.")
+            QMessageBox.information(self, "نحوهٔ تسویه", "نحوهٔ تسویه ذخیره شد؛ برای ثبت نهایی نیاز تایید مدیر دارد.")
         else:
             # طبقِ درخواستِ صریح («صندوق‌دار با اینتر ... درنهایت تایید
             # کنه»): در حالتِ صندوق (بدونِ تاییدِ مدیر)، ذخیره یعنی
@@ -2177,10 +2177,10 @@ class _SettlementPlanDialog(QDialog):
             self.accept()
 
     def _save_as_full_credit(self) -> None:
-        """طبقِ گزارشِ صریحِ کاربر: مسیرِ یک‌کلیکی برایِ فاکتورِ کاملاً
-        نسیه -- همه‌یِ ردیف‌ها صفر می‌شوند (یعنی هیچ روشی انتخاب نشده) و
-        بلافاصله ذخیره می‌شود؛ خودِ save_settlement_plan با فهرستِ خالی
-        از قبل پشتیبانی می‌کند (نسیه = مانده‌یِ خودکار، نه یک ردیفِ روش)."""
+        """طبق گزارش صریح کاربر: مسیر یک‌کلیکی برای فاکتور کاملاً
+        نسیه — همهٔ ردیف‌ها صفر می‌شوند (یعنی هیچ روشی انتخاب نشده) و
+        بلافاصله ذخیره می‌شود؛ خود save_settlement_plan با فهرست خالی
+        از قبل پشتیبانی می‌کند (نسیه = ماندهٔ خودکار، نه یک ردیف روش)."""
         for row_index in range(self.table.rowCount()):
             amount_field = self.table.cellWidget(row_index, 1)
             if amount_field is not None:
@@ -2189,18 +2189,18 @@ class _SettlementPlanDialog(QDialog):
 
 
 class _LandedCostDialog(QDialog):
-    """طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه در فاکتورِ خرید»): مدیریتِ
-    هزینه‌هایِ جانبیِ همین فاکتورِ خرید (ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر).
-    هر ردیف یک مبلغ و یک حسابِ معین+تفصیلیِ آزادانه دارد (مثلاً یک
-    تفصیلیِ گروهِ «سفارشاتِ در راه») که با Postِ فاکتور بستانکار می‌شود --
-    تسهیمِ خودِ مبلغ رویِ ردیف‌هایِ فاکتور (به بهایِ موجودی/تمام‌شده) و
-    ساختِ ردیف‌هایِ بستانکاریِ سندِ حسابداری، هردو در همان لحظه (درونِ
-    commercial_documents.post_document، همراهِ خودِ سندِ فاکتور) انجام
-    می‌شود -- این فرم فقط ردیف‌هایِ هزینه را قبل از Post مدیریت می‌کند."""
+    """طبق درخواست صریح («فرم تسهیم هزینه در فاکتور خرید»): مدیریت
+    هزینه‌های جانبی همین فاکتور خرید (ترخیص/گمرک/هزینه‌های ارزی دیگر).
+    هر ردیف یک مبلغ و یک حساب معین+تفصیلی آزادانه دارد (مثلاً یک
+    تفصیلی گروه «سفارشات در راه») که با Post فاکتور بستانکار می‌شود --
+    تسهیم خود مبلغ روی ردیف‌های فاکتور (به بهای موجودی/تمام‌شده) و
+    ساخت ردیف‌های بستانکاری سند حسابداری، هردو در همان لحظه (درون
+    commercial_documents.post_document، همراه خود سند فاکتور) انجام
+    می‌شود — این فرم فقط ردیف‌های هزینه را قبل از Post مدیریت می‌کند."""
 
     def __init__(self, document_id: int, company_id: int, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("تسهیمِ هزینه‌هایِ جانبیِ خرید")
+        self.setWindowTitle("تسهیم هزینه‌های جانبی خرید")
         self.resize(760, 480)
         self._document_id = document_id
         self._company_id = company_id
@@ -2254,7 +2254,7 @@ class _LandedCostDialog(QDialog):
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(44)
-        add_button.setToolTip("افزودنِ ردیفِ هزینه")
+        add_button.setToolTip("افزودن ردیف هزینه")
         add_button.clicked.connect(self._add_row)
         entry_row.addWidget(add_button)
         layout.addLayout(entry_row)
@@ -2314,7 +2314,7 @@ class _LandedCostDialog(QDialog):
             self.balance_label.setText("")
             return
         balance, nature = treasury_service.get_counterparty_balance(self._company_id, detail_account_id)
-        self.balance_label.setText(f"ماندهٔ فعلیِ همین تفصیلی: {numerals.format_money(balance, self._decimal_places)} ({nature})")
+        self.balance_label.setText(f"ماندهٔ فعلی همین تفصیلی: {numerals.format_money(balance, self._decimal_places)} ({nature})")
 
     def _refresh_table(self) -> None:
         allocations = purchasing_service.list_landed_cost_allocations(self._document_id)
@@ -2338,16 +2338,16 @@ class _LandedCostDialog(QDialog):
             delete_button.setFixedWidth(32)
             delete_button.clicked.connect(lambda _checked=False, allocation_id=a.allocation_id: self._delete_row(allocation_id))
             self.table.setCellWidget(row_index, 4, delete_button)
-        self.total_label.setText(f"جمعِ کلِ هزینه‌هایِ جانبی: {numerals.format_money(total, self._decimal_places)}")
+        self.total_label.setText(f"جمع کل هزینه‌های جانبی: {numerals.format_money(total, self._decimal_places)}")
 
     def _add_row(self) -> None:
         account_id = self.account_combo.currentData()
         if account_id is None:
-            self.status_label.setText("انتخابِ حساب الزامی است.")
+            self.status_label.setText("انتخاب حساب الزامی است.")
             return
         detail_account_id = self.detail_combo.currentData()
         if self._required_dimension_type_by_detail_id and detail_account_id is None:
-            self.status_label.setText("این حساب نیازمندِ انتخابِ تفصیلی است.")
+            self.status_label.setText("این حساب نیازمند انتخاب تفصیلی است.")
             return
         amount = decimal.Decimal(str(self.amount_field.value()))
         if amount <= 0:
@@ -2433,7 +2433,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # هیچ ویجتِ موجودی جابه‌جا نمی‌شود. چون این فرم (بر خلافِ آن دو)
         # هدرش را در یک کارتِ جداگانه نمی‌پیچد، از خودِ page_title/
         # lines_table به‌عنوانِ لنگرِ شروعِ هر بخش استفاده می‌شود.
-        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        self.step_stepper = SectionStepper(["اطلاعات سند", "ردیف‌ها"])
         title_row.addWidget(self.step_stepper)
         self.step_stepper.setMaximumWidth(460)
 
@@ -2444,9 +2444,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # اولین ویجتِ اضافه‌شده را در سمتِ راست می‌گذارد، ترتیبِ درجِ دیکشنری
         # همین ترتیبِ بصری را تولید می‌کند.
         self.summary_cards = SummaryCardBar({
-            "grand_total": SummaryCard("جمعِ کل", role="success", icon="✅"),
+            "grand_total": SummaryCard("جمع کل", role="success", icon="✅"),
             "discount_tax": SummaryCard("تخفیف/مالیات", role="warning", icon="🏷️"),
-            "subtotal": SummaryCard("جمعِ ناخالص", role="neutral", icon="📋"),
+            "subtotal": SummaryCard("جمع ناخالص", role="neutral", icon="📋"),
         })
         self.body_layout.addWidget(self.summary_cards)
 
@@ -2469,9 +2469,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # نماینده/مشتری است، امانیِ ورودی همان تامین‌کننده -- برچسبِ
         # روشن‌تر از «مشتری/تامین‌کننده»یِ عمومی.
         if document_type_code == "CONSIGNMENT_OUT":
-            counterparty_label_text = "نماینده/مشتری (طرفِ امانی)"
+            counterparty_label_text = "نماینده/مشتری (طرف امانی)"
         elif document_type_code == "CONSIGNMENT_IN":
-            counterparty_label_text = "تامین‌کننده (طرفِ امانی)"
+            counterparty_label_text = "تامین‌کننده (طرف امانی)"
         else:
             counterparty_label_text = "مشتری" if self._is_sales else "تامین‌کننده"
         header_grid.addWidget(QLabel(counterparty_label_text), 0, 1)
@@ -2482,7 +2482,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         counterparty_row.addWidget(self.counterparty_combo, stretch=1)
         add_quick_add_button(
             counterparty_row, self.counterparty_combo, main_window, "GL_DIM",
-            "تعریفِ مشتریِ تازه" if self._is_sales else "تعریفِ تامین‌کننده‌یِ تازه",
+            "تعریف مشتری تازه" if self._is_sales else "تعریف تامین‌کنندهٔ تازه",
         )
         header_grid.addLayout(counterparty_row, 1, 1)
 
@@ -2493,7 +2493,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         warehouse_row.setSpacing(3)
         self.warehouse_combo = _EnterComboBox()
         warehouse_row.addWidget(self.warehouse_combo, stretch=1)
-        add_quick_add_button(warehouse_row, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        add_quick_add_button(warehouse_row, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
         header_grid.addLayout(warehouse_row, 1, 2)
 
         # طبقِ درخواستِ صریح («فیلدِ شماره‌یِ سفارش روی هدر باز بشه»):
@@ -2525,7 +2525,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.setContentsMargins(0, 0, 0, 0)
         row2_grid.setSpacing(3)
 
-        row2_grid.addWidget(QLabel("فهرستِ قیمت"), 0, 0)
+        row2_grid.addWidget(QLabel("فهرست قیمت"), 0, 0)
         self.price_list_combo = _EnterComboBox()
         row2_grid.addWidget(self.price_list_combo, 1, 0)
 
@@ -2550,14 +2550,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # هزینه/پروژه هم نیاز داشته باشند — هم‌الگو با فیلدهایِ همیشه‌حاضرِ
         # مشابه در فرمِ تنخواه‌گردان. برچسب با «*» یعنی برایِ این نوعِ سند
         # (طبقِ تنظیماتِ نگاشتِ حساب‌ها) الزامی است.
-        self.cost_center_label = QLabel("مرکزِ هزینه")
+        self.cost_center_label = QLabel("مرکز هزینه")
         row2_grid.addWidget(self.cost_center_label, 0, 3)
         cost_center_row = QHBoxLayout()
         cost_center_row.setContentsMargins(0, 0, 0, 0)
         cost_center_row.setSpacing(3)
         self.cost_center_combo = _EnterComboBox()
         cost_center_row.addWidget(self.cost_center_combo, stretch=1)
-        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریفِ مرکزِ هزینه‌یِ تازه")
+        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریف مرکز هزینهٔ تازه")
         row2_grid.addLayout(cost_center_row, 1, 3)
 
         self.project_box = QWidget()
@@ -2571,7 +2571,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         project_row.setSpacing(3)
         self.project_combo = _EnterComboBox()
         project_row.addWidget(self.project_combo, stretch=1)
-        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریفِ پروژه‌یِ تازه")
+        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریف پروژهٔ تازه")
         project_layout.addLayout(project_row)
         row2_grid.addWidget(self.project_box, 0, 4, 2, 1)
 
@@ -2584,7 +2584,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         due_date_layout = QVBoxLayout(self.due_date_box)
         due_date_layout.setContentsMargins(0, 0, 0, 0)
         due_date_layout.setSpacing(3)
-        due_date_layout.addWidget(QLabel("موعدِ تسویه"))
+        due_date_layout.addWidget(QLabel("موعد تسویه"))
         self.due_date_field = JalaliDateEdit()
         due_date_layout.addWidget(self.due_date_field)
         row2_grid.addWidget(self.due_date_box, 0, 5, 2, 1)
@@ -2594,7 +2594,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         delivery_date_layout = QVBoxLayout(self.delivery_date_box)
         delivery_date_layout.setContentsMargins(0, 0, 0, 0)
         delivery_date_layout.setSpacing(3)
-        delivery_date_layout.addWidget(QLabel("تاریخِ تحویلِ مورد انتظار"))
+        delivery_date_layout.addWidget(QLabel("تاریخ تحویل مورد انتظار"))
         self.delivery_date_field = JalaliDateEdit()
         delivery_date_layout.addWidget(self.delivery_date_field)
         row2_grid.addWidget(self.delivery_date_box, 0, 5, 2, 1)
@@ -2608,13 +2608,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         consignment_warehouse_layout = QVBoxLayout(self.consignment_warehouse_box)
         consignment_warehouse_layout.setContentsMargins(0, 0, 0, 0)
         consignment_warehouse_layout.setSpacing(3)
-        consignment_warehouse_layout.addWidget(QLabel("انبارِ نمایندگی/طرفِ امانی"))
+        consignment_warehouse_layout.addWidget(QLabel("انبار نمایندگی/طرف امانی"))
         consignment_warehouse_row = QHBoxLayout()
         consignment_warehouse_row.setContentsMargins(0, 0, 0, 0)
         consignment_warehouse_row.setSpacing(3)
         self.consignment_warehouse_combo = _EnterComboBox()
         consignment_warehouse_row.addWidget(self.consignment_warehouse_combo, stretch=1)
-        add_quick_add_button(consignment_warehouse_row, self.consignment_warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        add_quick_add_button(consignment_warehouse_row, self.consignment_warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
         consignment_warehouse_layout.addLayout(consignment_warehouse_row)
         row2_grid.addWidget(self.consignment_warehouse_box, 0, 6, 2, 1)
         self.consignment_warehouse_box.setVisible(document_type_code == "CONSIGNMENT_OUT")
@@ -2627,9 +2627,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         tax_posting_mode_layout = QVBoxLayout(self.tax_posting_mode_box)
         tax_posting_mode_layout.setContentsMargins(0, 0, 0, 0)
         tax_posting_mode_layout.setSpacing(3)
-        tax_posting_mode_layout.addWidget(QLabel("نوعِ ثبت"))
+        tax_posting_mode_layout.addWidget(QLabel("نوع ثبت"))
         self.tax_posting_mode_combo = _EnterComboBox()
-        self.tax_posting_mode_combo.addItem("پیش‌فرضِ شرکت", None)
+        self.tax_posting_mode_combo.addItem("پیش‌فرض شرکت", None)
         self.tax_posting_mode_combo.addItem("رسمی", "OFFICIAL")
         self.tax_posting_mode_combo.addItem("غیررسمی", "INFORMAL")
         tax_posting_mode_layout.addWidget(self.tax_posting_mode_combo)
@@ -2641,7 +2641,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         purchase_type_layout = QVBoxLayout(self.purchase_type_box)
         purchase_type_layout.setContentsMargins(0, 0, 0, 0)
         purchase_type_layout.setSpacing(3)
-        purchase_type_layout.addWidget(QLabel("نوعِ خرید"))
+        purchase_type_layout.addWidget(QLabel("نوع خرید"))
         self.purchase_type_combo = _EnterComboBox()
         purchase_type_layout.addWidget(self.purchase_type_combo)
         row2_grid.addWidget(self.purchase_type_box, 0, 9, 2, 1)
@@ -2665,7 +2665,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # هدر) اعمال می‌شود -- چون باید مالیاتِ ردیف‌هایِ ازپیش‌ثبت‌شده را
         # هم صفر کند؛ برایِ سندِ تازه (هنوز ذخیره‌نشده)، فقط در _header_
         # fields() لحاظ می‌شود.
-        self.tax_exempt_checkbox = QCheckBox("معافیتِ مالیاتی")
+        self.tax_exempt_checkbox = QCheckBox("معافیت مالیاتی")
         self.tax_exempt_checkbox.toggled.connect(self._on_tax_exempt_toggled)
         row2_grid.addWidget(self.tax_exempt_checkbox, 0, 8, 2, 1)
 
@@ -2678,7 +2678,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         settlement_type_layout = QVBoxLayout(self.settlement_type_box)
         settlement_type_layout.setContentsMargins(0, 0, 0, 0)
         settlement_type_layout.setSpacing(3)
-        settlement_type_layout.addWidget(QLabel("نوعِ تسویهٔ پخش"))
+        settlement_type_layout.addWidget(QLabel("نوع تسویهٔ پخش"))
         self.settlement_type_combo = _EnterComboBox()
         settlement_type_layout.addWidget(self.settlement_type_combo)
         row2_grid.addWidget(self.settlement_type_box, 0, 9, 2, 1)
@@ -2905,8 +2905,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.settlement_plan_button.setObjectName("iconButton")
         self.settlement_plan_button.setFixedWidth(44)
         self.settlement_plan_button.setToolTip(
-            "نحوه‌یِ تسویه — تعیینِ ترکیبِ نقد/بانک(کارتخوان)/بن/کالابرگ/تخفیف/نسیه؛ "
-            "پیش از ثبتِ نهایی نیازِ تاییدِ مدیر دارد."
+            "نحوهٔ تسویه — تعیین ترکیب نقد/بانک(کارتخوان)/بن/کالابرگ/تخفیف/نسیه؛ "
+            "پیش از ثبت نهایی نیاز تایید مدیر دارد."
         )
         self.settlement_plan_button.clicked.connect(self._open_settlement_plan)
         _set_initial_visibility(self.settlement_plan_button, document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
@@ -2919,14 +2919,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.new_button = QPushButton("🆕")
         self.new_button.setObjectName("iconButton")
         self.new_button.setFixedWidth(44)
-        self.new_button.setToolTip("سندِ جدید — فرم را برایِ ثبتِ سندِ بعدی خالی می‌کند")
+        self.new_button.setToolTip("سند جدید — فرم را برای ثبت سند بعدی خالی می‌کند")
         self.new_button.clicked.connect(self._reset_form)
         self.footer_layout.addWidget(self.new_button)
 
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
-        self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرِسند و ردیف‌ها بعداً قابلِ‌ویرایش/حذف‌اند")
+        self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرسند و ردیف‌ها بعداً قابل‌ویرایش/حذف‌اند")
         self.save_button.clicked.connect(lambda: self._save_header(notify=True))
         self.footer_layout.addWidget(self.save_button)
 
@@ -2941,10 +2941,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # با هم انجام می‌دهد -- به‌جایِ اینکه کاربر مجبور باشد بعداً
             # جداگانه دکمهٔ 🧾 را پیدا کند.
             self.confirm_button.setToolTip(
-                "۲) ثبتِ فاکتور — سند تایید می‌شود و بلافاصله نحوه‌یِ تسویه (دریافت/پرداختِ نقد و بانکی، یا نسیه) پرسیده می‌شود"
+                "۲) ثبت فاکتور — سند تایید می‌شود و بلافاصله نحوهٔ تسویه (دریافت/پرداخت نقد و بانکی، یا نسیه) پرسیده می‌شود"
             )
         else:
-            self.confirm_button.setToolTip("۲) تاییدِ سند — گامِ اولِ گردشِ کار پس از پیش‌نویس؛ سند برایِ تصویب/ثبتِ نهایی آماده می‌شود")
+            self.confirm_button.setToolTip("۲) تایید سند — گام اول گردش کار پس از پیش‌نویس؛ سند برای تصویب/ثبت نهایی آماده می‌شود")
         self.confirm_button.clicked.connect(self._confirm_button_clicked)
         self.footer_layout.addWidget(self.confirm_button)
 
@@ -2953,11 +2953,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.approve_button.setFixedWidth(44)
         if self.document_type_code in _TWO_STAGE_APPROVAL_TYPES:
             self.approve_button.setToolTip(
-                "۳) تصویبِ سند — تاییدِ مدیریتی؛ برایِ این نوعِ سند اجباری است و پیش از آن ثبتِ نهایی ممکن نیست "
-                "(فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است)"
+                "۳) تصویب سند — تایید مدیریتی؛ برای این نوع سند اجباری است و پیش از آن ثبت نهایی ممکن نیست "
+                "(فقط برای مدیر — نقش ادمین/سوپروایزر/مدیر — ممکن است)"
             )
         else:
-            self.approve_button.setToolTip("۳) تصویبِ سند — تاییدِ مدیریتیِ اضافه پیش از ثبتِ نهایی (اختیاری، پیش از ثبتِ نهایی انجام می‌شود)")
+            self.approve_button.setToolTip("۳) تصویب سند — تایید مدیریتی اضافه پیش از ثبت نهایی (اختیاری، پیش از ثبت نهایی انجام می‌شود)")
         self.approve_button.clicked.connect(self._approve)
         # طبقِ گزارشِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید هم در دو
         # مرحله باشه: تاییدِ کاربر و تاییدِ مدیر»): برایِ فاکتورِ خرید/
@@ -2980,7 +2980,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button = QPushButton("🚫")
         self.cancel_button.setObjectName("dangerIconButton")
         self.cancel_button.setFixedWidth(44)
-        self.cancel_button.setToolTip("لغوِ سند — سند باطل می‌شود (فقط پیش از ثبتِ نهایی ممکن است)")
+        self.cancel_button.setToolTip("لغو سند — سند باطل می‌شود (فقط پیش از ثبت نهایی ممکن است)")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
 
@@ -2992,7 +2992,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.revert_button = QPushButton("↩️")
         self.revert_button.setObjectName("iconButton")
         self.revert_button.setFixedWidth(44)
-        self.revert_button.setToolTip("بازگشت به پیش‌نویس — سندِ تاییدشده دوباره کاملاً قابلِ‌ویرایش می‌شود (فقط پیش از تصویب/ثبتِ نهایی ممکن است)")
+        self.revert_button.setToolTip("بازگشت به پیش‌نویس — سند تاییدشده دوباره کاملاً قابل‌ویرایش می‌شود (فقط پیش از تصویب/ثبت نهایی ممکن است)")
         self.revert_button.clicked.connect(self._revert_to_draft)
         self.footer_layout.addWidget(self.revert_button)
 
@@ -3000,13 +3000,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.history_button = QPushButton("🕘")
         self.history_button.setObjectName("iconButton")
         self.history_button.setFixedWidth(44)
-        self.history_button.setToolTip("تاریخچهٔ تغییرات و تاییدِ سند")
+        self.history_button.setToolTip("تاریخچهٔ تغییرات و تایید سند")
         self.history_button.clicked.connect(self._show_history)
         self.footer_layout.addWidget(self.history_button)
         self.line_dates_button = QPushButton("📅")
         self.line_dates_button.setObjectName("iconButton")
         self.line_dates_button.setFixedWidth(44)
-        self.line_dates_button.setToolTip("تاریخِ تحویلِ موردِ انتظارِ هر ردیف (حتی پس از تایید)")
+        self.line_dates_button.setToolTip("تاریخ تحویل مورد انتظار هر ردیف (حتی پس از تایید)")
         self.line_dates_button.clicked.connect(self._edit_line_dates)
         _set_initial_visibility(self.line_dates_button, self.document_type_code == "PURCHASE_ORDER")
         self.footer_layout.addWidget(self.line_dates_button)
@@ -3020,9 +3020,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.correct_button.setObjectName("iconButton")
         self.correct_button.setFixedWidth(44)
         self.correct_button.setToolTip(
-            "اصلاحِ فاکتورِ ثبت‌شده — فقط برایِ مدیر و در صورتِ فعال‌بودنِ تنظیمِ «اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده».\n"
-            "سندِ فعلی عیناً و با تاریخِ امروز برگشت می‌خورد (بدونِ تغییرِ تاریخِ فاکتورهایِ قبلی) "
-            "و یک پیش‌نویسِ تازه برایِ ویرایش باز می‌شود."
+            "اصلاح فاکتور ثبت‌شده — فقط برای مدیر و در صورت فعال‌بودن تنظیم «اجازهٔ اصلاح فاکتور ثبت‌شده».\n"
+            "سند فعلی عیناً و با تاریخ امروز برگشت می‌خورد (بدون تغییر تاریخ فاکتورهای قبلی) "
+            "و یک پیش‌نویس تازه برای ویرایش باز می‌شود."
         )
         self.correct_button.clicked.connect(self._correct_invoice)
         _set_initial_visibility(self.correct_button, document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
@@ -3034,9 +3034,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.landed_cost_button.setObjectName("iconButton")
         self.landed_cost_button.setFixedWidth(44)
         self.landed_cost_button.setToolTip(
-            "تسهیمِ هزینه‌هایِ جانبیِ خرید (ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر) — "
-            "با Postِ فاکتور، این هزینه‌ها متناسب با ارزشِ ردیف‌ها به بهایِ موجودی/تمام‌شده اضافه می‌شوند "
-            "و حساب‌هایِ انتخاب‌شده برایِ هرکدام بستانکار می‌شوند."
+            "تسهیم هزینه‌های جانبی خرید (ترخیص/گمرک/هزینه‌های ارزی دیگر) — "
+            "با Post فاکتور، این هزینه‌ها متناسب با ارزش ردیف‌ها به بهای موجودی/تمام‌شده اضافه می‌شوند "
+            "و حساب‌های انتخاب‌شده برای هرکدام بستانکار می‌شوند."
         )
         self.landed_cost_button.clicked.connect(self._open_landed_costs)
         _set_initial_visibility(self.landed_cost_button, document_type_code == "PURCHASE_INVOICE")
@@ -3047,7 +3047,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.convert_button = QPushButton("→")
         self.convert_button.setObjectName("primaryIconButton")
         self.convert_button.setFixedWidth(48)
-        self.convert_button.setToolTip("تبدیل به فاکتور — از مقدارِ باقی‌ماندهٔ این سند، فاکتورِ تازه می‌سازد")
+        self.convert_button.setToolTip("تبدیل به فاکتور — از مقدار باقی‌ماندهٔ این سند، فاکتور تازه می‌سازد")
         self.convert_button.clicked.connect(self._convert_to_invoice)
         _set_initial_visibility(self.convert_button, document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
         self.footer_layout.addWidget(self.convert_button)
@@ -3058,7 +3058,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.history_button = QPushButton("🕘")
         self.history_button.setObjectName("iconButton")
         self.history_button.setFixedWidth(44)
-        self.history_button.setToolTip("آخرین اسنادِ این طرفِ‌حساب — تعدادِ ردیف قابلِ‌تنظیم است")
+        self.history_button.setToolTip("آخرین اسناد این طرف‌حساب — تعداد ردیف قابل‌تنظیم است")
         self.history_button.clicked.connect(self._open_counterparty_history)
         self.footer_layout.addWidget(self.history_button)
 
@@ -3069,7 +3069,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.pick_from_invoice_button = QPushButton("🧾↩")
         self.pick_from_invoice_button.setObjectName("iconButton")
         self.pick_from_invoice_button.setFixedWidth(48)
-        self.pick_from_invoice_button.setToolTip("انتخابِ اقلام از یکی از فاکتورهایِ قبلیِ همین طرفِ‌حساب")
+        self.pick_from_invoice_button.setToolTip("انتخاب اقلام از یکی از فاکتورهای قبلی همین طرف‌حساب")
         self.pick_from_invoice_button.clicked.connect(self._pick_lines_from_invoice)
         _set_initial_visibility(self.pick_from_invoice_button, document_type_code in ("SALES_RETURN", "PURCHASE_RETURN"))
         self.footer_layout.addWidget(self.pick_from_invoice_button)
@@ -3078,33 +3078,33 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.report_button.setObjectName("iconButton")
         self.report_button.setFixedWidth(44)
         self.report_button.setToolTip(
-            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به فاکتور -- "
-            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+            "اجرای یکی از گزارش‌های حرفه‌ای تخصیص‌داده‌شده به فاکتور -- "
+            "برای تعریف/ویرایش گزارش‌ها به «تنظیمات سیستم ›  گزارش‌های حرفه‌ای» مراجعه کنید."
         )
         self.report_button.clicked.connect(self._run_invoice_report)
         self.footer_layout.addWidget(self.report_button)
         self.footer_layout.addStretch(1)
 
         self.set_field_help([
-            (self.date_field, "تاریخِ سند — پایهٔ تعیینِ سالِ مالی."),
-            (self.counterparty_combo, "طرفِ‌حسابِ این سند (مشتری برایِ فروش، تامین‌کننده برایِ خرید)."),
-            (self.warehouse_combo, "انبارِ پیش‌فرضِ این سند — اگر ردیفی انبارِ اختصاصیِ خودش را نداشته باشد، همین انبار به‌کار می‌رود."),
-            (self.consignment_warehouse_combo, "انبارِ نمایندگی/طرفِ امانی -- محلِ‌نگه‌داریِ کالایِ امانی نزدِ طرفِ‌حساب (انبارِ اصلیِ بالا دست‌نخورده می‌ماند)."),
-            (self.reference_field, "شماره/مرجعِ دلخواه برایِ ردیابی (مثلاً شماره‌یِ سفارشِ مشتری) -- در هیچ محاسبه‌ای اثر ندارد."),
-            (self.price_list_combo, "اگر برایِ ردیفی بهایِ واحد وارد نشود، از همین فهرستِ قیمت (یا قراردادِ فعالِ طرفِ‌حساب) محاسبه می‌شود."),
-            (self.channel_combo, "کانالِ فروش (مثلاً فروشگاهِ اینترنتیِ خاص) که این سند از آن آمده -- برایِ گزارشِ فروش بر اساسِ کانال."),
-            (self.settlement_type_combo, "نوعِ تسویه‌یِ پخش (نقدیِ پایِ بار/چک/یک‌هفته‌ای/...) -- کاملاً جدا از روشِ دریافت/پرداختِ خزانه‌داری؛ در «تنظیماتِ سیستم ‹ مدیریتِ بازرگانی ‹ انواعِ تسویهٔ پخش» تعریف می‌شود. با تبدیلِ سفارش به فاکتور هم منتقل می‌شود."),
-            (self.cost_center_combo, "مرکزِ هزینه/درآمدی که این سند به آن نسبت داده می‌شود."),
+            (self.date_field, "تاریخ سند — پایهٔ تعیین سال مالی."),
+            (self.counterparty_combo, "طرف‌حساب این سند (مشتری برای فروش، تامین‌کننده برای خرید)."),
+            (self.warehouse_combo, "انبار پیش‌فرض این سند — اگر ردیفی انبار اختصاصی خودش را نداشته باشد، همین انبار به‌کار می‌رود."),
+            (self.consignment_warehouse_combo, "انبار نمایندگی/طرف امانی — محل‌نگه‌داری کالای امانی نزد طرف‌حساب (انبار اصلی بالا دست‌نخورده می‌ماند)."),
+            (self.reference_field, "شماره/مرجع دلخواه برای ردیابی (مثلاً شمارهٔ سفارش مشتری) — در هیچ محاسبه‌ای اثر ندارد."),
+            (self.price_list_combo, "اگر برای ردیفی بهای واحد وارد نشود، از همین فهرست قیمت (یا قرارداد فعال طرف‌حساب) محاسبه می‌شود."),
+            (self.channel_combo, "کانال فروش (مثلاً فروشگاه اینترنتی خاص) که این سند از آن آمده — برای گزارش فروش بر اساس کانال."),
+            (self.settlement_type_combo, "نوع تسویهٔ پخش (نقدی پای بار/چک/یک‌هفته‌ای/...) — کاملاً جدا از روش دریافت/پرداخت خزانه‌داری؛ در «تنظیمات سیستم ‹ مدیریت بازرگانی ‹ انواع تسویهٔ پخش» تعریف می‌شود. با تبدیل سفارش به فاکتور هم منتقل می‌شود."),
+            (self.cost_center_combo, "مرکز هزینه/درآمدی که این سند به آن نسبت داده می‌شود."),
             (self.project_combo, "پروژه‌ای که این سند به آن مربوط است."),
             (
                 self.tax_posting_mode_combo,
-                "نوعِ ثبتِ حسابداریِ این سند -- خالی یعنی از تنظیماتِ سراسریِ شرکت پیروی کند؛ رسمی/غیررسمی یعنی override رویِ همین یک سند.",
+                "نوع ثبت حسابداری این سند — خالی یعنی از تنظیمات سراسری شرکت پیروی کند؛ رسمی/غیررسمی یعنی override روی همین یک سند.",
             ),
             (
                 self.tax_exempt_checkbox,
-                "با روشن‌کردنش، مالیاتِ همه‌یِ ردیف‌هایِ این سند -- ازپیش‌ثبت‌شده و تازه -- بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیاتِ قبلی را برنمی‌گرداند.",
+                "با روشن‌کردنش، مالیات همهٔ ردیف‌های این سند — ازپیش‌ثبت‌شده و تازه — بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیات قبلی را برنمی‌گرداند.",
             ),
-            (self.description_field, "توضیحِ آزادِ داخلی دربارهٔ این سند."),
+            (self.description_field, "توضیح آزاد داخلی دربارهٔ این سند."),
         ])
 
     def _company_id(self) -> int | None:
@@ -3114,7 +3114,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if company_id is None or counterparty_id is None:
-            QMessageBox.information(self, "طرفِ‌حساب", "ابتدا یک طرفِ‌حساب انتخاب کنید.")
+            QMessageBox.information(self, "طرف‌حساب", "ابتدا یک طرف‌حساب انتخاب کنید.")
             return
         default_type = "SALES_INVOICE" if self.document_type_code in _SALES_TYPES else "PURCHASE_INVOICE"
         dialog = _CounterpartyHistoryDialog(
@@ -3127,7 +3127,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if company_id is None or counterparty_id is None:
-            QMessageBox.information(self, "انتخاب از فاکتور", "ابتدا یک طرفِ‌حساب انتخاب کنید.")
+            QMessageBox.information(self, "انتخاب از فاکتور", "ابتدا یک طرف‌حساب انتخاب کنید.")
             return
         invoice_type_code = "SALES_INVOICE" if self.document_type_code == "SALES_RETURN" else "PURCHASE_INVOICE"
         picker = _ReturnInvoicePickerDialog(
@@ -3155,7 +3155,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 errors.append(f"{label}: {exc}")
         self._load_document()
         if last_item_id is not None and not errors:
-            theme.set_status_label(self.status_label, "ردیف‌هایِ انتخاب‌شده از فاکتور به سندِ برگشت اضافه شدند.", ok=True)
+            theme.set_status_label(self.status_label, "ردیف‌های انتخاب‌شده از فاکتور به سند برگشت اضافه شدند.", ok=True)
         if errors:
             QMessageBox.warning(self, "خطا در برخی ردیف‌ها", "\n".join(errors))
 
@@ -3171,9 +3171,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         _show_invoice_print(self, company_id, self._document_id, self.counterparty_combo.currentText(), jrxml_path=jrxml_path)
 
     def _recompute_due_date(self) -> None:
-        """طبقِ درخواستِ صریح: با انتخابِ طرفِ‌حساب، موعدِ تسویه از رویِ
-        payment_term_days همان طرفِ‌حساب دوباره محاسبه می‌شود -- ویرایشِ
-        دستیِ بعدی (بدونِ تغییرِ طرفِ‌حساب) دست‌نخورده می‌ماند."""
+        """طبق درخواست صریح: با انتخاب طرف‌حساب، موعد تسویه از روی
+        payment_term_days همان طرف‌حساب دوباره محاسبه می‌شود — ویرایش
+        دستی بعدی (بدون تغییر طرف‌حساب) دست‌نخورده می‌ماند."""
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if company_id is None or counterparty_id is None:
@@ -3214,12 +3214,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # طبقِ درخواستِ صریح: در امانیِ ورودی، همین فیلدِ «انبار»
             # جایی‌ست که کالایِ تامین‌کننده تا مصرف/فروش/تسویه نگه‌داری
             # می‌شود -- نه انبارِ نهاییِ فروش.
-            self.warehouse_label.setText("انبارِ نگه‌داری")
+            self.warehouse_label.setText("انبار نگه‌داری")
         else:
-            self.warehouse_label.setText("انبار (پیش‌فرضِ ردیف‌ها)" if self._per_line_warehouse_enabled else "انبار")
+            self.warehouse_label.setText("انبار (پیش‌فرض ردیف‌ها)" if self._per_line_warehouse_enabled else "انبار")
         if self._goods_receipt_enabled and self.document_type_code == "PURCHASE_ORDER":
             # کالا هنوز وارد انبار نشده -- انباردار هنگامِ تاییدِ رسید انبار را مشخص می‌کند.
-            self.warehouse_label.setText("انبار (اختیاری -- در رسید مشخص می‌شود)")
+            self.warehouse_label.setText("انبار (اختیاری — در رسید مشخص می‌شود)")
         current_wh = self.warehouse_combo.currentData()
         self.warehouse_combo.blockSignals(True)
         self.warehouse_combo.clear()
@@ -3247,7 +3247,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             channels = pricing_service.list_channels(company_id)
             current_channel = self.channel_combo.currentData()
             self.channel_combo.clear()
-            self.channel_combo.addItem("(بدونِ کانال)", None)
+            self.channel_combo.addItem("(بدون کانال)", None)
             for ch in channels:
                 self.channel_combo.addItem(f"{ch.channel_code} — {ch.name}", ch.channel_code)
             if current_channel is not None:
@@ -3294,7 +3294,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         current_price_list = self.price_list_combo.currentData()
         self.price_list_combo.clear()
-        self.price_list_combo.addItem("(بدونِ فهرستِ قیمت)", None)
+        self.price_list_combo.addItem("(بدون فهرست قیمت)", None)
         for pl in price_lists:
             # طبقِ درخواستِ صریح: فقط نامِ فهرستِ قیمت نمایش داده شود،
             # نه «کد — نام» (که با عرضِ محدودِ فیلد بریده می‌شد).
@@ -3313,7 +3313,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         current_cc = self.cost_center_combo.currentData()
         self.cost_center_combo.clear()
-        self.cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        self.cost_center_combo.addItem("(بدون مرکز هزینه)", None)
         for opt in cost_center_options:
             # طبقِ درخواستِ صریح («فیلد برایِ نمایشِ کد و اسم کافی نیست --
             # فقط اسم کافی است»): برخلافِ فهرستِ قیمت که از قبل فقط نام
@@ -3324,14 +3324,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             index = self.cost_center_combo.findData(current_cc)
             if index >= 0:
                 self.cost_center_combo.setCurrentIndex(index)
-        self.cost_center_label.setText("مرکزِ هزینه *" if self._cost_center_required else "مرکزِ هزینه")
+        self.cost_center_label.setText("مرکز هزینه *" if self._cost_center_required else "مرکز هزینه")
 
         self._project_required, project_options = documents_service.get_header_dimension_requirement(
             company_id, self.document_type_code, dimensions_service.PROJECT_CODE
         )
         current_project = self.project_combo.currentData()
         self.project_combo.clear()
-        self.project_combo.addItem("(بدونِ پروژه)", None)
+        self.project_combo.addItem("(بدون پروژه)", None)
         for opt in project_options:
             self.project_combo.addItem(opt.name or opt.code, opt.detail_account_id)
         if current_project is not None:
@@ -3418,21 +3418,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         links = []
         stock_journal_entry_id = None
         if doc.stock_document_id is not None:
-            links.append(f"سندِ انبار: #{numerals.to_persian_digits(str(doc.stock_document_id))}")
+            links.append(f"سند انبار: #{numerals.to_persian_digits(str(doc.stock_document_id))}")
             try:
                 stock_doc_row, _ = inv_documents_service.get_stock_document(doc.stock_document_id, company_id)
                 stock_journal_entry_id = stock_doc_row.journal_entry_id
             except ValueError:
                 stock_journal_entry_id = None
         if doc.journal_entry_id is not None and stock_journal_entry_id is not None:
-            links.append(f"سندِ حسابداریِ فروش/دریافتنی: #{numerals.to_persian_digits(str(doc.journal_entry_id))}")
-            links.append(f"سندِ حسابداریِ بهایِ تمام‌شده/موجودی: #{numerals.to_persian_digits(str(stock_journal_entry_id))}")
+            links.append(f"سند حسابداری فروش/دریافتنی: #{numerals.to_persian_digits(str(doc.journal_entry_id))}")
+            links.append(f"سند حسابداری بهای تمام‌شده/موجودی: #{numerals.to_persian_digits(str(stock_journal_entry_id))}")
         elif doc.journal_entry_id is not None:
-            links.append(f"سندِ حسابداری: #{numerals.to_persian_digits(str(doc.journal_entry_id))}")
+            links.append(f"سند حسابداری: #{numerals.to_persian_digits(str(doc.journal_entry_id))}")
         elif stock_journal_entry_id is not None:
-            links.append(f"سندِ حسابداریِ بهایِ تمام‌شده/موجودی: #{numerals.to_persian_digits(str(stock_journal_entry_id))}")
+            links.append(f"سند حسابداری بهای تمام‌شده/موجودی: #{numerals.to_persian_digits(str(stock_journal_entry_id))}")
         if doc.source_document_id is not None:
-            links.append(f"سندِ مبدا: #{numerals.to_persian_digits(str(doc.source_document_id))}")
+            links.append(f"سند مبدا: #{numerals.to_persian_digits(str(doc.source_document_id))}")
         self.links_label.setText("  |  ".join(links))
         self._lines = lines
         self._refresh_lines_table()
@@ -3538,7 +3538,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         return self.warehouse_combo.currentData() if self.warehouse_combo is not None else None
 
     def _bin_choices(self, warehouse_id) -> list[tuple[int, str]]:
-        """R253: محل‌هایِ برگِ فعالِ انبار (کدِ کامل)، یک‌بار برایِ هر انبار در هر بازسازیِ جدول."""
+        """R253: محل‌های برگ فعال انبار (کد کامل)، یک‌بار برای هر انبار در هر بازسازی جدول."""
         if warehouse_id is None:
             return []
         if warehouse_id not in self._bin_choices_cache:
@@ -3567,11 +3567,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             combo.addItem(code, location_id)
         if ln.bin_location_id is not None:
             combo.setCurrentIndex(max(combo.findData(ln.bin_location_id), 0))
-        combo.setToolTip("محلِ ورودِ کالا در انبار؛ خالی = مکانِ پیش‌فرضِ انبار")
+        combo.setToolTip("محل ورود کالا در انبار؛ خالی = مکان پیش‌فرض انبار")
         receipt_locked = ln.bin_location_id is not None and ln.line_id in self._locked_line_ids
         combo.setEnabled(ln.stock_document_line_id is None and not receipt_locked)
         if receipt_locked:
-            combo.setToolTip("مکان را انباردار در تاییدِ رسید تعیین کرده است.")
+            combo.setToolTip("مکان را انباردار در تایید رسید تعیین کرده است.")
         combo.currentIndexChanged.connect(lambda _i=0, c=combo, line_id=ln.line_id: self._on_line_bin_changed(line_id, c))
         return combo
 
@@ -3630,7 +3630,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         qty_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
         if ln.line_id in self._locked_line_ids:
             qty_field.setEnabled(False)
-            qty_field.setToolTip("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌تغییر نیست.")
+            qty_field.setToolTip("مقدار این ردیف را انباردار در رسید کالا تایید کرده — قابل‌تغییر نیست.")
         self.lines_table.setCellWidget(row_index, 2, qty_field)
 
         price_field = _AmountField()
@@ -3773,14 +3773,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(28)
-        add_button.setToolTip("افزودنِ این ردیف به سند")
+        add_button.setToolTip("افزودن این ردیف به سند")
         actions_layout.addWidget(add_button)
         # طبقِ موردِ ۳: پیش از افزودن هم بتوان موجودی/کاردکس/قیمتِ قبلیِ
         # کالایِ انتخاب‌شده را دید -- تا انتخابِ کالا مشخص نشده غیرفعال‌اند.
         info_kardex_button = QPushButton("📇")
         info_kardex_button.setObjectName("iconButton")
         info_kardex_button.setFixedWidth(28)
-        info_kardex_button.setToolTip("کاردکسِ کالایِ انتخاب‌شده")
+        info_kardex_button.setToolTip("کاردکس کالای انتخاب‌شده")
         info_kardex_button.setEnabled(False)
         info_kardex_button.clicked.connect(
             lambda _checked=False, c=item_combo: self._open_item_kardex(c.currentData()) if c.currentData() is not None else None
@@ -3789,7 +3789,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         info_price_button = QPushButton("🕘")
         info_price_button.setObjectName("iconButton")
         info_price_button.setFixedWidth(28)
-        info_price_button.setToolTip("قیمت‌هایِ قبلیِ کالایِ انتخاب‌شده")
+        info_price_button.setToolTip("قیمت‌های قبلی کالای انتخاب‌شده")
         info_price_button.setEnabled(False)
         info_price_button.clicked.connect(
             lambda _checked=False, c=item_combo: self._open_item_price_history(c.currentData()) if c.currentData() is not None else None
@@ -3899,7 +3899,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self.price_list_combo.currentData(), self.document_type_code, self.date_field.date(),
             )
         except ValueError:
-            self.status_label.setText("قیمتی از قراردادِ فعال یا فهرستِ قیمت یافت نشد -- قیمت را دستی وارد کنید.")
+            self.status_label.setText("قیمتی از قرارداد فعال یا فهرست قیمت یافت نشد — قیمت را دستی وارد کنید.")
             return
         self.status_label.setText("")
         widgets["price"].setValue(float(resolved.unit_price))
@@ -3937,11 +3937,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._on_entry_row_item_changed()
 
     def _reset_entry_row_item_selection(self) -> None:
-        """طبقِ رفعِ باگِ واقعی («هر باز/بستِ فرم یک پیش‌نویسِ خالی
-        می‌سازد»): وقتی کاربر دیالوگِ ردیف را لغو می‌کند یا سند هنوز
-        ذخیره‌پذیر نیست، دیگر نیازی به ری‌لودِ کاملِ سند از پایگاه‌داده
-        نیست (که برایِ سندِ هنوز-ذخیره‌نشده اصلاً ممکن هم نبود) -- فقط
-        کمبویِ کالایِ ردیفِ ورودی به‌صورتِ محلی خالی می‌شود."""
+        """طبق رفع باگ واقعی («هر باز/بست فرم یک پیش‌نویس خالی
+        می‌سازد»): وقتی کاربر دیالوگ ردیف را لغو می‌کند یا سند هنوز
+        ذخیره‌پذیر نیست، دیگر نیازی به ری‌لود کامل سند از پایگاه‌داده
+        نیست (که برای سند هنوز-ذخیره‌نشده اصلاً ممکن هم نبود) — فقط
+        فهرست کالای ردیف ورودی به‌صورت محلی خالی می‌شود."""
         widgets = getattr(self, "_entry_row_widgets", None)
         if widgets is None:
             return
@@ -4009,20 +4009,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _maybe_offer_cross_warehouse_transfer(
         self, item, quantity: decimal.Decimal, warehouse_id: int | None,
     ) -> bool:
-        """طبقِ درخواستِ صریحِ کاربر («اگر کالایی در یک انبار وجود نداشت
-        ولی در انبارهایِ دیگر بود، در فاکتورِ فروش پیشنهاد بده و در
-        صورتِ تایید یک حواله‌یِ انتقال صادر کند»): این بررسی فقط برایِ
+        """طبق درخواست صریح کاربر («اگر کالایی در یک انبار وجود نداشت
+        ولی در انبارهای دیگر بود، در فاکتور فروش پیشنهاد بده و در
+        صورت تایید یک حوالهٔ انتقال صادر کند»): این بررسی فقط برای
         اسنادی که موجودی را کم می‌کنند (_STOCK_OUTBOUND_TYPES) و
-        کالایِ موجودی‌محور (is_stock_tracked) با انبارِ مشخص انجام
-        می‌شود. اگر موجودیِ انبارِ فعلی کافی نبود ولی انبارِ دیگری
-        موجودی داشت، از کاربر می‌پرسد و در صورتِ تایید، خودش یک سندِ
-        TRANSFER می‌سازد و مستقیماً تا POSTED پیش می‌برد. بازگشتِ False
-        فقط وقتی است که کاربر تاییدِ انتقال را داد ولی خودِ ساختِ حواله
-        شکست خورد -- در آن حالت افزودنِ ردیفِ فاکتور هم متوقف می‌شود تا
-        کاربر با یک فاکتورِ ناقص/گمراه‌کننده روبه‌رو نشود؛ در هر حالتِ
-        دیگر (موجودی کافی بود، جایِ دیگری هم موجودی نبود، یا کاربر
-        انتقال را نپذیرفت) True برمی‌گردد و ادامه‌یِ افزودنِ ردیف طبقِ
-        رفتارِ قبلی پیش می‌رود."""
+        کالای موجودی‌محور (is_stock_tracked) با انبار مشخص انجام
+        می‌شود. اگر موجودی انبار فعلی کافی نبود ولی انبار دیگری
+        موجودی داشت، از کاربر می‌پرسد و در صورت تایید، خودش یک سند
+        TRANSFER می‌سازد و مستقیماً تا POSTED پیش می‌برد. بازگشت False
+        فقط وقتی است که کاربر تایید انتقال را داد ولی خود ساخت حواله
+        شکست خورد — در آن حالت افزودن ردیف فاکتور هم متوقف می‌شود تا
+        کاربر با یک فاکتور ناقص/گمراه‌کننده روبه‌رو نشود؛ در هر حالت
+        دیگر (موجودی کافی بود، جای دیگری هم موجودی نبود، یا کاربر
+        انتقال را نپذیرفت) True برمی‌گردد و ادامهٔ افزودن ردیف طبق
+        رفتار قبلی پیش می‌رود."""
         if warehouse_id is None or self.document_type_code not in _STOCK_OUTBOUND_TYPES:
             return True
         if not getattr(item, "is_stock_tracked", True):
@@ -4046,13 +4046,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         current_wh_name = current_wh.name if current_wh is not None else ""
         qty_dp = self._uom_decimal_places.get(item.base_uom_id, 3)
         confirm = QMessageBox.question(
-            self, "کمبودِ موجودی",
+            self, "کمبود موجودی",
             (
-                f"موجودیِ «{item.name or item.code}» در انبارِ «{current_wh_name}» "
+                f"موجودی «{item.name or item.code}» در انبار «{current_wh_name}» "
                 f"{numerals.format_money(current_stock, qty_dp)} است (نیاز: {numerals.format_money(quantity, qty_dp)}).\n"
-                f"در انبارِ «{best.warehouse_name}»، {numerals.format_money(best.quantity_on_hand, qty_dp)} موجودی هست.\n\n"
-                f"یک حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, qty_dp)} عددی از «{best.warehouse_name}» "
-                f"به «{current_wh_name}» صادر و ثبتِ‌نهایی شود؟"
+                f"در انبار «{best.warehouse_name}»، {numerals.format_money(best.quantity_on_hand, qty_dp)} موجودی هست.\n\n"
+                f"یک حوالهٔ انتقال {numerals.format_money(transfer_qty, qty_dp)} عددی از «{best.warehouse_name}» "
+                f"به «{current_wh_name}» صادر و ثبت‌نهایی شود؟"
             ),
             QMessageBox.Yes | QMessageBox.No,
         )
@@ -4061,7 +4061,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         try:
             self._create_and_post_transfer(item.item_id, item.base_uom_id, transfer_qty, best.warehouse_id, warehouse_id)
         except ValueError as exc:
-            QMessageBox.warning(self, "خطا در صدورِ حواله‌یِ انتقال", str(exc))
+            QMessageBox.warning(self, "خطا در صدور حوالهٔ انتقال", str(exc))
             return False
         # طبقِ باگِ واقعیِ کشف‌شده: پیامِ موفقیت اگر همین‌جا رویِ
         # status_label نشسته می‌شد، بلافاصله توسطِ پیامِ ذخیره‌سازیِ
@@ -4070,7 +4070,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فقط این‌جا در یک متغیرِ نمونه یادداشت می‌شود تا _commit_entry_row
         # پس از اتمامِ کاملِ ذخیره‌سازی/بازسازیِ جدول، آن را واقعاً نشان دهد.
         self._pending_transfer_notice = (
-            f"حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, qty_dp)} عددی از «{best.warehouse_name}» ثبت شد."
+            f"حوالهٔ انتقال {numerals.format_money(transfer_qty, qty_dp)} عددی از «{best.warehouse_name}» ثبت شد."
         )
         return True
 
@@ -4083,7 +4083,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             company_id, user_id, "TRANSFER", self.date_field.date(),
             inv_documents_service.DocumentHeaderFields(
                 source_warehouse_id=source_warehouse_id, destination_warehouse_id=destination_warehouse_id,
-                description="حواله‌یِ خودکارِ رفعِ کمبودِ موجودی برایِ سندِ فروش",
+                description="حوالهٔ خودکار رفع کمبود موجودی برای سند فروش",
             ),
         )
         inv_documents_service.add_line(transfer_id, company_id, inv_documents_service.LineFields(
@@ -4103,10 +4103,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         here = sum((r.quantity_on_hand for r in rows if r.warehouse_id == warehouse_id), decimal.Decimal(0))
         uom_name = self._uom_codes.get(item.base_uom_id, "")
         dp = self._uom_decimal_places.get(item.base_uom_id, 2)
-        text = f"موجودیِ «{item.name or item.code}»: "
+        text = f"موجودی «{item.name or item.code}»: "
         if warehouse_id is not None:
             text += f"این انبار {numerals.format_money(here, dp)} {uom_name} -- "
-        text += f"کلِ انبارها {numerals.format_money(total, dp)} {uom_name}"
+        text += f"کل انبارها {numerals.format_money(total, dp)} {uom_name}"
         theme.set_status_label(self.entry_stock_label, text, ok=(here if warehouse_id is not None else total) > 0)
 
     def _entry_row_needs_tracking(self, item) -> bool:
@@ -4121,7 +4121,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
 
     def _open_entry_row_tracking(self, force: bool = False) -> bool:
-        """پنجرهٔ بچ/سریال/انقضا برایِ ردیفِ در حالِ ورود (پیش از ذخیرهٔ ردیف)؛
+        """پنجرهٔ بچ/سریال/انقضا برای ردیف در حال ورود (پیش از ذخیرهٔ ردیف)؛
         False یعنی کاربر انصراف داد."""
         from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
 
@@ -4235,13 +4235,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         edit_button = QPushButton("✏️")
         edit_button.setObjectName("iconButton")
         edit_button.setFixedWidth(28)
-        edit_button.setToolTip("ویرایشِ ردیف")
+        edit_button.setToolTip("ویرایش ردیف")
         edit_button.clicked.connect(lambda _checked=False, r=row_index: self._edit_line_at_row(r))
         layout.addWidget(edit_button)
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(28)
-        delete_button.setToolTip("حذفِ ردیف")
+        delete_button.setToolTip("حذف ردیف")
         delete_button.clicked.connect(lambda _checked=False, r=row_index: self._delete_line_at_row(r))
         if not self._lines_are_editable():
             # R226: سندِ تاییدشده/ثبت‌شده -- ویرایش/حذفِ ردیف فقط پس از بازگشت به پیش‌نویس.
@@ -4250,7 +4250,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 button.setToolTip("سند تایید شده و فقط-خواندنی است.")
         elif 0 <= row_index < len(self._lines) and self._lines[row_index].line_id in self._locked_line_ids:
             delete_button.setEnabled(False)
-            delete_button.setToolTip("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌حذف نیست.")
+            delete_button.setToolTip("مقدار این ردیف را انباردار در رسید کالا تایید کرده — قابل‌حذف نیست.")
         layout.addWidget(delete_button)
         # طبقِ موردِ ۳ («کاردکس و قیمت‌هایِ قبلی و موجودی در همان ردیف
         # قابلِ‌مشاهده باشه»): دو دکمهٔ سریع، مستقیم رویِ کالایِ همین
@@ -4258,7 +4258,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         kardex_button = QPushButton("📇")
         kardex_button.setObjectName("iconButton")
         kardex_button.setFixedWidth(28)
-        kardex_button.setToolTip("کاردکسِ این کالا")
+        kardex_button.setToolTip("کاردکس این کالا")
         kardex_button.clicked.connect(
             lambda _checked=False, r=row_index: self._open_item_kardex(self._lines[r].item_id) if 0 <= r < len(self._lines) else None
         )
@@ -4266,7 +4266,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         price_history_button = QPushButton("🕘")
         price_history_button.setObjectName("iconButton")
         price_history_button.setFixedWidth(28)
-        price_history_button.setToolTip("قیمت‌هایِ قبلیِ این کالا به همین طرفِ‌حساب")
+        price_history_button.setToolTip("قیمت‌های قبلی این کالا به همین طرف‌حساب")
         price_history_button.clicked.connect(
             lambda _checked=False, r=row_index: self._open_item_price_history(self._lines[r].item_id) if 0 <= r < len(self._lines) else None
         )
@@ -4282,7 +4282,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             track_button = QPushButton("🏷")
             track_button.setObjectName("iconButton")
             track_button.setFixedWidth(28)
-            track_button.setToolTip("ردیابی: بچ / سریال / تاریخِ انقضا")
+            track_button.setToolTip("ردیابی: بچ / سریال / تاریخ انقضا")
             track_button.clicked.connect(lambda _checked=False, ln=line, it=item: self._open_lot_tracking(ln, it))
             layout.addWidget(track_button)
         return container
@@ -4308,10 +4308,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         ).exec()
 
     def _item_info_tooltip_text(self, item_id: int) -> str:
-        """طبقِ موردِ ۳ («اطلاعاتِ کالا شاملِ کاردکس و قیمت‌هایِ قبلی و
-        موجودی در همان ردیف قابلِ‌مشاهده باشه»): موجودیِ کل/به‌ازایِ هر
-        انبار + آخرین قیمت‌هایِ همین کالا به همین طرفِ‌حساب -- بدونِ هیچ
-        کلیکی، فقط با نگه‌داشتنِ ماوس رویِ نامِ کالا دیده می‌شود."""
+        """طبق مورد ۳ («اطلاعات کالا شامل کاردکس و قیمت‌های قبلی و
+        موجودی در همان ردیف قابل‌مشاهده باشه»): موجودی کل/به‌ازای هر
+        انبار + آخرین قیمت‌های همین کالا به همین طرف‌حساب — بدون هیچ
+        کلیکی، فقط با نگه‌داشتن ماوس روی نام کالا دیده می‌شود."""
         company_id = self._company_id()
         if company_id is None:
             return ""
@@ -4330,7 +4330,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             per_warehouse = " | ".join(
                 f"{r.warehouse_name}: {numerals.format_money(r.quantity_on_hand, uom_decimals)}" for r in nonzero
             )
-            stock_line = f"موجودیِ کل: {numerals.format_money(total, uom_decimals)} ({per_warehouse})"
+            stock_line = f"موجودی کل: {numerals.format_money(total, uom_decimals)} ({per_warehouse})"
         lines = [stock_line]
         counterparty_id = self.counterparty_combo.currentData()
         if counterparty_id is not None:
@@ -4348,7 +4348,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.setWindowTitle("کاردکس کالا")
         dialog.resize(900, 560)
         dialog_layout = QVBoxLayout(dialog)
         dialog_layout.setContentsMargins(0, 0, 0, 0)
@@ -4361,7 +4361,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if company_id is None or counterparty_id is None:
-            QMessageBox.information(self, "قیمت‌هایِ قبلی", "برایِ دیدنِ قیمت‌هایِ قبلی، ابتدا طرفِ‌حساب را انتخاب کنید.")
+            QMessageBox.information(self, "قیمت‌های قبلی", "برای دیدن قیمت‌های قبلی، ابتدا طرف‌حساب را انتخاب کنید.")
             return
         item = next((it for it in self._items if it.item_id == item_id), None)
         item_label = f"{item.code} — {item.name or ''}" if item else str(item_id)
@@ -4405,7 +4405,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # دکمه. راهنماییِ متن برایِ شفاف‌شدنِ این تفاوت.
         if not is_draft and (is_confirmed or is_approved):
             self.confirm_button.setToolTip(
-                "این سند تایید شده و فقط-خواندنی است -- برایِ ویرایش، ابتدا دکمهٔ ↩️ «بازگشت به پیش‌نویس» را بزنید و بعد دوباره تایید کنید."
+                "این سند تایید شده و فقط-خواندنی است — برای ویرایش، ابتدا دکمهٔ ↩️ «بازگشت به پیش‌نویس» را بزنید و بعد دوباره تایید کنید."
             )
         # طبقِ گزارشِ صریحِ کاربر («سفارشِ خرید و مراحلِ آن قابلِ‌تنظیم
         # باشد... بسیار کار پیچیده و سخت است برایِ سازمان‌هایی که نیازِ
@@ -4446,8 +4446,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # Tooltip نشان می‌دهیم، نه فقط خاکستری‌کردنِ بی‌توضیح.
             if not has_plan and (is_confirmed or is_approved):
                 self.post_button.setToolTip(
-                    "۴) ثبتِ نهایی -- غیرِفعال است، چون: نحوه‌یِ تسویه هنوز مشخص نشده -- "
-                    "از دکمهٔ 🧾 «نحوه‌یِ تسویه» آن را مشخص کنید."
+                    "۴) ثبت نهایی — غیرفعال است، چون: نحوهٔ تسویه هنوز مشخص نشده -- "
+                    "از دکمهٔ 🧾 «نحوهٔ تسویه» آن را مشخص کنید."
                 )
             elif requires_doc_approval and is_confirmed and not is_approved:
                 # طبقِ گزارشِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید دو
@@ -4455,12 +4455,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 # صرفاً تاییدِ نحوه‌یِ تسویه کافی نیست -- خودِ سند هم باید
                 # جداگانه با دکمهٔ 👍 توسطِ مدیر تصویب شود.
                 self.post_button.setToolTip(
-                    "۴) ثبتِ نهایی -- غیرِفعال است، چون: این سند هنوز تصویبِ مدیر را نگرفته -- "
-                    "ابتدا دکمهٔ 👍 «تصویبِ سند» را بزنید."
+                    "۴) ثبت نهایی — غیرفعال است، چون: این سند هنوز تصویب مدیر را نگرفته -- "
+                    "ابتدا دکمهٔ 👍 «تصویب سند» را بزنید."
                 )
             elif has_plan and not has_approved_plan:
                 self.post_button.setToolTip(
-                    "۴) ثبتِ نهایی -- با این کلیک، هم نحوه‌یِ تسویه تاییدِ مدیر می‌شود (فقط برایِ مدیر ممکن است) "
+                    "۴) ثبت نهایی — با این کلیک، هم نحوهٔ تسویه تایید مدیر می‌شود (فقط برای مدیر ممکن است) "
                     "و هم سند قطعی می‌شود."
                 )
             else:
@@ -4479,11 +4479,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.post_button.setEnabled(is_approved if requires_doc_approval else (is_confirmed or is_approved))
             if requires_doc_approval and is_confirmed and not is_approved:
                 self.post_button.setToolTip(
-                    f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ابتدا باید توسطِ مدیر تصویب شود -- دکمهٔ 👍 «تصویبِ سند».)"
+                    f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ابتدا باید توسط مدیر تصویب شود — دکمهٔ 👍 «تصویب سند».)"
                 )
             else:
                 self.post_button.setToolTip(
-                    f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
+                    f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبت نهایی فقط برای مدیر — نقش ادمین/سوپروایزر/مدیر — ممکن است.)"
                 )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         self.history_button.setEnabled(self._document_id is not None)
@@ -4497,10 +4497,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         needs_receipt = self._goods_receipt_enabled and not self._warehouse_approved
         self.convert_button.setEnabled((is_confirmed or is_approved or is_posted) and not needs_receipt)
         self.convert_button.setToolTip(
-            ("تبدیل به فاکتور -- غیرِفعال است، چون حوالهٔ انبارِ این سفارش هنوز توسطِ انباردار تایید نشده."
+            ("تبدیل به فاکتور — غیرفعال است، چون حوالهٔ انبار این سفارش هنوز توسط انباردار تایید نشده."
              if self.document_type_code == "SALES_ORDER" else
-             "تبدیل به فاکتور -- غیرِفعال است، چون رسیدِ کالایِ این سفارش هنوز توسطِ انباردار تایید نشده.")
-            if needs_receipt else "تبدیل به فاکتور — از مقدارِ باقی‌ماندهٔ این سند، فاکتورِ تازه می‌سازد"
+             "تبدیل به فاکتور — غیرفعال است، چون رسید کالای این سفارش هنوز توسط انباردار تایید نشده.")
+            if needs_receipt else "تبدیل به فاکتور — از مقدار باقی‌ماندهٔ این سند، فاکتور تازه می‌سازد"
         )
         can_correct = is_posted and self._document_id is not None and self._can_correct_posted()
         self.correct_button.setEnabled(can_correct)
@@ -4510,12 +4510,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             company_id = self._company_id()
             user = app_session.current_user
             reason = documents_service.describe_correction_ineligibility(company_id, user.user_id) if company_id and user else ""
-            self.correct_button.setToolTip(f"اصلاحِ فاکتورِ ثبت‌شده -- غیرِفعال است، چون: {reason}")
+            self.correct_button.setToolTip(f"اصلاح فاکتور ثبت‌شده — غیرفعال است، چون: {reason}")
         else:
             self.correct_button.setToolTip(
-                "اصلاحِ فاکتورِ ثبت‌شده — فقط برایِ مدیر و در صورتِ فعال‌بودنِ تنظیمِ «اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده».\n"
-                "سندِ فعلی عیناً و با تاریخِ امروز برگشت می‌خورد (بدونِ تغییرِ تاریخِ فاکتورهایِ قبلی) "
-                "و یک پیش‌نویسِ تازه برایِ ویرایش باز می‌شود."
+                "اصلاح فاکتور ثبت‌شده — فقط برای مدیر و در صورت فعال‌بودن تنظیم «اجازهٔ اصلاح فاکتور ثبت‌شده».\n"
+                "سند فعلی عیناً و با تاریخ امروز برگشت می‌خورد (بدون تغییر تاریخ فاکتورهای قبلی) "
+                "و یک پیش‌نویس تازه برای ویرایش باز می‌شود."
             )
 
     def _reset_form(self, clear_only: bool = False) -> None:
@@ -4527,7 +4527,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._corrects_document_id = None
         self._lines = []
         self._clear_cross_sell_box()
-        self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]}ِ جدید")
+        self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]} جدید")
         self.document_no_field.setText("—")
         self.status_label.setText("")
         self.links_label.setText("")
@@ -4567,15 +4567,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.refresh()
 
     def open_as_new(self) -> None:
-        """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشِ خریدِ جدید کالای سفارشِ
-        قبلی را نگه می‌دارد»/«بعدِ تایید یا تصویب، صفحه خالی می‌ماند»):
-        این صفحه یک نمونه‌یِ تکی و کش‌شده است -- شِلِ اصلی برایِ هر نوعِ
+        """طبق رفع باگ واقعی گزارش‌شده («سفارش خرید جدید کالای سفارش
+        قبلی را نگه می‌دارد»/«بعد تایید یا تصویب، صفحه خالی می‌ماند»):
+        این صفحه یک نمونهٔ تکی و کش‌شده است — شل اصلی برای هر نوع
         سند فقط یک‌بار آن را می‌سازد، پس با هربار بازکردن دوباره‌اش از
-        منویِ سادهٔ ساید‌بار (که هیچ callbackِ then‌ای -- برخلافِ ویرایشِ
-        صریحِ یک سندِ مشخص از فهرستِ اسناد -- به آن نمی‌دهد)، بدونِ این
-        ریست صرفاً هرچه آخرین‌بار رویِ صفحه بوده دوباره نشان داده می‌شد:
-        چه سندِ قدیمیِ کاملاً نامرتبط (پس ردیفِ ورودی هم کالای همان سندِ
-        قدیمی را نگه می‌داشت) و چه هیچ‌ سندی هرگز رویِ آن بار نشده باشد
+        منوی سادهٔ ساید‌بار (که هیچ callback then‌ای — برخلاف ویرایش
+        صریح یک سند مشخص از فهرست اسناد — به آن نمی‌دهد)، بدون این
+        ریست صرفاً هرچه آخرین‌بار روی صفحه بوده دوباره نشان داده می‌شد:
+        چه سند قدیمی کاملاً نامرتبط (پس ردیف ورودی هم کالای همان سند
+        قدیمی را نگه می‌داشت) و چه هیچ‌ سندی هرگز روی آن بار نشده باشد
         (پس کاملاً خالی می‌ماند). shell_window.open_screen این متد را
         خودکار صدا می‌زند وقتی هیچ then ای داده نشده باشد."""
         self._reset_form()
@@ -4583,8 +4583,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def prefill_for_new(
         self, counterparty_detail_account_id: int, channel_code: str | None = None, description: str | None = None,
     ) -> None:
-        """طبقِ نیازِ صفحه‌یِ فروشِ تلفنی: بازکردنِ فرمِ سندِ تازه با
-        مشتری/کانال/توضیحِ از پیش‌انتخاب‌شده -- هم‌الگو با
+        """طبق نیاز صفحهٔ فروش تلفنی: بازکردن فرم سند تازه با
+        مشتری/کانال/توضیح از پیش‌انتخاب‌شده — هم‌الگو با
         prefill_for_invoice در treasury_voucher.py."""
         self._reset_form()
         index = self.counterparty_combo.findData(counterparty_detail_account_id)
@@ -4600,7 +4600,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _header_fields(self) -> documents_service.DocumentHeaderFields | None:
         counterparty_id = self.counterparty_combo.currentData()
         if counterparty_id is None:
-            self.status_label.setText("انتخابِ طرفِ‌حساب الزامی است.")
+            self.status_label.setText("انتخاب طرف‌حساب الزامی است.")
             return None
         # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
         # الزامی فراموش شده است»): اگر حسابِ نقش‌محورِ این نوعِ سند به
@@ -4610,16 +4610,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         if company_id is not None:
             if self.cost_center_combo.currentData() is None and self._cost_center_required:
-                self.status_label.setText("انتخابِ «مرکزِ هزینه» برایِ این نوعِ سند الزامی است.")
+                self.status_label.setText("انتخاب «مرکز هزینه» برای این نوع سند الزامی است.")
                 return None
             if self.project_combo.currentData() is None and self._project_required:
-                self.status_label.setText("انتخابِ «پروژه» برایِ این نوعِ سند الزامی است.")
+                self.status_label.setText("انتخاب «پروژه» برای این نوع سند الزامی است.")
                 return None
         consignment_warehouse_id = None
         if self.document_type_code == "CONSIGNMENT_OUT":
             consignment_warehouse_id = self.consignment_warehouse_combo.currentData()
             if consignment_warehouse_id is None:
-                self.status_label.setText("انتخابِ «انبارِ نمایندگی/طرفِ امانی» الزامی است.")
+                self.status_label.setText("انتخاب «انبار نمایندگی/طرف امانی» الزامی است.")
                 return None
         company = app_session.current_company
         return documents_service.DocumentHeaderFields(
@@ -4661,9 +4661,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 QMessageBox.warning(self, "خطا در ذخیره", str(exc))
                 return
             self._load_document()
-            theme.set_status_label(self.status_label, "مرکزِ هزینه/پروژهٔ سند ذخیره شد.", ok=True)
+            theme.set_status_label(self.status_label, "مرکز هزینه/پروژهٔ سند ذخیره شد.", ok=True)
             if notify:
-                widgets.show_saved_dialog(self, "مرکزِ هزینه/پروژهٔ سند ذخیره شد.")
+                widgets.show_saved_dialog(self, "مرکز هزینه/پروژهٔ سند ذخیره شد.")
             return
         try:
             if is_new:
@@ -4685,11 +4685,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # مسیرِ موفقیت فقط status_label را خالی می‌کرد — بدونِ هیچ
         # تاییدِ مثبتی، کاربر نمی‌فهمید سند واقعاً ذخیره شده یا نه.
         theme.set_status_label(
-            self.status_label, "سند به‌عنوانِ پیش‌نویس ذخیره شد." if is_new else "تغییراتِ سند ذخیره شد.", ok=True,
+            self.status_label, "سند به‌عنوان پیش‌نویس ذخیره شد." if is_new else "تغییرات سند ذخیره شد.", ok=True,
         )
         if notify:
             title = DOC_TYPE_TITLES.get(self.document_type_code, "سند")
-            widgets.show_saved_dialog(self, f"{title} ذخیره شد." if is_new else f"تغییراتِ {title} ذخیره شد.")
+            widgets.show_saved_dialog(self, f"{title} ذخیره شد." if is_new else f"تغییرات {title} ذخیره شد.")
 
     def _ensure_saved(self) -> bool:
         if self._document_id is None:
@@ -4716,14 +4716,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._load_document()
 
     def _flush_header_changes(self) -> bool:
-        """طبقِ گزارشِ صریح («نوعِ ثبت را عوض می‌کنم ولی اثر نمی‌کند»):
-        اگر کاربر پیش از تاییدِ سند یک فیلدِ هدر (مثلاً نوعِ ثبتِ رسمی/
-        غیررسمی) را تغییر داده باشد ولی دوباره رویِ «ذخیره» نزده باشد،
-        آن تغییر هرگز به سرور نمی‌رسید -- confirm_document فقط وضعیت را
-        عوض می‌کند، هیچ فیلدی از خودِ فرم نمی‌خواند. حالا پیش از هر
-        تاییدی، آخرین مقادیرِ فرم دوباره ذخیره می‌شود تا تصمیمِ رسمی/
-        غیررسمی (و تسهیمِ هزینه‌هایِ جانبی، که هردو در لحظهٔ Post خوانده
-        می‌شوند) همیشه با چیزی که کاربر واقعاً رویِ صفحه می‌بیند یکی باشد."""
+        """طبق گزارش صریح («نوع ثبت را عوض می‌کنم ولی اثر نمی‌کند»):
+        اگر کاربر پیش از تایید سند یک فیلد هدر (مثلاً نوع ثبت رسمی/
+        غیررسمی) را تغییر داده باشد ولی دوباره روی «ذخیره» نزده باشد،
+        آن تغییر هرگز به سرور نمی‌رسید — confirm_document فقط وضعیت را
+        عوض می‌کند، هیچ فیلدی از خود فرم نمی‌خواند. حالا پیش از هر
+        تاییدی، آخرین مقادیر فرم دوباره ذخیره می‌شود تا تصمیم رسمی/
+        غیررسمی (و تسهیم هزینه‌های جانبی، که هردو در لحظهٔ Post خوانده
+        می‌شوند) همیشه با چیزی که کاربر واقعاً روی صفحه می‌بیند یکی باشد."""
         if self._document_id is None:
             return True
         company_id = self._company_id()
@@ -4741,14 +4741,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         return True
 
     def _warn_if_consignment_cost_mixing(self, item_id: int | None, warehouse_id: int | None) -> None:
-        """طبقِ بررسیِ موردِ ۳ (رهگیریِ کالایِ امانیِ ورودی): وقتی روشِ
-        بهایابی WEIGHTED_AVERAGE است، اگر همین انبار از قبل موجودیِ
-        *خریداری‌شده* (نه امانی) از همین کالا هم داشته باشد، بهایِ
-        توافقیِ امانی با آن مخلوط می‌شود و ممکن است در تسویه‌یِ نهایی
-        (که همیشه دقیقاً با بهایِ توافقیِ اصلی جمع می‌بندد) یک اختلافِ
-        جزئی در حسابِ موجودیِ کالا باقی بگذارد. این فقط یک هشدارِ
-        اطلاع‌رسانی است -- هیچ‌چیزی مسدود نمی‌شود، چون فروشِ امانیِ
-        تسویه‌نشده پیش از تسویه یک ویژگیِ آگاهانه و تست‌شده است."""
+        """طبق بررسی مورد ۳ (رهگیری کالای امانی ورودی): وقتی روش
+        بهایابی WEIGHTED_AVERAGE است، اگر همین انبار از قبل موجودی
+        *خریداری‌شده* (نه امانی) از همین کالا هم داشته باشد، بهای
+        توافقی امانی با آن مخلوط می‌شود و ممکن است در تسویهٔ نهایی
+        (که همیشه دقیقاً با بهای توافقی اصلی جمع می‌بندد) یک اختلاف
+        جزئی در حساب موجودی کالا باقی بگذارد. این فقط یک هشدار
+        اطلاع‌رسانی است — هیچ‌چیزی مسدود نمی‌شود، چون فروش امانی
+        تسویه‌نشده پیش از تسویه یک ویژگی آگاهانه و تست‌شده است."""
         if self.document_type_code != "CONSIGNMENT_IN" or item_id is None or warehouse_id is None:
             return
         company_id = self._company_id()
@@ -4762,12 +4762,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         unsettled = consignment_service.unsettled_consignment_in_quantity(company_id, item_id, warehouse_id)
         if on_hand > unsettled:
             QMessageBox.information(
-                self, "هشدارِ اختلاطِ بهایِ میانگین",
-                "این انبار از قبل، علاوه‌بر امانی، موجودیِ خریداری‌شده از همین کالا هم دارد. "
-                "چون روشِ بهایابی «میانگینِ موزون» است، بهایِ توافقیِ امانی با بهایِ خریدِ واقعی مخلوط "
-                "می‌شود و ممکن است در تسویه‌یِ نهاییِ امانی یک اختلافِ جزئی در حسابِ موجودیِ کالا "
-                "باقی بماند. برایِ جلوگیریِ کامل از این اختلاط، توصیه می‌شود کالاهایِ امانیِ ورودی را "
-                "در یک انبارِ مجزا نگه‌داری کنید.",
+                self, "هشدار اختلاط بهای میانگین",
+                "این انبار از قبل، علاوه‌بر امانی، موجودی خریداری‌شده از همین کالا هم دارد. "
+                "چون روش بهایابی «میانگین موزون» است، بهای توافقی امانی با بهای خرید واقعی مخلوط "
+                "می‌شود و ممکن است در تسویهٔ نهایی امانی یک اختلاف جزئی در حساب موجودی کالا "
+                "باقی بماند. برای جلوگیری کامل از این اختلاط، توصیه می‌شود کالاهای امانی ورودی را "
+                "در یک انبار مجزا نگه‌داری کنید.",
             )
 
     def _add_line(self) -> None:
@@ -4825,19 +4825,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             theme.set_status_label(self.status_label, f"{len(fields_list)} ردیف اضافه شد.", ok=True)
 
     def _refresh_customer_summary(self) -> None:
-        """طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند»): خلاصه‌یِ وضعیتِ همان
-        مشتریِ رویِ هدر -- آخرین خرید، میانگینِ فاصله‌یِ خرید، سقفِ اعتبار،
-        بدهیِ جاری، و امتیاز/ردیفِ مشتری -- درست زیرِ هدرِ سند. طبقِ
-        درخواستِ صریحِ بعدی، خودِ فیلدِ انتخابِ مشتری هم رنگ‌آمیزی می‌شود:
-        گرادیانِ افقی از رنگِ (قرمز تا سبز، متناسب با امتیاز) در سمتِ چپ
-        تا سفید در سمتِ راست -- تا نامِ مشتری همیشه خوانا بماند.
+        """طبق درخواست صریح («فاکتور فوق‌هوشمند»): خلاصهٔ وضعیت همان
+        مشتری روی هدر — آخرین خرید، میانگین فاصلهٔ خرید، سقف اعتبار،
+        بدهی جاری، و امتیاز/ردیف مشتری — درست زیر هدر سند. طبق
+        درخواست صریح بعدی، خود فیلد انتخاب مشتری هم رنگ‌آمیزی می‌شود:
+        گرادیان افقی از رنگ (قرمز تا سبز، متناسب با امتیاز) در سمت چپ
+        تا سفید در سمت راست — تا نام مشتری همیشه خوانا بماند.
 
-        طبقِ گزارشِ صریحِ بعدی («بدهی از سقفِ اعتبار عبور کرده، آیا نباید
-        تاثیری داشته باشه؟»): طبقِ تصمیمِ طراحی، این عمداً امتیازِ کلی را
-        عوض نمی‌کند (چون امتیاز معیارِ ارزشِ رابطه است، نه ریسکِ لحظه‌ای)
-        ولی یک نشانه‌یِ جداگانه و فوری می‌گیرد -- به‌جایِ چشمک‌زدن (که برایِ
-        نرم‌افزارِ حرفه‌ای معمولاً توصیه نمی‌شود)، یک قابِ قرمزِ ثابت دورِ
-        فیلد و یک خطِ هشدار در پنل، تا هم دیده شود و هم اذیت‌کننده نباشد."""
+        طبق گزارش صریح بعدی («بدهی از سقف اعتبار عبور کرده، آیا نباید
+        تاثیری داشته باشه؟»): طبق تصمیم طراحی، این عمداً امتیاز کلی را
+        عوض نمی‌کند (چون امتیاز معیار ارزش رابطه است، نه ریسک لحظه‌ای)
+        ولی یک نشانهٔ جداگانه و فوری می‌گیرد — به‌جای چشمک‌زدن (که برای
+        نرم‌افزار حرفه‌ای معمولاً توصیه نمی‌شود)، یک قاب قرمز ثابت دور
+        فیلد و یک خط هشدار در پنل، تا هم دیده شود و هم اذیت‌کننده نباشد."""
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if not self._supports_cross_sell or company_id is None or counterparty_id is None:
@@ -4858,17 +4858,17 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             f"stop:0 {gradient_color}, stop:1 white); color: #1a1a1a; {border_rule} }}"
         )
 
-        parts = [f"{score_row.emoji} امتیازِ مشتری: {numerals.to_persian_digits(str(score_row.score))} ({score_row.tier_label})"]
+        parts = [f"{score_row.emoji} امتیاز مشتری: {numerals.to_persian_digits(str(score_row.score))} ({score_row.tier_label})"]
         if score_row.days_since_last is not None:
             parts.append(f"آخرین خرید: {numerals.to_persian_digits(str(score_row.days_since_last))} روز پیش")
         if score_row.avg_interval_days is not None:
-            parts.append(f"میانگینِ خرید: هر {numerals.to_persian_digits(str(round(score_row.avg_interval_days)))} روز")
+            parts.append(f"میانگین خرید: هر {numerals.to_persian_digits(str(round(score_row.avg_interval_days)))} روز")
 
         if score_row.credit_limit_amount:
-            parts.append(f"سقفِ اعتبار: {numerals.format_company_amount(score_row.credit_limit_amount)}")
-            parts.append(f"بدهیِ جاری: {numerals.format_company_amount(score_row.current_exposure)}")
+            parts.append(f"سقف اعتبار: {numerals.format_company_amount(score_row.credit_limit_amount)}")
+            parts.append(f"بدهی جاری: {numerals.format_company_amount(score_row.current_exposure)}")
             if score_row.over_credit_limit:
-                parts.append("🚨 بدهی از سقفِ اعتبار عبور کرده")
+                parts.append("🚨 بدهی از سقف اعتبار عبور کرده")
 
         self.customer_summary_label.setText("  |  ".join(parts))
         self.customer_summary_box.setVisible(True)
@@ -4882,22 +4882,22 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cross_sell_box.setVisible(False)
 
     def _refresh_cross_sell_suggestion(self, item_id: int | None) -> None:
-        """طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ یک ردیف، اگر
-        کالاهایی هست که همینِ مشتریِ رویِ هدرِ سند معمولاً همراهِ همین
+        """طبق درخواست صریح («سبد پیشنهادی»): بعد افزودن یک ردیف، اگر
+        کالاهایی هست که همین مشتری روی هدر سند معمولاً همراه همین
         کالا خریده، همه‌شان این‌جا نشان داده می‌شوند (نه فقط یکی) --
-        کاملاً غیرِمزاحم -- بدونِ مشتریِ انتخاب‌شده یا بدونِ سابقه‌یِ
+        کاملاً غیرمزاحم — بدون مشتری انتخاب‌شده یا بدون سابقهٔ
         کافی، هیچ‌چیزی نمایش داده نمی‌شود.
 
-        باگِ واقعیِ گزارش‌شده (۱): چون کالایِ A و B معمولاً هردو باهم
-        دیده می‌شوند، بعدِ افزودنِ B (که خودش به‌خاطرِ A پیشنهاد شده
-        بود)، دوباره خودِ A پیشنهاد می‌شد -- در حالی‌که از قبل در همین
-        فاکتور هست. پس این‌جا کالاهایی که از پیش در سندِ جاری‌اند فیلتر
+        باگ واقعی گزارش‌شده (۱): چون کالای A و B معمولاً هردو باهم
+        دیده می‌شوند، بعد افزودن B (که خودش به‌خاطر A پیشنهاد شده
+        بود)، دوباره خود A پیشنهاد می‌شد — در حالی‌که از قبل در همین
+        فاکتور هست. پس این‌جا کالاهایی که از پیش در سند جاری‌اند فیلتر
         می‌شوند.
 
-        باگِ واقعیِ گزارش‌شده (۲): پیام به «مشتری‌ها» به‌طورِ کلی اشاره
-        می‌کرد، در حالی‌که نامِ مشتریِ مشخص از قبل رویِ هدر هست -- حالا
-        فقط سابقه‌یِ خودِ همین مشتری در نظر گرفته می‌شود و در متنِ پیام
-        هم به نامِ او اشاره می‌شود."""
+        باگ واقعی گزارش‌شده (۲): پیام به «مشتری‌ها» به‌طور کلی اشاره
+        می‌کرد، در حالی‌که نام مشتری مشخص از قبل روی هدر هست — حالا
+        فقط سابقهٔ خود همین مشتری در نظر گرفته می‌شود و در متن پیام
+        هم به نام او اشاره می‌شود."""
         self._clear_cross_sell_box()
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
@@ -4919,7 +4919,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
             label = QLabel(
-                f"💡 «{customer_name}» معمولاً همراهِ این کالا «{suggestion.item_code} — {suggestion.item_name}» را هم می‌خرد "
+                f"💡 «{customer_name}» معمولاً همراه این کالا «{suggestion.item_code} — {suggestion.item_name}» را هم می‌خرد "
                 f"({numerals.to_persian_digits(str(suggestion.confidence_percent))}٪)"
             )
             label.setWordWrap(True)
@@ -4966,12 +4966,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.upsell_box.setVisible(False)
 
     def _refresh_upsell_suggestion(self, item_id: int | None) -> None:
-        """طبقِ درخواستِ صریح («فروشِ ارتقایی»): اگر کالایِ همین ردیف در
-        فرمِ کالا یک یا چند «جایگزین» (RelatedItem با نوعِ SUBSTITUTE)
-        دارد که قیمتِ فروشِ حل‌شده‌اش (طبقِ همان فهرستِ قیمت/طرفِ‌حسابِ
-        همین سند) از قیمتِ همین ردیف بالاتر باشد، پیشنهادِ ارتقا نشان
-        داده می‌شود -- یک جایگزینِ بدونِ قیمتِ قابلِ‌حل در همین بافت
-        بی‌صدا نادیده گرفته می‌شود (چون سوگیریِ آن قابلِ‌فروش نیست)."""
+        """طبق درخواست صریح («فروش ارتقایی»): اگر کالای همین ردیف در
+        فرم کالا یک یا چند «جایگزین» (RelatedItem با نوع SUBSTITUTE)
+        دارد که قیمت فروش حل‌شده‌اش (طبق همان فهرست قیمت/طرف‌حساب
+        همین سند) از قیمت همین ردیف بالاتر باشد، پیشنهاد ارتقا نشان
+        داده می‌شود — یک جایگزین بدون قیمت قابل‌حل در همین بافت
+        بی‌صدا نادیده گرفته می‌شود (چون سوگیری آن قابل‌فروش نیست)."""
         self._clear_upsell_box()
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
@@ -5008,8 +5008,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
             label = QLabel(
-                f"⬆️ نسخهٔ بالاترِ این کالا هم موجود است: «{substitute_item.code} — {substitute_item.name}» "
-                f"به‌قیمتِ {numerals.format_money(upgraded_price, self._decimal_places)}"
+                f"⬆️ نسخهٔ بالاتر این کالا هم موجود است: «{substitute_item.code} — {substitute_item.name}» "
+                f"به‌قیمت {numerals.format_money(upgraded_price, self._decimal_places)}"
             )
             label.setWordWrap(True)
             row_layout.addWidget(label, stretch=1)
@@ -5104,7 +5104,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _delete_line_object(self, line) -> None:
         if self._document_id is None or not self._lines_are_editable():
             return
-        confirm = QMessageBox.question(self, "حذفِ ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -5116,13 +5116,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         theme.set_status_label(self.status_label, "ردیف حذف شد.", ok=True)
 
     def _confirm(self) -> bool:
-        """طبقِ عمد: این تابع فقط خودِ تاییدِ سند را انجام می‌دهد (بدونِ
-        هیچ دیالوگِ اضافه) -- چون تست‌هایِ زیادی (نامرتبط با نحوه‌یِ
-        تسویه) این متد را مستقیماً برایِ رساندنِ سند به وضعیتِ CONFIRMED
-        صدا می‌زنند و نباید با یک QMessageBox/دیالوگِ مسدودکننده‌یِ
-        غیرمنتظره روبه‌رو شوند. پرسیدنِ نحوه‌یِ تسویه (طبقِ گزارشِ صریحِ
-        کاربر) فقط در _confirm_button_clicked -- که مستقیماً به کلیکِ
-        واقعیِ دکمهٔ ✅ وصل است -- انجام می‌شود."""
+        """طبق عمد: این تابع فقط خود تایید سند را انجام می‌دهد (بدون
+        هیچ دیالوگ اضافه) — چون تست‌های زیادی (نامرتبط با نحوهٔ
+        تسویه) این متد را مستقیماً برای رساندن سند به وضعیت CONFIRMED
+        صدا می‌زنند و نباید با یک QMessageBox/دیالوگ مسدودکنندهٔ
+        غیرمنتظره روبه‌رو شوند. پرسیدن نحوهٔ تسویه (طبق گزارش صریح
+        کاربر) فقط در _confirm_button_clicked — که مستقیماً به کلیک
+        واقعی دکمهٔ ✅ وصل است — انجام می‌شود."""
         if self._document_id is None:
             return False
         if not self._flush_header_changes():
@@ -5136,21 +5136,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # هیچ اتفاقی نیفتاده. حالا هم‌الگو با خطاهایِ ردیف، یک
             # دیالوگِ مسدودکننده هم نمایش می‌دهد.
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در تاییدِ سند", str(exc))
+            QMessageBox.warning(self, "خطا در تایید سند", str(exc))
             return False
         self._load_document()
         theme.set_status_label(self.status_label, "سند تایید شد.", ok=True)
         return True
 
     def _budget_warnings(self) -> list[str]:
-        """R243: هشدارِ بودجه پس از تاییدِ سندِ خرید (جلویِ ثبت را نمی‌گیرد)."""
+        """R243: هشدار بودجه پس از تایید سند خرید (جلوی ثبت را نمی‌گیرد)."""
         if self._document_id is None or not self.document_type_code.startswith("PURCHASE"):
             return []
         from peecha.services import purchase_budgets as budgets_service
 
         warnings = budgets_service.warnings_for_document(self._document_id, self._company_id())
         if warnings:
-            QMessageBox.warning(self, "هشدارِ بودجهٔ خرید", "\n".join(warnings))
+            QMessageBox.warning(self, "هشدار بودجهٔ خرید", "\n".join(warnings))
         return warnings
 
     def _confirm_button_clicked(self) -> None:
@@ -5167,22 +5167,22 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self._finish_one_step_post()
 
     def _finish_one_step_post(self) -> None:
-        """طبقِ درخواستِ صریحِ کاربر («مراحلِ ثبتِ فاکتور قابلِ‌تنظیم باشد»):
-        با Toggleِ INVOICE_ONE_STEP_POST، برایِ کاربرِ مدیر همین یک دکمه
-        تصویب (اگر لازم است) و ثبتِ نهایی را هم انجام می‌دهد."""
+        """طبق درخواست صریح کاربر («مراحل ثبت فاکتور قابل‌تنظیم باشد»):
+        با Toggle INVOICE_ONE_STEP_POST، برای کاربر مدیر همین یک دکمه
+        تصویب (اگر لازم است) و ثبت نهایی را هم انجام می‌دهد."""
         company_id = self._company_id()
         user = app_session.current_user
         if self._document_id is None or company_id is None or user is None:
             return
         if not roles_service.is_manager(user.user_id, company_id):
-            theme.set_status_label(self.status_label, "فاکتور تایید شد؛ ثبتِ نهایی با مدیر است.", ok=True)
+            theme.set_status_label(self.status_label, "فاکتور تایید شد؛ ثبت نهایی با مدیر است.", ok=True)
             return
         if self._settlement_plan is None:
             return
         if self.document_type_code == "PURCHASE_INVOICE" \
                 and documents_service.invoice_requires_warehouse_approval(self._document_id, company_id) \
                 and documents_service.get_document(self._document_id, company_id)[0].warehouse_approved_at is None:
-            theme.set_status_label(self.status_label, "فاکتور تایید شد؛ ثبتِ نهایی پس از تاییدِ رسیدِ کالا توسطِ انباردار.", ok=True)
+            theme.set_status_label(self.status_label, "فاکتور تایید شد؛ ثبت نهایی پس از تایید رسید کالا توسط انباردار.", ok=True)
             return
         if (
             self._requires_doc_approval and self._status_code == "CONFIRMED"
@@ -5191,7 +5191,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 documents_service.approve_document(
                     self._document_id, company_id, app_session.current_user.user_id if app_session.current_user else None)
             except ValueError as exc:
-                QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))
+                QMessageBox.warning(self, "خطا در تصویب سند", str(exc))
                 return
             self._load_document()
         self._post(ask=False)
@@ -5201,9 +5201,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if company_id is None or self._document_id is None:
             return
         has_receipt = QMessageBox.question(
-            self, "نحوه‌یِ تسویه",
-            "آیا همین الان دریافت/پرداختی (نقد یا بانکی) برایِ این فاکتور انجام شده؟\n"
-            "«خیر» یعنی این فاکتور به‌طورِ کامل نسیه است.",
+            self, "نحوهٔ تسویه",
+            "آیا همین الان دریافت/پرداختی (نقد یا بانکی) برای این فاکتور انجام شده؟\n"
+            "«خیر» یعنی این فاکتور به‌طور کامل نسیه است.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if has_receipt == QMessageBox.Yes:
@@ -5216,7 +5216,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._load_document()
         theme.set_status_label(
-            self.status_label, "فاکتور به‌عنوانِ نسیه ثبت شد؛ در انتظارِ ثبتِ نهاییِ مدیر است.", ok=True,
+            self.status_label, "فاکتور به‌عنوان نسیه ثبت شد؛ در انتظار ثبت نهایی مدیر است.", ok=True,
         )
 
     def _approve(self) -> None:
@@ -5230,8 +5230,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             user = app_session.current_user
             if company_id is not None and user is not None and not roles_service.is_manager(user.user_id, company_id):
                 QMessageBox.warning(
-                    self, "تصویبِ سند",
-                    "تصویبِ سند فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است.",
+                    self, "تصویب سند",
+                    "تصویب سند فقط برای مدیر (نقش ادمین/سوپروایزر/مدیر) ممکن است.",
                 )
                 return
         try:
@@ -5239,7 +5239,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     self._document_id, company_id, app_session.current_user.user_id if app_session.current_user else None)
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))
+            QMessageBox.warning(self, "خطا در تصویب سند", str(exc))
             return
         self._load_document()
         theme.set_status_label(self.status_label, "سند تصویب شد.", ok=True)
@@ -5258,8 +5258,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         user = app_session.current_user
         if company_id is not None and user is not None and not roles_service.is_manager(user.user_id, company_id):
             QMessageBox.warning(
-                self, "ثبتِ نهایی",
-                "ثبتِ نهایی فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است -- این سند تاییدشده و آماده‌یِ ثبتِ نهایی است.",
+                self, "ثبت نهایی",
+                "ثبت نهایی فقط برای مدیر (نقش ادمین/سوپروایزر/مدیر) ممکن است — این سند تاییدشده و آمادهٔ ثبت نهایی است.",
             )
             return
         # R226: مرکزِ هزینه/پروژه‌ای که پس از تایید انتخاب شده پیش از ثبت ذخیره می‌شود.
@@ -5269,7 +5269,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     self._document_id, company_id, self.cost_center_combo.currentData(), self.project_combo.currentData(),
                 )
             except ValueError as exc:
-                QMessageBox.warning(self, "ثبتِ نهایی", str(exc))
+                QMessageBox.warning(self, "ثبت نهایی", str(exc))
                 return
         # طبقِ گزارشِ صریحِ کاربر («مدیر فقط دیدن و کارِ ثبتِ نهایی انجام
         # دهد»): برایِ فاکتورِ خرید/فروش، اگر نقشه‌یِ تسویه هنوز توسطِ
@@ -5284,21 +5284,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             if self._is_invoice and self._corrects_document_id is None and company_id is not None else None
         )
         needs_settlement_approval = fresh_plan is not None and not fresh_plan.is_approved
-        question_text = "این سند ثبتِ نهایی شود؟ پسِ این کار، سند دیگر قابلِ‌ویرایش/حذف نیست."
+        question_text = "این سند ثبت نهایی شود؟ پس این کار، سند دیگر قابل‌ویرایش/حذف نیست."
         if needs_settlement_approval:
             question_text = (
-                "این سند ثبتِ نهایی شود؟ (این کار هم نحوه‌یِ تسویه را تایید می‌کند و هم سند را قطعی می‌کند.)\n"
-                "پسِ این کار، سند دیگر قابلِ‌ویرایش/حذف نیست."
+                "این سند ثبت نهایی شود؟ (این کار هم نحوهٔ تسویه را تایید می‌کند و هم سند را قطعی می‌کند.)\n"
+                "پس این کار، سند دیگر قابل‌ویرایش/حذف نیست."
             )
         if ask:
-            confirm = QMessageBox.question(self, "ثبتِ نهایی", question_text, QMessageBox.Yes | QMessageBox.No)
+            confirm = QMessageBox.question(self, "ثبت نهایی", question_text, QMessageBox.Yes | QMessageBox.No)
             if confirm != QMessageBox.Yes:
                 return
         if needs_settlement_approval:
             try:
                 settlements_service.approve_settlement_plan(self._document_id, company_id, app_session.current_user.user_id)
             except ValueError as exc:
-                QMessageBox.warning(self, "خطا در تاییدِ نحوه‌یِ تسویه", str(exc))
+                QMessageBox.warning(self, "خطا در تایید نحوهٔ تسویه", str(exc))
                 return
         try:
             if self._corrects_document_id is not None:
@@ -5307,14 +5307,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 result = documents_service.post_document(self._document_id, company_id, app_session.current_user.user_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در ثبتِ نهایی", str(exc))
+            QMessageBox.warning(self, "خطا در ثبت نهایی", str(exc))
             return
         # طبقِ رفعِ باگِ واقعی («بعدِ تایید، فرم ریست نمی‌شود»): بعدِ ثبتِ
         # نهایی، سند برایِ همیشه قفل است — دیگر کاری رویِ همین رکورد از
         # این فرم ممکن نیست، پس فرم برایِ سندِ بعدی ریست می‌شود، به‌جایِ
         # نگه‌داشتنِ سندِ بسته‌شده روی صفحه.
         je_note = (
-            f" (سندِ حسابداریِ #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
+            f" (سند حسابداری #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
             if result.journal_entry_id is not None else ""
         )
         # طبقِ درخواستِ صریح («بعدِ تاییدِ فاکتورِ فروش فرمِ دریافت باز
@@ -5339,12 +5339,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             if self._corrects_document_id is None else None
         )
         self._reset_form()
-        theme.set_status_label(self.status_label, f"سند ثبتِ نهایی شد.{je_note}", ok=True)
+        theme.set_status_label(self.status_label, f"سند ثبت نهایی شد.{je_note}", ok=True)
 
         if posted_type in ("SALES_INVOICE", "PURCHASE_INVOICE") and self._main_window is not None:
             is_sales = posted_type == "SALES_INVOICE"
             nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
-            description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
+            description = f"بابت {DOC_TYPE_TITLES[posted_type]} #{numerals.to_persian_digits(str(posted_no))}"
             if posted_settlement_plan is not None and posted_settlement_plan.lines_total > 0:
                 # R230: نحوهٔ تسویهٔ تاییدشده خودکار سندِ دریافت/پرداخت (و سندِ
                 # حسابداری) می‌سازد و به فاکتور تخصیص می‌یابد؛ فقط ردیف‌هایِ چک
@@ -5356,13 +5356,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 except ValueError as exc:
                     voucher_je_id, check_total = None, posted_settlement_plan.lines_total
                     QMessageBox.warning(
-                        self, "ثبتِ خودکارِ دریافت/پرداخت",
-                        f"{exc}\nفرمِ دریافت/پرداخت برایِ ثبتِ دستی باز می‌شود.",
+                        self, "ثبت خودکار دریافت/پرداخت",
+                        f"{exc}\nفرم دریافت/پرداخت برای ثبت دستی باز می‌شود.",
                     )
                 if voucher_je_id is not None:
                     theme.set_status_label(
                         self.status_label,
-                        f"سند ثبتِ نهایی شد.{je_note} سندِ {'دریافت' if is_sales else 'پرداخت'} هم طبقِ نحوهٔ تسویه ثبت و به فاکتور تخصیص یافت.",
+                        f"سند ثبت نهایی شد.{je_note} سند {'دریافت' if is_sales else 'پرداخت'} هم طبق نحوهٔ تسویه ثبت و به فاکتور تخصیص یافت.",
                         ok=True,
                     )
                 if check_total > 0:
@@ -5380,10 +5380,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                         ),
                     )
             elif posted_settlement_plan is None:
-                noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
+                noun = "دریافت وجه" if is_sales else "پرداخت وجه"
                 confirm_payment = QMessageBox.question(
                     self, noun,
-                    f"آیا برایِ این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
+                    f"آیا برای این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
                     QMessageBox.Yes | QMessageBox.No,
                 )
                 if confirm_payment == QMessageBox.Yes:
@@ -5396,7 +5396,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _cancel(self) -> None:
         if self._document_id is None:
             return
-        confirm = QMessageBox.question(self, "لغوِ سند", "این سند لغو شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "لغو سند", "این سند لغو شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         reason = CancellationReasonDialog.ask(self, self._company_id())
@@ -5409,7 +5409,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             )
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "خطا در لغوِ سند", str(exc))
+            QMessageBox.warning(self, "خطا در لغو سند", str(exc))
             return
         # لغو هم مثلِ ثبتِ نهایی یک وضعیتِ نهایی‌ست — سند دیگر رویِ همین
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
@@ -5439,7 +5439,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         confirm = QMessageBox.question(
             self, "بازگشت به پیش‌نویس",
-            "این سندِ تاییدشده به پیش‌نویس برگردد؟ (هدر دوباره کاملاً قابلِ‌ویرایش می‌شود، ولی باید دوباره تایید شود.)",
+            "این سند تاییدشده به پیش‌نویس برگردد؟ (هدر دوباره کاملاً قابل‌ویرایش می‌شود، ولی باید دوباره تایید شود.)",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -5451,7 +5451,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.warning(self, "خطا در بازگشت به پیش‌نویس", str(exc))
             return
         self._load_document()
-        theme.set_status_label(self.status_label, "سند به پیش‌نویس بازگشت -- اکنون قابلِ‌ویرایش است.", ok=True)
+        theme.set_status_label(self.status_label, "سند به پیش‌نویس بازگشت — اکنون قابل‌ویرایش است.", ok=True)
 
     def _open_settlement_plan(self) -> None:
         if self._document_id is None:
@@ -5485,10 +5485,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         company_id = self._company_id()
         confirm = QMessageBox.question(
-            self, "اصلاحِ فاکتور",
+            self, "اصلاح فاکتور",
             "این فاکتور اصلاح شود؟\n"
-            "سندِ انبار و حسابداریِ فعلی عیناً و با تاریخِ امروز برگشت می‌خورد (بدونِ تغییرِ تاریخِ فاکتورهایِ ثبت‌شده‌یِ "
-            "دیگر) و یک پیش‌نویسِ تازه با اطلاعاتِ همین فاکتور برایِ ویرایش باز می‌شود.",
+            "سند انبار و حسابداری فعلی عیناً و با تاریخ امروز برگشت می‌خورد (بدون تغییر تاریخ فاکتورهای ثبت‌شدهٔ "
+            "دیگر) و یک پیش‌نویس تازه با اطلاعات همین فاکتور برای ویرایش باز می‌شود.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -5498,12 +5498,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self._document_id, company_id, app_session.current_user.user_id
             )
         except ValueError as exc:
-            QMessageBox.warning(self, "خطا در اصلاحِ فاکتور", str(exc))
+            QMessageBox.warning(self, "خطا در اصلاح فاکتور", str(exc))
             return
         self.edit_document(new_document_id)
         theme.set_status_label(
             self.status_label,
-            f"فاکتورِ اصلی برگشت خورد و اصلاح شد؛ اکنون پیش‌نویسِ اصلاحیِ #{numerals.to_persian_digits(str(new_document_id))} را ویرایش کنید.",
+            f"فاکتور اصلی برگشت خورد و اصلاح شد؛ اکنون پیش‌نویس اصلاحی #{numerals.to_persian_digits(str(new_document_id))} را ویرایش کنید.",
             ok=True,
         )
 
@@ -5517,7 +5517,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
             return
         if not any(f.remaining_quantity > 0 for f in fulfillment):
-            QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برایِ تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
+            QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برای تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
             return
         items_by_id = {it.item_id: it for it in self._items}
         dialog = _ConvertToInvoiceDialog(
@@ -5528,7 +5528,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if dialog.exec() != QDialog.Accepted:
             return
         converts_to_sales = self.document_type_code in _CONVERTS_TO_SALES_INVOICE
-        target_title = "فاکتورِ فروش" if converts_to_sales else "فاکتورِ خرید"
+        target_title = "فاکتور فروش" if converts_to_sales else "فاکتور خرید"
         try:
             new_document_id = documents_service.convert_to_invoice(
                 self._document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
@@ -5544,6 +5544,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._load_document()
         theme.set_status_label(
             self.status_label,
-            f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از رویِ این سند ساخته شد.",
+            f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از روی این سند ساخته شد.",
             ok=True,
         )

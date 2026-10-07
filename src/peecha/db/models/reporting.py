@@ -1,4 +1,4 @@
-"""رجیستریِ گزارش‌هایِ حرفه‌ایِ قابلِ‌تخصیص -- معادلِ
+"""رجیستری گزارش‌های حرفه‌ای قابل‌تخصیص — معادل
 098_report_template_registry.sql."""
 
 from __future__ import annotations

@@ -1,18 +1,18 @@
-"""ارسال/انتقال/کپیِ اسناد حسابداری به شرکتِ دیگر — طبقِ آیتمِ ۳ (درخواستِ
-صریح: «امکانِ ارسالِ اسنادِ حسابداری و انتقال آن‌ها و کپیِ اسناد به شرکتِ
-دیگر، به‌همراهِ ضمائم اگر داشته باشد؛ اگر حساب‌ها تعریف نشده باشند لیست
-کند و اگر نبود به‌صورتِ اتوماتیک حساب‌ها را هم در شرکت‌ها کپی و انتقال
-دهد») + پاسخِ تاییدشده‌یِ کاربر به پرسشِ روشن‌سازی («هر دو حالت،
-انتخابی»): کپی (سندِ اصلی دست‌نخورده می‌ماند) یا انتقال (سندِ اصلی در
-شرکتِ مبدأ ابطال می‌شود).
+"""ارسال/انتقال/کپی اسناد حسابداری به شرکت دیگر — طبق آیتم ۳ (درخواست
+صریح: «امکان ارسال اسناد حسابداری و انتقال آن‌ها و کپی اسناد به شرکت
+دیگر، به‌همراه ضمائم اگر داشته باشد؛ اگر حساب‌ها تعریف نشده باشند لیست
+کند و اگر نبود به‌صورت اتوماتیک حساب‌ها را هم در شرکت‌ها کپی و انتقال
+دهد») + پاسخ تاییدشدهٔ کاربر به پرسش روشن‌سازی («هر دو حالت،
+انتخابی»): کپی (سند اصلی دست‌نخورده می‌ماند) یا انتقال (سند اصلی در
+شرکت مبدأ ابطال می‌شود).
 
-طبقِ همان قراردادِ مستندشده در company_cloning.py: تفصیلی‌هایِ اشخاص
-(مشتری/تامین‌کننده/پرسنل) رابطه‌یِ تجاریِ مختصِ همان شرکت‌اند، نه بخشی از
-کدینگ — پس هرگز خودکار کپی نمی‌شوند؛ اگر سطرِ سندی به یک شخصِ ناموجود در
-شرکتِ مقصد نیاز داشته باشد، فقط لیست می‌شود (کاربر باید اول در شرکتِ
-مقصد تعریفش کند). حساب‌هایِ کدینگی (گروه/کل/معین) و تفصیلی‌هایِ غیرِشخص
-(کالا/بانک/صندوق/مرکزِ هزینه/پروژه/گروه‌هایِ ساده) هرکدام با همان
-کد/full_code، به‌همراهِ کلِ زنجیره‌یِ والدشان، در شرکتِ مقصد اگر نبودند
+طبق همان قرارداد مستندشده در company_cloning.py: تفصیلی‌های اشخاص
+(مشتری/تامین‌کننده/پرسنل) رابطهٔ تجاری مختص همان شرکت‌اند، نه بخشی از
+کدینگ — پس هرگز خودکار کپی نمی‌شوند؛ اگر سطر سندی به یک شخص ناموجود در
+شرکت مقصد نیاز داشته باشد، فقط لیست می‌شود (کاربر باید اول در شرکت
+مقصد تعریفش کند). حساب‌های کدینگی (گروه/کل/معین) و تفصیلی‌های غیرشخص
+(کالا/بانک/صندوق/مرکز هزینه/پروژه/گروه‌های ساده) هرکدام با همان
+کد/full_code، به‌همراه کل زنجیرهٔ والدشان، در شرکت مقصد اگر نبودند
 خودکار ساخته می‌شوند."""
 
 from __future__ import annotations
@@ -40,15 +40,15 @@ class MissingAccountRow:
 
 
 def _gl_accounts_used(journal_entry_ids: list[int]) -> dict[int, list]:
-    """برایِ هر سند، فهرستِ ردیف‌های واقعیِ آن (LineInput) را برمی‌گرداند."""
+    """برای هر سند، فهرست ردیف‌های واقعی آن (LineInput) را برمی‌گرداند."""
     return {jid: je_service.get_journal_entry_lines(jid) for jid in journal_entry_ids}
 
 
 def preview_transfer(
     source_company_id: int, target_company_id: int, journal_entry_ids: list[int]
 ) -> list[MissingAccountRow]:
-    """حساب‌هایِ کدینگی/تفصیلیِ استفاده‌شده در اسنادِ انتخاب‌شده که در شرکتِ
-    مقصد (بر اساسِ full_code/کد) هنوز تعریف نشده‌اند."""
+    """حساب‌های کدینگی/تفصیلی استفاده‌شده در اسناد انتخاب‌شده که در شرکت
+    مقصد (بر اساس full_code/کد) هنوز تعریف نشده‌اند."""
     source_accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(source_company_id)}
     target_full_codes = {a.full_code for a in coa_service.list_accounts(target_company_id)}
     source_details_by_id = {d.detail_account_id: d for d in dimensions_service.list_all_detail_accounts(source_company_id)}
@@ -77,7 +77,7 @@ def preview_transfer(
                 for code in _ancestor_full_codes(account.full_code):
                     if code not in target_full_codes and (("GL", code)) not in missing:
                         name = next((a.name for a in source_accounts_by_id.values() if a.full_code == code), code)
-                        missing[("GL", code)] = MissingAccountRow("GL", "حسابِ کدینگی", code, name, True)
+                        missing[("GL", code)] = MissingAccountRow("GL", "حساب کدینگی", code, name, True)
             for dimension_type_id, detail_account_id in line.details.items():
                 detail = source_details_by_id.get(detail_account_id)
                 if detail is None:
@@ -187,21 +187,21 @@ def transfer_journal_entries(
     void_originals: bool,
     target_language_id: int,
 ) -> list[int]:
-    """کپی/انتقالِ اسنادِ انتخاب‌شده به شرکتِ مقصد؛ حساب‌هایِ کدینگی/تفصیلیِ
-    غیرِشخصِ ناموجود در مقصد خودکار ساخته می‌شوند. اگر تفصیلیِ شخصی
+    """کپی/انتقال اسناد انتخاب‌شده به شرکت مقصد؛ حساب‌های کدینگی/تفصیلی
+    غیرشخص ناموجود در مقصد خودکار ساخته می‌شوند. اگر تفصیلی شخصی
     ناموجود باشد، خطا می‌دهد (باید از preview_transfer قبلاً بررسی شده
     باشد و کاربر آن را دستی در مقصد تعریف کرده باشد)."""
     if source_company_id == target_company_id:
-        raise ValueError("شرکتِ مبدأ و مقصد نمی‌توانند یکی باشند.")
+        raise ValueError("شرکت مبدأ و مقصد نمی‌توانند یکی باشند.")
 
     with new_session() as session:
         entries = {jid: session.get(JournalEntry, jid) for jid in journal_entry_ids}
         if any(e is None or e.company_id != source_company_id for e in entries.values()):
-            raise ValueError("یکی از اسنادِ انتخاب‌شده نامعتبر است.")
+            raise ValueError("یکی از اسناد انتخاب‌شده نامعتبر است.")
         if void_originals:
             temporary_status_id = session.scalar(select(JournalEntryStatus.status_id).where(JournalEntryStatus.code == "TEMPORARY"))
             if any(e.status_id != temporary_status_id for e in entries.values()):
-                raise ValueError("فقط اسنادِ موقت را می‌توان «انتقال» داد (نه کپی) — سندِ دائم را نمی‌توان ابطال کرد.")
+                raise ValueError("فقط اسناد موقت را می‌توان «انتقال» داد (نه کپی) — سند دائم را نمی‌توان ابطال کرد.")
         journal_entry_form_id = session.scalar(select(Form.form_id).where(Form.code == "journal_entry"))
         entry_type_code_by_id = {t.entry_type_id: t.code for t in session.scalars(select(JournalEntryType)).all()}
         entry_infos = {
@@ -270,8 +270,8 @@ def transfer_journal_entries(
             )
             if existing is None:
                 raise ValueError(
-                    f"تفصیلیِ «{detail.name or detail.code}» یک شخص (مشتری/تامین‌کننده/پرسنل) است — "
-                    "باید پیش از انتقال، دستی در شرکتِ مقصد تعریف شود."
+                    f"تفصیلی «{detail.name or detail.code}» یک شخص (مشتری/تامین‌کننده/پرسنل) است — "
+                    "باید پیش از انتقال، دستی در شرکت مقصد تعریف شود."
                 )
             return existing
         target_dimension_type_id = _ensure_dimension_type(target_company_id, type_code, target_type_id_by_code)
@@ -307,7 +307,7 @@ def transfer_journal_entries(
                 )
             )
 
-        description = f"{source_description or ''} (منتقل‌شده از شرکتِ مبدأ، سندِ شماره‌یِ {source_no})".strip()
+        description = f"{source_description or ''} (منتقل‌شده از شرکت مبدأ، سند شمارهٔ {source_no})".strip()
         result = je_service.create_journal_entry(
             target_company_id, user_id, document_date, description, new_lines, entry_type_code=entry_type_code
         )
@@ -345,7 +345,7 @@ def transfer_journal_entries(
             for jid in journal_entry_ids:
                 original = session.get(JournalEntry, jid)
                 if original.status_id != temporary_status.status_id:
-                    raise ValueError("فقط اسنادِ موقت را می‌توان «انتقال» داد (نه کپی) — سندِ دائم را نمی‌توان ابطال کرد.")
+                    raise ValueError("فقط اسناد موقت را می‌توان «انتقال» داد (نه کپی) — سند دائم را نمی‌توان ابطال کرد.")
                 original.status_id = cancelled_status.status_id
             session.commit()
 

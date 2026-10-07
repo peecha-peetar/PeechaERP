@@ -1,4 +1,4 @@
-"""فرمِ درخواستِ خرید -- R241: فهرست + ویرایشگر، ارسال/تصویب/رد/لغو و تبدیل به سفارشِ خرید."""
+"""فرم درخواست خرید — R241: فهرست + ویرایشگر، ارسال/تصویب/رد/لغو و تبدیل به سفارش خرید."""
 
 from __future__ import annotations
 
@@ -53,23 +53,23 @@ def _labeled(grid: QGridLayout, col: int, text: str, widget: QWidget, row: int =
 
 
 class ConvertToOrderDialog(QDialog):
-    """انتخابِ تامین‌کننده (یا تامین‌کنندهٔ پیشنهادیِ هر ردیف) و مقدارِ سفارش."""
+    """انتخاب تامین‌کننده (یا تامین‌کنندهٔ پیشنهادی هر ردیف) و مقدار سفارش."""
 
     def __init__(self, parent, suppliers: list[tuple[str, int]], lines, ordered, item_labels) -> None:
         super().__init__(parent)
-        self.setWindowTitle("تبدیل به سفارشِ خرید")
+        self.setWindowTitle("تبدیل به سفارش خرید")
         self.setLayoutDirection(Qt.RightToLeft)
         self.resize(760, 420)
         layout = QVBoxLayout(self)
         row = QHBoxLayout()
         row.addWidget(QLabel("تامین‌کننده:"))
         self.supplier_combo = _editable_combo()
-        _searchable(self.supplier_combo, suppliers, "— تامین‌کنندهٔ پیشنهادیِ هر ردیف —")
+        _searchable(self.supplier_combo, suppliers, "— تامین‌کنندهٔ پیشنهادی هر ردیف —")
         row.addWidget(self.supplier_combo, stretch=1)
         layout.addLayout(row)
         self._lines = [ln for ln in lines if ln.quantity_base - ordered.get(ln.line_id, decimal.Decimal(0)) > 0]
         self.table = QTableWidget(len(self._lines), 4)
-        self.table.setHorizontalHeaderLabels(["کالا", "مقدارِ درخواست", "ماندهٔ قابلِ‌سفارش", "مقدارِ این سفارش"])
+        self.table.setHorizontalHeaderLabels(["کالا", "مقدار درخواست", "ماندهٔ قابل‌سفارش", "مقدار این سفارش"])
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.qty_fields: list[QLineEdit] = []
@@ -108,7 +108,7 @@ class PurchaseRequestScreen(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
         title_row = QHBoxLayout()
-        self.page_title = QLabel("درخواستِ خرید")
+        self.page_title = QLabel("درخواست خرید")
         self.page_title.setObjectName("pageTitle")
         title_row.addWidget(self.page_title)
         title_row.addStretch(1)
@@ -124,7 +124,7 @@ class PurchaseRequestScreen(QWidget):
         splitter = QSplitter(Qt.Vertical)
         self.list_table = QTableWidget(0, 8)
         self.list_table.setHorizontalHeaderLabels(
-            ["شماره", "تاریخ", "درخواست‌کننده", "اولویت", "تاریخِ نیاز", "وضعیت", "وضعیتِ سفارش", "شرح"])
+            ["شماره", "تاریخ", "درخواست‌کننده", "اولویت", "تاریخ نیاز", "وضعیت", "وضعیت سفارش", "شرح"])
         self.list_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.list_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.list_table.verticalHeader().setVisible(False)
@@ -143,9 +143,9 @@ class PurchaseRequestScreen(QWidget):
         self.cost_center_combo, self.project_combo = _editable_combo(), _editable_combo()
         self.description_field = QLineEdit()
         self.branch_combo, self.department_combo = QComboBox(), QComboBox()
-        for col, (text, widget) in enumerate((("تاریخ", self.date_field), ("تاریخِ نیاز", self.required_field),
-                                              ("اولویت", self.priority_combo), ("نوعِ خرید", self.type_combo),
-                                              ("انبارِ تحویل", self.warehouse_combo), ("مرکزِ هزینه", self.cost_center_combo),
+        for col, (text, widget) in enumerate((("تاریخ", self.date_field), ("تاریخ نیاز", self.required_field),
+                                              ("اولویت", self.priority_combo), ("نوع خرید", self.type_combo),
+                                              ("انبار تحویل", self.warehouse_combo), ("مرکز هزینه", self.cost_center_combo),
                                               ("پروژه", self.project_combo), ("شعبه", self.branch_combo),
                                               ("دپارتمان", self.department_combo), ("شرح", self.description_field))):
             _labeled(header, col, text, widget)
@@ -163,13 +163,13 @@ class PurchaseRequestScreen(QWidget):
         self.price_field.setMaximumWidth(110)
         self.line_date_field = JalaliDateEdit()
         for text, widget in (("کالا:", self.item_combo), ("واحد:", self.uom_combo), ("مقدار:", self.qty_field),
-                             ("تاریخِ نیاز:", self.line_date_field), ("تامین‌کنندهٔ پیشنهادی:", self.supplier_combo),
-                             ("فیِ برآوردی:", self.price_field)):
+                             ("تاریخ نیاز:", self.line_date_field), ("تامین‌کنندهٔ پیشنهادی:", self.supplier_combo),
+                             ("فی برآوردی:", self.price_field)):
             line_row.addWidget(QLabel(text))
             line_row.addWidget(widget)
-        self.add_line_button = QPushButton("افزودنِ ردیف")
+        self.add_line_button = QPushButton("افزودن ردیف")
         self.add_line_button.clicked.connect(self.add_line)
-        self.delete_line_button = QPushButton("حذفِ ردیف")
+        self.delete_line_button = QPushButton("حذف ردیف")
         self.delete_line_button.clicked.connect(self.delete_line)
         line_row.addWidget(self.add_line_button)
         line_row.addWidget(self.delete_line_button)
@@ -177,7 +177,7 @@ class PurchaseRequestScreen(QWidget):
 
         self.lines_table = QTableWidget(0, 8)
         self.lines_table.setHorizontalHeaderLabels(
-            ["کالا", "واحد", "مقدار", "تاریخِ نیاز", "تامین‌کنندهٔ پیشنهادی", "فیِ برآوردی", "سفارش‌شده (پایه)", "مانده (پایه)"])
+            ["کالا", "واحد", "مقدار", "تاریخ نیاز", "تامین‌کنندهٔ پیشنهادی", "فی برآوردی", "سفارش‌شده (پایه)", "مانده (پایه)"])
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
@@ -189,9 +189,9 @@ class PurchaseRequestScreen(QWidget):
         footer.addWidget(self.status_label, stretch=1)
         self.buttons: dict[str, QPushButton] = {}
         for key, text, slot in (
-            ("new", "جدید", self.new_request), ("save", "ذخیره", self.save_header), ("submit", "ارسال برایِ تصویب", self.submit),
+            ("new", "جدید", self.new_request), ("save", "ذخیره", self.save_header), ("submit", "ارسال برای تصویب", self.submit),
             ("approve", "تصویب", self.approve), ("reject", "رد", self.reject), ("cancel", "لغو", self.cancel),
-            ("convert", "تبدیل به سفارشِ خرید", self.convert),
+            ("convert", "تبدیل به سفارش خرید", self.convert),
         ):
             button = QPushButton(text)
             if key in ("save", "convert"):
@@ -278,7 +278,7 @@ class PurchaseRequestScreen(QWidget):
     # --- ویرایشگر --------------------------------------------------------
     def new_request(self) -> None:
         self._request_id, self._status, self._lines = None, "DRAFT", []
-        self.page_title.setText("درخواستِ خریدِ جدید")
+        self.page_title.setText("درخواست خرید جدید")
         today = datetime.date.today()
         self.date_field.setDate(today)
         self.required_field.setDate(today + datetime.timedelta(days=7))
@@ -298,7 +298,7 @@ class PurchaseRequestScreen(QWidget):
             return
         row, lines = pr_service.get_request(request_id, company_id)
         self._request_id, self._status, self._lines = request_id, row.status_code, lines
-        self.page_title.setText(numerals.to_persian_digits(f"درخواستِ خریدِ شمارهٔ {row.request_no} -- {pr_service.STATUS_LABELS[row.status_code]}"))
+        self.page_title.setText(numerals.to_persian_digits(f"درخواست خرید شمارهٔ {row.request_no} -- {pr_service.STATUS_LABELS[row.status_code]}"))
         self.date_field.setDate(row.request_date)
         self.required_field.setDate(row.required_date or row.request_date)
         self.priority_combo.setCurrentIndex(max(0, self.priority_combo.findData(row.priority_code)))
@@ -312,7 +312,7 @@ class PurchaseRequestScreen(QWidget):
         if row.approved_by_user_id:
             info.append(f"تصویب: {users.get(row.approved_by_user_id, '')} -- {numerals.format_jalali_datetime(row.approved_at)}")
         if row.rejected_reason:
-            info.append(f"علتِ رد: {row.rejected_reason}")
+            info.append(f"علت رد: {row.rejected_reason}")
         orders = pr_service.linked_orders(request_id)
         if orders:
             info.append("سفارش‌ها: " + "، ".join(numerals.to_persian_digits(str(o.document_no)) +
@@ -365,7 +365,7 @@ class PurchaseRequestScreen(QWidget):
             action()
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "درخواستِ خرید", str(exc))
+            QMessageBox.warning(self, "درخواست خرید", str(exc))
             return False
         theme.set_status_label(self.status_label, success, ok=True)
         return True
@@ -419,20 +419,20 @@ class PurchaseRequestScreen(QWidget):
             self._reload_list()
 
     def submit(self) -> None:
-        self._transition(lambda: pr_service.submit_request(self._request_id, self._company_id()), "درخواست برایِ تصویب ارسال شد.")
+        self._transition(lambda: pr_service.submit_request(self._request_id, self._company_id()), "درخواست برای تصویب ارسال شد.")
 
     def approve(self) -> None:
         self._transition(lambda: pr_service.approve_request(self._request_id, self._company_id(), self._user_id()), "درخواست تصویب شد.")
 
     def reject(self, reason: str | None = None) -> None:
         if reason is None:
-            reason, ok = QInputDialog.getText(self, "ردِ درخواست", "علتِ رد:")
+            reason, ok = QInputDialog.getText(self, "رد درخواست", "علت رد:")
             if not ok:
                 return
         self._transition(lambda: pr_service.reject_request(self._request_id, self._company_id(), reason), "درخواست رد شد.")
 
     def cancel(self, reason_id: int | None = None, confirm: bool = True) -> None:
-        if confirm and QMessageBox.question(self, "لغوِ درخواست", "این درخواست لغو شود؟") != QMessageBox.Yes:
+        if confirm and QMessageBox.question(self, "لغو درخواست", "این درخواست لغو شود؟") != QMessageBox.Yes:
             return
         self._transition(lambda: pr_service.cancel_request(self._request_id, self._company_id(), reason_id), "درخواست لغو شد.")
 
@@ -451,7 +451,7 @@ class PurchaseRequestScreen(QWidget):
         def action():
             created.extend(pr_service.convert_to_orders(self._request_id, company_id, self._user_id(), supplier_id, quantities))
 
-        if self._run(action, "سفارشِ خرید ساخته شد."):
+        if self._run(action, "سفارش خرید ساخته شد."):
             self.edit_document(self._request_id)
             self._reload_list()
             if self._main_window is not None and len(created) == 1:

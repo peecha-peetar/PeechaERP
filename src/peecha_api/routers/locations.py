@@ -1,7 +1,7 @@
-"""محلِ انبار برایِ اپِ موبایل -- R248 (اسکنِ کالا/محل، محتوا، پیشنهادِ جانمایی، تاییدِ جانمایی/برداشت، انتقال).
+"""محل انبار برای برنامهٔ موبایل — R248 (اسکن کالا/محل، محتوا، پیشنهاد جانمایی، تایید جانمایی/برداشت، انتقال).
 
-نازک: همهٔ منطق در services/warehouse_locations و services/warehouse_operations است؛ دسترسی با همان RBACِ موجود
-(فرمِ «warehouse_map»). موجودی همان inv.stock_balance است و جابه‌جایی فقط با سندِ انتقالِ عادیِ سیستم.
+نازک: همهٔ منطق در services/warehouse_locations و services/warehouse_operations است؛ دسترسی با همان RBAC موجود
+(فرم «warehouse_map»). موجودی همان inv.stock_balance است و جابه‌جایی فقط با سند انتقال عادی سیستم.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ _KEY = Depends(get_idempotency_key)
 
 
 def _write(key: str | None, endpoint: str, ctx: AuthContext, compute, serialize) -> dict:
-    """نوشتن‌هایِ موبایل از صفِ آفلاین می‌آیند؛ تکرارِ همان کلید پاسخِ قبلی را برمی‌گرداند."""
+    """نوشتن‌های موبایل از صف آفلاین می‌آیند؛ تکرار همان کلید پاسخ قبلی را برمی‌گرداند."""
     try:
         return run_idempotent(key, endpoint, ctx.user_id, ctx.company_id, status.HTTP_200_OK, compute, serialize)
     except IdempotentReplay as replay:
@@ -76,7 +76,7 @@ def _detail(company_id: int, location_id: int) -> dict:
 
 @router.get("/warehouses/{warehouse_id}/map")
 def warehouse_map(warehouse_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
-    """همهٔ محل‌هایِ انبار با مختصاتِ نقشه و اشغال (برایِ نقشهٔ موبایل/نمایِ سه‌بعدیِ آینده)."""
+    """همهٔ محل‌های انبار با مختصات نقشه و اشغال (برای نقشهٔ موبایل/نمای سه‌بعدی آینده)."""
     try:
         nodes = wl.tree(ctx.company_id, warehouse_id)
     except ValueError as exc:
@@ -87,7 +87,7 @@ def warehouse_map(warehouse_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
 
 @router.get("/search")
 def search(q: str, ctx: AuthContext = _VIEW) -> dict:
-    """کد/نام/بارکدِ کالا، کد/بارکدِ محل یا متنِ QR."""
+    """کد/نام/بارکد کالا، کد/بارکد محل یا متن QR."""
     try:
         result = wl.search(ctx.company_id, q)
     except ValueError as exc:
@@ -98,7 +98,7 @@ def search(q: str, ctx: AuthContext = _VIEW) -> dict:
 
 @router.get("/scan")
 def scan(payload: str, ctx: AuthContext = _VIEW) -> dict:
-    """اسکنِ QRِ محل → جزئیات و محتوا."""
+    """اسکن QR محل → جزئیات و محتوا."""
     try:
         return _detail(ctx.company_id, wl.decode_qr(ctx.company_id, payload))
     except ValueError as exc:
@@ -124,7 +124,7 @@ def putaway_suggestions(warehouse_id: int, item_id: int, quantity: decimal.Decim
 
 @router.get("/warehouses/{warehouse_id}/scene3d")
 def warehouse_scene_3d(warehouse_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
-    """R249: جعبه‌هایِ سه‌بعدی (واحدِ نقشه؛ ۲۰ واحد = ۱ متر) با درصدِ اشغال."""
+    """R249: جعبه‌های سه‌بعدی (واحد نقشه؛ ۲۰ واحد = ۱ متر) با درصد اشغال."""
     try:
         nodes = wl.tree(ctx.company_id, warehouse_id)
     except ValueError as exc:
@@ -157,7 +157,7 @@ def storage_profile(item_id: int, ctx: AuthContext = _VIEW) -> dict:
 @router.get("/tasks")
 def list_tasks(task_type: str | None = None, open_only: bool = True, warehouse_id: int | None = None,
                ctx: AuthContext = _VIEW) -> list[dict]:
-    """وظایفِ انبار برایِ اپِ انباردار (جانمایی/برداشت/تأمینِ مجدد) با کدِ کالا و محل."""
+    """وظایف انبار برای اپ انباردار (جانمایی/برداشت/تامین مجدد) با کد کالا و محل."""
     from peecha.services import inventory_catalog as catalog_service
 
     tasks = ops.list_tasks(ctx.company_id, task_type, None, warehouse_id)
@@ -194,7 +194,7 @@ def start_task(task_id: int, ctx: AuthContext = _EDIT) -> dict:
 
 @router.get("/waves")
 def list_waves(open_only: bool = True, ctx: AuthContext = _VIEW) -> list[dict]:
-    """R250: موج‌هایِ برداشت با پیشرفت."""
+    """R250: موج‌های برداشت با پیشرفت."""
     out = []
     for w in ops.list_waves(ctx.company_id, open_only):
         tasks = ops.wave_tasks(ctx.company_id, w.wave_id)
@@ -224,7 +224,7 @@ def generate_replenishment(warehouse_id: int | None = None, ctx: AuthContext = _
 
 @router.get("/counts")
 def list_counts(ctx: AuthContext = _VIEW) -> list[dict]:
-    """R250: شمارش‌هایِ بازِ محل‌محور."""
+    """R250: شمارش‌های باز محل‌محور."""
     from peecha.services import location_counts as lc
 
     return [{"session_id": s.session_id, "code": s.session_code, "warehouse_id": s.warehouse_id, "blind": s.is_blind_count,
@@ -250,7 +250,7 @@ def create_count(body: CountCreate, ctx: AuthContext = _EDIT) -> dict:
 
 @router.get("/counts/{session_id}")
 def count_detail(session_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
-    """ردیف‌هایِ شمارش؛ در شمارشِ کور مقدارِ دفتری تا پیش از شمارش پنهان است."""
+    """ردیف‌های شمارش؛ در شمارش کور مقدار دفتری تا پیش از شمارش پنهان است."""
     from peecha.services import location_counts as lc
 
     try:
@@ -291,7 +291,7 @@ class SerialCountRecord(BaseModel):
 
 @router.post("/counts/{session_id}/serials")
 def record_serial_count(session_id: int, body: SerialCountRecord, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
-    """R252: سریال‌هایِ اسکن‌شده در یک محل."""
+    """R252: سریال‌های اسکن‌شده در یک محل."""
     from peecha.services import location_counts as lc
 
     return _write(key, f"POST /locations/counts/{session_id}/serials", ctx,
@@ -301,7 +301,7 @@ def record_serial_count(session_id: int, body: SerialCountRecord, ctx: AuthConte
 
 @router.get("/putaway-sources")
 def putaway_sources(ctx: AuthContext = _VIEW) -> list[dict]:
-    """R252: رسیدهایِ ثبت‌شدهٔ اخیر که هنوز وظیفهٔ جانمایی ندارند (برایِ ساختِ وظیفه از موبایل)."""
+    """R252: رسیدهای ثبت‌شدهٔ اخیر که هنوز وظیفهٔ جانمایی ندارند (برای ساخت وظیفه از موبایل)."""
     return [{"document_id": src.key[1], "document_type": src.doc.document_type_code, "document_no": src.doc.document_no,
              "document_date": src.doc.document_date.isoformat(), "warehouse_id": src.doc.destination_warehouse_id,
              "open_lines": src.open_lines} for src in ops.putaway_sources(ctx.company_id)]
@@ -322,7 +322,7 @@ def generate_tasks(body: TaskGenerate, ctx: AuthContext = _EDIT) -> dict:
 
 @router.get("/kpis")
 def kpis(days: int = 30, warehouse_id: int | None = None, ctx: AuthContext = _VIEW) -> dict:
-    """R251: داشبوردِ عملیاتِ انبار."""
+    """R251: داشبورد عملیات انبار."""
     import datetime
 
     from peecha.services import wms_kpis
@@ -335,7 +335,7 @@ def kpis(days: int = 30, warehouse_id: int | None = None, ctx: AuthContext = _VI
 
 
 def label_svgs(location_id: int, code: str) -> tuple[str, str]:
-    """QR و بارکدِ Code128 به‌صورتِ SVG (برایِ چاپ از موبایل)."""
+    """QR و بارکد Code128 به‌صورت SVG (برای چاپ از موبایل)."""
     import segno
 
     qr = segno.make(wl.qr_payload(location_id, code), error="m", micro=False).svg_inline(scale=4, border=1)
@@ -348,7 +348,7 @@ def label_svgs(location_id: int, code: str) -> tuple[str, str]:
 
 @router.get("/{location_id}/labels")
 def location_labels(location_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
-    """R252: برچسبِ خودِ محل و همهٔ زیرمحل‌هایش (چاپِ گروهیِ یک منطقه/قفسه از موبایل؛ حداکثر ۳۰۰)."""
+    """R252: برچسب خود محل و همهٔ زیرمحل‌هایش (چاپ گروهی یک منطقه/قفسه از موبایل؛ حداکثر ۳۰۰)."""
     from peecha.db.base import new_session
     from peecha.db.models.inventory import BinLocation
 
@@ -374,7 +374,7 @@ def location_labels(location_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
 
 @router.get("/{location_id}/label")
 def location_label(location_id: int, ctx: AuthContext = _VIEW) -> dict:
-    """R251: برچسبِ محل (QR + بارکد) برایِ چاپ از اپِ موبایل."""
+    """R251: برچسب محل (QR + بارکد) برای چاپ از برنامهٔ موبایل."""
     try:
         detail = _detail(ctx.company_id, location_id)
     except ValueError as exc:

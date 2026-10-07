@@ -1,4 +1,4 @@
-"""شناسنامه، تحصیل، سرمایه‌ای‌شدن، انتقال و تغییرِ طبقهٔ دارایی -- R262."""
+"""شناسنامه، تحصیل، سرمایه‌ای‌شدن، انتقال و تغییر طبقهٔ دارایی — R262."""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from peecha.db.models.fixed_assets import (
 from peecha.services.fixed_assets import common as c
 
 ZERO = c.ZERO
-COST_TYPES = {"PURCHASE": "قیمتِ خرید", "TRANSPORT": "حمل", "INSTALLATION": "نصب", "CUSTOMS": "گمرک", "INSURANCE": "بیمه",
-              "COMMISSION": "کارمزد", "TESTING": "آزمایش", "SETUP": "راه‌اندازی", "PROFESSIONAL": "خدماتِ تخصصی",
-              "OTHER": "سایر هزینه‌هایِ قابلِ‌سرمایه‌ای‌شدن"}
-SOURCE_LABELS = {"PURCHASE": "خرید", "IMPORT": "واردات", "PRODUCTION": "تولیدِ داخلی", "CAPITALIZATION": "سرمایه‌ای‌کردن",
+COST_TYPES = {"PURCHASE": "قیمت خرید", "TRANSPORT": "حمل", "INSTALLATION": "نصب", "CUSTOMS": "گمرک", "INSURANCE": "بیمه",
+              "COMMISSION": "کارمزد", "TESTING": "آزمایش", "SETUP": "راه‌اندازی", "PROFESSIONAL": "خدمات تخصصی",
+              "OTHER": "سایر هزینه‌های قابل‌سرمایه‌ای‌شدن"}
+SOURCE_LABELS = {"PURCHASE": "خرید", "IMPORT": "واردات", "PRODUCTION": "تولید داخلی", "CAPITALIZATION": "سرمایه‌ای‌کردن",
                  "TRANSFER": "انتقال", "CONSTRUCTION": "ساخت (CIP)", "OPENING": "افتتاحیه", "MANUAL": "دستی", "SPLIT": "تقسیم",
-                 "LEGACY": "دارایی‌هایِ قبلی"}
+                 "LEGACY": "دارایی‌های قبلی"}
 _FA_REASON_CODE = "FA_CAP"
 
 
@@ -79,38 +79,38 @@ class CostItem:
 # --- اعتبارسنجی ---------------------------------------------------------------------------
 def _validate(session, company_id: int, f: AssetFields, asset_id: int | None) -> AssetCategory:
     if not (f.asset_code or "").strip():
-        raise ValueError("کدِ دارایی الزامی است.")
+        raise ValueError("کد دارایی الزامی است.")
     if not (f.name or "").strip():
-        raise ValueError("نامِ دارایی الزامی است.")
+        raise ValueError("نام دارایی الزامی است.")
     dup = session.scalar(select(Asset.asset_id).where(Asset.company_id == company_id, Asset.asset_code == f.asset_code.strip()))
     if dup is not None and dup != asset_id:
-        raise ValueError(f"کدِ دارایی «{f.asset_code}» تکراری است.")
+        raise ValueError(f"کد دارایی «{f.asset_code}» تکراری است.")
     if not f.category_id:
         raise ValueError("طبقهٔ دارایی مشخص نشده است.")
     category = session.get(AssetCategory, f.category_id)
     if category is None or category.company_id != company_id:
         raise ValueError("طبقهٔ دارایی نامعتبر است.")
     if f.asset_type_code not in c.TYPE_LABELS:
-        raise ValueError("نوعِ دارایی نامعتبر است.")
+        raise ValueError("نوع دارایی نامعتبر است.")
     method = f.depreciation_method or category.default_method
     if method not in c.METHOD_LABELS:
-        raise ValueError("روشِ استهلاک مشخص نشده است.")
+        raise ValueError("روش استهلاک مشخص نشده است.")
     life = f.useful_life if f.useful_life is not None else category.default_life_months
     if method in ("STRAIGHT_LINE",) and not life:
-        raise ValueError("برایِ روشِ خطِ مستقیم، عمرِ مفید الزامی است.")
+        raise ValueError("برای روش خط مستقیم، عمر مفید الزامی است.")
     if method == "DECLINING_BALANCE" and not (f.declining_rate or category.default_declining_rate or life):
-        raise ValueError("برایِ روشِ نزولی، نرخ یا عمرِ مفید الزامی است.")
+        raise ValueError("برای روش نزولی، نرخ یا عمر مفید الزامی است.")
     if method == "UNITS_OF_PRODUCTION" and (not f.useful_life or f.useful_life_unit not in ("HOUR", "UNIT")):
-        raise ValueError("برایِ روشِ بر اساسِ تولید، ظرفیتِ کلِ کارکرد (ساعت/واحد) الزامی است.")
+        raise ValueError("برای روش بر اساس تولید، ظرفیت کل کارکرد (ساعت/واحد) الزامی است.")
     if f.residual_value is not None and f.residual_value < 0:
-        raise ValueError("ارزشِ اسقاط نمی‌تواند منفی باشد.")
+        raise ValueError("ارزش اسقاط نمی‌تواند منفی باشد.")
     if f.parent_asset_id is not None:
         parent = session.get(Asset, f.parent_asset_id)
         if parent is None or parent.company_id != company_id or parent.asset_id == asset_id:
-            raise ValueError("داراییِ اصلیِ جزء نامعتبر است.")
+            raise ValueError("دارایی اصلی جزء نامعتبر است.")
     cost_center = f.cost_center_detail_account_id or category.default_cost_center_detail_account_id
     if (category.cost_center_required or c.settings(session, company_id).require_cost_center) and not cost_center:
-        raise ValueError("مرکزِ هزینه برایِ این دارایی الزامی است.")
+        raise ValueError("مرکز هزینه برای این دارایی الزامی است.")
     return category
 
 
@@ -136,7 +136,7 @@ def _apply_fields(asset: Asset, f: AssetFields, category: AssetCategory) -> None
 
 
 def insert_asset(session, company_id: int, user_id: int | None, f: AssetFields, status: str = "DRAFT") -> Asset:
-    """درجِ دارایی درونِ تراکنشِ فراخوان (برایِ عملیاتِ اتمیکِ CIP/تقسیم)."""
+    """درج دارایی درون تراکنش فراخوان (برای عملیات اتمیک CIP/تقسیم)."""
     category = _validate(session, company_id, f, None)
     c.primary_book(session, company_id)
     asset = Asset(company_id=company_id, status_code=status, created_by_user_id=user_id, purchase_price=ZERO,
@@ -163,8 +163,8 @@ _TRACKED = ("name", "category_id", "group_id", "depreciation_method", "useful_li
 
 
 def update_asset(company_id: int, user_id: int | None, asset_id: int, f: AssetFields, reason: str | None = None) -> None:
-    """ویرایشِ شناسنامه (ارقامِ مالی فقط از راهِ عملیات/دفتر عوض می‌شوند). تغییرِ طبقه/محل/مرکزِ هزینهٔ داراییِ
-    سرمایه‌ای‌شده باید از «تغییرِ طبقه/انتقال» برود تا سند و تاریخچه بسازد."""
+    """ویرایش شناسنامه (ارقام مالی فقط از راه عملیات/دفتر عوض می‌شوند). تغییر طبقه/محل/مرکز هزینهٔ دارایی
+    سرمایه‌ای‌شده باید از «تغییر طبقه/انتقال» برود تا سند و تاریخچه بسازد."""
     with new_session() as session:
         asset = c.lock_asset(session, asset_id, company_id)
         c.ensure_open(asset)
@@ -175,7 +175,7 @@ def update_asset(company_id: int, user_id: int | None, asset_id: int, f: AssetFi
                 new = getattr(f, key) if key != "cost_center_detail_account_id" else (
                     f.cost_center_detail_account_id or category.default_cost_center_detail_account_id)
                 if new != getattr(asset, key):
-                    raise ValueError("برایِ تغییرِ طبقه/محل/تحویل‌گیرنده/مرکزِ هزینه از «انتقال» یا «تغییرِ طبقه» استفاده کنید.")
+                    raise ValueError("برای تغییر طبقه/محل/تحویل‌گیرنده/مرکز هزینه از «انتقال» یا «تغییر طبقه» استفاده کنید.")
         before = {k: getattr(asset, k) for k in _TRACKED}
         _apply_fields(asset, f, category)
         asset.updated_at = datetime.datetime.now()
@@ -194,7 +194,7 @@ def _cost_lines(asset: Asset, category: AssetCategory, items: list[CostItem], me
                      description=memo)]
     for i in items:
         if i.offset_account_id is None:
-            raise ValueError(f"حسابِ طرفِ مقابلِ «{COST_TYPES.get(i.cost_type, i.cost_type)}» مشخص نشده است.")
+            raise ValueError(f"حساب طرف مقابل «{COST_TYPES.get(i.cost_type, i.cost_type)}» مشخص نشده است.")
         lines.append(c.JLine(i.offset_account_id, credit=c.money(i.amount), detail_ids=(i.offset_detail_account_id,),
                              description=f"{memo} -- {COST_TYPES.get(i.cost_type, i.cost_type)}"))
     return lines
@@ -202,13 +202,13 @@ def _cost_lines(asset: Asset, category: AssetCategory, items: list[CostItem], me
 
 def acquire(company_id: int, user_id: int, asset_id: int, date: datetime.date, items: list[CostItem],
             idempotency_key: str | None = None, source_code: str | None = None) -> int:
-    """بهایِ تحصیل (قیمتِ خرید + حمل/نصب/گمرک/...): بدهکارِ حسابِ دارایی، بستانکارِ حساب‌هایِ طرفِ مقابل -- اتمیک.
-    دوباره صدا زدن با همان idempotency_key سندِ دوم نمی‌سازد."""
+    """بهای تحصیل (قیمت خرید + حمل/نصب/گمرک/...): بدهکار حساب دارایی، بستانکار حساب‌های طرف مقابل — اتمیک.
+    دوباره صدا زدن با همان idempotency_key سند دوم نمی‌سازد."""
     if not items:
-        raise ValueError("حداقل یک جزءِ بها لازم است.")
+        raise ValueError("حداقل یک جزء بها لازم است.")
     for i in items:
         if i.cost_type not in COST_TYPES or decimal.Decimal(i.amount) <= 0:
-            raise ValueError("جزءِ بهایِ تحصیل نامعتبر است.")
+            raise ValueError("جزء بهای تحصیل نامعتبر است.")
     with new_session() as session:
         if idempotency_key:
             done = session.scalar(select(AssetEvent).where(AssetEvent.company_id == company_id,
@@ -218,11 +218,11 @@ def acquire(company_id: int, user_id: int, asset_id: int, date: datetime.date, i
         asset = c.lock_asset(session, asset_id, company_id)
         c.ensure_open(asset)
         if asset.status_code not in ("DRAFT", "ACQUIRED", "UNDER_CONSTRUCTION", "CAPITALIZED", "IN_SERVICE"):
-            raise ValueError("در این وضعیت، بهایِ تحصیل قابلِ‌ثبت نیست.")
+            raise ValueError("در این وضعیت، بهای تحصیل قابل‌ثبت نیست.")
         category = session.get(AssetCategory, asset.category_id)
         c.require_accounts(category, ("asset_account_id",))
         book = c.primary_book(session, company_id)
-        memo = f"تحصیلِ دارایی {asset.asset_code} -- {asset.name}"
+        memo = f"تحصیل دارایی {asset.asset_code} -- {asset.name}"
         je_id = c.post_journal(session, company_id, user_id, date, memo, _cost_lines(asset, category, items, memo))
         total = sum((c.money(i.amount) for i in items), ZERO)
         for i in items:
@@ -252,13 +252,13 @@ def _fa_reason_code(company_id: int) -> int:
     for row in inv_docs.list_reason_codes(company_id, "ADJUSTMENT", active_only=False):
         if row.code == _FA_REASON_CODE:
             return row.reason_code_id
-    return inv_docs.create_reason_code(company_id, "ADJUSTMENT", _FA_REASON_CODE, "سرمایه‌ای‌شدن به‌عنوانِ داراییِ ثابت")
+    return inv_docs.create_reason_code(company_id, "ADJUSTMENT", _FA_REASON_CODE, "سرمایه‌ای‌شدن به‌عنوان دارایی ثابت")
 
 
 def acquire_from_receipt(company_id: int, user_id: int, f: AssetFields, stock_line_id: int, date: datetime.date,
                          quantity: decimal.Decimal = decimal.Decimal(1), extra_items: list[CostItem] | None = None) -> int:
-    """خریدِ دارایی که با فاکتور/رسید واردِ انبار شده: کالا با موتورِ انبار (سندِ اصلاحِ کسری با دلیلِ FA_CAP) خارج
-    و بهایش به حسابِ دارایی منتقل می‌شود؛ فاکتور/رسید قابلِ‌ردیابی می‌ماند. تکرار برایِ همان ردیفِ رسید ممنوع است."""
+    """خرید دارایی که با فاکتور/رسید وارد انبار شده: کالا با موتور انبار (سند اصلاح کسری با دلیل FA_CAP) خارج
+    و بهایش به حساب دارایی منتقل می‌شود؛ فاکتور/رسید قابل‌ردیابی می‌ماند. تکرار برای همان ردیف رسید ممنوع است."""
     from peecha.db.models.inventory import StockDocument, StockDocumentLine, StockLedger
     from peecha.services import inventory_documents as inv_docs
     from peecha.services import inventory_engine
@@ -267,14 +267,14 @@ def acquire_from_receipt(company_id: int, user_id: int, f: AssetFields, stock_li
         line = session.get(StockDocumentLine, stock_line_id)
         doc = session.get(StockDocument, line.stock_document_id) if line is not None else None
         if doc is None or doc.company_id != company_id or doc.document_type_code != "RECEIPT" or doc.status_code != "POSTED":
-            raise ValueError("ردیفِ رسیدِ ثبت‌شده نامعتبر است.")
+            raise ValueError("ردیف رسید ثبت‌شده نامعتبر است.")
         if session.scalar(select(Asset.asset_id).where(Asset.source_stock_line_id == stock_line_id)) is not None:
-            raise ValueError("این ردیفِ رسید قبلاً به دارایی تبدیل شده است.")
+            raise ValueError("این ردیف رسید قبلاً به دارایی تبدیل شده است.")
         category = _validate(session, company_id, f, None)
         c.require_accounts(category, ("asset_account_id",))
         loss_account = inventory_engine.get_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS")
         if loss_account is None:
-            raise ValueError("حسابِ «کسریِ انبار» در تنظیماتِ انبار مشخص نشده است.")
+            raise ValueError("حساب «کسری انبار» در تنظیمات انبار مشخص نشده است.")
         item_id, warehouse_id, uom_id = line.item_id, doc.destination_warehouse_id, line.uom_id
         invoice_id = None
         if doc.reference_no and doc.reference_no.startswith("COMM-"):
@@ -283,7 +283,7 @@ def acquire_from_receipt(company_id: int, user_id: int, f: AssetFields, stock_li
     f.supplier_detail_account_id = f.supplier_detail_account_id or doc.counterparty_detail_account_id
     asset_id = create_asset(company_id, user_id, f)
     stock_doc = inv_docs.create_stock_document(company_id, user_id, "ADJUSTMENT", date, inv_docs.DocumentHeaderFields(
-        source_warehouse_id=warehouse_id, reference_no=f"FA-{asset_id}", description=f"سرمایه‌ای‌شدنِ دارایی {f.asset_code}"))
+        source_warehouse_id=warehouse_id, reference_no=f"FA-{asset_id}", description=f"سرمایه‌ای‌شدن دارایی {f.asset_code}"))
     inv_docs.add_line(stock_doc, company_id, inv_docs.LineFields(
         item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity, unit_cost=None,
         reason_code_id=_fa_reason_code(company_id), source_line_id=stock_line_id))
@@ -296,21 +296,21 @@ def acquire_from_receipt(company_id: int, user_id: int, f: AssetFields, stock_li
         issued = session.scalar(select(func.coalesce(func.sum(StockLedger.quantity_base * StockLedger.unit_cost), 0))
                                 .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
                                 .where(StockDocumentLine.stock_document_id == stock_doc, StockLedger.movement_direction == "OUT"))
-    items = [CostItem("PURCHASE", c.money(issued), loss_account, None, f"رسید → دارایی (سندِ انبار {stock_doc})")]
+    items = [CostItem("PURCHASE", c.money(issued), loss_account, None, f"رسید → دارایی (سند انبار {stock_doc})")]
     acquire(company_id, user_id, asset_id, date, items + list(extra_items or []), idempotency_key=f"FA-RCPT-{stock_line_id}",
             source_code="PURCHASE")
     return asset_id
 
 
 def complete_receipt_acquisition(company_id: int, user_id: int, asset_id: int, date: datetime.date) -> int | None:
-    """اگر خروجِ انبار انجام شد ولی ثبتِ دارایی (مثلاً قطعِ برق) نماند، همان مبلغ را بدونِ خروجِ دوباره ثبت می‌کند."""
+    """اگر خروج انبار انجام شد ولی ثبت دارایی (مثلاً قطع برق) نماند، همان مبلغ را بدون خروج دوباره ثبت می‌کند."""
     from peecha.db.models.inventory import StockDocumentLine, StockLedger
     from peecha.services import inventory_engine
 
     with new_session() as session:
         asset = session.get(Asset, asset_id)
         if asset is None or asset.company_id != company_id or asset.capitalization_stock_document_id is None:
-            raise ValueError("این دارایی از رسیدِ انبار نیامده است.")
+            raise ValueError("این دارایی از رسید انبار نیامده است.")
         if asset.status_code != "DRAFT":
             return None
         issued = session.scalar(select(func.coalesce(func.sum(StockLedger.quantity_base * StockLedger.unit_cost), 0))
@@ -338,14 +338,14 @@ def depreciation_start(rule: str, *, acquisition: datetime.date | None, in_servi
 
 def capitalize(company_id: int, user_id: int, asset_id: int, date: datetime.date, in_service_date: datetime.date | None = None,
                depreciation_start_date: datetime.date | None = None, reason: str | None = None) -> None:
-    """تحصیل‌شده ← سرمایه‌ای‌شده (و اگر تاریخِ بهره‌برداری داده شود، در حالِ بهره‌برداری). شروعِ استهلاک طبقِ سیاستِ تنظیمات."""
+    """تحصیل‌شده ← سرمایه‌ای‌شده (و اگر تاریخ بهره‌برداری داده شود، در حال بهره‌برداری). شروع استهلاک طبق سیاست تنظیمات."""
     with new_session() as session:
         asset = c.lock_asset(session, asset_id, company_id)
         c.ensure_open(asset)
         if asset.status_code not in ("ACQUIRED", "UNDER_CONSTRUCTION"):
-            raise ValueError("فقط داراییِ تحصیل‌شده قابلِ‌سرمایه‌ای‌شدن است.")
+            raise ValueError("فقط دارایی تحصیل‌شده قابل‌سرمایه‌ای‌شدن است.")
         if asset.gross_cost <= 0:
-            raise ValueError("بهایِ تحصیلِ دارایی ثبت نشده است.")
+            raise ValueError("بهای تحصیل دارایی ثبت نشده است.")
         category = session.get(AssetCategory, asset.category_id)
         needed = ("asset_account_id",) if asset.depreciation_method == "NONE" else (
             "asset_account_id", "accumulated_depreciation_account_id", "depreciation_expense_account_id")
@@ -353,7 +353,7 @@ def capitalize(company_id: int, user_id: int, asset_id: int, date: datetime.date
         if not asset.residual_value and category.default_residual_percent:
             asset.residual_value = c.money(asset.gross_cost * category.default_residual_percent / 100)
         if asset.residual_value > asset.gross_cost:
-            raise ValueError("ارزشِ اسقاط از بهایِ دارایی بیشتر است.")
+            raise ValueError("ارزش اسقاط از بهای دارایی بیشتر است.")
         rule = c.settings(session, company_id).depreciation_start_rule
         asset.capitalization_date = date
         asset.in_service_date = in_service_date
@@ -376,7 +376,7 @@ def put_in_service(company_id: int, user_id: int, asset_id: int, date: datetime.
         asset = c.lock_asset(session, asset_id, company_id)
         c.ensure_open(asset)
         if asset.status_code not in ("CAPITALIZED", "UNDER_MAINTENANCE", "SUSPENDED"):
-            raise ValueError("این دارایی برایِ شروعِ بهره‌برداری آماده نیست.")
+            raise ValueError("این دارایی برای شروع بهره‌برداری آماده نیست.")
         previous = asset.status_code
         asset.status_code, asset.in_service_date = "IN_SERVICE", asset.in_service_date or date
         if previous == "CAPITALIZED" and c.settings(session, company_id).depreciation_start_rule in ("IN_SERVICE", "NEXT_MONTH") \
@@ -392,14 +392,14 @@ def put_in_service(company_id: int, user_id: int, asset_id: int, date: datetime.
 
 
 def set_status(company_id: int, user_id: int, asset_id: int, status: str, date: datetime.date, reason: str | None = None) -> None:
-    """وضعیت‌هایِ عملیاتی (در تعمیر/متوقف/بهره‌برداری)؛ واگذاری فقط از عملیاتِ فروش/اسقاط."""
+    """وضعیت‌های عملیاتی (در تعمیر/متوقف/بهره‌برداری)؛ واگذاری فقط از عملیات فروش/اسقاط."""
     if status not in ("UNDER_MAINTENANCE", "SUSPENDED", "IN_SERVICE"):
-        raise ValueError("این وضعیت را فقط عملیاتِ مربوط تعیین می‌کند.")
+        raise ValueError("این وضعیت را فقط عملیات مربوط تعیین می‌کند.")
     with new_session() as session:
         asset = c.lock_asset(session, asset_id, company_id)
         c.ensure_open(asset)
         if asset.status_code in ("DRAFT", "ACQUIRED", "UNDER_CONSTRUCTION"):
-            raise ValueError("داراییِ سرمایه‌ای‌نشده وضعیتِ عملیاتی ندارد.")
+            raise ValueError("دارایی سرمایه‌ای‌نشده وضعیت عملیاتی ندارد.")
         previous = asset.status_code
         asset.status_code = status
         session.add(AssetEvent(company_id=company_id, asset_id=asset_id, event_type="STATUS", event_date=date, status_code="POSTED",
@@ -410,16 +410,16 @@ def set_status(company_id: int, user_id: int, asset_id: int, status: str, date: 
 
 
 # --- انتقال و تغییرِ طبقه --------------------------------------------------------------------------
-TRANSFER_FIELDS = {"branch_id": "شعبه", "department_id": "دپارتمان", "cost_center_detail_account_id": "مرکزِ هزینه",
+TRANSFER_FIELDS = {"branch_id": "شعبه", "department_id": "دپارتمان", "cost_center_detail_account_id": "مرکز هزینه",
                    "project_detail_account_id": "پروژه", "location_id": "محل", "custodian_employee_id": "تحویل‌گیرنده"}
 
 
 def transfer(company_id: int, user_id: int, asset_id: int, date: datetime.date, reason: str | None = None,
              idempotency_key: str | None = None, **targets) -> int:
-    """انتقال بینِ شعبه/دپارتمان/مرکزِ هزینه/محل/تحویل‌گیرنده -- تاریخچه در رویدادها و دفتر؛ استهلاکِ بعدی با مرکزِ هزینهٔ جدید."""
+    """انتقال بین شعبه/دپارتمان/مرکز هزینه/محل/تحویل‌گیرنده — تاریخچه در رویدادها و دفتر؛ استهلاک بعدی با مرکز هزینهٔ جدید."""
     unknown = set(targets) - set(TRANSFER_FIELDS)
     if unknown:
-        raise ValueError(f"فیلدِ انتقالِ نامعتبر: {', '.join(unknown)}")
+        raise ValueError(f"فیلد انتقال نامعتبر: {', '.join(unknown)}")
     with new_session() as session:
         if idempotency_key:
             done = session.scalar(select(AssetEvent.event_id).where(AssetEvent.company_id == company_id,
@@ -430,11 +430,11 @@ def transfer(company_id: int, user_id: int, asset_id: int, date: datetime.date, 
         c.ensure_open(asset)
         changes = {k: [getattr(asset, k), v] for k, v in targets.items() if getattr(asset, k) != v}
         if not changes:
-            raise ValueError("هیچ تغییری برایِ انتقال انتخاب نشده است.")
+            raise ValueError("هیچ تغییری برای انتقال انتخاب نشده است.")
         category = session.get(AssetCategory, asset.category_id)
         if "cost_center_detail_account_id" in changes and not targets["cost_center_detail_account_id"] and (
                 category.cost_center_required or c.settings(session, company_id).require_cost_center):
-            raise ValueError("مرکزِ هزینه برایِ این دارایی الزامی است.")
+            raise ValueError("مرکز هزینه برای این دارایی الزامی است.")
         for k, (_old, new) in changes.items():
             setattr(asset, k, new)
         asset.updated_at = datetime.datetime.now()
@@ -454,8 +454,8 @@ def transfer(company_id: int, user_id: int, asset_id: int, date: datetime.date, 
 
 def reclassify(company_id: int, user_id: int, asset_id: int, new_category_id: int, date: datetime.date,
                reason: str | None = None, adopt_defaults: bool = False) -> int:
-    """تغییرِ طبقه (مثلاً تجهیزات ← ماشین‌آلاتِ تولید) بدونِ ازدست‌رفتنِ تاریخچه؛ اگر حساب‌ها فرق کنند، بها و استهلاکِ
-    انباشته با یک سند بینِ حساب‌ها جابه‌جا می‌شوند."""
+    """تغییر طبقه (مثلاً تجهیزات ← ماشین‌آلات تولید) بدون ازدست‌رفتن تاریخچه؛ اگر حساب‌ها فرق کنند، بها و استهلاک
+    انباشته با یک سند بین حساب‌ها جابه‌جا می‌شوند."""
     with new_session() as session:
         asset = c.lock_asset(session, asset_id, company_id)
         c.ensure_open(asset)
@@ -469,7 +469,7 @@ def reclassify(company_id: int, user_id: int, asset_id: int, new_category_id: in
                                                               if asset.accumulated_depreciation + asset.accumulated_impairment else ()))
             accumulated = asset.accumulated_depreciation + asset.accumulated_impairment
             dims = (asset.cost_center_detail_account_id, asset.project_detail_account_id, c.asset_detail_id(asset))
-            memo = f"تغییرِ طبقهٔ دارایی {asset.asset_code}: {old.name} ← {new.name}"
+            memo = f"تغییر طبقهٔ دارایی {asset.asset_code}: {old.name} ← {new.name}"
             lines = [c.JLine(new.asset_account_id, debit=asset.gross_cost, detail_ids=dims),
                      c.JLine(old.asset_account_id, credit=asset.gross_cost, detail_ids=dims)]
             if accumulated:
@@ -553,7 +553,7 @@ def get_asset(company_id: int, asset_id: int) -> Asset:
 
 
 def find_by_code(company_id: int, code: str) -> Asset | None:
-    """جستجو با کد/بارکد/محتوایِ QR (PEECHA-FA:شناسه:کد)."""
+    """جستجو با کد/بارکد/محتوای QR (PEECHA-FA:شناسه:کد)."""
     code = (code or "").strip()
     with new_session() as session:
         if code.startswith("PEECHA-FA:"):
@@ -573,7 +573,7 @@ def qr_payload(asset: Asset) -> str:
 
 
 def ledger(company_id: int, asset_id: int) -> list[SimpleNamespace]:
-    """دفترِ دارایی با ماندهٔ جاریِ ارزشِ دفتری."""
+    """دفتر دارایی با ماندهٔ جاری ارزش دفتری."""
     with new_session() as session:
         rows = session.scalars(select(AssetTransaction).where(AssetTransaction.asset_id == asset_id,
                                                               AssetTransaction.company_id == company_id)
@@ -623,5 +623,5 @@ def depreciation_history(asset_id: int) -> list[DepreciationLine]:
 
 
 def fields_of(asset: Asset) -> AssetFields:
-    """شناسنامهٔ فعلی به‌صورتِ AssetFields (برایِ ویرایش)."""
+    """شناسنامهٔ فعلی به‌صورت AssetFields (برای ویرایش)."""
     return AssetFields(**{f.name: getattr(asset, f.name) for f in dc_fields(AssetFields)})

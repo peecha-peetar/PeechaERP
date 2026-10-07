@@ -1,4 +1,4 @@
-"""اطلاعاتِ پایهٔ تدارکات -- R240: انواعِ خرید، علت‌هایِ لغو، سیاستِ سفارشِ کالا."""
+"""اطلاعات پایهٔ تدارکات — R240: انواع خرید، علت‌های لغو، سیاست سفارش کالا."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _qty(value) -> str:
 
 
 class _CodeNameTab(QWidget):
-    """جدول + فرمِ کد/عنوان/فعال (و در صورتِ نیاز «اضطراری»)."""
+    """جدول + فرم کد/عنوان/فعال (و در صورت نیاز «اضطراری»)."""
 
     def __init__(self, headers: list[str], with_emergency: bool) -> None:
         super().__init__()
@@ -166,7 +166,7 @@ class _CancelReasonsTab(_CodeNameTab):
 
 
 class _BranchesTab(_CodeNameTab):
-    """R244: شعبه‌ها و اختصاصِ انبارها به شعبه (سندِ بدونِ شعبه، شعبهٔ انبارش را می‌گیرد)."""
+    """R244: شعبه‌ها و اختصاص انبارها به شعبه (سند بدون شعبه، شعبهٔ انبارش را می‌گیرد)."""
 
     MODEL = Branch
 
@@ -179,7 +179,7 @@ class _BranchesTab(_CodeNameTab):
         box.addWidget(QLabel("شعبه:"))
         self.assign_branch_combo = QComboBox()
         box.addWidget(self.assign_branch_combo)
-        assign = QPushButton("اختصاصِ انبار به شعبه")
+        assign = QPushButton("اختصاص انبار به شعبه")
         assign.clicked.connect(self.assign_warehouse)
         box.addWidget(assign)
         box.addStretch(1)
@@ -211,7 +211,7 @@ class _BranchesTab(_CodeNameTab):
         for w in self._warehouses:
             self.warehouse_combo.addItem(w.name, w.warehouse_id)
         self.assign_branch_combo.clear()
-        self.assign_branch_combo.addItem("— بدونِ شعبه —", None)
+        self.assign_branch_combo.addItem("— بدون شعبه —", None)
         for r in self._rows:
             self.assign_branch_combo.addItem(r.name, r.branch_id)
 
@@ -231,12 +231,12 @@ class _ReorderPoliciesTab(QWidget):
         self._items: dict[int, str] = {}
         self._warehouses: dict[int, str] = {}
         layout = QVBoxLayout(self)
-        hint = QLabel("حداقل ≤ نقطهٔ سفارش < حداکثر. این مقادیر در گزارش‌هایِ «وضعیتِ موجودی»، «پیشنهادِ خرید» و "
-                      "«تحلیلِ نقطهٔ سفارش» استفاده می‌شوند؛ کالایِ بدونِ سیاست از پیش‌فرضِ انبار پیروی می‌کند.")
+        hint = QLabel("حداقل ≤ نقطهٔ سفارش < حداکثر. این مقادیر در گزارش‌های «وضعیت موجودی»، «پیشنهاد خرید» و "
+                      "«تحلیل نقطهٔ سفارش» استفاده می‌شوند؛ کالای بدون سیاست از پیش‌فرض انبار پیروی می‌کند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        self.table = _table(["کالا", "انبار", "حداقل", "نقطهٔ سفارش", "حداکثر", "مقدارِ سفارش", "زمانِ تحویل (روز)", "فعال"])
+        self.table = _table(["کالا", "انبار", "حداقل", "نقطهٔ سفارش", "حداکثر", "مقدار سفارش", "زمان تحویل (روز)", "فعال"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
         form = QHBoxLayout()
@@ -253,8 +253,8 @@ class _ReorderPoliciesTab(QWidget):
         self.active_check = QCheckBox("فعال")
         self.active_check.setChecked(True)
         for text, widget in (("کالا:", self.item_combo), ("انبار:", self.warehouse_combo), ("حداقل:", self.min_field),
-                             ("نقطهٔ سفارش:", self.rop_field), ("حداکثر:", self.max_field), ("مقدارِ سفارش:", self.qty_field),
-                             ("زمانِ تحویل:", self.lead_spin)):
+                             ("نقطهٔ سفارش:", self.rop_field), ("حداکثر:", self.max_field), ("مقدار سفارش:", self.qty_field),
+                             ("زمان تحویل:", self.lead_spin)):
             form.addWidget(QLabel(text))
             form.addWidget(widget)
         form.addWidget(self.active_check)
@@ -343,7 +343,7 @@ class _ReorderPoliciesTab(QWidget):
         company_id = _company_id()
         if company_id is None or self._editing_id is None:
             return
-        if QMessageBox.question(self, "حذف", "این سیاستِ سفارش حذف شود؟") != QMessageBox.Yes:
+        if QMessageBox.question(self, "حذف", "این سیاست سفارش حذف شود؟") != QMessageBox.Yes:
             return
         masters_service.delete_reorder_policy(company_id, self._editing_id)
         self.clear_form()
@@ -351,7 +351,7 @@ class _ReorderPoliciesTab(QWidget):
 
 
 class _BudgetsTab(QWidget):
-    """R243: بودجهٔ خرید -- مبلغ برایِ یک دوره و ترکیبی از مرکزِ هزینه/پروژه/گروهِ کالا (خالی = همه)."""
+    """R243: بودجهٔ خرید — مبلغ برای یک دوره و ترکیبی از مرکز هزینه/پروژه/گروه کالا (خالی = همه)."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -360,12 +360,12 @@ class _BudgetsTab(QWidget):
         self._rows: list = []
         self._editing_id: int | None = None
         layout = QVBoxLayout(self)
-        hint = QLabel("مصرف = فاکتورِ ثبت‌شده − برگشت + ماندهٔ سفارش‌هایِ باز. با رسیدن به درصدِ هشدار، پس از تاییدِ سندِ خرید "
-                      "پیامِ هشدار نمایش داده می‌شود (جلویِ ثبت گرفته نمی‌شود).")
+        hint = QLabel("مصرف = فاکتور ثبت‌شده − برگشت + ماندهٔ سفارش‌های باز. با رسیدن به درصد هشدار، پس از تایید سند خرید "
+                      "پیام هشدار نمایش داده می‌شود (جلوی ثبت گرفته نمی‌شود).")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        self.table = _table(["کد", "نام", "از", "تا", "مرکزِ هزینه", "پروژه", "گروهِ کالا", "مبلغ", "مصرف‌شده", "درصدِ مصرف", "فعال"])
+        self.table = _table(["کد", "نام", "از", "تا", "مرکز هزینه", "پروژه", "گروه کالا", "مبلغ", "مصرف‌شده", "درصد مصرف", "فعال"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
         form = QHBoxLayout()
@@ -380,8 +380,8 @@ class _BudgetsTab(QWidget):
         self.active_check = QCheckBox("فعال")
         self.active_check.setChecked(True)
         for text, widget in (("کد:", self.code_field), ("نام:", self.name_field), ("از:", self.from_field), ("تا:", self.to_field),
-                             ("مرکزِ هزینه:", self.cost_center_combo), ("پروژه:", self.project_combo),
-                             ("گروهِ کالا:", self.category_combo), ("شعبه:", self.branch_combo), ("دپارتمان:", self.department_combo),
+                             ("مرکز هزینه:", self.cost_center_combo), ("پروژه:", self.project_combo),
+                             ("گروه کالا:", self.category_combo), ("شعبه:", self.branch_combo), ("دپارتمان:", self.department_combo),
                              ("مبلغ:", self.amount_field), ("هشدار٪:", self.warn_spin)):
             form.addWidget(QLabel(text))
             form.addWidget(widget)
@@ -511,16 +511,16 @@ class ProcurementMastersScreen(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
-        title = QLabel("اطلاعاتِ پایهٔ تدارکات")
+        title = QLabel("اطلاعات پایهٔ تدارکات")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         self.tabs = QTabWidget()
         self.purchase_types_tab = _PurchaseTypesTab()
         self.cancel_reasons_tab = _CancelReasonsTab()
         self.policies_tab = _ReorderPoliciesTab()
-        self.tabs.addTab(self.purchase_types_tab, "انواعِ خرید")
-        self.tabs.addTab(self.cancel_reasons_tab, "علت‌هایِ لغو")
-        self.tabs.addTab(self.policies_tab, "سیاستِ سفارشِ کالا")
+        self.tabs.addTab(self.purchase_types_tab, "انواع خرید")
+        self.tabs.addTab(self.cancel_reasons_tab, "علت‌های لغو")
+        self.tabs.addTab(self.policies_tab, "سیاست سفارش کالا")
         self.budgets_tab = _BudgetsTab()
         self.tabs.addTab(self.budgets_tab, "بودجهٔ خرید")
         self.branches_tab = _BranchesTab()

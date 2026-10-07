@@ -81,10 +81,10 @@ export function DeliveryConfirmScreen({
 
   return (
     <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
-      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.lg }]}>تاییدِ تحویل</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.lg }]}>تایید تحویل</Text>
       <TextInput
         style={inputStyle}
-        placeholder="نامِ تحویل‌گیرنده"
+        placeholder="نام تحویل‌گیرنده"
         placeholderTextColor={colors.textSecondary}
         value={receivedByName}
         onChangeText={setReceivedByName}
@@ -96,7 +96,7 @@ export function DeliveryConfirmScreen({
         value={notes}
         onChangeText={setNotes}
       />
-      <Button label="ثبتِ رسیدِ تحویل" onPress={submit} loading={submitting} disabled={submitting} />
+      <Button label="ثبت رسید تحویل" onPress={submit} loading={submitting} disabled={submitting} />
     </View>
   );
 }

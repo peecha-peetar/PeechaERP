@@ -1,15 +1,15 @@
-"""ردیابیِ بچ/سریال/تاریخِ انقضا و کالایِ امانی بر اساسِ تامین‌کننده -- R227.
+"""ردیابی بچ/سریال/تاریخ انقضا و کالای امانی بر اساس تامین‌کننده — R227.
 
-موجودیِ کمّی همچنان فقط در موتورِ انبار (inventory_engine) است و دست نمی‌خورد؛
+موجودی کمّی همچنان فقط در موتور انبار (inventory_engine) است و دست نمی‌خورد؛
 این سرویس لایهٔ ردیابی است:
-- ورودیِ کاربر (شمارهٔ بچ، تاریخِ تولید/انقضا، سریال) رویِ ردیفِ سندِ انبار یا
-  ردیفِ سندِ بازرگانی (سفارشِ خرید در تاییدِ رسید، فاکتورِ خرید، امانیِ ورودی).
-- با هر ثبتِ سندِ انبار (inventory_documents.post_stock_document) حرکتِ هر
+- ورودی کاربر (شمارهٔ بچ، تاریخ تولید/انقضا، سریال) روی ردیف سند انبار یا
+  ردیف سند بازرگانی (سفارش خرید در تایید رسید، فاکتور خرید، امانی ورودی).
+- با هر ثبت سند انبار (inventory_documents.post_stock_document) حرکت هر
   بچ/سریال/تامین‌کننده در inv.lot_movements ثبت می‌شود؛ خروجی‌ها اگر بچ/سریال
-  مشخص نشده باشد، خودکار FEFO (زودانقضاترین اول) تخصیص می‌یابند -- فروشِ واقعی
-  هرگز به‌خاطرِ نبودِ اطلاعاتِ ردیابی رد نمی‌شود.
-- کالایِ امانیِ ورودی (حتی بدونِ بچ/سریال) با تامین‌کننده‌اش ردیابی می‌شود و با
-  تسویه (تبدیل به فاکتورِ خرید) مالکیتش از «امانی» به «خریداری‌شده» منتقل می‌شود.
+  مشخص نشده باشد، خودکار FEFO (زودانقضاترین اول) تخصیص می‌یابند — فروش واقعی
+  هرگز به‌خاطر نبود اطلاعات ردیابی رد نمی‌شود.
+- کالای امانی ورودی (حتی بدون بچ/سریال) با تامین‌کننده‌اش ردیابی می‌شود و با
+  تسویه (تبدیل به فاکتور خرید) مالکیتش از «امانی» به «خریداری‌شده» منتقل می‌شود.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def item_tracking_flags(item_id: int) -> tuple[bool, bool, bool]:
 
 
 def has_pools(company_id: int, item_id: int) -> bool:
-    """کالایی که (حتی بدونِ بچ/سریال) سابقهٔ ردیابی دارد -- مثلاً امانیِ تامین‌کننده."""
+    """کالایی که (حتی بدون بچ/سریال) سابقهٔ ردیابی دارد — مثلاً امانی تامین‌کننده."""
     with new_session() as session:
         return session.scalar(
             select(func.count()).select_from(LotMovement).where(
@@ -103,7 +103,7 @@ def has_pools(company_id: int, item_id: int) -> bool:
 
 
 def expected_tracking(company_id: int, item_id: int, warehouse_id: int) -> list[TrackingEntry]:
-    """موجودیِ دفتریِ هر بچ/سریال در انبار (برایِ انبارگردانی) -- بدونِ تفکیکِ تامین‌کننده."""
+    """موجودی دفتری هر بچ/سریال در انبار (برای انبارگردانی) — بدون تفکیک تامین‌کننده."""
     totals: dict[tuple, decimal.Decimal] = {}
     for r in list_lot_balances(company_id, item_id=item_id, warehouse_id=warehouse_id):
         key = (r.batch_no, r.serial_no, r.expiry_date, r.manufacture_date)
@@ -121,13 +121,13 @@ def is_tracked(item_id: int) -> bool:
 
 def _line_owner(session, stock_line_id: int | None, commercial_line_id: int | None, cycle_count_line_id: int | None = None):
     if sum(x is not None for x in (stock_line_id, commercial_line_id, cycle_count_line_id)) != 1:
-        raise ValueError("دقیقاً یکی از ردیفِ سندِ انبار، سندِ بازرگانی یا انبارگردانی باید مشخص باشد.")
+        raise ValueError("دقیقاً یکی از ردیف سند انبار، سند بازرگانی یا انبارگردانی باید مشخص باشد.")
     if cycle_count_line_id is not None:
         from peecha.db.models.inventory import CycleCountLine, CycleCountSession
 
         line = session.get(CycleCountLine, cycle_count_line_id)
         if line is None:
-            raise ValueError("ردیفِ انبارگردانی نامعتبر است.")
+            raise ValueError("ردیف انبارگردانی نامعتبر است.")
         count = session.get(CycleCountSession, line.session_id)
         status = "DRAFT" if count.status_code == "COUNTING" else "POSTED"
         # در انبارگردانی مقدارِ شمارش همان جمعِ ردیف‌هایِ ردیابی است (سقف ندارد)
@@ -135,12 +135,12 @@ def _line_owner(session, stock_line_id: int | None, commercial_line_id: int | No
     if stock_line_id is not None:
         line = session.get(StockDocumentLine, stock_line_id)
         if line is None:
-            raise ValueError("ردیفِ سند نامعتبر است.")
+            raise ValueError("ردیف سند نامعتبر است.")
         doc = session.get(StockDocument, line.stock_document_id)
         return line, doc.company_id, line.quantity_base, doc.status_code
     line = session.get(CommercialDocumentLine, commercial_line_id)
     if line is None:
-        raise ValueError("ردیفِ سند نامعتبر است.")
+        raise ValueError("ردیف سند نامعتبر است.")
     doc = session.get(CommercialDocument, line.document_id)
     status = doc.status_code
     # R231: سفارشِ ثبتِ نهایی‌شده اثرِ انبار ندارد؛ انباردار تا پیش از تاییدِ رسید
@@ -162,40 +162,40 @@ def _validate_entries(item: Item, entries: list[TrackingEntry], total_base: deci
     for e in entries:
         quantity = decimal.Decimal(e.quantity)
         if quantity <= 0:
-            raise ValueError("مقدارِ هر ردیفِ ردیابی باید بزرگ‌تر از صفر باشد.")
+            raise ValueError("مقدار هر ردیف ردیابی باید بزرگ‌تر از صفر باشد.")
         if item.track_batch and not (e.batch_no or "").strip():
-            raise ValueError(f"برایِ «{name}» شمارهٔ بچ الزامی است.")
+            raise ValueError(f"برای «{name}» شمارهٔ بچ الزامی است.")
         if item.track_expiry and e.expiry_date is None:
-            raise ValueError(f"برایِ «{name}» تاریخِ انقضا الزامی است.")
+            raise ValueError(f"برای «{name}» تاریخ انقضا الزامی است.")
         if e.manufacture_date and e.expiry_date and e.expiry_date < e.manufacture_date:
-            raise ValueError("تاریخِ انقضا نمی‌تواند پیش از تاریخِ تولید باشد.")
+            raise ValueError("تاریخ انقضا نمی‌تواند پیش از تاریخ تولید باشد.")
         if item.track_serial:
             serial = (e.serial_no or "").strip()
             if not serial:
-                raise ValueError(f"برایِ «{name}» شمارهٔ سریالِ هر عدد الزامی است.")
+                raise ValueError(f"برای «{name}» شمارهٔ سریال هر عدد الزامی است.")
             if quantity != 1:
                 raise ValueError("هر سریال دقیقاً یک عدد است.")
             if serial in serials:
-                raise ValueError(f"سریالِ «{serial}» تکراری است.")
+                raise ValueError(f"سریال «{serial}» تکراری است.")
             serials.add(serial)
         total += quantity
     if total_base is not None and total > total_base:
-        raise ValueError(f"جمعِ مقدارِ ردیابی ({total.normalize()}) از مقدارِ ردیف ({total_base.normalize()}) بیشتر است.")
+        raise ValueError(f"جمع مقدار ردیابی ({total.normalize()}) از مقدار ردیف ({total_base.normalize()}) بیشتر است.")
 
 
 def set_line_tracking(
     company_id: int, entries: list[TrackingEntry], *, stock_line_id: int | None = None,
     commercial_line_id: int | None = None, cycle_count_line_id: int | None = None,
 ) -> None:
-    """جایگزینیِ کاملِ اطلاعاتِ ردیابیِ یک ردیف (مقادیر به واحدِ پایه)."""
+    """جایگزینی کامل اطلاعات ردیابی یک ردیف (مقادیر به واحد پایه)."""
     with new_session() as session:
         line, line_company_id, total_base, status_code = _line_owner(
             session, stock_line_id, commercial_line_id, cycle_count_line_id,
         )
         if line_company_id != company_id:
-            raise ValueError("ردیفِ سند نامعتبر است.")
+            raise ValueError("ردیف سند نامعتبر است.")
         if status_code in ("POSTED", "CANCELLED", "CORRECTED"):
-            raise ValueError("اطلاعاتِ ردیابیِ سندِ ثبت‌شده/لغوشده قابلِ‌تغییر نیست.")
+            raise ValueError("اطلاعات ردیابی سند ثبت‌شده/لغوشده قابل‌تغییر نیست.")
         item = session.get(Item, line.item_id)
         _validate_entries(item, entries, total_base, _item_name(session, item))
         session.query(LineTrackingEntry).filter(_owner_filter(stock_line_id, commercial_line_id, cycle_count_line_id)).delete()
@@ -240,7 +240,7 @@ def _own_entries(session, *, stock_line_id=None, commercial_line_id=None, cycle_
 
 
 def _commercial_entries(session, commercial_line_id: int) -> list[TrackingEntry]:
-    """ورودیِ خودِ ردیف؛ وگرنه زنجیرهٔ مبدا (فاکتور ← سفارشِ رسیده/امانی)."""
+    """ورودی خود ردیف؛ وگرنه زنجیرهٔ مبدا (فاکتور ← سفارش رسیده/امانی)."""
     line_id, depth = commercial_line_id, 0
     while line_id is not None and depth < 6:
         entries = _own_entries(session, commercial_line_id=line_id)
@@ -257,7 +257,7 @@ def get_effective_commercial_tracking(commercial_line_id: int) -> list[TrackingE
 
 
 def _commercial_context(session, stock_line_id: int):
-    """(ردیفِ بازرگانی، سندِ بازرگانی) برایِ ردیفِ سندِ انبارِ صادرشده از سندِ بازرگانی."""
+    """(ردیف بازرگانی، سند بازرگانی) برای ردیف سند انبار صادرشده از سند بازرگانی."""
     comm_line = session.scalar(
         select(CommercialDocumentLine).where(CommercialDocumentLine.stock_document_line_id == stock_line_id)
     )
@@ -293,13 +293,13 @@ def _directions(doc: StockDocument) -> list[tuple[str, int | None]]:
 
 
 def validate_before_post(stock_document_id: int, company_id: int) -> None:
-    """ورودیِ کاملِ بچ/سریال/انقضا برایِ رسیدِ انبار، فاکتورِ خرید و امانیِ ورودی."""
+    """ورودی کامل بچ/سریال/انقضا برای رسید انبار، فاکتور خرید و امانی ورودی."""
     with new_session() as session:
         validate_before_post_in(session, stock_document_id, company_id)
 
 
 def validate_before_post_in(session, stock_document_id: int, company_id: int) -> None:
-    """R266: همان منطق در تراکنشِ فراخواننده (بدونِ commit)."""
+    """R266: همان منطق در تراکنش فراخواننده (بدون commit)."""
     doc = session.get(StockDocument, stock_document_id)
     if doc is None or doc.company_id != company_id:
         return
@@ -324,8 +324,8 @@ def validate_before_post_in(session, stock_document_id: int, company_id: int) ->
         if total != line.quantity_base:
             kinds = "/".join(k for k, on in (("بچ", item.track_batch), ("انقضا", item.track_expiry), ("سریال", item.track_serial)) if on)
             raise ValueError(
-                f"اطلاعاتِ {kinds}ِ «{_item_name(session, item)}» کامل نیست -- {total.normalize()} از {line.quantity_base.normalize()} "
-                "وارد شده. از دکمهٔ «ردیابی» (بچ/سریال/انقضا) رویِ همان ردیف وارد کنید."
+                f"اطلاعات {kinds} «{_item_name(session, item)}» کامل نیست -- {total.normalize()} از {line.quantity_base.normalize()} "
+                "وارد شده. از دکمهٔ «ردیابی» (بچ/سریال/انقضا) روی همان ردیف وارد کنید."
             )
         _validate_entries(item, entries, line.quantity_base, _item_name(session, item))
         if item.track_serial:
@@ -335,7 +335,7 @@ def validate_before_post_in(session, stock_document_id: int, company_id: int) ->
                     SerialNumber.serial_no == e.serial_no,
                 ))
                 if existing is not None and existing.status_code == "IN_STOCK":
-                    raise ValueError(f"سریالِ «{e.serial_no}» از قبل در انبار موجود است.")
+                    raise ValueError(f"سریال «{e.serial_no}» از قبل در انبار موجود است.")
 
 
 def _get_or_create_batch(session, company_id: int, item_id: int, e: TrackingEntry, supplier_id: int | None,
@@ -358,7 +358,7 @@ def _get_or_create_batch(session, company_id: int, item_id: int, e: TrackingEntr
 
 
 def _pools(session, company_id: int, item_id: int, warehouse_id: int | None = None):
-    """استخرهایِ مثبت: (warehouse, batch, serial, supplier, consignment) -> مقدار."""
+    """استخرهای مثبت: (warehouse, batch, serial, supplier, consignment) -> مقدار."""
     q = (
         select(
             LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id,
@@ -377,7 +377,7 @@ def _pools(session, company_id: int, item_id: int, warehouse_id: int | None = No
 
 
 def _bin_pools(session, company_id: int, item_id: int, bin_id: int) -> dict[tuple, decimal.Decimal]:
-    """R251: موجودیِ هر استخر در یک محل (از ستونِ محلِ حرکت‌ها)."""
+    """R251: موجودی هر مخزن در یک محل (از ستون محل حرکت‌ها)."""
     rows = session.execute(
         select(LotMovement.batch_id, LotMovement.serial_id, LotMovement.supplier_detail_account_id, LotMovement.is_consignment,
                func.sum(LotMovement.quantity_base))
@@ -389,8 +389,8 @@ def _bin_pools(session, company_id: int, item_id: int, bin_id: int) -> dict[tupl
 def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quantity: decimal.Decimal,
                   entries: list[TrackingEntry], preferred_supplier_id: int | None, prefer_consignment: bool,
                   bin_id: int | None = None):
-    """[(batch_id, serial_id, supplier_id, is_consignment, qty)] از استخرهایِ همین انبار.
-    R251: اگر محلِ خروج معلوم است، اول از استخرهایِ موجود در همان محل (تا سقفِ موجودیِ محل)."""
+    """[(batch_id, serial_id, supplier_id, is_consignment, qty)] از استخرهای همین انبار.
+    R251: اگر محل خروج معلوم است، اول از استخرهای موجود در همان محل (تا سقف موجودی محل)."""
     pools = _pools(session, company_id, item.item_id, warehouse_id)
     if not pools:
         return []
@@ -486,7 +486,7 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
 
 
 def apply_after_post_in(session, stock_document_id: int, company_id: int) -> None:
-    """R266: همان منطق در تراکنشِ فراخواننده (بدونِ commit)."""
+    """R266: همان منطق در تراکنش فراخواننده (بدون commit)."""
     doc = session.get(StockDocument, stock_document_id)
     if doc is None or doc.company_id != company_id:
         return
@@ -593,7 +593,7 @@ def apply_after_post_in(session, stock_document_id: int, company_id: int) -> Non
 
 
 def reverse_document_movements(stock_document_id: int, company_id: int) -> None:
-    """برگشتِ کاملِ سند (inventory_engine.reverse_stock_document): حرکت‌هایِ ردیابی هم معکوس می‌شوند."""
+    """برگشت کامل سند (inventory_engine.reverse_stock_document): حرکت‌های ردیابی هم معکوس می‌شوند."""
     with new_session() as session:
         line_ids = list(session.scalars(
             select(StockDocumentLine.line_id).where(StockDocumentLine.stock_document_id == stock_document_id)
@@ -617,7 +617,7 @@ def reverse_document_movements(stock_document_id: int, company_id: int) -> None:
 
 
 def mirror_tracking_for_reversal(original_stock_document_id: int, reversal_stock_document_id: int) -> None:
-    """سندِ برگشتیِ خودکار (حذفِ سندِ ثبت‌شده) دقیقاً همان بچ/سریال‌ها را برمی‌گرداند."""
+    """سند برگشتی خودکار (حذف سند ثبت‌شده) دقیقاً همان بچ/سریال‌ها را برمی‌گرداند."""
     with new_session() as session:
         original_lines = session.scalars(
             select(StockDocumentLine).where(StockDocumentLine.stock_document_id == original_stock_document_id)
@@ -644,8 +644,8 @@ def mirror_tracking_for_reversal(original_stock_document_id: int, reversal_stock
 
 
 def settle_consignment(invoice_document_id: int, company_id: int) -> None:
-    """تسویهٔ امانیِ ورودی (فاکتورِ خرید از رویِ امانی): مالکیتِ همان مقدار از
-    «امانیِ تامین‌کننده» به «خریداری‌شده» منتقل می‌شود (بچ/سریال/انبار حفظ می‌شود)."""
+    """تسویهٔ امانی ورودی (فاکتور خرید از روی امانی): مالکیت همان مقدار از
+    «امانی تامین‌کننده» به «خریداری‌شده» منتقل می‌شود (بچ/سریال/انبار حفظ می‌شود)."""
     with new_session() as session:
         invoice = session.get(CommercialDocument, invoice_document_id)
         if invoice is None or invoice.company_id != company_id:
@@ -736,7 +736,7 @@ def list_lot_balances(
 
 def trace(company_id: int, *, batch_no: str | None = None, serial_no: str | None = None,
           item_id: int | None = None, supplier_detail_account_id: int | None = None) -> list[TraceRow]:
-    """تاریخچهٔ کاملِ حرکتِ یک بچ/سریال/کالایِ یک تامین‌کننده -- از ورود تا خروج."""
+    """تاریخچهٔ کامل حرکت یک بچ/سریال/کالای یک تامین‌کننده — از ورود تا خروج."""
     with new_session() as session:
         q = select(LotMovement).where(LotMovement.company_id == company_id)
         if item_id is not None:
@@ -767,8 +767,8 @@ def trace(company_id: int, *, batch_no: str | None = None, serial_no: str | None
 
 
 _STOCK_TITLES = {
-    "RECEIPT": "رسیدِ انبار", "ISSUE": "حوالهٔ انبار", "TRANSFER": "انتقال", "RETURN_IN": "برگشت از فروش",
-    "RETURN_OUT": "برگشت به تامین‌کننده", "ADJUSTMENT": "اصلاحِ انبار", "CONSIGNMENT_IN": "امانیِ ورودی",
+    "RECEIPT": "رسید انبار", "ISSUE": "حوالهٔ انبار", "TRANSFER": "انتقال", "RETURN_IN": "برگشت از فروش",
+    "RETURN_OUT": "برگشت به تامین‌کننده", "ADJUSTMENT": "اصلاح انبار", "CONSIGNMENT_IN": "امانی ورودی",
 }
 
 
@@ -782,5 +782,5 @@ def _document_label(session, m: LotMovement) -> str:
         line = session.get(CommercialDocumentLine, m.commercial_line_id)
         doc = session.get(CommercialDocument, line.document_id) if line else None
         if doc is not None:
-            return f"تسویهٔ امانی -- فاکتورِ خرید {doc.document_no}"
+            return f"تسویهٔ امانی — فاکتور خرید {doc.document_no}"
     return ""

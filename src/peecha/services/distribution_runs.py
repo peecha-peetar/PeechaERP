@@ -1,10 +1,10 @@
-"""تیمِ پخش -- طبقِ درخواستِ صریحِ کاربر (روالِ کاملِ پخشِ سرد): فاکتورهایِ
-فروشِ ثبت‌نهایی‌شده‌یِ کانالِ «پخشِ سرد» که از گیتِ تاییدِ انبار/توزینِ
-سفارشِ مبدا (commercial_documents.approve_warehouse/approve_weighing)
+"""تیم پخش — طبق درخواست صریح کاربر (روال کامل پخش سرد): فاکتورهای
+فروش ثبت‌نهایی‌شدهٔ کانال «پخش سرد» که از گیت تایید انبار/توزین
+سفارش مبدا (commercial_documents.approve_warehouse/approve_weighing)
 عبور کرده‌اند، اینجا به یک خودرو (inv.warehouses با
 warehouse_type_code='VEHICLE' -- که از پیش پلاک/رانندهٔ خودش را دارد) +
-تاریخِ مشخص الصاق می‌شوند. هر تیم یک «مانیفستِ» چاپ‌پذیر است: فهرستِ
-فاکتورها + جمعِ هر کالا در همه‌یِ آن فاکتورها -- که به راننده تحویل داده
+تاریخ مشخص الصاق می‌شوند. هر تیم یک «مانیفست» چاپ‌پذیر است: فهرست
+فاکتورها + جمع هر کالا در همهٔ آن فاکتورها — که به راننده تحویل داده
 می‌شود."""
 
 from __future__ import annotations
@@ -26,10 +26,10 @@ from peecha.services import inventory_catalog as catalog_service
 
 
 def list_order_visitors(company_id: int) -> list[tuple[int, str]]:
-    """طبقِ درخواستِ صریح («ویزیتور هم به فیلترهایِ تیمِ پخش اضافه
-    بشه»): هم‌الگو با field_sales_dashboard._visitor_names -- «ویزیتور»
+    """طبق درخواست صریح («ویزیتور هم به فیلترهای تیم پخش اضافه
+    بشه»): هم‌الگو با field_sales_dashboard._visitor_names — «ویزیتور»
     در این پروژه یعنی همان کاربری که سفارش را ثبت کرده (created_by_
-    user_id)، نه فیلدِ کم‌استفاده‌یِ sales_rep_detail_account_id."""
+    user_id)، نه فیلد کم‌استفادهٔ sales_rep_detail_account_id."""
     from peecha.services import users as users_service
 
     return sorted(
@@ -49,9 +49,9 @@ class EligibleInvoiceRow:
 
 
 def _route_and_descendant_ids(company_id: int, route_detail_account_id: int) -> set[int]:
-    """طبقِ درخواستِ صریح («فیلترِ منطقه‌بندی و مسیر رویِ تیمِ پخش»):
-    مسیرِ توزیع یک بُعدِ سلسله‌مراتبی است (منطقه > زیرمنطقه > مسیر) --
-    انتخابِ یک گره باید همه‌یِ زیرگره‌هایش را هم شاملِ فیلتر کند."""
+    """طبق درخواست صریح («فیلتر منطقه‌بندی و مسیر روی تیم پخش»):
+    مسیر توزیع یک بُعد سلسله‌مراتبی است (منطقه > زیرمنطقه > مسیر) --
+    انتخاب یک گره باید همهٔ زیرگره‌هایش را هم شامل فیلتر کند."""
     dimension_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE)
     all_rows = dimensions_service.list_detail_accounts(company_id, dimension_type_id)
     children_by_parent: dict[int | None, list[int]] = {}
@@ -72,12 +72,12 @@ def list_eligible_invoices(
     company_id: int, customer_group_id: int | None = None, route_detail_account_id: int | None = None,
     visitor_user_id: int | None = None,
 ) -> list[EligibleInvoiceRow]:
-    """فاکتورهایِ فروشِ ثبت‌نهایی‌شده‌یِ کانالِ پخشِ سرد که هنوز به هیچ
-    تیمِ فعالی (DRAFT/CONFIRMED) الصاق نشده‌اند -- طبقِ درخواستِ صریح،
-    قابلِ‌فیلتر بر اساسِ گروهِ مشتریان، مسیر/منطقه‌یِ توزیعِ مشتری
-    (comm.customer_profiles)، و ویزیتوری که سفارشِ مبدا را ثبت کرده
-    (از رویِ source_document_id، چون فاکتور را معمولاً شخصِ دیگری --
-    انبار/دفتر -- می‌سازد، نه خودِ ویزیتور) تا بتوان فاکتورهایِ یک
+    """فاکتورهای فروش ثبت‌نهایی‌شدهٔ کانال پخش سرد که هنوز به هیچ
+    تیم فعالی (DRAFT/CONFIRMED) الصاق نشده‌اند — طبق درخواست صریح،
+    قابل‌فیلتر بر اساس گروه مشتریان، مسیر/منطقهٔ توزیع مشتری
+    (comm.customer_profiles)، و ویزیتوری که سفارش مبدا را ثبت کرده
+    (از روی source_document_id، چون فاکتور را معمولاً شخص دیگری --
+    انبار/دفتر — می‌سازد، نه خود ویزیتور) تا بتوان فاکتورهای یک
     منطقه/ویزیتور را یک‌جا به یک خودرو تخصیص داد."""
     route_ids = _route_and_descendant_ids(company_id, route_detail_account_id) if route_detail_account_id is not None else None
     with new_session() as session:
@@ -168,7 +168,7 @@ def create_distribution_run(
         if vehicle_warehouse is None or vehicle_warehouse.company_id != company_id:
             raise ValueError("انبار/خودروی انتخاب‌شده نامعتبر است.")
         if vehicle_warehouse.warehouse_type_code != "VEHICLE":
-            raise ValueError("فقط انبارِ نوعِ «خودرو» می‌تواند تیمِ پخش داشته باشد.")
+            raise ValueError("فقط انبار نوع «خودرو» می‌تواند تیم پخش داشته باشد.")
         run = DistributionRun(
             company_id=company_id, run_date=run_date, vehicle_warehouse_id=vehicle_warehouse_id,
             notes=notes or None, created_by_user_id=created_by_user_id,
@@ -182,21 +182,21 @@ def add_document_to_run(distribution_run_id: int, company_id: int, document_id: 
     with new_session() as session:
         run = session.get(DistributionRun, distribution_run_id)
         if run is None or run.company_id != company_id:
-            raise ValueError("تیمِ پخش نامعتبر است.")
+            raise ValueError("تیم پخش نامعتبر است.")
         if run.status_code != "DRAFT":
-            raise ValueError("فقط تیمِ پخشِ هنوز تاییدنشده قابلِ‌ویرایش است.")
+            raise ValueError("فقط تیم پخش هنوز تاییدنشده قابل‌ویرایش است.")
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("فاکتور نامعتبر است.")
         if doc.document_type_code != "SALES_INVOICE" or doc.status_code != "POSTED":
-            raise ValueError("فقط فاکتورِ فروشِ ثبت‌نهایی‌شده قابلِ‌الصاق است.")
+            raise ValueError("فقط فاکتور فروش ثبت‌نهایی‌شده قابل‌الصاق است.")
         existing = session.scalar(
             select(DistributionRunDocument)
             .join(DistributionRun, DistributionRun.distribution_run_id == DistributionRunDocument.distribution_run_id)
             .where(DistributionRunDocument.document_id == document_id, DistributionRun.status_code != "CANCELLED")
         )
         if existing is not None:
-            raise ValueError("این فاکتور قبلاً به یک تیمِ پخشِ فعال الصاق شده است.")
+            raise ValueError("این فاکتور قبلاً به یک تیم پخش فعال الصاق شده است.")
         session.add(DistributionRunDocument(distribution_run_id=distribution_run_id, document_id=document_id))
         session.commit()
 
@@ -205,12 +205,12 @@ def remove_document_from_run(distribution_run_id: int, company_id: int, document
     with new_session() as session:
         run = session.get(DistributionRun, distribution_run_id)
         if run is None or run.company_id != company_id:
-            raise ValueError("تیمِ پخش نامعتبر است.")
+            raise ValueError("تیم پخش نامعتبر است.")
         if run.status_code != "DRAFT":
-            raise ValueError("فقط تیمِ پخشِ هنوز تاییدنشده قابلِ‌ویرایش است.")
+            raise ValueError("فقط تیم پخش هنوز تاییدنشده قابل‌ویرایش است.")
         link = session.get(DistributionRunDocument, (distribution_run_id, document_id))
         if link is None:
-            raise ValueError("این فاکتور در این تیمِ پخش نیست.")
+            raise ValueError("این فاکتور در این تیم پخش نیست.")
         session.delete(link)
         session.commit()
 
@@ -219,7 +219,7 @@ def get_distribution_run(distribution_run_id: int, company_id: int) -> Distribut
     with new_session() as session:
         run = session.get(DistributionRun, distribution_run_id)
         if run is None or run.company_id != company_id:
-            raise ValueError("تیمِ پخش نامعتبر است.")
+            raise ValueError("تیم پخش نامعتبر است.")
         vehicle_warehouse = session.get(Warehouse, run.vehicle_warehouse_id)
         document_ids = list(
             session.scalars(
@@ -287,14 +287,14 @@ def confirm_distribution_run(distribution_run_id: int, company_id: int, confirme
     with new_session() as session:
         run = session.get(DistributionRun, distribution_run_id)
         if run is None or run.company_id != company_id:
-            raise ValueError("تیمِ پخش نامعتبر است.")
+            raise ValueError("تیم پخش نامعتبر است.")
         if run.status_code != "DRAFT":
-            raise ValueError("این تیمِ پخش قبلاً تایید/لغو شده است.")
+            raise ValueError("این تیم پخش قبلاً تایید/لغو شده است.")
         has_documents = session.scalar(
             select(DistributionRunDocument).where(DistributionRunDocument.distribution_run_id == distribution_run_id)
         )
         if has_documents is None:
-            raise ValueError("حداقل یک فاکتور باید به این تیمِ پخش الصاق شده باشد.")
+            raise ValueError("حداقل یک فاکتور باید به این تیم پخش الصاق شده باشد.")
         run.status_code = "CONFIRMED"
         run.confirmed_by_user_id = confirmed_by_user_id
         run.confirmed_at = datetime.datetime.now()
@@ -305,8 +305,8 @@ def cancel_distribution_run(distribution_run_id: int, company_id: int) -> None:
     with new_session() as session:
         run = session.get(DistributionRun, distribution_run_id)
         if run is None or run.company_id != company_id:
-            raise ValueError("تیمِ پخش نامعتبر است.")
+            raise ValueError("تیم پخش نامعتبر است.")
         if run.status_code != "DRAFT":
-            raise ValueError("فقط تیمِ پخشِ هنوز تاییدنشده قابلِ‌لغو است.")
+            raise ValueError("فقط تیم پخش هنوز تاییدنشده قابل‌لغو است.")
         run.status_code = "CANCELLED"
         session.commit()

@@ -1,7 +1,7 @@
-"""بهایِ جایگزینی (Replacement Cost) و منابعِ قیمتِ روشِ NIFO -- R258.
+"""بهای جایگزینی (Replacement Cost) و منابع قیمت روش NIFO — R258.
 
-NIFO با لایه‌هایِ واقعی مخلوط نمی‌شود: موجودی با بهایِ دفتری (میانگین) بستانکار می‌شود و بهایِ تمام‌شده
-با بهایِ جایگزینی؛ اختلاف به حسابِ مغایرتِ بها می‌رود (inventory_engine).
+NIFO با لایه‌های واقعی مخلوط نمی‌شود: موجودی با بهای دفتری (میانگین) بستانکار می‌شود و بهای تمام‌شده
+با بهای جایگزینی؛ اختلاف به حساب مغایرت بها می‌رود (inventory_engine).
 """
 
 from __future__ import annotations
@@ -18,11 +18,11 @@ from peecha.db.models.inventory import Item, ReplacementCost, StockDocument, Sto
 
 _ZERO = decimal.Decimal(0)
 SOURCES = {
-    "MANUAL": "بهایِ جایگزینیِ دستی",
-    "LAST_RECEIPT": "آخرین رسیدِ خرید",
-    "LAST_PURCHASE_PRICE": "آخرین قیمتِ فاکتورِ خرید",
-    "LAST_PURCHASE_ORDER": "آخرین سفارشِ خرید",
-    "SUPPLIER_PRICE": "فهرستِ قیمتِ تامین‌کننده",
+    "MANUAL": "بهای جایگزینی دستی",
+    "LAST_RECEIPT": "آخرین رسید خرید",
+    "LAST_PURCHASE_PRICE": "آخرین قیمت فاکتور خرید",
+    "LAST_PURCHASE_ORDER": "آخرین سفارش خرید",
+    "SUPPLIER_PRICE": "فهرست قیمت تامین‌کننده",
 }
 DEFAULT_ORDER = ["MANUAL", "LAST_RECEIPT", "LAST_PURCHASE_PRICE", "LAST_PURCHASE_ORDER", "SUPPLIER_PRICE"]
 
@@ -78,7 +78,7 @@ def _supplier_price(session, item_id, as_of):
 
 def replacement_cost(session, company_id: int, item_id: int, warehouse_id: int | None, as_of: datetime.date,
                      sources: list[str] | None = None) -> tuple[decimal.Decimal, str] | None:
-    """اولین قیمتِ معتبر (مثبت) به ترتیبِ منابعِ تنظیم‌شده -- بهایِ هر واحدِ پایه."""
+    """اولین قیمت معتبر (مثبت) به ترتیب منابع تنظیم‌شده — بهای هر واحد پایه."""
     for code in sources or DEFAULT_ORDER:
         if code == "MANUAL":
             value = _manual(session, item_id, warehouse_id, as_of)
@@ -120,13 +120,13 @@ class ReplacementCostRow:
 def set_replacement_cost(company_id: int, item_id: int, unit_cost: decimal.Decimal, effective_date: datetime.date,
                          warehouse_id: int | None = None, uom_id: int | None = None, note: str | None = None,
                          user_id: int | None = None) -> int:
-    """بهایِ جایگزینیِ دستی (به ازایِ واحدِ داده‌شده؛ به واحدِ پایه تبدیل و ذخیره می‌شود) -- با Audit."""
+    """بهای جایگزینی دستی (به ازای واحد داده‌شده؛ به واحد پایه تبدیل و ذخیره می‌شود) — با Audit."""
     from peecha.services import audit as audit_service
     from peecha.services import unit_conversion as uc
 
     unit_cost = decimal.Decimal(unit_cost)
     if unit_cost <= 0:
-        raise ValueError("بهایِ جایگزینی باید مثبت باشد.")
+        raise ValueError("بهای جایگزینی باید مثبت باشد.")
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:

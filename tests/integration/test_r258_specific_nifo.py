@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -209,22 +209,22 @@ mk("RECEIPT", ph, 1, 12 * M, dst=wh, entries=[TE(D(1), serial_no="SN002")])
 mk("RECEIPT", ph, 2, 11 * M, dst=wh, entries=[TE(D(1), serial_no="SN003"), TE(D(1), serial_no="SN004")])
 lyr = layers(ph)
 check(len(lyr) == 4 and all(l.serial_id is not None and l.original_quantity == 1 for l in lyr),
-      "هر سریال لایهٔ خودش را دارد (رسیدِ دوسریالی به دو لایه شکست)")
-check({l.serial_id: l.unit_cost for l in lyr}[serial_id(ph, "SN002")] == 12 * M, "بهایِ SN002 = ۱۲٬۰۰۰٬۰۰۰")
+      "هر سریال لایهٔ خودش را دارد (رسید دوسریالی به دو لایه شکست)")
+check({l.serial_id: l.unit_cost for l in lyr}[serial_id(ph, "SN002")] == 12 * M, "بهای SN002 = ۱۲٬۰۰۰٬۰۰۰")
 _, issue_line = mk("ISSUE", ph, 1, src=wh, entries=[TE(D(1), serial_no="SN002")])
-check(out_costs(issue_line) == [(D(1), (12 * M).normalize())], f"خروجِ SN002 با بهایِ خودش، نه FIFO (got {out_costs(issue_line)})")
+check(out_costs(issue_line) == [(D(1), (12 * M).normalize())], f"خروج SN002 با بهای خودش، نه FIFO (got {out_costs(issue_line)})")
 check({l.serial_id: l.remaining_quantity for l in layers(ph)}[serial_id(ph, "SN002")] == 0, "لایهٔ SN002 مصرف شد")
 _, rin = mk("RETURN_IN", ph, 1, dst=wh, source_line=issue_line, entries=[TE(D(1), serial_no="SN002")])
 with new_session() as s:
     rcost = s.scalar(select(StockLedger.unit_cost).where(StockLedger.stock_document_line_id == rin))
-check(rcost == 12 * M, f"برگشت از فروشِ SN002 با بهایِ همان سریال ({rcost})")
+check(rcost == 12 * M, f"برگشت از فروش SN002 با بهای همان سریال ({rcost})")
 check(any(l.serial_id == serial_id(ph, "SN002") and l.source_type_code == "RETURN_IN" and l.remaining_quantity == 1 for l in layers(ph)),
       "لایهٔ برگشتی دوباره به همان سریال وصل شد")
 wh2 = locations_service.create_warehouse(company_id, "WH02", "فرعی", locations_service.WarehouseFields(allow_negative_stock=False))
 _, tl = mk("TRANSFER", ph, 1, src=wh, dst=wh2, entries=[TE(D(1), serial_no="SN004")])
 moved = [l for l in layers(ph, wh2)]
 check(len(moved) == 1 and moved[0].serial_id == serial_id(ph, "SN004") and moved[0].unit_cost == 11 * M,
-      "انتقال: سریال و بهایش در انبارِ مقصد حفظ شد")
+      "انتقال: سریال و بهایش در انبار مقصد حفظ شد")
 
 # --- ۲) بچ: شناساییِ ویژه در برابرِ FIFO ---------------------------------------------------
 exp = today + datetime.timedelta(days=300)
@@ -235,22 +235,22 @@ def batch_item(code, method):
     return it
 bs = batch_item("SP-BAT", "SPECIFIC")
 check(sorted(l.unit_cost for l in layers(bs)) == [100_000, 130_000] and all(l.batch_id for l in layers(bs)),
-      "هر بچ لایه/بهایِ مخصوصِ خودش را دارد")
+      "هر بچ لایه/بهای مخصوص خودش را دارد")
 _, ln = mk("ISSUE", bs, 50, src=wh, entries=[TE(D(50), batch_no="B")])
-check(out_costs(ln) == [(D(50), D(130000))], "شناساییِ ویژه: خروج از بچِ B با بهایِ B")
+check(out_costs(ln) == [(D(50), D(130000))], "شناسایی ویژه: خروج از بچ B با بهای B")
 bf = batch_item("FI-BAT", "FIFO")
 _, ln = mk("ISSUE", bf, 50, src=wh, entries=[TE(D(50), batch_no="B")])
-check(out_costs(ln) == [(D(50), D(100000))], "FIFO: بهایِ خروج طبقِ روشِ سیستم (قدیمی‌ترین)، نه بچِ فیزیکی")
+check(out_costs(ln) == [(D(50), D(100000))], "FIFO: بهای خروج طبق روش سیستم (قدیمی‌ترین)، نه بچ فیزیکی")
 
 # --- ۳) NIFO و بهایِ جایگزینی ---------------------------------------------------------------
-check(any(m.code == "NIFO" for m in catalog_service.list_costing_methods()), "NIFO قابلِ‌انتخاب است")
+check(any(m.code == "NIFO" for m in catalog_service.list_costing_methods()), "NIFO قابل‌انتخاب است")
 nf = new_item("NI-1", "NIFO")
 mk("RECEIPT", nf, 100, 100, dst=wh)
-rid = rc.set_replacement_cost(company_id, nf, D(150), today, note="قیمتِ روز", user_id=user.user_id)
-check(rc.get_replacement_cost(company_id, nf, wh) == (D(150), "MANUAL"), "بهایِ جایگزینیِ دستی معتبرترین منبع است")
+rid = rc.set_replacement_cost(company_id, nf, D(150), today, note="قیمت روز", user_id=user.user_id)
+check(rc.get_replacement_cost(company_id, nf, wh) == (D(150), "MANUAL"), "بهای جایگزینی دستی معتبرترین منبع است")
 d, ln = mk("ISSUE", nf, 10, src=wh)
-check(alloc_costs(ln) == [(D(10), D(150))], f"NIFO: بهایِ خروج = بهایِ جایگزینی ۱۵۰ (got {alloc_costs(ln)})")
-check(out_costs(ln) == [(D(10), D(100))], "NIFO با لایهٔ واقعی مخلوط نمی‌شود: موجودی با بهایِ دفتری ۱۰۰ کم شد")
+check(alloc_costs(ln) == [(D(10), D(150))], f"NIFO: بهای خروج = بهای جایگزینی ۱۵۰ (got {alloc_costs(ln)})")
+check(out_costs(ln) == [(D(10), D(100))], "NIFO با لایهٔ واقعی مخلوط نمی‌شود: موجودی با بهای دفتری ۱۰۰ کم شد")
 check(not layers(nf), "NIFO لایه نمی‌سازد")
 with new_session() as s:
     je = s.get(SD, d).journal_entry_id
@@ -259,17 +259,17 @@ with new_session() as s:
 debit = {a: dbt for a, dbt, _c in lines if dbt}
 credit = {a: cr for a, _d, cr in lines if cr}
 check(debit.get(cogs_gl.account_id) == 1500 and credit.get(inv_gl.account_id) == 1000 and credit.get(adj_gl.account_id) == 500,
-      f"سندِ NIFO: بهایِ تمام‌شده ۱۵۰۰، موجودی ۱۰۰۰، مغایرت ۵۰۰ ({debit}, {credit})")
+      f"سند NIFO: بهای تمام‌شده ۱۵۰۰، موجودی ۱۰۰۰، مغایرت ۵۰۰ ({debit}, {credit})")
 with new_session() as s:
     logged = s.scalar(select(sa_func.count()).select_from(ActivityLog).where(ActivityLog.entity_type == "ReplacementCost"))
-check(logged >= 1, "ثبتِ بهایِ جایگزینی در Audit")
+check(logged >= 1, "ثبت بهای جایگزینی در Audit")
 # ترتیبِ منابع قابلِ‌تنظیم: بدونِ «دستی» → آخرین رسید
 engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, user_id=user.user_id,
                                     nifo_price_sources=["LAST_RECEIPT", "MANUAL"])
 _, ln = mk("ISSUE", nf, 5, src=wh)
-check(alloc_costs(ln) == [(D(5), D(100))], "ترتیبِ منبع: آخرین رسید (۱۰۰) پیش از قیمتِ دستی")
+check(alloc_costs(ln) == [(D(5), D(100))], "ترتیب منبع: آخرین رسید (۱۰۰) پیش از قیمت دستی")
 check(raises(lambda: engine_service.set_costing_settings(company_id, "WEIGHTED_AVERAGE", True, nifo_price_sources=["XYZ"])),
-      "منبعِ نامعتبر رد شد")
+      "منبع نامعتبر رد شد")
 # فهرستِ قیمتِ تامین‌کننده (واحدِ کارتن = ۱۲ عدد)
 carton = catalog_service.create_uom(company_id, "CTN", "کارتن", "COUNT", decimal_places=0)
 nf2 = new_item("NI-2", "NIFO")
@@ -282,12 +282,12 @@ with new_session() as s:
     s.add(PriceListItem(price_list_id=pl.price_list_id, item_id=nf2, uom_id=carton, unit_price=D(1_200_000)))
     s.commit()
 check(rc.replacement_cost(new_session(), company_id, nf2, wh, today, ["SUPPLIER_PRICE"]) == (D(100_000), "SUPPLIER_PRICE"),
-      "قیمتِ تامین‌کننده به واحدِ پایه: کارتنِ ۱٬۲۰۰٬۰۰۰ → هر عدد ۱۰۰٬۰۰۰")
+      "قیمت تامین‌کننده به واحد پایه: کارتن ۱٬۲۰۰٬۰۰۰ → هر عدد ۱۰۰٬۰۰۰")
 rc.set_replacement_cost(company_id, nf2, D(2_400_000), today, uom_id=carton, user_id=user.user_id)
 check(rc.get_replacement_cost(company_id, nf2) is not None and
       rc.replacement_cost(new_session(), company_id, nf2, wh, today, ["MANUAL"]) == (D(200_000), "MANUAL"),
-      "بهایِ جایگزینیِ واحدِ کارتن به واحدِ پایه تبدیل شد")
-check(raises(lambda: rc.set_replacement_cost(company_id, nf2, D(0), today)), "بهایِ جایگزینیِ صفر رد شد")
+      "بهای جایگزینی واحد کارتن به واحد پایه تبدیل شد")
+check(raises(lambda: rc.set_replacement_cost(company_id, nf2, D(0), today)), "بهای جایگزینی صفر رد شد")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

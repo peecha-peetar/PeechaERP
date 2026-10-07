@@ -33,7 +33,7 @@ export function ApprovalsInboxScreen({ apiClient, onBack, onOpenCustomer }: Prop
     try {
       setData(await apiClient.listApprovals());
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ صندوقِ تاییدها ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت صندوق تاییدها ناموفق بود.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -55,7 +55,7 @@ export function ApprovalsInboxScreen({ apiClient, onBack, onOpenCustomer }: Prop
       toast.show(approve ? "تایید شد." : "رد شد.", "success");
       await load();
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "ثبتِ تصمیم ناموفق بود.", "danger");
+      toast.show(e instanceof ApiError ? e.message : "ثبت تصمیم ناموفق بود.", "danger");
     } finally {
       setDecidingId(null);
     }
@@ -86,10 +86,10 @@ export function ApprovalsInboxScreen({ apiClient, onBack, onOpenCustomer }: Prop
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
     >
       <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>صندوقِ تاییدها</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>صندوق تاییدها</Text>
 
       {isEmpty ? (
-        <EmptyState title="کاری در انتظارِ تاییدِ شما نیست" />
+        <EmptyState title="کاری در انتظار تایید شما نیست" />
       ) : (
         <>
           {cartableTasks.length > 0 ? (
@@ -107,7 +107,7 @@ export function ApprovalsInboxScreen({ apiClient, onBack, onOpenCustomer }: Prop
                     <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
                       {t.submitted_by_name ?? "نامشخص"}
                       {t.submitted_at ? ` · ${formatJalaliDateTime(t.submitted_at)}` : ""}
-                      {` · مرحله‌یِ ${t.current_step_no} از ${t.total_steps}`}
+                      {` · مرحلهٔ ${t.current_step_no} از ${t.total_steps}`}
                     </Text>
                     <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
                       <Button
@@ -135,12 +135,12 @@ export function ApprovalsInboxScreen({ apiClient, onBack, onOpenCustomer }: Prop
           {pendingCustomers.length > 0 ? (
             <View>
               <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-                مشتریانِ درانتظارِ تایید ({pendingCustomers.length})
+                مشتریان درانتظار تایید ({pendingCustomers.length})
               </Text>
               <View style={{ gap: spacing.sm }}>
                 {pendingCustomers.map((c) => (
                   <Card key={c.customer_detail_account_id} onPress={() => onOpenCustomer(c.customer_detail_account_id)}>
-                    <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>{c.name ?? `مشتریِ #${c.customer_detail_account_id}`}</Text>
+                    <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>{c.name ?? `مشتری #${c.customer_detail_account_id}`}</Text>
                     <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
                       {c.code ?? ""}
                       {c.submitted_at ? ` · ${formatJalaliDateTime(c.submitted_at)}` : ""}

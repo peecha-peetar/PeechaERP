@@ -16,7 +16,7 @@ export async function shareInvoicePdf(data: InvoicePrintData): Promise<void> {
     await Sharing.shareAsync(uri, {
       mimeType: "application/pdf",
       UTI: "com.adobe.pdf",
-      dialogTitle: data.document_no !== null ? `فاکتورِ شمارهٔ ${data.document_no}` : "فاکتور",
+      dialogTitle: data.document_no !== null ? `فاکتور شمارهٔ ${data.document_no}` : "فاکتور",
     });
   }
 }

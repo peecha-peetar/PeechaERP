@@ -1,22 +1,22 @@
-"""فرمِ واحدِ ثبتِ همه‌ی حساب‌هایِ تفصیلی — معادلِ Qt برایِ detail_dimensions.py/.kv.
+"""فرم واحد ثبت همهٔ حساب‌های تفصیلی — معادل Qt برای detail_dimensions.py/.kv.
 
-طبقِ درخواستِ صریح: «تعریفِ تفصیلی‌ها همه در یک فرم باشد و از هدرِ فرم
-نوعِ تفصیلی انتخاب و تعریف شود، منویِ جداگانه نداشته باشیم» — این صفحه
-قبلاً فقط گروه‌هایِ «ساده» (بدونِ صفحه‌ی اختصاصی) را پوشش می‌داد؛ حالا
-همان یک فرم، با یک کمبویِ سرستون («گروه»)، هرسه نوعِ زیر را یک‌جا پوشش
+طبق درخواست صریح: «تعریف تفصیلی‌ها همه در یک فرم باشد و از هدر فرم
+نوع تفصیلی انتخاب و تعریف شود، منوی جداگانه نداشته باشیم» — این صفحه
+قبلاً فقط گروه‌های «ساده» (بدون صفحهٔ اختصاصی) را پوشش می‌داد؛ حالا
+همان یک فرم، با یک فهرست سرستون («گروه»)، هرسه نوع زیر را یک‌جا پوشش
 می‌دهد:
-  ۱) گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل) — فیلدهایِ هاردکدِ
-     اختصاصیِ خودشان (کدِ اقتصادی، شناسه‌یِ ملی، ...) را دارند، چون در
-     جدولِ SQLِ جداگانه‌ای (customer_details/...) ذخیره می‌شوند.
-  ۲) ۷ نوعِ «فرمِ خاص» (کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکزِهزینه/
-     پروژه) که قبلاً صفحه‌ی اختصاصیِ خودشان را داشتند (specialized_dimensions.py) —
-     هیچ فیلدِ هاردکدی ندارند، فقط با فیلدهایِ اختصاصیِ پیکربندی‌شده کار می‌کنند.
-  ۳) گروه‌هایِ «ساده»یِ تعریف‌شده‌یِ کاربر — مثلِ قبل.
+  ۱) گروه‌های اشخاص (مشتری/تامین‌کننده/پرسنل) — فیلدهای هاردکد
+     اختصاصی خودشان (کد اقتصادی، شناسهٔ ملی، ...) را دارند، چون در
+     جدول SQL جداگانه‌ای (customer_details/...) ذخیره می‌شوند.
+  ۲) ۷ نوع «فرم خاص» (کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکز هزینه/
+     پروژه) که قبلاً صفحهٔ اختصاصی خودشان را داشتند (specialized_dimensions.py) —
+     هیچ فیلد هاردکدی ندارند، فقط با فیلدهای اختصاصی پیکربندی‌شده کار می‌کنند.
+  ۳) گروه‌های «ساده»ی تعریف‌شدهٔ کاربر — مثل قبل.
 
-هرسه نوع از یک زیرساختِ مشترک (سلسله‌مراتب/کدِ پیشنهادی/فیلدهایِ
-اختصاصیِ پیکربندی‌شده) استفاده می‌کنند؛ فرقشان فقط در این است که
-گروه‌هایِ اشخاص یک ردیفِ اضافه از فیلدهایِ هاردکد هم دارند و با
-تابع‌هایِ سرویسِ اختصاصیِ خودشان (create_customer/...) ذخیره می‌شوند."""
+هرسه نوع از یک زیرساخت مشترک (سلسله‌مراتب/کد پیشنهادی/فیلدهای
+اختصاصی پیکربندی‌شده) استفاده می‌کنند؛ فرقشان فقط در این است که
+گروه‌های اشخاص یک ردیف اضافه از فیلدهای هاردکد هم دارند و با
+تابع‌های سرویس اختصاصی خودشان (create_customer/...) ذخیره می‌شوند."""
 
 from __future__ import annotations
 
@@ -80,16 +80,16 @@ from peecha.ui.widgets import (
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها.
-_COLUMNS = ["کدِ کامل", "نام", "سطح", "وضعیت"]
+_COLUMNS = ["کد کامل", "نام", "سطح", "وضعیت"]
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: فهرستِ کارمندان
 # (که قبلاً در صفحه‌یِ جداگانه‌یِ «تعریفِ کارکنان» این ستون‌ها را داشت)
 # باید همین‌جا هم دیده شود، پس فقط برایِ گروهِ PERSONNEL این ۴ ستونِ
 # اضافه به ستون‌هایِ عمومی افزوده می‌شود.
-_PERSONNEL_EXTRA_COLUMNS = ["واحدِ سازمانی", "پست", "حقوقِ پایه", "وضعیتِ استخدام"]
+_PERSONNEL_EXTRA_COLUMNS = ["واحد سازمانی", "پست", "حقوق پایه", "وضعیت استخدام"]
 # طبقِ ادغامِ فرمِ «کالا و خدمت» در گروهِ تفصیلیِ INVENTORY_ITEM: فقط برایِ
 # ردیف‌هایِ سطحِ‌آخرِ همین گروه، این ۳ ستونِ اضافه دیده می‌شود (گره‌هایِ
 # میانیِ گروه‌بندی مقدارِ «—» می‌گیرند، چون ردیفِ inv.items ندارند).
-_ITEM_EXTRA_COLUMNS = ["نوع", "واحدِ پایه", "وضعیتِ چرخهٔ‌عمر"]
+_ITEM_EXTRA_COLUMNS = ["نوع", "واحد پایه", "وضعیت چرخهٔ‌عمر"]
 # طبقِ گزارشِ صریح («نوعِ حساب جاری/پس‌انداز») — گزینه‌هایِ ثابتِ کیندِ
 # «account_type»یِ فیلدهایِ اختصاصی (فقط برایِ BANK_ACCOUNT کاربرد دارد).
 _ACCOUNT_TYPE_OPTIONS = ["جاری", "پس‌انداز"]
@@ -98,26 +98,26 @@ _ACCOUNT_TYPE_OPTIONS = ["جاری", "پس‌انداز"]
 # _ACCOUNT_TYPE_OPTIONS بالا.
 _CUSTOMER_TYPE_OPTIONS = [
     ("INDIVIDUAL", "شخص"), ("COMPANY", "شرکت"), ("STORE", "فروشگاه"), ("ORGANIZATION", "سازمان"),
-    ("WHOLESALER", "عمده‌فروش"), ("RETAILER", "خرده‌فروش"), ("AGENT", "نماینده"), ("ONLINE", "مشتریِ آنلاین"),
+    ("WHOLESALER", "عمده‌فروش"), ("RETAILER", "خرده‌فروش"), ("AGENT", "نماینده"), ("ONLINE", "مشتری آنلاین"),
 ]
 _PERSON_TYPE_OPTIONS = [("NATURAL", "حقیقی"), ("LEGAL", "حقوقی")]
 _CUSTOMER_CLASS_OPTIONS = [("A", "A"), ("B", "B"), ("C", "C"), ("D", "D")]
 # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۳ -- طبقه‌بندیِ فروش/تنظیماتِ سفارش).
 _OUTLET_TYPE_OPTIONS = [
-    ("SUPERMARKET", "سوپرمارکت"), ("CHAIN_STORE", "فروشگاهِ زنجیره‌ای"), ("WHOLESALE", "عمده‌فروشی"),
-    ("RESTAURANT", "رستوران"), ("PHARMACY", "داروخانه"), ("SPECIALTY_STORE", "فروشگاهِ تخصصی"),
+    ("SUPERMARKET", "سوپرمارکت"), ("CHAIN_STORE", "فروشگاه زنجیره‌ای"), ("WHOLESALE", "عمده‌فروشی"),
+    ("RESTAURANT", "رستوران"), ("PHARMACY", "داروخانه"), ("SPECIALTY_STORE", "فروشگاه تخصصی"),
     ("ORGANIZATIONAL", "سازمانی"), ("OTHER", "سایر"),
 ]
 _PRIORITY_OPTIONS = [("LOW", "کم"), ("NORMAL", "عادی"), ("HIGH", "بالا"), ("VIP", "ویژه/VIP")]
 _SHIPMENT_TYPE_OPTIONS = [
-    ("VEHICLE_ROUTE", "خودرو/مسیرِ پخش"), ("COURIER", "پیک"), ("FREIGHT", "باربری"), ("PICKUP", "حضوری/تحویلِ درِ انبار"),
+    ("VEHICLE_ROUTE", "خودرو/مسیر پخش"), ("COURIER", "پیک"), ("FREIGHT", "باربری"), ("PICKUP", "حضوری/تحویل در انبار"),
 ]
 _EMPLOYEE_STATUS_LABELS = {"ACTIVE": "فعال", "ON_LEAVE": "مرخصی", "TERMINATED": "پایان‌یافته"}
 # طبقِ یکپارچه‌سازیِ مشتری/تامین‌کننده در فرمِ تفصیلی (مرحلهٔ بازرگانی):
 # وضعیتِ گردشِ کارِ تاییدِ اعتباری (comm.customer_profiles/supplier_profiles.status_code).
 _PARTNER_STATUS_LABELS = {
-    "DRAFT": "پیش‌نویس", "PENDING_APPROVAL": "درانتظارِ تاییدِ اعتباری", "ACTIVE": "فعال",
-    "SUSPENDED": "معلق", "BLACKLISTED": "لیستِ سیاه", "ON_HOLD": "متوقف", "DISQUALIFIED": "ردِ صلاحیت",
+    "DRAFT": "پیش‌نویس", "PENDING_APPROVAL": "درانتظار تایید اعتباری", "ACTIVE": "فعال",
+    "SUSPENDED": "معلق", "BLACKLISTED": "لیست سیاه", "ON_HOLD": "متوقف", "DISQUALIFIED": "رد صلاحیت",
     "INACTIVE": "غیرفعال",
 }
 # طبقِ آیتمِ ۱۰ از بازبینیِ «تعریفِ مشتری» (R219): تبِ آدرس‌هایِ چندگانه در
@@ -130,54 +130,54 @@ _PARTY_ADDRESS_TYPE_LABELS = {
 # طبقِ آیتمِ ۲ از بازخوردِ کاربر رویِ R220: تبِ ضمانت‌هایِ مشتری در فرمِ
 # دسکتاپ (سرویس/API از R219 آماده بود، فقط UI نداشت).
 _GUARANTEE_TYPE_LABELS = {
-    "CHECK": "چکِ تضمینی", "PROMISSORY_NOTE": "سفته", "BANK_GUARANTEE": "ضمانت‌نامه",
+    "CHECK": "چک تضمینی", "PROMISSORY_NOTE": "سفته", "BANK_GUARANTEE": "ضمانت‌نامه",
     "GUARANTOR": "ضامن", "COLLATERAL": "وثیقه",
 }
 _GUARANTEE_STATUS_LABELS = {"ACTIVE": "فعال", "RELEASED": "آزادشده", "CALLED": "ضبط‌شده", "EXPIRED": "منقضی"}
-_GUARANTEE_RELEASE_STATUS_OPTIONS = [("RELEASED", "آزادسازی"), ("CALLED", "ضبط"), ("EXPIRED", "اعلامِ انقضا")]
+_GUARANTEE_RELEASE_STATUS_OPTIONS = [("RELEASED", "آزادسازی"), ("CALLED", "ضبط"), ("EXPIRED", "اعلام انقضا")]
 # طبقِ آیتمِ ۳ از همان بازخورد: تبِ قراردادهایِ مشتری/تامین‌کننده.
 _CONTRACT_CATEGORY_LABELS = {"STANDARD": "استاندارد", "AGENCY": "نمایندگی", "ORGANIZATIONAL": "سازمانی"}
 _CONTRACT_CATEGORY_OPTIONS = [("STANDARD", "استاندارد"), ("AGENCY", "نمایندگی"), ("ORGANIZATIONAL", "سازمانی")]
 _CONTRACT_STATUS_LABELS = {"ACTIVE": "فعال", "CANCELLED": "لغوشده", "EXPIRED": "منقضی"}
 
 _PERSON_FIELD_LABELS = {
-    "economic_code": "کدِ اقتصادی",
-    "national_id": "شناسه/کدِ ملی",
+    "economic_code": "کد اقتصادی",
+    "national_id": "شناسه/کد ملی",
     "phone": "تلفن",
     "mobile": "موبایل",
     "address": "آدرس",
-    "credit_limit": "سقفِ اعتبار",
+    "credit_limit": "سقف اعتبار",
     "notes": "یادداشت",
-    "bank_account_no": "شماره‌حسابِ بانکی",
-    "personnel_no": "شماره‌ی پرسنلی",
+    "bank_account_no": "شماره‌حساب بانکی",
+    "personnel_no": "شمارهٔ پرسنلی",
     "position_title": "سمت",
-    "hire_date": "تاریخِ استخدام",
-    "org_unit_id": "واحدِ سازمانی",
+    "hire_date": "تاریخ استخدام",
+    "org_unit_id": "واحد سازمانی",
     "position_id": "پست",
-    "employment_type_lookup_id": "نوعِ استخدام",
-    "base_salary": "حقوقِ پایه (ریال)",
-    "customer_group_id": "گروهِ مشتری",
-    "supplier_group_id": "گروهِ تامین‌کننده",
-    "default_price_list_id": "فهرستِ قیمتِ پیش‌فرض",
-    "default_channel_code": "کانالِ پیش‌فرض",
-    "payment_term_days": "مهلتِ پرداخت (روز)",
-    "credit_limit_amount": "سقفِ اعتبار (بازرگانی)",
-    "is_tax_exempt": "معافِ مالیاتی",
-    "distribution_route_detail_account_id": "مسیرِ توزیع",
-    "customer_type_code": "نوعِ مشتری",
-    "person_type_code": "نوعِ شخصیت",
-    "customer_class": "طبقه‌یِ مشتری",
-    "geographic_region": "منطقه‌یِ جغرافیایی",
-    "outlet_type_code": "نوعِ فروشگاه",
-    "priority_code": "اولویتِ مشتری",
-    "min_order_amount": "حداقلِ مبلغِ سفارش",
-    "min_order_quantity": "حداقلِ تعدادِ سفارش",
-    "allowed_order_days_mask": "روزهایِ مجازِ سفارش (بیت‌مسک، ۱-۱۲۷)",
-    "allowed_order_hour_from": "ساعتِ مجازِ سفارش -- از",
-    "allowed_order_hour_to": "ساعتِ مجازِ سفارش -- تا",
-    "expected_delivery_days": "زمانِ تحویلِ موردِانتظار (روز)",
-    "shipment_type_code": "نوعِ ارسال",
-    "default_warehouse_id": "انبارِ پیش‌فرض",
+    "employment_type_lookup_id": "نوع استخدام",
+    "base_salary": "حقوق پایه (ریال)",
+    "customer_group_id": "گروه مشتری",
+    "supplier_group_id": "گروه تامین‌کننده",
+    "default_price_list_id": "فهرست قیمت پیش‌فرض",
+    "default_channel_code": "کانال پیش‌فرض",
+    "payment_term_days": "مهلت پرداخت (روز)",
+    "credit_limit_amount": "سقف اعتبار (بازرگانی)",
+    "is_tax_exempt": "معاف مالیاتی",
+    "distribution_route_detail_account_id": "مسیر توزیع",
+    "customer_type_code": "نوع مشتری",
+    "person_type_code": "نوع شخصیت",
+    "customer_class": "طبقهٔ مشتری",
+    "geographic_region": "منطقهٔ جغرافیایی",
+    "outlet_type_code": "نوع فروشگاه",
+    "priority_code": "اولویت مشتری",
+    "min_order_amount": "حداقل مبلغ سفارش",
+    "min_order_quantity": "حداقل تعداد سفارش",
+    "allowed_order_days_mask": "روزهای مجاز سفارش (بیت‌مسک، ۱-۱۲۷)",
+    "allowed_order_hour_from": "ساعت مجاز سفارش — از",
+    "allowed_order_hour_to": "ساعت مجاز سفارش — تا",
+    "expected_delivery_days": "زمان تحویل مورد انتظار (روز)",
+    "shipment_type_code": "نوع ارسال",
+    "default_warehouse_id": "انبار پیش‌فرض",
 }
 
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: این کمبوها
@@ -296,10 +296,10 @@ _PERSON_GROUP_META = {
 
 
 def _find_combo_index(combo: QComboBox, data: tuple[str, int | str] | None) -> int:
-    """جایگزینِ combo.findData(...) — طبقِ آزمایشِ عملی، findDataیِ Qt برایِ
-    داده‌یِ نوعِ tuple (که یک شیءِ خامِ پایتون است، نه نوعِ بومیِ Qt) رفتارِ
-    قابلِ‌اتکایی ندارد، هرچند itemData(i) خودش مقدارِ درست/قابلِ‌مقایسه
-    برمی‌گرداند؛ پس این‌جا با یک پیمایشِ دستی همان مقایسه را انجام می‌دهیم."""
+    """جایگزین combo.findData(...) — طبق آزمایش عملی، findDataی Qt برای
+    دادهٔ نوع tuple (که یک شیء خام پایتون است، نه نوع بومی Qt) رفتار
+    قابل‌اتکایی ندارد، هرچند itemData(i) خودش مقدار درست/قابل‌مقایسه
+    برمی‌گرداند؛ پس این‌جا با یک پیمایش دستی همان مقایسه را انجام می‌دهیم."""
     for i in range(combo.count()):
         if combo.itemData(i) == data:
             return i
@@ -320,8 +320,8 @@ def _make_field_widget(kind: str) -> QWidget:
 
 
 class _ClickableLabel(QLabel):
-    """طبقِ درخواستِ صریح («با کلیک روی عکسهای آپلود شده زوم هم بشه»):
-    QLabelِ معمولی سیگنالِ کلیک ندارد -- این زیرکلاسِ ساده همان را اضافه
+    """طبق درخواست صریح («با کلیک روی عکسهای بارگذاری شده زوم هم بشه»):
+    QLabel معمولی سیگنال کلیک ندارد — این زیرکلاس ساده همان را اضافه
     می‌کند."""
 
     clicked = Signal()
@@ -332,8 +332,8 @@ class _ClickableLabel(QLabel):
 
 
 class _PhotoZoomDialog(QDialog):
-    """طبقِ درخواستِ صریح («تمام صفحه ببینیم»): نمایِ بزرگِ یک عکس، تا
-    حدِ ۸۰٪ اندازه‌یِ صفحه‌نمایش (بدونِ خرابیِ نسبت)."""
+    """طبق درخواست صریح («تمام صفحه ببینیم»): نمای بزرگ یک عکس، تا
+    حد ۸۰٪ اندازهٔ صفحه‌نمایش (بدون خرابی نسبت)."""
 
     def __init__(self, pixmap: QPixmap, title: str, parent=None) -> None:
         super().__init__(parent)
@@ -406,43 +406,43 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.set_field_help([
             (
                 self.group_combo,
-                "نوعِ حسابِ تفصیلی‌ای که می‌خواهید بسازید یا ویرایش کنید — مشتری/تامین‌کننده/پرسنل، "
-                "کالا/بانک/صندوق/... یا یک گروهِ سفارشی. ساختنِ گروهِ تازه و تنظیمِ سطح/فیلدهایش در "
-                "«پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود، نه این‌جا.",
+                "نوع حساب تفصیلی‌ای که می‌خواهید بسازید یا ویرایش کنید — مشتری/تامین‌کننده/پرسنل، "
+                "کالا/بانک/صندوق/... یا یک گروه سفارشی. ساختن گروه تازه و تنظیم سطح/فیلدهایش در "
+                "«پیکربندی گروه‌های تفصیلی» انجام می‌شود، نه این‌جا.",
             ),
             (
                 self.show_all_levels_checkbox,
-                "به‌طورِ پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کلِ درختِ والد و فرزند را می‌بینید.",
+                "به‌طور پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کل درخت والد و فرزند را می‌بینید.",
             ),
             (
                 self.parent_combo,
-                "اگر این حساب زیرمجموعه‌یِ یک حسابِ دیگر است، آن را این‌جا انتخاب کنید. "
-                "بدونِ والد یعنی این حساب در سطحِ اول قرار می‌گیرد.",
+                "اگر این حساب زیرمجموعهٔ یک حساب دیگر است، آن را این‌جا انتخاب کنید. "
+                "بدون والد یعنی این حساب در سطح اول قرار می‌گیرد.",
             ),
             (
                 self.account_code_field,
-                "کدِ این حساب. برنامه بعدِ انتخابِ والد یک کدِ پیشنهادی خودش پر می‌کند، ولی می‌توانید تغییرش دهید.",
+                "کد این حساب. برنامه بعد انتخاب والد یک کد پیشنهادی خودش پر می‌کند، ولی می‌توانید تغییرش دهید.",
             ),
-            (self.account_name_field, "نامی که در فهرست‌ها و سندها برایِ این حساب نشان داده می‌شود."),
+            (self.account_name_field, "نامی که در فهرست‌ها و سندها برای این حساب نشان داده می‌شود."),
             (
                 self.account_active_checkbox,
-                "حساب‌هایِ غیرِفعال از فهرستِ انتخاب در سندها کنار گذاشته می‌شوند، ولی سوابقِ قبلی‌شان می‌ماند.",
+                "حساب‌های غیرفعال از فهرست انتخاب در سندها کنار گذاشته می‌شوند، ولی سوابق قبلی‌شان می‌ماند.",
             ),
-            (self.copy_from_combo, "یک حسابِ تفصیلیِ ازپیش‌موجود را انتخاب کنید تا فیلدهایِ اضافیِ آن (نه کد/نام) در همین فرم کپی شوند."),
-            (self.pay_component_item_combo, "آیتمِ حقوقیِ اختصاصیِ این کارمند (مثلاً یک پاداشِ ثابتِ ماهانه)."),
-            (self.pay_component_amount_field, "مبلغِ ثابتِ همین آیتمِ حقوقی برایِ این کارمند."),
-            (self.pay_component_unbounded_checkbox, "اگر روشن باشد، فیلدِ «تا تاریخ» غیرِفعال می‌شود -- این آیتم تا اطلاعِ ثانوی برایِ این کارمند فعال می‌ماند."),
+            (self.copy_from_combo, "یک حساب تفصیلی ازپیش‌موجود را انتخاب کنید تا فیلدهای اضافی آن (نه کد/نام) در همین فرم کپی شوند."),
+            (self.pay_component_item_combo, "آیتم حقوقی اختصاصی این کارمند (مثلاً یک پاداش ثابت ماهانه)."),
+            (self.pay_component_amount_field, "مبلغ ثابت همین آیتم حقوقی برای این کارمند."),
+            (self.pay_component_unbounded_checkbox, "اگر روشن باشد، فیلد «تا تاریخ» غیرفعال می‌شود — این آیتم تا اطلاع ثانوی برای این کارمند فعال می‌ماند."),
         ])
 
     # --- دیالوگِ انتخابِ حسابِ تفصیلیِ *موجود* (برایِ ویرایش) -----------------
     def _build_account_picker_dialog(self) -> QDialog:
-        """طبقِ رفعِ باگِ گزارش‌شده («لیستِ تفصیلی حذف بشه»): درختِ حساب‌ها
-        دیگر همیشه رویِ صفحه نیست -- فقط با زدنِ دکمهٔ 🔍 (کنارِ کمبویِ
-        گروه در فرمِ اصلی) به‌صورتِ یک دیالوگِ جدا باز می‌شود؛ کلیک رویِ
-        هر ردیف هم مثلِ قبل رکورد را در فرم بارگذاری می‌کند و هم خودش
+        """طبق رفع باگ گزارش‌شده («لیست تفصیلی حذف بشه»): درخت حساب‌ها
+        دیگر همیشه روی صفحه نیست — فقط با زدن دکمهٔ 🔍 (کنار فهرستی
+        گروه در فرم اصلی) به‌صورت یک دیالوگ جدا باز می‌شود؛ کلیک روی
+        هر ردیف هم مثل قبل رکورد را در فرم بارگذاری می‌کند و هم خودش
         دیالوگ را می‌بندد."""
         dialog = QDialog(self)
-        dialog.setWindowTitle("بازکردنِ حسابِ تفصیلیِ موجود")
+        dialog.setWindowTitle("بازکردن حساب تفصیلی موجود")
         dialog.resize(680, 560)
         layout = QVBoxLayout(dialog)
 
@@ -451,7 +451,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.picker_search_field.setPlaceholderText("جست‌وجو در کد یا نام…")
         self.picker_search_field.textChanged.connect(lambda _text: self._rebuild_accounts_tree())
         top_row.addWidget(self.picker_search_field, stretch=1)
-        self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox = QCheckBox("نمایش همهٔ سطوح")
         self.show_all_levels_checkbox.setChecked(True)
         self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._rebuild_accounts_tree())
         top_row.addWidget(self.show_all_levels_checkbox)
@@ -482,7 +482,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         layout = build_section_layout(panel)
 
-        self.account_form_title = QLabel("حسابِ تفصیلیِ جدید")
+        self.account_form_title = QLabel("حساب تفصیلی جدید")
         self.account_form_title.setObjectName("pageTitle")
         layout.addWidget(self.account_form_title)
         # R276: سطحِ حسابِ درحالِ ثبت/ویرایش و جایگاهش در ساختارِ گروه.
@@ -505,7 +505,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         copy_from_row.setContentsMargins(0, 0, 0, 0)
         copy_from_row.addWidget(QLabel("کپی از:"))
         self.copy_from_combo = QComboBox()
-        self.copy_from_combo.addItem("— انتخابِ نمونه برایِ کپی —", None)
+        self.copy_from_combo.addItem("— انتخاب نمونه برای کپی —", None)
         self.copy_from_combo.currentIndexChanged.connect(self._on_copy_from_changed)
         copy_from_row.addWidget(self.copy_from_combo, stretch=1)
         self.copy_from_widget = QWidget()
@@ -540,7 +540,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # فیلدهایِ هاردکدِ اختصاصیِ خودشان را هم دارند (چون در جدولِ
         # جداگانه‌یِ SQL ذخیره می‌شوند) — این ردیف فقط وقتی آن گروه‌ها
         # انتخاب شده باشند نمایان می‌شود.
-        self.person_fields_label = QLabel("فیلدهایِ اختصاصیِ این گروه")
+        self.person_fields_label = QLabel("فیلدهای اختصاصی این گروه")
         layout.addWidget(self.person_fields_label)
         # طبقِ یکپارچه‌سازیِ مشتری/تامین‌کننده: وضعیتِ گردشِ کارِ تاییدِ
         # اعتباری (comm.customer_profiles/supplier_profiles.status_code) —
@@ -560,7 +560,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         person_fields_widget.setLayout(self.person_fields_grid)
         layout.addWidget(person_fields_widget)
 
-        self.extra_fields_label = QLabel("فیلدهایِ اختصاصیِ تعریف‌شده")
+        self.extra_fields_label = QLabel("فیلدهای اختصاصی تعریف‌شده")
         layout.addWidget(self.extra_fields_label)
         self.extra_fields_container = QVBoxLayout()
         extra_widget = QWidget()
@@ -632,13 +632,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.terminate_employee_button = QPushButton("🚪")
         self.terminate_employee_button.setObjectName("dangerIconButton")
         self.terminate_employee_button.setFixedWidth(44)
-        self.terminate_employee_button.setToolTip("ثبتِ ترکِ کار")
+        self.terminate_employee_button.setToolTip("ثبت ترک کار")
         self.terminate_employee_button.clicked.connect(self._terminate_employee)
         self.terminate_employee_button.setVisible(False)
         self.approve_partner_button = QPushButton("💳")
         self.approve_partner_button.setObjectName("primaryIconButton")
         self.approve_partner_button.setFixedWidth(48)
-        self.approve_partner_button.setToolTip("تاییدِ اعتباری")
+        self.approve_partner_button.setToolTip("تایید اعتباری")
         self.approve_partner_button.clicked.connect(self._approve_partner)
         self.approve_partner_button.setVisible(False)
         footer = build_action_footer([
@@ -654,8 +654,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # هیچ گروهی) فعال بماند تا اصلاً بشود گروه را انتخاب کرد -- پس
         # این هدر بیرونِ wrapperِ غیرِفعال‌شدنی قرار می‌گیرد، نه داخلش.
         header = build_page_header(
-            "تعریفِ حساب‌هایِ تفصیلی",
-            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود.",
+            "تعریف حساب‌های تفصیلی",
+            "ساخت گروه تازه و تنظیم تعداد رقم/بازه/فیلد اختصاصی در «پیکربندی گروه‌های تفصیلی» انجام می‌شود.",
         )
         header_layout = header.layout()
 
@@ -667,7 +667,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         open_picker_button = QPushButton("🔍")
         open_picker_button.setObjectName("iconButton")
         open_picker_button.setFixedWidth(44)
-        open_picker_button.setToolTip("بازکردنِ حسابِ تفصیلیِ موجود برایِ ویرایش")
+        open_picker_button.setToolTip("بازکردن حساب تفصیلی موجود برای ویرایش")
         open_picker_button.clicked.connect(self._open_account_picker)
         group_row.addWidget(open_picker_button)
         header_layout.addLayout(group_row)
@@ -687,10 +687,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout = build_section_layout(tab)
 
         upload_row = QHBoxLayout()
-        upload_photo_button = QPushButton("📷 آپلودِ عکس")
+        upload_photo_button = QPushButton("📷 بارگذاری عکس")
         upload_photo_button.clicked.connect(self._upload_photo)
         upload_row.addWidget(upload_photo_button)
-        upload_file_button = QPushButton("📎 الصاقِ فایل (کاتالوگ و ...)")
+        upload_file_button = QPushButton("📎 الصاق فایل (کاتالوگ و ...)")
         upload_file_button.clicked.connect(self._upload_file)
         upload_row.addWidget(upload_file_button)
         upload_row.addStretch(1)
@@ -710,7 +710,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         gallery_scroll.setWidget(self.files_gallery_container)
         layout.addWidget(gallery_scroll, stretch=1)
 
-        self.files_empty_label = QLabel("هنوز عکس یا فایلی برایِ این حساب ثبت نشده.")
+        self.files_empty_label = QLabel("هنوز عکس یا فایلی برای این حساب ثبت نشده.")
         self.files_empty_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.files_empty_label)
 
@@ -731,7 +731,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             if not pixmap.isNull():
                 thumb.setPixmap(pixmap.scaled(56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             thumb.setCursor(Qt.PointingHandCursor)
-            thumb.setToolTip("برایِ نمایِ بزرگ کلیک کنید")
+            thumb.setToolTip("برای نمای بزرگ کلیک کنید")
             thumb.clicked.connect(lambda a=attachment: self._zoom_photo(a))
             row.addWidget(thumb)
         else:
@@ -741,12 +741,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             file_label.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px; font-size: 22px;")
             row.addWidget(file_label)
 
-        name_text = attachment.file_name + ("  ⭐ عکسِ اصلی" if attachment.is_primary else "")
+        name_text = attachment.file_name + ("  ⭐ عکس اصلی" if attachment.is_primary else "")
         name_label = QLabel(name_text)
         row.addWidget(name_label, stretch=1)
 
         if is_image and not attachment.is_primary:
-            primary_button = QPushButton("⭐ عکسِ اصلی")
+            primary_button = QPushButton("⭐ عکس اصلی")
             primary_button.clicked.connect(lambda _checked=False, a=attachment: self._set_primary_photo(a.attachment_id))
             row.addWidget(primary_button)
         if not is_image:
@@ -783,20 +783,20 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.files_upload_row_widget.setVisible(can_show)
         if not can_show:
             self.files_empty_label.setVisible(True)
-            self.files_empty_label.setText("برایِ آپلودِ عکس/فایل، اول این حساب را ذخیره کنید.")
+            self.files_empty_label.setText("برای بارگذاری عکس/فایل، اول این حساب را ذخیره کنید.")
             return
 
         company_id = self._company_id()
         files = dimensions_service.list_detail_account_files(company_id, self._editing_account_id) if company_id else []
         self.files_empty_label.setVisible(not files)
-        self.files_empty_label.setText("هنوز عکس یا فایلی برایِ این حساب ثبت نشده.")
+        self.files_empty_label.setText("هنوز عکس یا فایلی برای این حساب ثبت نشده.")
         for attachment in files:
             self.files_gallery_layout.insertWidget(self.files_gallery_layout.count() - 1, self._build_file_row(attachment))
 
     def _zoom_photo(self, attachment) -> None:
         pixmap = QPixmap(attachment.storage_key)
         if pixmap.isNull():
-            QMessageBox.warning(self, "خطا", "بارگذاریِ عکس ممکن نشد.")
+            QMessageBox.warning(self, "خطا", "بارگذاری عکس ممکن نشد.")
             return
         dialog = _PhotoZoomDialog(pixmap, attachment.file_name, self)
         dialog.exec()
@@ -811,7 +811,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if company_id is None:
             return
         path, _filter = QFileDialog.getOpenFileName(
-            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+            self, "انتخاب عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
         )
         if not path:
             return
@@ -830,7 +830,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
-        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایل", "", "همه‌ی فایل‌ها (*)")
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخاب فایل", "", "همهٔ فایل‌ها (*)")
         if not path:
             return
         try:
@@ -871,7 +871,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("حکمِ حقوق — مزایا/کسوراتِ اختصاصیِ این کارمند"))
+        layout.addWidget(QLabel("حکم حقوق — مزایا/کسورات اختصاصی این کارمند"))
 
         self.pay_components_table = QTableWidget(0, 4)
         self.pay_components_table.setHorizontalHeaderLabels(["آیتم", "مبلغ", "از تاریخ", "تا تاریخ"])
@@ -901,7 +901,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         dates_row.addWidget(self.pay_component_to_field)
         layout.addLayout(dates_row)
 
-        self.pay_component_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
+        self.pay_component_unbounded_checkbox = QCheckBox("تا اطلاع ثانوی (بدون تاریخ پایان)")
         self.pay_component_unbounded_checkbox.setChecked(True)
         self.pay_component_unbounded_checkbox.toggled.connect(
             lambda checked: self.pay_component_to_field.setEnabled(not checked)
@@ -933,7 +933,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_pay_component_button = QPushButton("🗑️")
         self.delete_pay_component_button.setObjectName("dangerIconButton")
         self.delete_pay_component_button.setFixedWidth(44)
-        self.delete_pay_component_button.setToolTip("حذفِ ردیف")
+        self.delete_pay_component_button.setToolTip("حذف ردیف")
         self.delete_pay_component_button.clicked.connect(self._delete_pay_component)
         self.delete_pay_component_button.setVisible(False)
         pc_buttons.addWidget(self.delete_pay_component_button)
@@ -944,11 +944,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         return section
 
     def _eligible_pay_items_for_decree(self, company_id: int) -> list[payroll_service.PayItemRow]:
-        """فقط آیتم‌هایی که واقعاً از رویِ EmployeePayComponent خوانده
-        می‌شوند (فصلِ ۶/۸ در payroll_engine.py): همه‌یِ کسورات + مزایا/
-        درآمدهایِ با روشِ محاسبه‌یِ MANUAL. آیتم‌هایِ FIXED/PERCENTAGE/
-        FORMULA این‌جا معنا ندارند چون مبلغ‌شان از رویِ خودِ تعریفِ آیتم
-        محاسبه می‌شود، نه رویِ حکمِ کارمند."""
+        """فقط آیتم‌هایی که واقعاً از روی EmployeePayComponent خوانده
+        می‌شوند (فصل ۶/۸ در payroll_engine.py): همهٔ کسورات + مزایا/
+        درآمدهای با روش محاسبهٔ MANUAL. آیتم‌های FIXED/PERCENTAGE/
+        FORMULA این‌جا معنا ندارند چون مبلغ‌شان از روی خود تعریف آیتم
+        محاسبه می‌شود، نه روی حکم کارمند."""
         items = payroll_service.list_pay_items(company_id, active_only=True)
         return [
             item for item in items
@@ -1013,7 +1013,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         pay_item_id = self.pay_component_item_combo.currentData()
         if pay_item_id is None:
-            self.pay_component_status_label.setText("آیتمِ حقوقی را انتخاب کنید.")
+            self.pay_component_status_label.setText("آیتم حقوقی را انتخاب کنید.")
             return
         amount = decimal.Decimal(str(self.pay_component_amount_field.value()))
         effective_from = self.pay_component_from_field.date()
@@ -1033,7 +1033,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_pay_component_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ ردیف", "این ردیفِ حکمِ حقوق حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف ردیف", "این ردیف حکم حقوق حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -1046,7 +1046,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         tab = QWidget()
         layout = build_section_layout(tab)
 
-        layout.addWidget(QLabel("آدرس‌هایِ این حساب — دفتر/فروشگاه/انبار/تحویل/صورتحساب/مرجوعی"))
+        layout.addWidget(QLabel("آدرس‌های این حساب — دفتر/فروشگاه/انبار/تحویل/صورتحساب/مرجوعی"))
 
         self.addresses_table = QTableWidget(0, 4)
         self.addresses_table.setHorizontalHeaderLabels(["نوع", "آدرس", "شهر", "پیش‌فرض"])
@@ -1064,12 +1064,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in _PARTY_ADDRESS_TYPE_LABELS.items():
             self.address_type_combo.addItem(label, code)
         type_row.addWidget(self.address_type_combo, stretch=1)
-        self.address_default_checkbox = QCheckBox("پیش‌فرضِ این نوع")
+        self.address_default_checkbox = QCheckBox("پیش‌فرض این نوع")
         type_row.addWidget(self.address_default_checkbox)
         layout.addLayout(type_row)
 
         self.address_line1_field = QLineEdit()
-        self.address_line1_field.setPlaceholderText("متنِ کاملِ آدرس")
+        self.address_line1_field.setPlaceholderText("متن کامل آدرس")
         layout.addWidget(self.address_line1_field)
 
         city_row = QHBoxLayout()
@@ -1080,17 +1080,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.address_province_field.setPlaceholderText("استان")
         city_row.addWidget(self.address_province_field)
         self.address_postal_code_field = QLineEdit()
-        self.address_postal_code_field.setPlaceholderText("کدِپستی")
+        self.address_postal_code_field.setPlaceholderText("کد پستی")
         city_row.addWidget(self.address_postal_code_field)
         layout.addLayout(city_row)
 
         gps_row = QHBoxLayout()
-        self.address_gps_label = QLabel("موقعیتِ مکانی: ثبت‌نشده")
+        self.address_gps_label = QLabel("موقعیت مکانی: ثبت‌نشده")
         gps_row.addWidget(self.address_gps_label, stretch=1)
-        pick_on_map_button = QPushButton("انتخاب رویِ نقشه")
+        pick_on_map_button = QPushButton("انتخاب روی نقشه")
         pick_on_map_button.clicked.connect(self._pick_address_location_on_map)
         gps_row.addWidget(pick_on_map_button)
-        gps_row.addWidget(QLabel("شعاعِ GeoFence (متر)"))
+        gps_row.addWidget(QLabel("شعاع محدودهٔ مجاز ویزیت (متر)"))
         self.address_geofence_field = QSpinBox()
         self.address_geofence_field.setRange(0, 100_000)
         self.address_geofence_field.setSpecialValueText("—")
@@ -1121,7 +1121,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_address_button = QPushButton("🗑️")
         self.delete_address_button.setObjectName("dangerIconButton")
         self.delete_address_button.setFixedWidth(44)
-        self.delete_address_button.setToolTip("حذفِ آدرس")
+        self.delete_address_button.setToolTip("حذف آدرس")
         self.delete_address_button.clicked.connect(self._delete_address)
         self.delete_address_button.setVisible(False)
         addr_buttons.addWidget(self.delete_address_button)
@@ -1177,9 +1177,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _refresh_address_gps_label(self) -> None:
         if self._address_lat is None or self._address_lon is None:
-            self.address_gps_label.setText("موقعیتِ مکانی: ثبت‌نشده")
+            self.address_gps_label.setText("موقعیت مکانی: ثبت‌نشده")
         else:
-            self.address_gps_label.setText(f"موقعیتِ مکانی: {self._address_lat:.6f}, {self._address_lon:.6f}")
+            self.address_gps_label.setText(f"موقعیت مکانی: {self._address_lat:.6f}, {self._address_lon:.6f}")
 
     def _pick_address_location_on_map(self) -> None:
         from peecha.ui.map_picker import MapPickerDialog
@@ -1212,7 +1212,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         address_type_code = self.address_type_combo.currentData()
         line1 = self.address_line1_field.text().strip()
         if not line1:
-            self.address_status_label.setText("متنِ آدرس را وارد کنید.")
+            self.address_status_label.setText("متن آدرس را وارد کنید.")
             return
         lat = decimal.Decimal(str(self._address_lat)) if self._address_lat is not None else None
         lon = decimal.Decimal(str(self._address_lon)) if self._address_lon is not None else None
@@ -1245,7 +1245,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_address_id is None or self._editing_account_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ آدرس", "این آدرس حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف آدرس", "این آدرس حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -1263,7 +1263,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.guarantees_summary_label)
 
         self.guarantees_table = QTableWidget(0, 4)
-        self.guarantees_table.setHorizontalHeaderLabels(["نوع", "مبلغ", "وضعیت", "تاریخِ انقضا"])
+        self.guarantees_table.setHorizontalHeaderLabels(["نوع", "مبلغ", "وضعیت", "تاریخ انقضا"])
         self.guarantees_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.guarantees_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.guarantees_table.verticalHeader().setVisible(False)
@@ -1286,10 +1286,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addLayout(type_row)
 
         date_row = QHBoxLayout()
-        date_row.addWidget(QLabel("تاریخِ انقضا"))
+        date_row.addWidget(QLabel("تاریخ انقضا"))
         self.guarantee_valid_until_field = JalaliDateEdit()
         date_row.addWidget(self.guarantee_valid_until_field)
-        self.guarantee_no_expiry_checkbox = QCheckBox("بدونِ تاریخِ انقضا")
+        self.guarantee_no_expiry_checkbox = QCheckBox("بدون تاریخ انقضا")
         self.guarantee_no_expiry_checkbox.setChecked(True)
         self.guarantee_no_expiry_checkbox.toggled.connect(
             lambda checked: self.guarantee_valid_until_field.setEnabled(not checked)
@@ -1306,7 +1306,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         check_row = QHBoxLayout()
         self.guarantee_check_no_field = QLineEdit()
-        self.guarantee_check_no_field.setPlaceholderText("شماره‌یِ چک/سفته")
+        self.guarantee_check_no_field.setPlaceholderText("شمارهٔ چک/سفته")
         check_row.addWidget(self.guarantee_check_no_field)
         check_row.addWidget(QLabel("سررسید"))
         self.guarantee_check_due_field = JalaliDateEdit()
@@ -1323,14 +1323,14 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.guarantee_status_label)
 
         button_row = QHBoxLayout()
-        add_guarantee_button = QPushButton("➕ ثبتِ ضمانتِ تازه")
+        add_guarantee_button = QPushButton("➕ ثبت ضمانت تازه")
         add_guarantee_button.clicked.connect(self._save_guarantee)
         button_row.addWidget(add_guarantee_button)
         self.guarantee_release_status_combo = QComboBox()
         for code, label in _GUARANTEE_RELEASE_STATUS_OPTIONS:
             self.guarantee_release_status_combo.addItem(label, code)
         button_row.addWidget(self.guarantee_release_status_combo)
-        self.release_guarantee_button = QPushButton("بستنِ ضمانتِ انتخاب‌شده")
+        self.release_guarantee_button = QPushButton("بستن ضمانت انتخاب‌شده")
         self.release_guarantee_button.clicked.connect(self._release_guarantee)
         self.release_guarantee_button.setVisible(False)
         button_row.addWidget(self.release_guarantee_button)
@@ -1358,7 +1358,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         self._guarantees = partners_service.list_customer_guarantees(self._editing_account_id)
         total_active = partners_service.total_active_guarantee_amount(self._editing_account_id)
-        self.guarantees_summary_label.setText(f"جمعِ ضمانتِ فعال: {numerals.format_company_amount(total_active)}")
+        self.guarantees_summary_label.setText(f"جمع ضمانت فعال: {numerals.format_company_amount(total_active)}")
         self.guarantees_table.setRowCount(len(self._guarantees))
         for row_index, g in enumerate(self._guarantees):
             values = [
@@ -1434,7 +1434,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout = build_section_layout(tab)
 
         self.contracts_table = QTableWidget(0, 4)
-        self.contracts_table.setHorizontalHeaderLabels(["دسته", "وضعیت", "سهمیه‌یِ مبلغی", "مصرف‌شده"])
+        self.contracts_table.setHorizontalHeaderLabels(["دسته", "وضعیت", "سهمیهٔ مبلغی", "مصرف‌شده"])
         self.contracts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.contracts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.contracts_table.verticalHeader().setVisible(False)
@@ -1458,7 +1458,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         dates_row.addWidget(QLabel("تا تاریخ"))
         self.contract_valid_to_field = JalaliDateEdit()
         dates_row.addWidget(self.contract_valid_to_field)
-        self.contract_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی")
+        self.contract_unbounded_checkbox = QCheckBox("تا اطلاع ثانوی")
         self.contract_unbounded_checkbox.setChecked(True)
         self.contract_unbounded_checkbox.toggled.connect(
             lambda checked: self.contract_valid_to_field.setEnabled(not checked)
@@ -1468,7 +1468,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addLayout(dates_row)
 
         amount_row = QHBoxLayout()
-        amount_row.addWidget(QLabel("سهمیه‌یِ مبلغی (اختیاری)"))
+        amount_row.addWidget(QLabel("سهمیهٔ مبلغی (اختیاری)"))
         self.contract_committed_amount_field = QDoubleSpinBox()
         self.contract_committed_amount_field.setRange(0, 1_000_000_000_000)
         self.contract_committed_amount_field.setDecimals(0)
@@ -1476,10 +1476,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addLayout(amount_row)
 
         item_row = QHBoxLayout()
-        item_row.addWidget(QLabel("کالایِ خاص (اختیاری)"))
+        item_row.addWidget(QLabel("کالای خاص (اختیاری)"))
         self.contract_item_combo = QComboBox()
         item_row.addWidget(self.contract_item_combo, stretch=2)
-        item_row.addWidget(QLabel("سهمیه‌یِ تعدادی"))
+        item_row.addWidget(QLabel("سهمیهٔ تعدادی"))
         self.contract_committed_quantity_field = QDoubleSpinBox()
         self.contract_committed_quantity_field.setRange(0, 1_000_000_000)
         self.contract_committed_quantity_field.setDecimals(2)
@@ -1487,7 +1487,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addLayout(item_row)
 
         self.contract_commitments_field = QLineEdit()
-        self.contract_commitments_field.setPlaceholderText("تعهداتِ متنیِ قرارداد")
+        self.contract_commitments_field.setPlaceholderText("تعهدات متنی قرارداد")
         layout.addWidget(self.contract_commitments_field)
 
         self.contract_status_label = QLabel("")
@@ -1496,10 +1496,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.contract_status_label)
 
         button_row = QHBoxLayout()
-        add_contract_button = QPushButton("➕ ثبتِ قراردادِ تازه")
+        add_contract_button = QPushButton("➕ ثبت قرارداد تازه")
         add_contract_button.clicked.connect(self._save_contract)
         button_row.addWidget(add_contract_button)
-        self.cancel_contract_button = QPushButton("لغوِ قراردادِ انتخاب‌شده")
+        self.cancel_contract_button = QPushButton("لغو قرارداد انتخاب‌شده")
         self.cancel_contract_button.clicked.connect(self._cancel_contract)
         self.cancel_contract_button.setVisible(False)
         button_row.addWidget(self.cancel_contract_button)
@@ -1604,7 +1604,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._selected_contract_id is None:
             return
         confirm = QMessageBox.question(
-            self, "لغوِ قرارداد", "این قرارداد لغو شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "لغو قرارداد", "این قرارداد لغو شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -1624,7 +1624,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
-        self.group_combo.addItem("— انتخابِ گروه —", None)
+        self.group_combo.addItem("— انتخاب گروه —", None)
         for g in self._person_groups:
             if g.code in _PERSON_GROUP_META:
                 self.group_combo.addItem(g.name, ("person", g.code))
@@ -1659,10 +1659,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         return _PERSON_GROUP_META[self._selected[1]]
 
     def _is_inventory_item_group(self) -> bool:
-        """طبقِ ادغامِ فرمِ «کالا و خدمت»: برخلافِ CUSTOMER/SUPPLIER/PERSONNEL
-        (که زیرِ نوع‌بُعدِ سیستمیِ PERSON‌اند و در _PERSON_GROUP_META جا
+        """طبق ادغام فرم «کالا و خدمت»: برخلاف CUSTOMER/SUPPLIER/PERSONNEL
+        (که زیر نوع‌بُعد سیستمی PERSON‌اند و در _PERSON_GROUP_META جا
         می‌شوند)، INVENTORY_ITEM یک DetailDimensionType کاملاً جداست — پس
-        یک مسیرِ شرطیِ موازی و مستقل لازم است."""
+        یک مسیر شرطی موازی و مستقل لازم است."""
         if self._selected is None or self._selected[0] != "dim":
             return False
         return any(
@@ -1671,9 +1671,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         )
 
     def _render_item_panel(self, item_row: catalog_service.ItemRow | None = None) -> None:
-        """نمایش/مخفی‌کردنِ پنلِ اختصاصیِ کالا — فقط وقتی گروهِ انتخاب‌شده
-        INVENTORY_ITEM باشد و سطحِ درحالِ‌ساخت/ویرایش، سطحِ‌آخر باشد
-        (دقیقاً هم‌شرطِ is_leaf_level در _render_person_fields/_render_extra_fields)."""
+        """نمایش/مخفی‌کردن پنل اختصاصی کالا — فقط وقتی گروه انتخاب‌شده
+        INVENTORY_ITEM باشد و سطح درحال‌ساخت/ویرایش، سطح‌آخر باشد
+        (دقیقاً هم‌شرط is_leaf_level در _render_person_fields/_render_extra_fields)."""
         # طبقِ رفعِ باگِ احتمالی: قفلِ زیر فقط باید هنگامِ *ویرایشِ* واقعیِ
         # یک متغیرِ ازپیش‌موجود اعمال شود -- نه هنگامِ «کپی از» یک متغیر
         # به‌عنوانِ نمونه برایِ ساختنِ یک رکوردِ کاملاً تازه (که در آن حالت
@@ -1693,10 +1693,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.item_level_hint_label.setVisible(not is_leaf_level or is_variant)
         if not is_leaf_level:
             self.item_level_hint_label.setText(
-                f"این یک سطحِ دسته‌بندی است، نه خودِ کالا (سطحِ فعلی: {self._current_level_no()} از "
-                f"{self._current_max_level_no}). برایِ تعریفِ کالا، یک زیرمجموعه در همین سطح بسازید تا به "
-                "سطحِ آخر برسید؛ یا اگر نمی‌خواهید دسته‌بندی داشته باشید، تعدادِ سطوحِ گروهِ «کالا» را در "
-                "«تنظیماتِ گروه‌هایِ تفصیلی» به ۱ کاهش دهید."
+                f"این یک سطح دسته‌بندی است، نه خود کالا (سطح فعلی: {self._current_level_no()} از "
+                f"{self._current_max_level_no}). برای تعریف کالا، یک زیرمجموعه در همین سطح بسازید تا به "
+                "سطح آخر برسید؛ یا اگر نمی‌خواهید دسته‌بندی داشته باشید، تعداد سطوح گروه «کالا» را در "
+                "«تنظیمات گروه‌های تفصیلی» به ۱ کاهش دهید."
             )
             return
         company_id = self._company_id()
@@ -1713,14 +1713,14 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             # همین متغیر هم‌چنان از تبِ «ویژگی‌ها و متغیرها»یِ خودِ کالایِ
             # اصلی قابلِ‌ویرایش است.
             self.item_level_hint_label.setText(
-                "این یک «متغیر» است، نه خودِ کالایِ اصلی — همه‌یِ ویژگی‌هایِ این‌جا از کالایِ اصلی به ارث "
-                "می‌رسند و مستقیماً قابلِ‌ویرایش نیستند. برایِ تغییرِ توضیحات/قیمت/عکسِ همین متغیر یا حذفِ آن، "
-                "به تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی مراجعه کنید."
+                "این یک «متغیر» است، نه خود کالای اصلی — همهٔ ویژگی‌های این‌جا از کالای اصلی به ارث "
+                "می‌رسند و مستقیماً قابل‌ویرایش نیستند. برای تغییر توضیحات/قیمت/عکس همین متغیر یا حذف آن، "
+                "به تب «ویژگی‌ها و متغیرها»ی کالای اصلی مراجعه کنید."
             )
 
     def _apply_variant_lock(self, is_variant: bool) -> None:
-        """قفل‌کردنِ فرمِ عمومیِ حسابِ تفصیلی وقتی رکوردِ درحالِ‌ویرایش خودش
-        یک «متغیر» است -- طبقِ توضیحِ _render_item_panel."""
+        """قفل‌کردن فرم عمومی حساب تفصیلی وقتی رکورد درحال‌ویرایش خودش
+        یک «متغیر» است — طبق توضیح _render_item_panel."""
         self.account_code_field.setEnabled(not is_variant)
         self.account_name_field.setEnabled(not is_variant)
         self.account_active_checkbox.setEnabled(not is_variant)
@@ -1728,14 +1728,14 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.save_button.setEnabled(not is_variant)
         if is_variant:
             self.delete_button.setEnabled(False)
-            self.delete_button.setToolTip("حذفِ متغیر فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی ممکن است.")
+            self.delete_button.setToolTip("حذف متغیر فقط از تب «ویژگی‌ها و متغیرها»ی کالای اصلی ممکن است.")
         else:
             self.delete_button.setEnabled(True)
             self.delete_button.setToolTip("حذف")
 
     def _dimension_type_id(self) -> int | None:
-        """dimension_type_idِ فعلی — برایِ گروه‌هایِ اشخاص، همیشه نوع‌بُعدِ
-        سیستمیِ PERSON (سراسری برایِ هرسه‌شان)، برایِ بقیه همان انتخابِ کمبو."""
+        """dimension_type_id فعلی — برای گروه‌های اشخاص، همیشه نوع‌بُعد
+        سیستمی PERSON (سراسری برای هرسه‌شان)، برای بقیه همان انتخاب فهرست."""
         if self._selected is None:
             return None
         if self._is_person():
@@ -1787,7 +1787,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.parent_combo.blockSignals(True)
         self.parent_combo.clear()
-        self.parent_combo.addItem("— بدونِ والد (سطحِ ۱) —", None)
+        self.parent_combo.addItem("— بدون والد (سطح ۱) —", None)
         if self._is_person():
             for r in rows:
                 if r["level_no"] < max_level_no and r["detail_account_id"] != self._editing_account_id:
@@ -1802,7 +1802,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # همین گروه (در هر سطحی) به‌عنوانِ نمونه‌یِ کپی در دسترس‌اند.
         self.copy_from_combo.blockSignals(True)
         self.copy_from_combo.clear()
-        self.copy_from_combo.addItem("— انتخابِ نمونه برایِ کپی —", None)
+        self.copy_from_combo.addItem("— انتخاب نمونه برای کپی —", None)
         if self._is_person():
             for r in rows:
                 if r["detail_account_id"] != self._editing_account_id:
@@ -1822,9 +1822,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self._suggest_code_for_current_parent()
 
     def _rebuild_accounts_tree(self) -> None:
-        """طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
-        برگ‌ها (سطحِ آخر) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
-        سلسله‌مراتبِ کاملِ والد/فرزند را می‌سازد."""
+        """طبق درخواست صریح: نمای درختی + رنگ گروه — به‌طور پیش‌فرض فقط
+        برگ‌ها (سطح آخر) نشان داده می‌شوند؛ چک‌باکس «نمایش همهٔ سطوح»
+        سلسله‌مراتب کامل والد/فرزند را می‌سازد."""
         self.accounts_table.clear()
         if self._selected is None:
             return
@@ -1964,17 +1964,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         level_no = self._current_level_no()
         max_level_no = self._current_max_level_no
-        kind = "سطحِ آخر (قابلِ انتخاب در اسناد)" if level_no >= max_level_no else "سطحِ گروه‌بندی (والدِ سطحِ بعد)"
-        text = f"سطحِ {level_no} از {max_level_no} — {kind}"
+        kind = "سطح آخر (قابل انتخاب در اسناد)" if level_no >= max_level_no else "سطح گروه‌بندی (والد سطح بعد)"
+        text = f"سطح {level_no} از {max_level_no} — {kind}"
         parent_id = self.parent_combo.currentData()
         if parent_id is not None:
             text += f" — زیرمجموعهٔ {self.parent_combo.currentText()}"
         self.level_info_label.setText(text)
 
     def _current_level_no(self) -> int:
-        """سطحِ حسابی که در حالِ ساخت/ویرایشِ آن هستیم — از رویِ والدِ
-        انتخاب‌شده در parent_combo، هم برایِ رکوردِ تازه و هم (چون هنگامِ
-        ویرایش والدِ درست از قبل رویِ کمبو ست شده) برایِ رکوردِ درحالِ‌ویرایش."""
+        """سطح حسابی که در حال ساخت/ویرایش آن هستیم — از روی والد
+        انتخاب‌شده در parent_combo، هم برای رکورد تازه و هم (چون هنگام
+        ویرایش والد درست از قبل روی فهرست ست شده) برای رکورد درحال‌ویرایش."""
         parent_id = self.parent_combo.currentData()
         if parent_id is None:
             return 1
@@ -2104,7 +2104,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 # طبقِ گزارشِ صریح («نام بانک از جدولِ بانک‌ها»): کمبویی که
                 # از فهرستِ treasury.banks پر می‌شود، نه متنِ آزاد.
                 widget = QComboBox()
-                widget.addItem("— انتخابِ بانک —", None)
+                widget.addItem("— انتخاب بانک —", None)
                 if company_id is not None:
                     for bank in treasury_service.list_banks(company_id):
                         widget.addItem(bank.name, bank.bank_id)
@@ -2167,7 +2167,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             # نشان داده می‌شود.
             traceback.print_exc()
             self.account_status_label.setText(
-                "بارگذاریِ این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
+                "بارگذاری این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
             )
 
     def edit_detail_account(self, detail_account_id: int) -> None:
@@ -2177,7 +2177,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 return
             self._editing_account_id = detail_account_id
             self._reload_accounts()
-            self.account_form_title.setText(f"ویرایشِ «{row['full_code']}»")
+            self.account_form_title.setText(f"ویرایش «{row['full_code']}»")
             self.account_code_field.setText(row["code"])
             self.account_name_field.setText(row["name"] or "")
             self.account_active_checkbox.setChecked(row["is_active"])
@@ -2203,7 +2203,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         self._editing_account_id = detail_account_id
         self._reload_accounts()
-        self.account_form_title.setText(f"ویرایشِ «{account.full_code}»")
+        self.account_form_title.setText(f"ویرایش «{account.full_code}»")
         self.account_code_field.setText(account.code)
         self.account_name_field.setText(account.name or "")
         self.account_active_checkbox.setChecked(account.is_active)
@@ -2239,11 +2239,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.copy_from_combo.blockSignals(False)
 
     def _apply_copy_from(self, source_id: int) -> None:
-        """طبقِ درخواستِ صریح («بشه از تفصیلی‌هایِ دیگر کپی کرد»): تمامِ
-        فیلدهایِ یک حسابِ تفصیلیِ موجود -- بجز کد، که باید یکتا بماند و
-        دوباره پیشنهاد می‌شود -- در فرمِ «حسابِ تفصیلیِ جدید» از پیش پر
-        می‌شود. فقط وقتی معنا دارد که در حالِ ساختنِ رکوردِ تازه باشیم
-        (نه ویرایشِ یک رکوردِ موجود) -- copy_from_widget هم دقیقاً به
+        """طبق درخواست صریح («بشه از تفصیلی‌های دیگر کپی کرد»): تمام
+        فیلدهای یک حساب تفصیلی موجود — بجز کد، که باید یکتا بماند و
+        دوباره پیشنهاد می‌شود — در فرم «حساب تفصیلی جدید» از پیش پر
+        می‌شود. فقط وقتی معنا دارد که در حال ساختن رکورد تازه باشیم
+        (نه ویرایش یک رکورد موجود) — copy_from_widget هم دقیقاً به
         همین شرط پنهان/نمایان می‌شود."""
         if self._editing_account_id is not None:
             return
@@ -2284,7 +2284,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.partner_status_label.setVisible(False)
             self.approve_partner_button.setVisible(False)
         else:
-            self.partner_status_label.setText(f"وضعیتِ اعتباری: {_PARTNER_STATUS_LABELS.get(status_code, status_code)}")
+            self.partner_status_label.setText(f"وضعیت اعتباری: {_PARTNER_STATUS_LABELS.get(status_code, status_code)}")
             self.partner_status_label.setVisible(True)
             self.approve_partner_button.setVisible(status_code == "PENDING_APPROVAL")
 
@@ -2300,7 +2300,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.customer_score_label.setVisible(False)
             return
         self.customer_score_label.setText(
-            f"امتیازِ مشتری: {score_row.emoji} {score_row.score} ({score_row.tier_label})"
+            f"امتیاز مشتری: {score_row.emoji} {score_row.score} ({score_row.tier_label})"
         )
         self.customer_score_label.setVisible(True)
 
@@ -2330,7 +2330,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _cancel_account_edit(self) -> None:
         self._editing_account_id = None
-        self.account_form_title.setText("حسابِ تفصیلیِ جدید")
+        self.account_form_title.setText("حساب تفصیلی جدید")
         self.copy_from_widget.setVisible(True)
         self.copy_from_combo.blockSignals(True)
         self.copy_from_combo.setCurrentIndex(0)
@@ -2366,7 +2366,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if employee_id is None:
             return
         confirm = QMessageBox.question(
-            self, "ثبتِ ترکِ کار", "همکاری با این کارمند پایان یابد؟", QMessageBox.Yes | QMessageBox.No
+            self, "ثبت ترک کار", "همکاری با این کارمند پایان یابد؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -2388,7 +2388,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
             if existing is not None and existing.variant_parent_item_id is not None:
                 self.account_status_label.setText(
-                    "این یک متغیر است؛ فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی قابلِ‌ویرایش است."
+                    "این یک متغیر است؛ فقط از تب «ویژگی‌ها و متغیرها»ی کالای اصلی قابل‌ویرایش است."
                 )
                 return
         code = self.account_code_field.text().strip()
@@ -2460,11 +2460,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
             if existing is not None and existing.variant_parent_item_id is not None:
                 self.account_status_label.setText(
-                    "این یک متغیر است؛ فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی قابلِ‌حذف است."
+                    "این یک متغیر است؛ فقط از تب «ویژگی‌ها و متغیرها»ی کالای اصلی قابل‌حذف است."
                 )
                 return
         confirm = QMessageBox.question(
-            self, "حذف", "این حساب حذف شود؟ این کار قابلِ بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
+            self, "حذف", "این حساب حذف شود؟ این کار قابل بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -2490,7 +2490,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             # نباید بی‌صدا بلعیده شود -- حداقل یک پیامِ عمومی به کاربر
             # نشان داده می‌شود تا بداند حذف انجام نشده.
             self.account_status_label.setText(
-                "حذف با خطا مواجه شد؛ احتمالاً این حساب در جایِ دیگری استفاده شده است."
+                "حذف با خطا مواجه شد؛ احتمالاً این حساب در جای دیگری استفاده شده است."
             )
             return
 
@@ -2514,14 +2514,14 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             # است تا یک استثنایِ پیش‌بینی‌نشده کلِ برنامه را کرش نکند.
             traceback.print_exc()
             self.account_status_label.setText(
-                "بارگذاریِ این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
+                "بارگذاری این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
             )
 
     def select_type_for_new_entry(self, combo_data: tuple[str, int | str]) -> None:
-        """برایِ دکمه‌ی «تفصیلیِ جدید» در فهرستِ واحد — همان گروه را انتخاب
-        می‌کند و فرم را در حالتِ «رکوردِ تازه» نگه می‌دارد. صراحتاً _select
+        """برای دکمهٔ «تفصیلی جدید» در فهرست واحد — همان گروه را انتخاب
+        می‌کند و فرم را در حالت «رکورد تازه» نگه می‌دارد. صراحتاً _select
         را هم صدا می‌زند (نه فقط setCurrentIndex) چون اگر همین گروه از قبل
-        انتخاب‌شده باشد، تغییرِ ایندکس سیگنال نمی‌دهد و ریست انجام نمی‌شود."""
+        انتخاب‌شده باشد، تغییر ایندکس سیگنال نمی‌دهد و ریست انجام نمی‌شود."""
         self.refresh()
         index = _find_combo_index(self.group_combo, combo_data)
         if index >= 0:

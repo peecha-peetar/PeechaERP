@@ -1,23 +1,23 @@
-"""تاییدِ سرپرست برایِ فروش‌هایِ حضوری (POS، مرحلهٔ ۸) — فاکتورهایی که
-کاریر فقط confirm کرده‌اند (پرداختِ واقعی/سندِ حسابداری هنوز ثبت نشده)
+"""تایید سرپرست برای فروش‌های حضوری (POS، مرحلهٔ ۸) — فاکتورهایی که
+کاریر فقط confirm کرده‌اند (پرداخت واقعی/سند حسابداری هنوز ثبت نشده)
 اینجا approve+post می‌شوند و پرداخت واقعاً ثبت می‌شود.
 
-طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فروشِ نقدیِ تسویه‌شده، در تاییدِ
-سرپرست نسیه در نظر گرفته می‌شود») و درخواستِ صریحِ همراهش («هر فاکتور
-طبقِ خودش تسویه بشه، نه یک روشِ واحد برایِ کلِ دسته»): این صفحه دیگر
-یک کمبویِ سراسریِ «روشِ پرداخت» ندارد که رویِ همه‌یِ فاکتورهایِ
-بدونِ‌نقشه اعمال شود -- چنین کمبویی پیش‌فرضش «بدونِ پرداخت (نسیه)» بود
-و اگر سرپرست فراموش می‌کرد آن را عوض کند، حتی فروشِ نقدیِ واقعی هم
-نسیه ثبت می‌شد. حالا هر فاکتورِ بدونِ‌نقشه دقیقاً طبقِ چیزی که خودِ
-صندوق‌دار در فروشِ حضوری زده (pos_intended_payment_type: نقدی یا
-نسیه) خودکار تسویه می‌شود -- بدونِ نیاز به هیچ انتخابِ دستی.
+طبق رفع باگ واقعی گزارش‌شده («فروش نقدی تسویه‌شده، در تایید
+سرپرست نسیه در نظر گرفته می‌شود») و درخواست صریح همراهش («هر فاکتور
+طبق خودش تسویه بشه، نه یک روش واحد برای کل دسته»): این صفحه دیگر
+یک فهرست سراسری «روش پرداخت» ندارد که روی همهٔ فاکتورهای
+بدون‌نقشه اعمال شود — چنین فهرستیی پیش‌فرضش «بدون پرداخت (نسیه)» بود
+و اگر سرپرست فراموش می‌کرد آن را عوض کند، حتی فروش نقدی واقعی هم
+نسیه ثبت می‌شد. حالا هر فاکتور بدون‌نقشه دقیقاً طبق چیزی که خود
+صندوق‌دار در فروش حضوری زده (pos_intended_payment_type: نقدی یا
+نسیه) خودکار تسویه می‌شود — بدون نیاز به هیچ انتخاب دستی.
 
-طبقِ تصمیمِ صریح («ادغام فقط رویِ سندِ حسابداری باشد، نه خودِ فاکتور»):
-وقتی چند فاکتورِ هم‌طرفِ‌حساب با هم انتخاب شوند و تیکِ «ادغام» فعال
-باشد، فقط یک سندِ حسابداریِ واحد برایِ مجموع ساخته می‌شود -- چه فاکتور
-از پیش پلنِ تسویهٔ چندروشیِ خودش را داشته باشد (از دیالوگِ «نحوهٔ
-تسویه»/اصلاحِ سند)، چه فقط نقدیِ ساده باشد؛ خودِ فاکتورها دست‌نخورده و
-جدا می‌مانند، هرکدام فقط یک ردیفِ تسویه به همان یک سندِ حسابداری
+طبق تصمیم صریح («ادغام فقط روی سند حسابداری باشد، نه خود فاکتور»):
+وقتی چند فاکتور هم‌طرف‌حساب با هم انتخاب شوند و تیک «ادغام» فعال
+باشد، فقط یک سند حسابداری واحد برای مجموع ساخته می‌شود — چه فاکتور
+از پیش پلن تسویهٔ چندروشی خودش را داشته باشد (از دیالوگ «نحوهٔ
+تسویه»/اصلاح سند)، چه فقط نقدی ساده باشد؛ خود فاکتورها دست‌نخورده و
+جدا می‌مانند، هرکدام فقط یک ردیف تسویه به همان یک سند حسابداری
 می‌گیرد."""
 
 from __future__ import annotations
@@ -64,11 +64,11 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(10)
 
-        title = QLabel("تاییدِ سرپرست — فروش‌هایِ حضوری")
+        title = QLabel("تایید سرپرست — فروش‌های حضوری")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
-        hint = QLabel("فاکتورهایی که صندوق‌دار تایید کرده و منتظرِ تاییدِ نهایی/ثبتِ سندِ حسابداری‌اند.")
+        hint = QLabel("فاکتورهایی که صندوق‌دار تایید کرده و منتظر تایید نهایی/ثبت سند حسابداری‌اند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
@@ -77,14 +77,14 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
         refresh_button = QPushButton("🔄")
         refresh_button.setObjectName("iconButton")
         refresh_button.setFixedWidth(44)
-        refresh_button.setToolTip("به‌روزرسانیِ فهرست")
+        refresh_button.setToolTip("به‌روزرسانی فهرست")
         refresh_button.clicked.connect(self.refresh)
         header_row.addWidget(refresh_button)
-        select_all_button = QPushButton("انتخابِ همه")
+        select_all_button = QPushButton("انتخاب همه")
         select_all_button.setObjectName("flatButton")
         select_all_button.clicked.connect(lambda: self._set_all_checked(True))
         header_row.addWidget(select_all_button)
-        clear_selection_button = QPushButton("لغوِ انتخاب")
+        clear_selection_button = QPushButton("لغو انتخاب")
         clear_selection_button.setObjectName("flatButton")
         clear_selection_button.clicked.connect(lambda: self._set_all_checked(False))
         header_row.addWidget(clear_selection_button)
@@ -92,7 +92,7 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
         outer.addLayout(header_row)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["انتخاب", "شمارهٔ سند", "طرفِ‌حساب", "تاریخ", "مبلغ", "نوعِ اعلامی"])
+        self.table.setHorizontalHeaderLabels(["انتخاب", "شمارهٔ سند", "طرف‌حساب", "تاریخ", "مبلغ", "نوع اعلامی"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -101,18 +101,18 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
         action_row = QHBoxLayout()
         action_row.addWidget(QLabel("مرجع/توضیح"))
         self.reference_field = QLineEdit()
-        self.reference_field.setToolTip("اختیاری -- مثلاً شمارهٔ پیگیریِ بانک؛ رویِ همه‌یِ فاکتورهایِ تسویه‌شده در همین دسته اعمال می‌شود.")
+        self.reference_field.setToolTip("اختیاری — مثلاً شمارهٔ پیگیری بانک؛ روی همهٔ فاکتورهای تسویه‌شده در همین دسته اعمال می‌شود.")
         action_row.addWidget(self.reference_field, stretch=1)
-        self.merge_checkbox = QCheckBox("ادغامِ سندِ حسابداری (یک سند برایِ همه‌یِ انتخاب‌شده‌ها)")
+        self.merge_checkbox = QCheckBox("ادغام سند حسابداری (یک سند برای همهٔ انتخاب‌شده‌ها)")
         self.merge_checkbox.setChecked(True)
         action_row.addWidget(self.merge_checkbox)
         outer.addLayout(action_row)
 
-        self.selected_total_label = QLabel("جمعِ انتخاب‌شده‌ها: ۰")
+        self.selected_total_label = QLabel("جمع انتخاب‌شده‌ها: ۰")
         self.selected_total_label.setObjectName("sectionTitle")
         outer.addWidget(self.selected_total_label)
 
-        approve_button = QPushButton("✅ تاییدِ نهایی و ثبتِ انتخاب‌شده‌ها")
+        approve_button = QPushButton("✅ تایید نهایی و ثبت انتخاب‌شده‌ها")
         approve_button.setObjectName("primaryIconButton")
         approve_button.clicked.connect(self._approve_selected)
         outer.addWidget(approve_button, alignment=Qt.AlignLeft)
@@ -127,10 +127,10 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
         root.addWidget(wrap_scrollable(page))
 
         self.set_field_help([
-            (self.reference_field, "اختیاری -- مثلاً شمارهٔ پیگیریِ بانک؛ رویِ همه‌یِ فاکتورهایِ تسویه‌شده در همین دسته اعمال می‌شود."),
+            (self.reference_field, "اختیاری — مثلاً شمارهٔ پیگیری بانک؛ روی همهٔ فاکتورهای تسویه‌شده در همین دسته اعمال می‌شود."),
             (
                 self.merge_checkbox,
-                "وقتی روشن است و چند فاکتورِ هم‌طرفِ‌حساب انتخاب شده باشند، فقط یک سندِ حسابداریِ واحد برایِ مجموع ساخته می‌شود -- خودِ فاکتورها جدا می‌مانند.",
+                "وقتی روشن است و چند فاکتور هم‌طرف‌حساب انتخاب شده باشند، فقط یک سند حسابداری واحد برای مجموع ساخته می‌شود — خود فاکتورها جدا می‌مانند.",
             ),
         ])
 
@@ -191,7 +191,7 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
     def _update_selected_total(self, *_args) -> None:
         selected = self._selected_documents()
         total = sum((d.total_amount for d in selected), decimal.Decimal("0"))
-        self.selected_total_label.setText(f"جمعِ انتخاب‌شده‌ها: {numerals.format_company_amount(total)}")
+        self.selected_total_label.setText(f"جمع انتخاب‌شده‌ها: {numerals.format_company_amount(total)}")
 
     def _approve_selected(self) -> None:
         selected = self._selected_documents()
@@ -221,13 +221,13 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
                 transfer_doc_id = documents_service.create_compensating_transfer(company_id, user_id, shortage)
                 if transfer_doc_id is not None:
                     shortage_messages.append(
-                        f"فاکتور #{doc_label}: کمبودِ «{shortage.item_label}» در انبارِ «{shortage.warehouse_label}» -- "
-                        f"سندِ انتقالِ انبار #{transfer_doc_id} صادر شد؛ پس از تاییدِ انباردار، دوباره تایید کنید."
+                        f"فاکتور #{doc_label}: کمبود «{shortage.item_label}» در انبار «{shortage.warehouse_label}» -- "
+                        f"سند انتقال انبار #{transfer_doc_id} صادر شد؛ پس از تایید انباردار، دوباره تایید کنید."
                     )
                 else:
                     shortage_messages.append(
-                        f"فاکتور #{doc_label}: کمبودِ «{shortage.item_label}» در انبارِ «{shortage.warehouse_label}» -- "
-                        "هیچ انبارِ دیگری هم موجودیِ کافی ندارد؛ ابتدا موجودی را (رسید/تعدیل) تامین کنید."
+                        f"فاکتور #{doc_label}: کمبود «{shortage.item_label}» در انبار «{shortage.warehouse_label}» -- "
+                        "هیچ انبار دیگری هم موجودی کافی ندارد؛ ابتدا موجودی را (رسید/تعدیل) تامین کنید."
                     )
         selected = ready_for_approval
         if not selected:
@@ -291,8 +291,8 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
             merge_docs = [doc for doc in selected if doc.document_id in merge_doc_ids]
             if len({d.counterparty_detail_account_id for d in merge_docs}) > 1:
                 self.status_label.setText(
-                    "ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب ممکن است -- "
-                    "یا ادغام را خاموش کنید، یا فقط فاکتورهایِ یک طرفِ‌حساب را انتخاب کنید."
+                    "ادغام سند حسابداری فقط برای فاکتورهای یک طرف‌حساب ممکن است -- "
+                    "یا ادغام را خاموش کنید، یا فقط فاکتورهای یک طرف‌حساب را انتخاب کنید."
                 )
                 return
 

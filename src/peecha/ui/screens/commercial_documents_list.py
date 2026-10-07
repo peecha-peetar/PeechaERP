@@ -1,5 +1,5 @@
-"""فهرستِ اسنادِ بازرگانی — فیلترِ نوع/وضعیت، بازکردنِ سندِ انتخاب‌شده در
-فرمِ مخصوصِ همان نوع (commercial_document.py)."""
+"""فهرست اسناد بازرگانی — فیلتر نوع/وضعیت، بازکردن سند انتخاب‌شده در
+فرم مخصوص همان نوع (commercial_document.py)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from peecha.ui.screens.commercial_document import (
 )
 from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
-_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
+_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرف‌حساب", "جمع کل", "وضعیت", "شمارهٔ مرجع", "وضعیت تبدیل", "عملیات"]
 
 # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشات و فاکتورهایِ تاییدشده در
 # پخشِ سرد نمایش داده نمی‌شود»): علتِ ریشه‌ای این بود که این فهرست وقتی
@@ -94,7 +94,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
 
         title = QLabel(
             title_override
-            or ("اسنادِ فروش" if type_filter_codes and type_filter_codes[0].startswith("SALES") else "اسنادِ خرید" if type_filter_codes else "اسنادِ بازرگانی")
+            or ("اسناد فروش" if type_filter_codes and type_filter_codes[0].startswith("SALES") else "اسناد خرید" if type_filter_codes else "اسناد بازرگانی")
         )
         title.setObjectName("pageTitle")
         layout.addWidget(title)
@@ -134,10 +134,10 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         # کانال‌ها/فهرست‌هایِ عمومی، این گیت اصلاً معنا ندارد.
         self.warehouse_status_filter = QComboBox()
         if channel_type_code == "PRE_SALES":
-            filters.addWidget(QLabel("وضعیتِ انبار/توزین"))
+            filters.addWidget(QLabel("وضعیت انبار/توزین"))
             self.warehouse_status_filter.addItem("(همه)", None)
-            self.warehouse_status_filter.addItem("در انتظارِ تاییدِ انبار", "در انتظارِ تاییدِ انبار")
-            self.warehouse_status_filter.addItem("در انتظارِ توزین", "در انتظارِ توزین")
+            self.warehouse_status_filter.addItem("در انتظار تایید انبار", "در انتظار تایید انبار")
+            self.warehouse_status_filter.addItem("در انتظار توزین", "در انتظار توزین")
             self.warehouse_status_filter.addItem("آمادهٔ تبدیل به فاکتور", "آمادهٔ تبدیل به فاکتور")
             self.warehouse_status_filter.currentIndexChanged.connect(self.refresh)
             filters.addWidget(self.warehouse_status_filter)
@@ -149,7 +149,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             for code in visible_types:
                 button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
                 button.setObjectName("primaryButton")
-                button.setToolTip(f"سندِ {DOC_TYPE_TITLES[code]}یِ تازه")
+                button.setToolTip(f"سند {DOC_TYPE_TITLES[code]}ی تازه")
                 button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
                 new_buttons.addWidget(button)
         layout.addLayout(new_buttons)
@@ -171,10 +171,10 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         self.set_field_help([
-            (self.type_filter, "فقط اسنادِ همین نوع نشان داده شوند."),
-            (self.status_filter, "فقط اسنادِ همین وضعیت نشان داده شوند."),
-            (self.source_filter, "فقط اسنادِ ثبت‌شده از فرمِ عمومی یا فقط فروشِ حضوری (POS) نشان داده شوند."),
-            (self.warehouse_status_filter, "فقط سفارش‌هایی که در همین مرحله از تاییدِ انبار/توزین هستند نشان داده شوند."),
+            (self.type_filter, "فقط اسناد همین نوع نشان داده شوند."),
+            (self.status_filter, "فقط اسناد همین وضعیت نشان داده شوند."),
+            (self.source_filter, "فقط اسناد ثبت‌شده از فرم عمومی یا فقط فروش حضوری (POS) نشان داده شوند."),
+            (self.warehouse_status_filter, "فقط سفارش‌هایی که در همین مرحله از تایید انبار/توزین هستند نشان داده شوند."),
         ])
 
     def _company_id(self) -> int | None:
@@ -308,7 +308,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         print_button = QPushButton("⎙")
         print_button.setObjectName("iconButton")
         print_button.setFixedSize(44, 32)
-        print_button.setToolTip("نمایشِ چاپی")
+        print_button.setToolTip("نمایش چاپی")
         print_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._print_document(doc_id))
         actions_layout.addWidget(print_button)
 
@@ -318,7 +318,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             delete_button = QPushButton("✕")
             delete_button.setObjectName("dangerIconButton")
             delete_button.setFixedSize(44, 32)
-            delete_button.setToolTip("حذفِ سند")
+            delete_button.setToolTip("حذف سند")
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._delete_document(doc_id))
             actions_layout.addWidget(delete_button)
 
@@ -341,7 +341,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             convert_button.setFixedSize(44, 32)
             if fulfillment is None:
                 convert_button.setEnabled(False)
-                convert_button.setToolTip("فقط سندِ تاییدشده/تصویب‌شده/ثبت‌شده قابلِ‌تبدیل به فاکتور است.")
+                convert_button.setToolTip("فقط سند تاییدشده/تصویب‌شده/ثبت‌شده قابل‌تبدیل به فاکتور است.")
             elif fulfillment[1] >= fulfillment[0]:
                 convert_button.setEnabled(False)
                 convert_button.setToolTip("کل این سند قبلاً به فاکتور تبدیل شده است.")
@@ -352,7 +352,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
                 # فقط در لحظه‌یِ کلیک با خطا رد می‌شد -- حالا از همین‌جا
                 # غیرِفعال است، با دلیلِ روشن.
                 convert_button.setEnabled(False)
-                convert_button.setToolTip(f"{pre_sales_status} -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
+                convert_button.setToolTip(f"{pre_sales_status} -- ابتدا از تب «تایید انبار و توزین» تایید کنید.")
             elif (
                 pre_sales_status is None and d.warehouse_approved_at is None
                 and documents_service.order_warehouse_step_enabled(self._company_id(), d.document_type_code)
@@ -360,8 +360,8 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
                 # R232: سفارشِ خرید/فروش تا تاییدِ رسید/حوالهٔ انبار تبدیل نمی‌شود
                 convert_button.setEnabled(False)
                 convert_button.setToolTip(
-                    "ابتدا حوالهٔ انبارِ این سفارش باید توسطِ انباردار تایید شود."
-                    if d.document_type_code == "SALES_ORDER" else "ابتدا رسیدِ کالایِ این سفارش باید توسطِ انباردار تایید شود."
+                    "ابتدا حوالهٔ انبار این سفارش باید توسط انباردار تایید شود."
+                    if d.document_type_code == "SALES_ORDER" else "ابتدا رسید کالای این سفارش باید توسط انباردار تایید شود."
                 )
             else:
                 convert_button.setToolTip("تبدیل به فاکتور")
@@ -387,11 +387,11 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         if self._channel_type_code is not None and channel_code is None:
             # طبقِ رفعِ باگِ واقعی: بدونِ این هشدار، سندِ تازه بدونِ کانال
             # ساخته می‌شد و دوباره در همین تب هرگز ظاهر نمی‌شد -- بدونِ
-            # اینکه کاربر متوجهٔ علتش بشود.
+            # اینکه کاربر متوجه علتش بشود.
             QMessageBox.warning(
                 self, "کانال تعریف نشده است",
-                "برایِ این تب هنوز هیچ «کانالِ فروش»یی از همین نوع تعریف نشده -- سندِ تازه بدونِ کانال ساخته می‌شود "
-                "و در این فهرست نمایش داده نخواهد شد. ابتدا از «تنظیماتِ سیستم ‹ مدیریتِ بازرگانی ‹ کانال‌هایِ فروش» "
+                "برای این تب هنوز هیچ «کانال فروش»یی از همین نوع تعریف نشده — سند تازه بدون کانال ساخته می‌شود "
+                "و در این فهرست نمایش داده نخواهد شد. ابتدا از «تنظیمات سیستم ‹ مدیریت بازرگانی ‹ کانال‌های فروش» "
                 "یک کانال از همین نوع تعریف کنید.",
             )
 
@@ -439,7 +439,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
             return
         if not any(f.remaining_quantity > 0 for f in fulfillment):
-            QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برایِ تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
+            QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برای تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
             return
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id, active_only=True)}
         dialog = _ConvertToInvoiceDialog(
@@ -450,7 +450,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         if dialog.exec() != QDialog.Accepted:
             return
         converts_to_sales = doc.document_type_code in _CONVERTS_TO_SALES_INVOICE
-        target_title = "فاکتورِ فروش" if converts_to_sales else "فاکتورِ خرید"
+        target_title = "فاکتور فروش" if converts_to_sales else "فاکتور خرید"
         try:
             new_document_id = documents_service.convert_to_invoice(
                 document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
@@ -460,7 +460,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
             return
         QMessageBox.information(
-            self, "تبدیل به فاکتور", f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از رویِ این سند ساخته شد."
+            self, "تبدیل به فاکتور", f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از روی این سند ساخته شد."
         )
         self.refresh()
 
@@ -471,10 +471,10 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         try:
             _show_invoice_print(self, company_id, document_id)
         except ValueError as exc:
-            QMessageBox.warning(self, "نمایشِ چاپی", str(exc))
+            QMessageBox.warning(self, "نمایش چاپی", str(exc))
 
     def _next_step(self, d, fulfillment, pre_sales_status):
-        """R226: مرحلهٔ بعدیِ گردشِ کار همین‌جا در ردیف -- (برچسب، راهنما، اقدام) یا None."""
+        """R226: مرحلهٔ بعدی گردش کار همین‌جا در ردیف — (برچسب، راهنما، اقدام) یا None."""
         company_id = self._company_id()
         user = app_session.current_user
         if company_id is None or user is None:
@@ -489,27 +489,27 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         if needs_approval:
             if not roles_service.is_manager(user.user_id, company_id):
                 return None
-            return ("تصویب", "مرحلهٔ بعد: تصویبِ مدیر", lambda: self._approve_document(doc_id))
+            return ("تصویب", "مرحلهٔ بعد: تصویب مدیر", lambda: self._approve_document(doc_id))
         if doc_type in ("PURCHASE_ORDER", "SALES_ORDER") and pre_sales_status is None:
             is_sale = doc_type == "SALES_ORDER"
-            step = "حوالهٔ انبار" if is_sale else "رسیدِ کالا"
+            step = "حوالهٔ انبار" if is_sale else "رسید کالا"
             needs_receipt = documents_service.order_warehouse_step_enabled(company_id, doc_type) and d.warehouse_approved_at is None
             if needs_receipt and d.status_code not in documents_service.receipt_eligible_statuses(company_id, doc_type):
                 # R230/R232: سفارش ابتدا ثبتِ نهایی می‌شود، بعد به تاییدِ انبار می‌رسد
                 if not roles_service.is_manager(user.user_id, company_id):
                     return None
                 nav_code = _TYPE_TO_NAV_CODE[doc_type]
-                return ("ثبتِ نهایی", f"مرحلهٔ بعد: ثبتِ نهاییِ سفارش (سپس تاییدِ {step})",
+                return ("ثبت نهایی", f"مرحلهٔ بعد: ثبت نهایی سفارش (سپس تایید {step})",
                         lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
             if needs_receipt:
-                return (step, f"مرحلهٔ بعد: تاییدِ {step} توسطِ انباردار",
+                return (step, f"مرحلهٔ بعد: تایید {step} توسط انباردار",
                         lambda: self._main_window.open_screen("SALES_WAREHOUSE_ISSUE" if is_sale else "PURCH_GOODS_RECEIPT"))
         if doc_type in ("CONSIGNMENT_IN", "CONSIGNMENT_OUT") and d.status_code in ("CONFIRMED", "APPROVED"):
             if documents_service.consignment_requires_warehouse_approval(company_id, doc_type) and d.warehouse_approved_at is None:
-                return ("تاییدِ انبار", "مرحلهٔ بعد: تاییدِ انباردار", lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
+                return ("تایید انبار", "مرحلهٔ بعد: تایید انباردار", lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
             if roles_service.is_manager(user.user_id, company_id):
                 nav_code = _TYPE_TO_NAV_CODE[doc_type]
-                return ("ثبتِ نهایی", "مرحلهٔ بعد: ثبتِ نهاییِ امانی (جابه‌جاییِ کالا)",
+                return ("ثبت نهایی", "مرحلهٔ بعد: ثبت نهایی امانی (جابه‌جایی کالا)",
                         lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
         if doc_type in _CONVERTIBLE_TO_INVOICE_TYPES:
             ready = fulfillment is not None and fulfillment[1] < fulfillment[0] and (
@@ -521,13 +521,13 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         if doc_type == "PURCHASE_INVOICE" and d.warehouse_approved_at is None \
                 and documents_service.invoice_requires_warehouse_approval(doc_id, company_id):
             # R255: فاکتورِ خریدِ مستقیم ابتدا به تاییدِ رسیدِ انباردار می‌رسد
-            return ("تاییدِ انبار", "مرحلهٔ بعد: تاییدِ رسیدِ کالا توسطِ انباردار",
+            return ("تایید انبار", "مرحلهٔ بعد: تایید رسید کالا توسط انباردار",
                     lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
         if doc_type in ("SALES_INVOICE", "PURCHASE_INVOICE", "SALES_RETURN", "PURCHASE_RETURN"):
             if not roles_service.is_manager(user.user_id, company_id):
                 return None
             nav_code = _TYPE_TO_NAV_CODE[doc_type]
-            return ("ثبتِ نهایی", "مرحلهٔ بعد: ثبتِ نهایی (فرمِ سند باز می‌شود)",
+            return ("ثبت نهایی", "مرحلهٔ بعد: ثبت نهایی (فرم سند باز می‌شود)",
                     lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
         return None
 
@@ -544,7 +544,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
 
     def _delete_document(self, document_id: int) -> None:
         confirm = QMessageBox.question(
-            self, "حذف", "این سند حذف شود؟ این کار قابلِ‌بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
+            self, "حذف", "این سند حذف شود؟ این کار قابل‌بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

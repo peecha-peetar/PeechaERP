@@ -19,8 +19,8 @@ async function build(fetcher: Fetcher) {
   return { api, queue, engine: new SyncEngine(api, queue, new LocalCache(kv)) };
 }
 
-describe("عملیاتِ انبار (R249)", () => {
-  it("انتقال با کلیدِ Idempotency به /locations/transfer می‌رود و از صف حذف می‌شود", async () => {
+describe("عملیات انبار (R249)", () => {
+  it("انتقال با کلید Idempotency به /locations/transfer می‌رود و از صف حذف می‌شود", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fetcher = jest.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
@@ -38,15 +38,15 @@ describe("عملیاتِ انبار (R249)", () => {
     expect(await queue.size()).toBe(0);
   });
 
-  it("ردِ سرور (۴۰۰) با پیامِ فارسی برمی‌گردد و در صف نمی‌ماند", async () => {
-    const fetcher = jest.fn(async () => jsonResponse(400, { detail: "محلِ مقصد مسدود است." })) as unknown as Fetcher;
+  it("رد سرور (۴۰۰) با پیام فارسی برمی‌گردد و در صف نمی‌ماند", async () => {
+    const fetcher = jest.fn(async () => jsonResponse(400, { detail: "محل مقصد مسدود است." })) as unknown as Fetcher;
     const { queue, engine } = await build(fetcher);
     const outcome = await submitWmsAction(queue, engine, { type: "WMS_PUTAWAY", payload: { taskId: 4, toLocationId: 9 } });
-    expect(outcome).toEqual({ status: "REJECTED", reason: "محلِ مقصد مسدود است." });
+    expect(outcome).toEqual({ status: "REJECTED", reason: "محل مقصد مسدود است." });
     expect(await queue.size()).toBe(0);
   });
 
-  it("بی‌اینترنت: اقدام در صف می‌ماند و بعداً به مسیرِ درست می‌رود", async () => {
+  it("بی‌اینترنت: اقدام در صف می‌ماند و بعداً به مسیر درست می‌رود", async () => {
     let online = false;
     const urls: string[] = [];
     const fetcher = jest.fn(async (url: string) => {
@@ -64,7 +64,7 @@ describe("عملیاتِ انبار (R249)", () => {
     expect(await queue.size()).toBe(0);
   });
 
-  it("کلاینت: جستجو و اسکنِ محل با پارامترِ کدشده", async () => {
+  it("کلاینت: جستجو و اسکن محل با پارامتر کدشده", async () => {
     const urls: string[] = [];
     const fetcher = jest.fn(async (url: string) => {
       urls.push(url);

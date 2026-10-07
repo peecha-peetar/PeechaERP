@@ -1,7 +1,7 @@
-"""تنظیماتِ حقوق و دستمزد — فازِ ۲: اطلاعاتِ پایه + قوانینِ حقوق (فصلِ ۴ و ۵
-از سندِ طراحی). سه بخش: تنظیماتِ کلیِ شرکت، حداقلِ دستمزدِ مصوب (نسخه‌بندی‌
-شده)، و قوانینِ حقوق و دستمزد (پارامترهایِ قانونِ کار، هرکدام با امکانِ
-override اختصاصیِ شرکت)."""
+"""تنظیمات حقوق و دستمزد — فاز ۲: اطلاعات پایه + قوانین حقوق (فصل ۴ و ۵
+از سند طراحی). سه بخش: تنظیمات کلی شرکت، حداقل دستمزد مصوب (نسخه‌بندی‌
+شده)، و قوانین حقوق و دستمزد (پارامترهای قانون کار، هرکدام با امکان
+override اختصاصی شرکت)."""
 
 from __future__ import annotations
 
@@ -57,32 +57,32 @@ from peecha.ui.widgets import (
 
 _CALCULATION_BASIS_LABELS = [("DAILY", "روزانه"), ("HOURLY", "ساعتی")]
 _ROUNDING_RULE_LABELS = [
-    ("NONE", "بدونِ گردکردن"),
+    ("NONE", "بدون گردکردن"),
     ("ROUND_1000", "گردکردن به هزار"),
     ("ROUND_100", "گردکردن به صد"),
-    ("TRUNCATE", "قطعِ اعشار"),
+    ("TRUNCATE", "قطع اعشار"),
 ]
 
 _ITEM_TYPE_LABELS = [
-    ("EARNING", "مزایایِ نقدی (Earning)"),
+    ("EARNING", "مزایای نقدی (Earning)"),
     ("BENEFIT", "مزیت (Benefit)"),
     ("DEDUCTION", "کسورات"),
     ("INSURANCE", "بیمه"),
     ("TAX", "مالیات"),
 ]
 _CALCULATION_METHOD_LABELS = [
-    ("BASE_SALARY_FROM_CONTRACT", "حقوقِ پایه از قرارداد"),
-    ("FIXED", "مبلغِ ثابت"),
-    ("PERCENTAGE_OF_BASE", "درصدی از حقوقِ پایه"),
+    ("BASE_SALARY_FROM_CONTRACT", "حقوق پایه از قرارداد"),
+    ("FIXED", "مبلغ ثابت"),
+    ("PERCENTAGE_OF_BASE", "درصدی از حقوق پایه"),
     ("FORMULA", "فرمول"),
-    ("MANUAL", "دستی (به‌ازایِ هر کارمند)"),
-    ("SYSTEM_TAX_ENGINE", "سیستمی (موتورِ بیمه/مالیات)"),
+    ("MANUAL", "دستی (به‌ازای هر کارمند)"),
+    ("SYSTEM_TAX_ENGINE", "سیستمی (موتور بیمه/مالیات)"),
 ]
 _CALCULATION_PHASE_LABELS = [
-    ("EARNING_PHASE", "فازِ مزایا"),
-    ("INSURANCE_PHASE", "فازِ بیمه"),
-    ("DEDUCTION_PHASE", "فازِ کسورات"),
-    ("TAX_PHASE", "فازِ مالیات"),
+    ("EARNING_PHASE", "فاز مزایا"),
+    ("INSURANCE_PHASE", "فاز بیمه"),
+    ("DEDUCTION_PHASE", "فاز کسورات"),
+    ("TAX_PHASE", "فاز مالیات"),
 ]
 
 
@@ -119,7 +119,7 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("تنظیماتِ کلیِ حقوق و دستمزد")
+        title = QLabel("تنظیمات کلی حقوق و دستمزد")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -144,17 +144,17 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
         self.salary_payable_detail_combo = _make_searchable_combo([])
 
         self.payable_description_template_field = QLineEdit()
-        self.payable_description_template_field.setPlaceholderText("مثلاً: پرداختنیِ حقوقِ خالص — دورهٔ {دوره} — اجرایِ {اجرا}")
+        self.payable_description_template_field.setPlaceholderText("مثلاً: پرداختنی حقوق خالص — دورهٔ {دوره} — اجرای {اجرا}")
 
         self.general_grid = FieldGrid([
-            FieldSpec("standard_month_days", "تعدادِ روزهایِ استانداردِ ماه", self.standard_month_days_field, span=1),
-            FieldSpec("calculation_basis", "مبنایِ محاسبه", self.calculation_basis_combo, span=1),
+            FieldSpec("standard_month_days", "تعداد روزهای استاندارد ماه", self.standard_month_days_field, span=1),
+            FieldSpec("calculation_basis", "مبنای محاسبه", self.calculation_basis_combo, span=1),
             FieldSpec("rounding_rule", "قاعدهٔ گردکردن", self.rounding_rule_combo, span=1),
-            FieldSpec("default_pay_day", "روزِ پرداخت (۰ یعنی تنظیم‌نشده)", self.default_pay_day_field, span=1),
-            FieldSpec("payslip_currency", "ارزِ فیشِ حقوقی", self.payslip_currency_combo, span=2),
-            FieldSpec("salary_payable_account", "حسابِ حقوقِ پرداختنی/بانک (برایِ صدورِ سندِ حقوق)", self.salary_payable_account_combo, span=3),
-            FieldSpec("salary_payable_detail", "تفصیلیِ حسابِ حقوقِ پرداختنی (اختیاری)", self.salary_payable_detail_combo, span=3),
-            FieldSpec("payable_description_template", "قالبِ شرحِ ردیفِ حقوقِ پرداختنی (اختیاری)", self.payable_description_template_field, span=3),
+            FieldSpec("default_pay_day", "روز پرداخت (۰ یعنی تنظیم‌نشده)", self.default_pay_day_field, span=1),
+            FieldSpec("payslip_currency", "ارز فیش حقوقی", self.payslip_currency_combo, span=2),
+            FieldSpec("salary_payable_account", "حساب حقوق پرداختنی/بانک (برای صدور سند حقوق)", self.salary_payable_account_combo, span=3),
+            FieldSpec("salary_payable_detail", "تفصیلی حساب حقوق پرداختنی (اختیاری)", self.salary_payable_detail_combo, span=3),
+            FieldSpec("payable_description_template", "قالب شرح ردیف حقوق پرداختنی (اختیاری)", self.payable_description_template_field, span=3),
         ])
         layout.addWidget(self.general_grid)
         self.register_field_grids("payroll_settings_general", [self.general_grid])
@@ -173,21 +173,21 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
         self.footer_layout.addWidget(self.status_label)
 
         self.set_field_help([
-            (self.standard_month_days_field, "پایهٔ محاسباتِ پرو-راتا (نسبی‌سازی) — پیش‌فرضِ رایج ۳۰ روز."),
-            (self.calculation_basis_combo, "آیا محاسباتِ نسبی بر مبنایِ روز باشد یا ساعت."),
-            (self.rounding_rule_combo, "قاعدهٔ گردکردنِ مبالغِ نهاییِ فیش."),
-            (self.default_pay_day_field, "روزِ ماهِ شمسی‌ای که حقوق معمولاً پرداخت می‌شود."),
-            (self.payslip_currency_combo, "ارزی که فیشِ حقوقی با آن نمایش داده می‌شود."),
-            (self.salary_payable_account_combo, "حسابِ کلی که خالصِ پرداختنیِ حقوق در سندِ خودکار به آن بستانکار می‌شود — بدونِ این، صدورِ سند ممکن نیست."),
-            (self.salary_payable_detail_combo, "تفصیلیِ اختیاری برایِ همان ردیف (مثلاً بانکِ مشخص)."),
-            (self.payable_description_template_field, "شرحِ ردیفِ حقوقِ پرداختنی — جای‌گذارهایِ مجاز: {دوره} {اجرا}."),
+            (self.standard_month_days_field, "پایهٔ محاسبات پرو-راتا (نسبی‌سازی) — پیش‌فرض رایج ۳۰ روز."),
+            (self.calculation_basis_combo, "آیا محاسبات نسبی بر مبنای روز باشد یا ساعت."),
+            (self.rounding_rule_combo, "قاعدهٔ گردکردن مبالغ نهایی فیش."),
+            (self.default_pay_day_field, "روز ماه شمسی‌ای که حقوق معمولاً پرداخت می‌شود."),
+            (self.payslip_currency_combo, "ارزی که فیش حقوقی با آن نمایش داده می‌شود."),
+            (self.salary_payable_account_combo, "حساب کلی که خالص پرداختنی حقوق در سند خودکار به آن بستانکار می‌شود — بدون این، صدور سند ممکن نیست."),
+            (self.salary_payable_detail_combo, "تفصیلی اختیاری برای همان ردیف (مثلاً بانک مشخص)."),
+            (self.payable_description_template_field, "شرح ردیف حقوق پرداختنی — جای‌گذارهای مجاز: {دوره} {اجرا}."),
         ])
 
     def refresh(self) -> None:
         self.status_label.setText("")
         self.payslip_currency_combo.blockSignals(True)
         self.payslip_currency_combo.clear()
-        self.payslip_currency_combo.addItem("(ارزِ پایهٔ شرکت)", None)
+        self.payslip_currency_combo.addItem("(ارز پایهٔ شرکت)", None)
         for c in currencies_service.list_all_currencies():
             self.payslip_currency_combo.addItem(c.iso_code, c.currency_id)
         self.payslip_currency_combo.blockSignals(False)
@@ -254,7 +254,7 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
 # ---------------------------------------------------------------------
 # تبِ حداقلِ دستمزد
 # ---------------------------------------------------------------------
-_WAGE_COLUMNS = ["نرخِ ساعتی", "نرخِ روزانه", "مبلغِ ماهانه", "تا تاریخ", "از تاریخ"]
+_WAGE_COLUMNS = ["نرخ ساعتی", "نرخ روزانه", "مبلغ ماهانه", "تا تاریخ", "از تاریخ"]
 
 
 class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -278,10 +278,10 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
-            (self.from_date_field, "شروعِ اعتبارِ این نرخِ حداقل‌دستمزد."),
-            (self.to_date_field, "پایانِ اعتبار — خالی یعنی تا اطلاعِ ثانوی."),
-            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلدِ پایانِ اعتبار غیرِفعال می‌شود -- این نرخ تا وضعِ نرخِ تازه‌تر معتبر می‌ماند."),
-            (self.monthly_field, "حداقلِ دستمزدِ ماهانهٔ مصوب."),
+            (self.from_date_field, "شروع اعتبار این نرخ حداقل‌دستمزد."),
+            (self.to_date_field, "پایان اعتبار — خالی یعنی تا اطلاع ثانوی."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این نرخ تا وضع نرخ تازه‌تر معتبر می‌ماند."),
+            (self.monthly_field, "حداقل دستمزد ماهانهٔ مصوب."),
         ])
 
     def _build_list_panel(self) -> QWidget:
@@ -290,7 +290,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("حداقلِ دستمزدِ مصوب")
+        title = QLabel("حداقل دستمزد مصوب")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -318,7 +318,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.to_date_field = JalaliDateEdit()
 
-        self.to_date_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
+        self.to_date_unbounded_checkbox = QCheckBox("تا اطلاع ثانوی (بدون تاریخ پایان)")
         self.to_date_unbounded_checkbox.setChecked(True)
         self.to_date_unbounded_checkbox.toggled.connect(lambda checked: self.to_date_field.setEnabled(not checked))
         self.to_date_field.setEnabled(False)
@@ -333,9 +333,9 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("from_date", "از تاریخ", self.from_date_field, span=1),
             FieldSpec("to_date", "تا تاریخ", self.to_date_field, span=1),
             FieldSpec("to_date_unbounded", "", self.to_date_unbounded_checkbox, span=1),
-            FieldSpec("monthly", "مبلغِ ماهانه (ریال)", self.monthly_field, span=1),
-            FieldSpec("daily", "مبلغِ روزانه (اختیاری)", self.daily_field, span=1),
-            FieldSpec("hourly", "مبلغِ ساعتی (اختیاری)", self.hourly_field, span=1),
+            FieldSpec("monthly", "مبلغ ماهانه (ریال)", self.monthly_field, span=1),
+            FieldSpec("daily", "مبلغ روزانه (اختیاری)", self.daily_field, span=1),
+            FieldSpec("hourly", "مبلغ ساعتی (اختیاری)", self.hourly_field, span=1),
         ])
         layout.addWidget(self.wage_grid)
         self.register_field_grids("payroll_settings_minimum_wage", [self.wage_grid])
@@ -394,7 +394,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, w: payroll_service.MinimumWageRateRow) -> None:
         self._editing_id = w.minimum_wage_rate_id
-        self.form_title.setText("ویرایشِ دوره")
+        self.form_title.setText("ویرایش دوره")
         self.status_label.setText("")
         self.from_date_field.setDate(w.effective_from)
         self.to_date_unbounded_checkbox.setChecked(w.effective_to is None)
@@ -445,7 +445,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ دوره", "این دورهٔ حداقل‌دستمزد حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف دوره", "این دورهٔ حداقل‌دستمزد حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -456,21 +456,21 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 # ---------------------------------------------------------------------
 # تبِ قوانینِ حقوق و دستمزد
 # ---------------------------------------------------------------------
-_POLICY_COLUMNS = ["اختصاصیِ شرکت", "از تاریخِ اجرا", "مقدار", "عنوانِ قانون"]
+_POLICY_COLUMNS = ["اختصاصی شرکت", "از تاریخ اجرا", "مقدار", "عنوان قانون"]
 
 
 class _SetPolicyDialog(QDialog):
     def __init__(self, parent: QWidget, label: str, current_value: decimal.Decimal | None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"ویرایشِ قانون — {label}")
+        self.setWindowTitle(f"ویرایش قانون — {label}")
         layout = QVBoxLayout(self)
 
-        layout.addWidget(QLabel("تاریخِ اجرا (نسخهٔ تازه از این تاریخ به بعد)"))
+        layout.addWidget(QLabel("تاریخ اجرا (نسخهٔ تازه از این تاریخ به بعد)"))
         self.effective_from_field = JalaliDateEdit()
         self.effective_from_field.setDate(datetime.date.today())
         layout.addWidget(self.effective_from_field)
 
-        layout.addWidget(QLabel("مقدارِ تازه"))
+        layout.addWidget(QLabel("مقدار تازه"))
         self.value_field = _AmountField()
         self.value_field.setValue(float(current_value or 0))
         layout.addWidget(self.value_field)
@@ -501,14 +501,14 @@ class _PoliciesTab(FormScreenBase):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("قوانینِ حقوق و دستمزد")
+        title = QLabel("قوانین حقوق و دستمزد")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "مقدارِ بدونِ نشانِ «اختصاصیِ شرکت» یعنی پیش‌فرضِ سراسری در حالِ استفاده است. "
-            "برایِ این شرکت مقدارِ اختصاصی تعریف کنید تا از تاریخِ انتخابی به‌بعد جایگزینِ پیش‌فرض شود؛ "
-            "نسخهٔ قبلی برایِ محاسبهٔ دوره‌هایِ گذشته دست‌نخورده می‌ماند."
+            "مقدار بدون نشان «اختصاصی شرکت» یعنی پیش‌فرض سراسری در حال استفاده است. "
+            "برای این شرکت مقدار اختصاصی تعریف کنید تا از تاریخ انتخابی به‌بعد جایگزین پیش‌فرض شود؛ "
+            "نسخهٔ قبلی برای محاسبهٔ دوره‌های گذشته دست‌نخورده می‌ماند."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -525,7 +525,7 @@ class _PoliciesTab(FormScreenBase):
         edit_button = QPushButton("✏️")
         edit_button.setObjectName("primaryIconButton")
         edit_button.setFixedWidth(48)
-        edit_button.setToolTip("ویرایشِ قانونِ انتخاب‌شده")
+        edit_button.setToolTip("ویرایش قانون انتخاب‌شده")
         edit_button.clicked.connect(self._edit_selected)
         self.footer_layout.addWidget(edit_button)
         self.footer_layout.addStretch(1)
@@ -559,7 +559,7 @@ class _PoliciesTab(FormScreenBase):
     def _edit_selected(self) -> None:
         row = self.table.currentRow()
         if row < 0:
-            QMessageBox.information(self, "ویرایشِ قانون", "یک ردیف را انتخاب کنید.")
+            QMessageBox.information(self, "ویرایش قانون", "یک ردیف را انتخاب کنید.")
             return
         self._edit_row(row)
 
@@ -575,7 +575,7 @@ class _PoliciesTab(FormScreenBase):
         try:
             payroll_service.set_policy(company_id, policy_code, dialog.effective_from(), dialog.value())
         except ValueError as exc:
-            QMessageBox.warning(self, "ویرایشِ قانون", str(exc))
+            QMessageBox.warning(self, "ویرایش قانون", str(exc))
             return
         self.refresh()
 
@@ -583,7 +583,7 @@ class _PoliciesTab(FormScreenBase):
 # ---------------------------------------------------------------------
 # تبِ آیتم‌هایِ حقوقی (موتورِ عمومیِ فصلِ ۶ + تکمیل‌هایِ فصلِ ۷/۸)
 # ---------------------------------------------------------------------
-_PAY_ITEM_COLUMNS = ["فعال", "فاز", "روشِ محاسبه", "نوع", "نام", "کد"]
+_PAY_ITEM_COLUMNS = ["فعال", "فاز", "روش محاسبه", "نوع", "نام", "کد"]
 
 
 class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -607,27 +607,27 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
-            (self.code_field, "کدِ یکتایِ این آیتمِ حقوقی -- در فرمول‌هایِ آیتم‌هایِ دیگر با {CODE} به آن ارجاع داده می‌شود."),
-            (self.name_field, "نامِ نمایشیِ این آیتم در فیش/گزارشِ حقوق."),
-            (self.item_type_combo, "این آیتم به جمعِ حقوق اضافه می‌شود (مزایا) یا از آن کم می‌شود (کسورات)."),
-            (self.calculation_method_combo, "روشِ محاسبهٔ مبلغِ این آیتم -- مبلغِ ثابت، درصدی، یا فرمولِ سفارشی."),
-            (self.calculation_phase_combo, "این آیتم در کدام مرحله از محاسبهٔ حقوق اعمال می‌شود -- ترتیب رویِ آیتم‌هایِ وابسته اثر دارد."),
-            (self.formula_field, "زبانِ محدودِ فرمول: + - * / ( )، اعداد، BASE_SALARY/WORKED_DAYS/CALENDAR_DAYS/"
-                                  "CHILDREN_COUNT/WEEKLY_HOURS، ارجاع به آیتمِ دیگر با {CODE}، و POLICY(CODE)."),
-            (self.fixed_amount_field, "مبلغِ ثابتِ این آیتم -- فقط وقتی روشِ محاسبه «مبلغِ ثابت» باشد به‌کار می‌رود."),
-            (self.percentage_field, "درصدِ این آیتم از حقوقِ پایه -- فقط وقتی روشِ محاسبه «درصدی» باشد به‌کار می‌رود."),
-            (self.deduction_priority_field, "اولویتِ کسرِ این آیتم وقتی خالص‌ حقوق برایِ کسرِ همه‌یِ آیتم‌ها کافی نباشد -- عددِ کوچک‌تر زودتر کسر می‌شود."),
-            (self.eligibility_field, "شرطِ تخصیصِ خودکار، مثلاً «CHILDREN_COUNT > 0» — خالی یعنی همیشه اعمال شود."),
-            (self.gl_account_combo, "حسابِ کلی که این آیتم در سندِ حسابداریِ خودکارِ حقوق به آن می‌رود."),
-            (self.detail_account_combo, "تفصیلیِ اختیاری برایِ همین ردیفِ سند (مثلاً مرکزِ هزینه)."),
-            (self.description_template_field, "شرحِ ردیفِ این آیتم در سند — جای‌گذارهایِ مجاز: {نام_آیتم} {دوره} {اجرا}."),
-            (self.is_prorated_checkbox, "اگر روشن باشد، مبلغِ این آیتم به نسبتِ روزهایِ واقعیِ کارکرد در دوره تعدیل می‌شود."),
-            (self.is_taxable_checkbox, "این آیتم در محاسبهٔ مالیاتِ حقوق لحاظ می‌شود."),
-            (self.is_insurable_checkbox, "این آیتم در محاسبهٔ حقِ‌بیمه لحاظ می‌شود."),
-            (self.is_continuous_checkbox, "این آیتم مستمر است -- در محاسبهٔ سنوات/اضافه‌کاری هم به‌عنوانِ مبنا لحاظ می‌شود."),
-            (self.is_cash_checkbox, "این آیتم در جمعِ نهاییِ قابلِ‌پرداختِ نقدیِ فیش لحاظ می‌شود."),
-            (self.is_court_order_checkbox, "این آیتم یک کسرِ الزامیِ ناشی از حکمِ دادگاه است -- اولویتِ کسر رویِ آن اثر دارد."),
-            (self.is_active_checkbox, "آیتم‌هایِ غیرِفعال دیگر در محاسبهٔ حقوقِ دوره‌هایِ تازه اعمال نمی‌شوند."),
+            (self.code_field, "کد یکتای این آیتم حقوقی — در فرمول‌های آیتم‌های دیگر با {CODE} به آن ارجاع داده می‌شود."),
+            (self.name_field, "نام نمایشی این آیتم در فیش/گزارش حقوق."),
+            (self.item_type_combo, "این آیتم به جمع حقوق اضافه می‌شود (مزایا) یا از آن کم می‌شود (کسورات)."),
+            (self.calculation_method_combo, "روش محاسبهٔ مبلغ این آیتم — مبلغ ثابت، درصدی، یا فرمول سفارشی."),
+            (self.calculation_phase_combo, "این آیتم در کدام مرحله از محاسبهٔ حقوق اعمال می‌شود — ترتیب روی آیتم‌های وابسته اثر دارد."),
+            (self.formula_field, "زبان محدود فرمول: + - * / ( )، اعداد، BASE_SALARY/WORKED_DAYS/CALENDAR_DAYS/"
+                                  "CHILDREN_COUNT/WEEKLY_HOURS، ارجاع به آیتم دیگر با {CODE}، و POLICY(CODE)."),
+            (self.fixed_amount_field, "مبلغ ثابت این آیتم — فقط وقتی روش محاسبه «مبلغ ثابت» باشد به‌کار می‌رود."),
+            (self.percentage_field, "درصد این آیتم از حقوق پایه — فقط وقتی روش محاسبه «درصدی» باشد به‌کار می‌رود."),
+            (self.deduction_priority_field, "اولویت کسر این آیتم وقتی خالص‌ حقوق برای کسر همهٔ آیتم‌ها کافی نباشد — عدد کوچک‌تر زودتر کسر می‌شود."),
+            (self.eligibility_field, "شرط تخصیص خودکار، مثلاً «CHILDREN_COUNT > 0» — خالی یعنی همیشه اعمال شود."),
+            (self.gl_account_combo, "حساب کلی که این آیتم در سند حسابداری خودکار حقوق به آن می‌رود."),
+            (self.detail_account_combo, "تفصیلی اختیاری برای همین ردیف سند (مثلاً مرکز هزینه)."),
+            (self.description_template_field, "شرح ردیف این آیتم در سند — جای‌گذارهای مجاز: {نام_آیتم} {دوره} {اجرا}."),
+            (self.is_prorated_checkbox, "اگر روشن باشد، مبلغ این آیتم به نسبت روزهای واقعی کارکرد در دوره تعدیل می‌شود."),
+            (self.is_taxable_checkbox, "این آیتم در محاسبهٔ مالیات حقوق لحاظ می‌شود."),
+            (self.is_insurable_checkbox, "این آیتم در محاسبهٔ حق‌بیمه لحاظ می‌شود."),
+            (self.is_continuous_checkbox, "این آیتم مستمر است — در محاسبهٔ سنوات/اضافه‌کاری هم به‌عنوان مبنا لحاظ می‌شود."),
+            (self.is_cash_checkbox, "این آیتم در جمع نهایی قابل‌پرداخت نقدی فیش لحاظ می‌شود."),
+            (self.is_court_order_checkbox, "این آیتم یک کسر الزامی ناشی از حکم دادگاه است — اولویت کسر روی آن اثر دارد."),
+            (self.is_active_checkbox, "آیتم‌های غیرفعال دیگر در محاسبهٔ حقوق دوره‌های تازه اعمال نمی‌شوند."),
         ])
         self.register_field_grids("payroll_settings_pay_items", [self.form_grid])
 
@@ -637,7 +637,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("آیتم‌هایِ حقوقی")
+        title = QLabel("آیتم‌های حقوقی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -657,7 +657,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("آیتمِ تازه")
+        self.form_title = QLabel("آیتم تازه")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -689,17 +689,17 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.detail_account_combo = _make_searchable_combo([])
 
         self.description_template_field = QLineEdit()
-        self.description_template_field.setPlaceholderText("مثلاً: بابتِ {نام_آیتم} — دورهٔ {دوره} — اجرایِ {اجرا}")
+        self.description_template_field.setPlaceholderText("مثلاً: بابت {نام_آیتم} — دورهٔ {دوره} — اجرای {اجرا}")
 
         self.eligibility_field = QLineEdit()
 
-        self.is_prorated_checkbox = QCheckBox("نسبی‌سازی بر اساسِ روزِ کارکرد")
-        self.is_taxable_checkbox = QCheckBox("مشمولِ مالیات")
-        self.is_insurable_checkbox = QCheckBox("مشمولِ بیمه")
-        self.is_continuous_checkbox = QCheckBox("مستمر (مبنایِ سنوات/اضافه‌کاری)")
-        self.is_cash_checkbox = QCheckBox("نقدی (در جمعِ قابلِ‌پرداخت لحاظ شود)")
+        self.is_prorated_checkbox = QCheckBox("نسبی‌سازی بر اساس روز کارکرد")
+        self.is_taxable_checkbox = QCheckBox("مشمول مالیات")
+        self.is_insurable_checkbox = QCheckBox("مشمول بیمه")
+        self.is_continuous_checkbox = QCheckBox("مستمر (مبنای سنوات/اضافه‌کاری)")
+        self.is_cash_checkbox = QCheckBox("نقدی (در جمع قابل‌پرداخت لحاظ شود)")
         self.is_cash_checkbox.setChecked(True)
-        self.is_court_order_checkbox = QCheckBox("کسرِ حکمِ دادگاه")
+        self.is_court_order_checkbox = QCheckBox("کسر حکم دادگاه")
 
         self.deduction_priority_field = ZeroPaddedSpinBox()
         self.deduction_priority_field.setRange(0, 99)
@@ -711,22 +711,22 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("name", "نام", self.name_field, span=2),
             FieldSpec("item_type", "نوع", self.item_type_combo, span=1),
-            FieldSpec("calculation_method", "روشِ محاسبه", self.calculation_method_combo, span=1),
-            FieldSpec("calculation_phase", "فازِ محاسبه", self.calculation_phase_combo, span=1),
+            FieldSpec("calculation_method", "روش محاسبه", self.calculation_method_combo, span=1),
+            FieldSpec("calculation_phase", "فاز محاسبه", self.calculation_phase_combo, span=1),
             FieldSpec("formula", "فرمول", self.formula_field, span=3),
-            FieldSpec("fixed_amount", "مبلغِ ثابت (ریال)", self.fixed_amount_field, span=2),
-            FieldSpec("percentage", "درصد (از حقوقِ پایه)", self.percentage_field, span=1),
-            FieldSpec("gl_account", "حسابِ کلِ مرتبط (اختیاری)", self.gl_account_combo, span=3),
-            FieldSpec("detail_account", "تفصیلیِ مرتبط (اختیاری)", self.detail_account_combo, span=3),
-            FieldSpec("description_template", "قالبِ شرحِ سند (اختیاری — خالی یعنی شرحِ پیش‌فرض)", self.description_template_field, span=3),
-            FieldSpec("eligibility", "شرطِ تخصیص (اختیاری)", self.eligibility_field, span=3),
+            FieldSpec("fixed_amount", "مبلغ ثابت (ریال)", self.fixed_amount_field, span=2),
+            FieldSpec("percentage", "درصد (از حقوق پایه)", self.percentage_field, span=1),
+            FieldSpec("gl_account", "حساب کل مرتبط (اختیاری)", self.gl_account_combo, span=3),
+            FieldSpec("detail_account", "تفصیلی مرتبط (اختیاری)", self.detail_account_combo, span=3),
+            FieldSpec("description_template", "قالب شرح سند (اختیاری — خالی یعنی شرح پیش‌فرض)", self.description_template_field, span=3),
+            FieldSpec("eligibility", "شرط تخصیص (اختیاری)", self.eligibility_field, span=3),
             FieldSpec("is_prorated", "", self.is_prorated_checkbox, span=1),
             FieldSpec("is_taxable", "", self.is_taxable_checkbox, span=1),
             FieldSpec("is_insurable", "", self.is_insurable_checkbox, span=1),
             FieldSpec("is_continuous", "", self.is_continuous_checkbox, span=1),
             FieldSpec("is_cash", "", self.is_cash_checkbox, span=1),
             FieldSpec("is_court_order", "", self.is_court_order_checkbox, span=1),
-            FieldSpec("deduction_priority", "اولویتِ کسر (عددِ کوچک‌تر = اولویتِ بالاتر)", self.deduction_priority_field, span=2),
+            FieldSpec("deduction_priority", "اولویت کسر (عدد کوچک‌تر = اولویت بالاتر)", self.deduction_priority_field, span=2),
             FieldSpec("is_active", "", self.is_active_checkbox, span=1),
         ])
         layout.addWidget(self.form_grid)
@@ -825,7 +825,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, p: payroll_service.PayItemRow) -> None:
         self._editing_id = p.pay_item_id
-        self.form_title.setText(f"ویرایشِ آیتم — {p.name}")
+        self.form_title.setText(f"ویرایش آیتم — {p.name}")
         self.status_label.setText("")
         self.code_field.setText(p.code)
         self.code_field.setEnabled(False)
@@ -855,7 +855,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("آیتمِ تازه")
+        self.form_title.setText("آیتم تازه")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -932,7 +932,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete(self) -> None:
         if self._editing_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ آیتم", "این آیتمِ حقوقی حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف آیتم", "این آیتم حقوقی حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -946,7 +946,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 # ---------------------------------------------------------------------
 # تبِ بیمه (فصلِ ۹)
 # ---------------------------------------------------------------------
-_INSURANCE_COLUMNS = ["نرخِ بیکاری", "نرخِ کارفرما", "نرخِ کارمند", "تا تاریخ", "از تاریخ"]
+_INSURANCE_COLUMNS = ["نرخ بیکاری", "نرخ کارفرما", "نرخ کارمند", "تا تاریخ", "از تاریخ"]
 
 
 class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -970,12 +970,12 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
-            (self.employee_rate_field, "سهمِ بیمهٔ کارمند به‌صورتِ درصد، مثلاً ۷ برایِ ۷٪."),
-            (self.floor_field, "کفِ مزدِ مشمولِ بیمه — خالی یعنی حداقل‌دستمزدِ مصوب."),
-            (self.employer_expense_account_combo, "حسابِ هزینه‌ای که سهمِ کارفرمایِ بیمه در سندِ خودکار به‌عنوانِ بدهکار به آن می‌رود."),
-            (self.employer_expense_detail_combo, "تفصیلیِ اختیاری برایِ همان ردیف."),
-            (self.insurance_description_template_field, "شرحِ ردیفِ سهمِ کارفرما — جای‌گذارهایِ مجاز: {دوره} {اجرا}."),
-            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلدِ پایانِ اعتبار غیرِفعال می‌شود -- این تنظیم تا وضعِ نرخِ تازه‌تر معتبر می‌ماند."),
+            (self.employee_rate_field, "سهم بیمهٔ کارمند به‌صورت درصد، مثلاً ۷ برای ۷٪."),
+            (self.floor_field, "کف مزد مشمول بیمه — خالی یعنی حداقل‌دستمزد مصوب."),
+            (self.employer_expense_account_combo, "حساب هزینه‌ای که سهم کارفرمای بیمه در سند خودکار به‌عنوان بدهکار به آن می‌رود."),
+            (self.employer_expense_detail_combo, "تفصیلی اختیاری برای همان ردیف."),
+            (self.insurance_description_template_field, "شرح ردیف سهم کارفرما — جای‌گذارهای مجاز: {دوره} {اجرا}."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این تنظیم تا وضع نرخ تازه‌تر معتبر می‌ماند."),
         ])
         self.register_field_grids("payroll_settings_insurance", [self.form_grid])
 
@@ -985,11 +985,11 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("تنظیماتِ بیمهٔ اختصاصیِ این شرکت")
+        title = QLabel("تنظیمات بیمهٔ اختصاصی این شرکت")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("اگر دوره‌ای این‌جا تعریف نشود، نرخِ پیش‌فرضِ سراسری (۷٪/۲۰٪/۳٪) استفاده می‌شود.")
+        hint = QLabel("اگر دوره‌ای این‌جا تعریف نشود، نرخ پیش‌فرض سراسری (۷٪/۲۰٪/۳٪) استفاده می‌شود.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
@@ -1016,7 +1016,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.from_date_field = JalaliDateEdit()
 
         self.to_date_field = JalaliDateEdit()
-        self.to_date_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
+        self.to_date_unbounded_checkbox = QCheckBox("تا اطلاع ثانوی (بدون تاریخ پایان)")
         self.to_date_unbounded_checkbox.setChecked(True)
         self.to_date_unbounded_checkbox.toggled.connect(lambda checked: self.to_date_field.setEnabled(not checked))
         self.to_date_field.setEnabled(False)
@@ -1034,19 +1034,19 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.employer_expense_detail_combo = _make_searchable_combo([])
 
         self.insurance_description_template_field = QLineEdit()
-        self.insurance_description_template_field.setPlaceholderText("مثلاً: سهمِ کارفرمایِ بیمه — دورهٔ {دوره} — اجرایِ {اجرا}")
+        self.insurance_description_template_field.setPlaceholderText("مثلاً: سهم کارفرمای بیمه — دورهٔ {دوره} — اجرای {اجرا}")
 
         self.form_grid = FieldGrid([
             FieldSpec("from_date", "از تاریخ", self.from_date_field, span=1),
             FieldSpec("to_date", "تا تاریخ", self.to_date_field, span=1),
             FieldSpec("to_date_unbounded", "", self.to_date_unbounded_checkbox, span=1),
-            FieldSpec("employee_rate", "نرخِ سهمِ کارمند (درصد)", self.employee_rate_field, span=1),
-            FieldSpec("employer_rate", "نرخِ سهمِ کارفرما (درصد)", self.employer_rate_field, span=1),
-            FieldSpec("unemployment_rate", "نرخِ بیمهٔ بیکاری — سهمِ کارفرما (درصد)", self.unemployment_rate_field, span=1),
-            FieldSpec("floor", "کفِ مزدِ مشمول (ریال، اختیاری)", self.floor_field, span=1),
-            FieldSpec("employer_expense_account", "حسابِ هزینهٔ سهمِ کارفرما (برایِ صدورِ سندِ حقوق)", self.employer_expense_account_combo, span=2),
-            FieldSpec("employer_expense_detail", "تفصیلیِ حسابِ هزینهٔ سهمِ کارفرما (اختیاری)", self.employer_expense_detail_combo, span=3),
-            FieldSpec("insurance_description_template", "قالبِ شرحِ ردیفِ سهمِ کارفرما (اختیاری)", self.insurance_description_template_field, span=3),
+            FieldSpec("employee_rate", "نرخ سهم کارمند (درصد)", self.employee_rate_field, span=1),
+            FieldSpec("employer_rate", "نرخ سهم کارفرما (درصد)", self.employer_rate_field, span=1),
+            FieldSpec("unemployment_rate", "نرخ بیمهٔ بیکاری — سهم کارفرما (درصد)", self.unemployment_rate_field, span=1),
+            FieldSpec("floor", "کف مزد مشمول (ریال، اختیاری)", self.floor_field, span=1),
+            FieldSpec("employer_expense_account", "حساب هزینهٔ سهم کارفرما (برای صدور سند حقوق)", self.employer_expense_account_combo, span=2),
+            FieldSpec("employer_expense_detail", "تفصیلی حساب هزینهٔ سهم کارفرما (اختیاری)", self.employer_expense_detail_combo, span=3),
+            FieldSpec("insurance_description_template", "قالب شرح ردیف سهم کارفرما (اختیاری)", self.insurance_description_template_field, span=3),
         ])
         layout.addWidget(self.form_grid)
 
@@ -1123,7 +1123,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, c: payroll_service.InsuranceConfigRow) -> None:
         self._editing_id = c.insurance_config_id
-        self.form_title.setText("ویرایشِ دوره")
+        self.form_title.setText("ویرایش دوره")
         self.status_label.setText("")
         self.from_date_field.setDate(c.effective_from)
         self.to_date_unbounded_checkbox.setChecked(c.effective_to is None)
@@ -1164,7 +1164,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             employer_rate = decimal.Decimal(numerals.to_ascii_digits(self.employer_rate_field.text())) / decimal.Decimal(100)
             unemployment_rate = decimal.Decimal(numerals.to_ascii_digits(self.unemployment_rate_field.text())) / decimal.Decimal(100)
         except (decimal.InvalidOperation, ValueError):
-            self.status_label.setText("نرخ‌ها را به‌صورتِ عدد وارد کنید.")
+            self.status_label.setText("نرخ‌ها را به‌صورت عدد وارد کنید.")
             return
         effective_from = self.from_date_field.date()
         effective_to = None if self.to_date_unbounded_checkbox.isChecked() else self.to_date_field.date()
@@ -1187,7 +1187,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete(self) -> None:
         if self._editing_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ دوره", "این تنظیماتِ بیمه حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف دوره", "این تنظیمات بیمه حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         payroll_service.delete_insurance_config(self._editing_id)
@@ -1206,13 +1206,13 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("پلکان‌هایِ مالیاتِ سالانه")
+        title = QLabel("پلکان‌های مالیات سالانه")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "پلکان‌ها باید پیوسته باشند (سقفِ هر پلکان = کفِ پلکانِ بعدی) و نرخ‌ها صعودی. "
-            "سقفِ آخرین پلکان را خالی بگذارید (بدونِ سقف)."
+            "پلکان‌ها باید پیوسته باشند (سقف هر پلکان = کف پلکان بعدی) و نرخ‌ها صعودی. "
+            "سقف آخرین پلکان را خالی بگذارید (بدون سقف)."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -1228,12 +1228,12 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         add_row_button = QPushButton("➕")
         add_row_button.setObjectName("iconButton")
         add_row_button.setFixedWidth(44)
-        add_row_button.setToolTip("افزودنِ پلکان")
+        add_row_button.setToolTip("افزودن پلکان")
         add_row_button.clicked.connect(lambda: self._add_bracket_row())
         bracket_buttons.addWidget(add_row_button)
         layout.addLayout(bracket_buttons)
 
-        layout.addWidget(QLabel("از تاریخِ اجرا"))
+        layout.addWidget(QLabel("از تاریخ اجرا"))
         self.brackets_from_date_field = JalaliDateEdit()
         layout.addWidget(self.brackets_from_date_field)
 
@@ -1242,7 +1242,7 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         self.brackets_status_label.setWordWrap(True)
         layout.addWidget(self.brackets_status_label)
 
-        layout.addWidget(QLabel("سقفِ معافیتِ سالانه (ریال)"))
+        layout.addWidget(QLabel("سقف معافیت سالانه (ریال)"))
         exemption_row = QHBoxLayout()
         self.exemption_field = _AmountField()
         exemption_row.addWidget(self.exemption_field)
@@ -1265,15 +1265,15 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         save_exemption_button = QPushButton("💾")
         save_exemption_button.setObjectName("primaryIconButton")
         save_exemption_button.setFixedWidth(48)
-        save_exemption_button.setToolTip("ذخیرهٔ سقفِ معافیت")
+        save_exemption_button.setToolTip("ذخیرهٔ سقف معافیت")
         save_exemption_button.clicked.connect(self._save_exemption)
         self.footer_layout.addWidget(save_exemption_button)
         self.footer_layout.addStretch(1)
 
         self.set_field_help([
-            (self.brackets_from_date_field, "تاریخِ شروعِ اجرایِ همین چیدمانِ پلکانی -- پلکانِ قبلی تا این تاریخ معتبر می‌ماند."),
-            (self.exemption_field, "مبلغِ سالانه‌ای که پیش از محاسبهٔ مالیات، از حقوقِ مشمول کسر می‌شود."),
-            (self.exemption_from_date_field, "تاریخِ شروعِ اجرایِ همین سقفِ معافیت."),
+            (self.brackets_from_date_field, "تاریخ شروع اجرای همین چیدمان پلکانی — پلکان قبلی تا این تاریخ معتبر می‌ماند."),
+            (self.exemption_field, "مبلغ سالانه‌ای که پیش از محاسبهٔ مالیات، از حقوق مشمول کسر می‌شود."),
+            (self.exemption_from_date_field, "تاریخ شروع اجرای همین سقف معافیت."),
         ])
 
     def _add_bracket_row(self, from_amount: str = "", to_amount: str = "", rate: str = "") -> None:
@@ -1294,7 +1294,7 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         remove_button = QPushButton("✕")
         remove_button.setObjectName("dangerIconButton")
         remove_button.setFixedWidth(44)
-        remove_button.setToolTip("حذفِ این ردیف")
+        remove_button.setToolTip("حذف این ردیف")
         container = QWidget()
         container.setLayout(row_layout)
         row_layout.addWidget(remove_button)
@@ -1330,11 +1330,11 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
             for b in brackets:
                 to_text = numerals.format_company_amount(b.to_annual_amount) if b.to_annual_amount is not None else "∞"
                 parts.append(f"{numerals.format_company_amount(b.from_annual_amount)} تا {to_text}: {numerals.to_persian_digits(str(b.rate * 100))}٪")
-            self.current_brackets_label.setText("پلکان‌هایِ فعلی — " + " | ".join(parts))
+            self.current_brackets_label.setText("پلکان‌های فعلی — " + " | ".join(parts))
             for b in brackets:
                 self._add_bracket_row(str(b.from_annual_amount), str(b.to_annual_amount) if b.to_annual_amount is not None else "", str(b.rate * 100))
         else:
-            self.current_brackets_label.setText("هیچ پلکانِ مالیاتی‌ای هنوز تعریف نشده است.")
+            self.current_brackets_label.setText("هیچ پلکان مالیاتی‌ای هنوز تعریف نشده است.")
             self._add_bracket_row()
 
         exemption = payroll_service.get_tax_exemption(company_id, as_of)
@@ -1353,7 +1353,7 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
                 rate = decimal.Decimal(numerals.to_ascii_digits(rate_field.text()) or "0") / decimal.Decimal(100)
                 brackets.append((from_amount, to_amount, rate))
         except (decimal.InvalidOperation, ValueError):
-            self.brackets_status_label.setText("مقادیرِ پلکان‌ها را به‌صورتِ عدد وارد کنید.")
+            self.brackets_status_label.setText("مقادیر پلکان‌ها را به‌صورت عدد وارد کنید.")
             return
         try:
             payroll_service.set_tax_brackets(company_id, self.brackets_from_date_field.date(), brackets)
@@ -1384,18 +1384,18 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
 # است، چون آن‌ها تراکنشی‌اند نه تنظیماتی.
 # ---------------------------------------------------------------------
 _OVERTIME_RULE_CODE_LABELS = [
-    ("OVERTIME", "اضافه‌کاریِ عادی"),
+    ("OVERTIME", "اضافه‌کاری عادی"),
     ("NIGHT_SHIFT", "شب‌کاری"),
     ("HOLIDAY_WORK", "تعطیل‌کاری"),
     ("FRIDAY_WORK", "جمعه‌کاری"),
-    ("ROTATING_SHIFT_BONUS", "فوق‌العادهٔ شیفتِ گردشی"),
+    ("ROTATING_SHIFT_BONUS", "فوق‌العادهٔ شیفت گردشی"),
 ]
 _STACKING_MODE_LABELS = [
     ("ADDITIVE", "جمعی (افزایشی)"),
     ("MULTIPLICATIVE", "ضربی"),
     ("MAX_ONLY", "فقط بیشترین"),
 ]
-_OVERTIME_RULE_COLUMNS = ["تا تاریخ", "از تاریخ", "حالتِ ترکیب", "ضریب", "نوع"]
+_OVERTIME_RULE_COLUMNS = ["تا تاریخ", "از تاریخ", "حالت ترکیب", "ضریب", "نوع"]
 
 
 class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -1419,11 +1419,11 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
-            (self.code_combo, "نوعِ اضافه‌کاری که این قانون تعریف می‌کند (مثلاً روزانه، تعطیل، شب‌کاری)."),
-            (self.multiplier_field, "ضریبِ این نوعِ اضافه‌کاری — مثلاً ۱٫۴ برایِ ۴۰٪ اضافه."),
-            (self.stacking_mode_combo, "وقتی چند نوعِ اضافه‌کاری هم‌زمان رخ می‌دهد، ضرایب چگونه ترکیب شوند."),
-            (self.max_hours_policy_field, "کدِ سیاستِ سقفِ ساعتِ اضافه‌کاریِ ماهانه -- اختیاری، برایِ محدودکردنِ سقفِ محاسبه."),
-            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلدِ پایانِ اعتبار غیرِفعال می‌شود -- این قانون تا وضعِ قانونِ تازه‌تر معتبر می‌ماند."),
+            (self.code_combo, "نوع اضافه‌کاری که این قانون تعریف می‌کند (مثلاً روزانه، تعطیل، شب‌کاری)."),
+            (self.multiplier_field, "ضریب این نوع اضافه‌کاری — مثلاً ۱٫۴ برای ۴۰٪ اضافه."),
+            (self.stacking_mode_combo, "وقتی چند نوع اضافه‌کاری هم‌زمان رخ می‌دهد، ضرایب چگونه ترکیب شوند."),
+            (self.max_hours_policy_field, "کد سیاست سقف ساعت اضافه‌کاری ماهانه — اختیاری، برای محدودکردن سقف محاسبه."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این قانون تا وضع قانون تازه‌تر معتبر می‌ماند."),
         ])
         self.register_field_grids("payroll_settings_overtime_rules", [self.form_grid])
 
@@ -1433,7 +1433,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("قوانینِ اضافه‌کاری")
+        title = QLabel("قوانین اضافه‌کاری")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -1453,7 +1453,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("قانونِ تازه")
+        self.form_title = QLabel("قانون تازه")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -1472,7 +1472,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.from_date_field = JalaliDateEdit()
 
         self.to_date_field = JalaliDateEdit()
-        self.to_date_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
+        self.to_date_unbounded_checkbox = QCheckBox("تا اطلاع ثانوی (بدون تاریخ پایان)")
         self.to_date_unbounded_checkbox.setChecked(True)
         self.to_date_unbounded_checkbox.toggled.connect(lambda checked: self.to_date_field.setEnabled(not checked))
         self.to_date_field.setEnabled(False)
@@ -1480,9 +1480,9 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.form_grid = FieldGrid([
             FieldSpec("code", "نوع", self.code_combo, span=1),
             FieldSpec("multiplier", "ضریب", self.multiplier_field, span=1),
-            FieldSpec("stacking_mode", "حالتِ ترکیبِ ضرایب", self.stacking_mode_combo, span=1),
-            FieldSpec("max_hours_policy", "کدِ سیاستِ سقفِ ساعتِ ماهانه (اختیاری)", self.max_hours_policy_field, span=2),
-            FieldSpec("from_date", "از تاریخِ اجرا", self.from_date_field, span=1),
+            FieldSpec("stacking_mode", "حالت ترکیب ضرایب", self.stacking_mode_combo, span=1),
+            FieldSpec("max_hours_policy", "کد سیاست سقف ساعت ماهانه (اختیاری)", self.max_hours_policy_field, span=2),
+            FieldSpec("from_date", "از تاریخ اجرا", self.from_date_field, span=1),
             FieldSpec("to_date", "تا تاریخ", self.to_date_field, span=1),
             FieldSpec("to_date_unbounded", "", self.to_date_unbounded_checkbox, span=2),
         ])
@@ -1544,7 +1544,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, r: overtime_service.OvertimeRuleRow) -> None:
         self._editing_id = r.overtime_rule_id
-        self.form_title.setText("ویرایشِ قانون")
+        self.form_title.setText("ویرایش قانون")
         self.status_label.setText("")
         self.code_combo.setCurrentIndex(self.code_combo.findData(r.code))
         self.code_combo.setEnabled(False)
@@ -1561,7 +1561,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("قانونِ تازه")
+        self.form_title.setText("قانون تازه")
         self.status_label.setText("")
         self.code_combo.setCurrentIndex(0)
         self.code_combo.setEnabled(True)
@@ -1583,7 +1583,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         try:
             multiplier = decimal.Decimal(numerals.to_ascii_digits(self.multiplier_field.text()) or "0")
         except decimal.InvalidOperation:
-            self.status_label.setText("ضریب را به‌صورتِ عدد وارد کنید.")
+            self.status_label.setText("ضریب را به‌صورت عدد وارد کنید.")
             return
         stacking_mode = self.stacking_mode_combo.currentData()
         max_hours_policy_code = self.max_hours_policy_field.text().strip() or None
@@ -1604,7 +1604,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete(self) -> None:
         if self._editing_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ قانون", "این قانونِ اضافه‌کاری حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف قانون", "این قانون اضافه‌کاری حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -1629,10 +1629,10 @@ _TIME_FORMAT_OPTIONS = [
 
 
 class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
-    """الگوهایِ ذخیره‌شدهٔ ایمپورتِ CSV/اکسلِ دستگاه‌هایِ حضوروغیاب — طبقِ
-    خواستهٔ صریح («الگویِ فایلِ csv شرکت‌هایِ دستگاه‌دارِ حضوروغیاب تعریف
-    کنم») تا فرمِ ورود/خروجِ کارکنان (hr_attendance_entries.py) بتواند با
-    فقط انتخابِ مسیرِ فایل، بدونِ تناظرِ دستیِ ستون‌ها، ایمپورت کند."""
+    """الگوهای ذخیره‌شدهٔ ورود CSV/اکسل دستگاه‌های حضور و غیاب — طبق
+    خواستهٔ صریح («الگوی فایل csv شرکت‌های دستگاه‌دار حضور و غیاب تعریف
+    کنم») تا فرم ورود/خروج کارکنان (hr_attendance_entries.py) بتواند با
+    فقط انتخاب مسیر فایل، بدون تناظر دستی ستون‌ها، ورود کند."""
 
     manages_own_scroll = True
 
@@ -1654,13 +1654,13 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.set_field_help([
             (
                 self.define_columns_button,
-                "یک فایلِ نمونهٔ خروجیِ دستگاه (CSV یا اکسل) را انتخاب کنید و ستون‌هایش را یک‌بار مشخص کنید — "
-                "این تناظر با همین الگو ذخیره می‌شود تا دفعاتِ بعد تکرار نشود.",
+                "یک فایل نمونهٔ خروجی دستگاه (CSV یا اکسل) را انتخاب کنید و ستون‌هایش را یک‌بار مشخص کنید — "
+                "این تناظر با همین الگو ذخیره می‌شود تا دفعات بعد تکرار نشود.",
             ),
-            (self.name_field, "نامِ این الگو -- معمولاً نامِ شرکتِ سازندهٔ دستگاهِ حضوروغیاب."),
-            (self.header_row_checkbox, "اگر روشن باشد، اولین ردیفِ فایلِ ایمپورت‌شده به‌عنوانِ دیتا خوانده نمی‌شود (فقط عنوانِ ستون‌هاست)."),
-            (self.date_format_combo, "قالبِ نوشته‌شدنِ تاریخ در فایلِ خروجیِ دستگاه."),
-            (self.time_format_combo, "قالبِ نوشته‌شدنِ ساعت در فایلِ خروجیِ دستگاه."),
+            (self.name_field, "نام این الگو — معمولاً نام شرکت سازندهٔ دستگاه حضور و غیاب."),
+            (self.header_row_checkbox, "اگر روشن باشد، اولین ردیف فایل واردشده به‌عنوان دیتا خوانده نمی‌شود (فقط عنوان ستون‌هاست)."),
+            (self.date_format_combo, "قالب نوشته‌شدن تاریخ در فایل خروجی دستگاه."),
+            (self.time_format_combo, "قالب نوشته‌شدن ساعت در فایل خروجی دستگاه."),
         ])
         self.register_field_grids("payroll_settings_attendance_templates", [self.form_grid])
 
@@ -1670,20 +1670,20 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("الگوهایِ ایمپورتِ حضوروغیاب")
+        title = QLabel("الگوهای ورود حضور و غیاب")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "هر الگو، تناظرِ ستون‌هایِ فایلِ خروجیِ یک شرکتِ سازندهٔ دستگاهِ حضوروغیاب را ذخیره می‌کند — "
-            "برایِ ایمپورتِ بعدی، فقط کافی‌ست الگو و مسیرِ فایل انتخاب شود."
+            "هر الگو، تناظر ستون‌های فایل خروجی یک شرکت سازندهٔ دستگاه حضور و غیاب را ذخیره می‌کند — "
+            "برای ورود بعدی، فقط کافی‌ست الگو و مسیر فایل انتخاب شود."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["فرمتِ ساعت/تاریخ", "نامِ الگو"])
+        self.table.setHorizontalHeaderLabels(["قالب ساعت/تاریخ", "نام الگو"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -1698,13 +1698,13 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("الگویِ تازه")
+        self.form_title = QLabel("الگوی تازه")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
         self.name_field = QLineEdit()
 
-        self.header_row_checkbox = QCheckBox("ردیفِ اولِ فایل، عنوانِ ستون‌هاست")
+        self.header_row_checkbox = QCheckBox("ردیف اول فایل، عنوان ستون‌هاست")
         self.header_row_checkbox.setChecked(True)
 
         self.date_format_combo = QComboBox()
@@ -1716,17 +1716,17 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.time_format_combo.addItem(label, value)
 
         self.form_grid = FieldGrid([
-            FieldSpec("name", "نامِ الگو (مثلاً نامِ شرکتِ سازندهٔ دستگاه)", self.name_field, span=2),
+            FieldSpec("name", "نام الگو (مثلاً نام شرکت سازندهٔ دستگاه)", self.name_field, span=2),
             FieldSpec("header_row", "", self.header_row_checkbox, span=1),
-            FieldSpec("date_format", "فرمتِ تاریخ در فایل", self.date_format_combo, span=2),
-            FieldSpec("time_format", "فرمتِ ساعت در فایل", self.time_format_combo, span=1),
+            FieldSpec("date_format", "قالب تاریخ در فایل", self.date_format_combo, span=2),
+            FieldSpec("time_format", "قالب ساعت در فایل", self.time_format_combo, span=1),
         ])
         layout.addWidget(self.form_grid)
 
         self.define_columns_button = QPushButton("➕")
         self.define_columns_button.setObjectName("iconButton")
         self.define_columns_button.setFixedWidth(44)
-        self.define_columns_button.setToolTip("تعریفِ ستون‌ها از رویِ فایلِ نمونه…")
+        self.define_columns_button.setToolTip("تعریف ستون‌ها از روی فایل نمونه…")
         self.define_columns_button.clicked.connect(self._on_define_columns)
         layout.addWidget(self.define_columns_button)
 
@@ -1784,7 +1784,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _load_into_form(self, t: attendance_service.AttendanceImportTemplateRow) -> None:
         self._editing_id = t.template_id
         self._pending_mapping = dict(t.column_mapping)
-        self.form_title.setText("ویرایشِ الگو")
+        self.form_title.setText("ویرایش الگو")
         self.status_label.setText("")
         self.name_field.setText(t.name)
         self.header_row_checkbox.setChecked(t.has_header_row)
@@ -1792,13 +1792,13 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.date_format_combo.setCurrentIndex(index if index >= 0 else 0)
         index = self.time_format_combo.findData(t.time_format)
         self.time_format_combo.setCurrentIndex(index if index >= 0 else 0)
-        self.mapping_status_label.setText("ستون‌هایِ این الگو قبلاً مشخص شده‌اند؛ برایِ تغییر، دوباره تعریف کنید.")
+        self.mapping_status_label.setText("ستون‌های این الگو قبلاً مشخص شده‌اند؛ برای تغییر، دوباره تعریف کنید.")
         self.delete_button.setVisible(True)
 
     def _reset_form(self) -> None:
         self._editing_id = None
         self._pending_mapping = None
-        self.form_title.setText("الگویِ تازه")
+        self.form_title.setText("الگوی تازه")
         self.status_label.setText("")
         self.name_field.clear()
         self.header_row_checkbox.setChecked(True)
@@ -1810,7 +1810,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _on_define_columns(self) -> None:
         path, _filter = QFileDialog.getOpenFileName(
-            self, "انتخابِ فایلِ نمونهٔ حضوروغیاب", "", "Excel/CSV Files (*.xlsx *.csv)"
+            self, "انتخاب فایل نمونهٔ حضور و غیاب", "", "Excel/CSV Files (*.xlsx *.csv)"
         )
         if not path:
             return
@@ -1819,26 +1819,26 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         dialog = ExcelColumnMappingDialog(
             _IMPORT_TARGET_FIELDS, _IMPORT_GUESS_KEYWORDS, rows[0], self,
-            title="تعریفِ ستون‌هایِ الگو",
+            title="تعریف ستون‌های الگو",
         )
         if dialog.exec() != QDialog.Accepted:
             return
         mapping = dialog.mapping()
         if mapping.get("worked_hours") is None and (mapping.get("clock_in") is None or mapping.get("clock_out") is None):
             QMessageBox.warning(
-                self, "ناقص", "یا «مجموعِ ساعتِ کارکرد» را مشخص کنید، یا هر دویِ «ساعتِ ورود» و «ساعتِ خروج» را."
+                self, "ناقص", "یا «مجموع ساعت کارکرد» را مشخص کنید، یا هر دوی «ساعت ورود» و «ساعت خروج» را."
             )
             return
         self._pending_mapping = mapping
         self.header_row_checkbox.setChecked(dialog.skip_header_row())
-        self.mapping_status_label.setText("ستون‌ها از رویِ فایلِ نمونه مشخص شدند — حالا نام را وارد و ذخیره کنید.")
+        self.mapping_status_label.setText("ستون‌ها از روی فایل نمونه مشخص شدند — حالا نام را وارد و ذخیره کنید.")
 
     def _save(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
         if self._pending_mapping is None:
-            self.status_label.setText("اول ستون‌ها را از رویِ یک فایلِ نمونه تعریف کنید.")
+            self.status_label.setText("اول ستون‌ها را از روی یک فایل نمونه تعریف کنید.")
             return
         name = self.name_field.text().strip()
         date_format = self.date_format_combo.currentData()
@@ -1861,7 +1861,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete(self) -> None:
         if self._editing_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ الگو", "این الگویِ ایمپورت حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف الگو", "این الگوی اطلاعات واردشده حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         attendance_service.delete_attendance_import_template(self._editing_id)

@@ -1,6 +1,6 @@
-"""پیش‌بینیِ فروش -- طبقِ ادامهٔ فهرستِ درخواستی، همان اصلِ رعایت‌شده در
-sales_assistant.py («بدونِ هیچ مدلِ یادگیریِ ماشین، فقط آمارِ ساده‌یِ
-توصیفی»): بر اساسِ روندِ خطیِ فروشِ خالصِ N دورهٔ اخیر، فروشِ دورهٔ بعدی
+"""پیش‌بینی فروش — طبق ادامهٔ فهرست درخواستی، همان اصل رعایت‌شده در
+sales_assistant.py («بدون هیچ مدل یادگیری ماشین، فقط آمار سادهٔ
+توصیفی»): بر اساس روند خطی فروش خالص N دورهٔ اخیر، فروش دورهٔ بعدی
 تخمین زده می‌شود."""
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ _GRANULARITY_OPTIONS = [("MONTHLY", "ماهانه"), ("QUARTERLY", "فصلی")]
 
 class SalesForecastScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("پیش‌بینیِ فروش")
+        super().__init__("پیش‌بینی فروش")
 
-        hint = QLabel("«از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایانِ آخرین دورهٔ واقعی است.")
+        hint = QLabel("«از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایان آخرین دورهٔ واقعی است.")
         hint.setObjectName("sectionHint")
         self.layout().insertWidget(1, hint)
 
@@ -33,17 +33,17 @@ class SalesForecastScreen(ReportScreenBase):
             self.granularity_combo.addItem(label, value)
         self.extra_filter_row.addWidget(self.granularity_combo)
 
-        self.extra_filter_row.addWidget(QLabel("تعدادِ دورهٔ واقعی:"))
+        self.extra_filter_row.addWidget(QLabel("تعداد دورهٔ واقعی:"))
         self.period_count_spin = QSpinBox()
         self.period_count_spin.setRange(3, 24)
         self.period_count_spin.setValue(6)
         self.extra_filter_row.addWidget(self.period_count_spin)
 
         self.add_field_help([
-            (self.granularity_combo, "طولِ هر دوره: ماهانه یا فصلی."),
+            (self.granularity_combo, "طول هر دوره: ماهانه یا فصلی."),
             (
                 self.period_count_spin,
-                "چند دورهٔ اخیر مبنایِ محاسبهٔ روند قرار بگیرد -- هرچه بیشتر، روند پایدارتر ولی کندتر به تغییرِ اخیر واکنش نشان می‌دهد.",
+                "چند دورهٔ اخیر مبنای محاسبهٔ روند قرار بگیرد — هرچه بیشتر، روند پایدارتر ولی کندتر به تغییر اخیر واکنش نشان می‌دهد.",
             ),
         ])
         self._currency_decimal_places = 0
@@ -68,7 +68,7 @@ class SalesForecastScreen(ReportScreenBase):
         periods = reports_service.generate_jalali_periods(date_to, granularity, count)
         result = documents_service.compute_sales_trend(company_id, periods)
 
-        headers = ["دوره", "فروشِ خالص"]
+        headers = ["دوره", "فروش خالص"]
         table_rows = [[label, self._fmt(amount)] for label, amount in zip(result.period_labels, result.amounts)]
         self._all_row_bold = [False] * len(table_rows)
         if result.forecast_next is not None:

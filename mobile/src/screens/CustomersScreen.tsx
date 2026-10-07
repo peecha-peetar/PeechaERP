@@ -37,7 +37,7 @@ export function CustomersScreen({ apiClient, onOpenCustomer, title, onAddCustome
       const rows = await apiClient.listCustomers(q || undefined);
       setCustomers(rows);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "دریافتِ فهرستِ مشتریان ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "دریافت فهرست مشتریان ناموفق بود.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -54,9 +54,9 @@ export function CustomersScreen({ apiClient, onOpenCustomer, title, onAddCustome
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
       {title ? <Text style={[typography.h2, { color: colors.textPrimary }]}>{title}</Text> : null}
       {onAddCustomer ? (
-        <Button label="ثبتِ مشتریِ جدید" onPress={onAddCustomer} variant="secondary" testID="add-customer-button" />
+        <Button label="ثبت مشتری جدید" onPress={onAddCustomer} variant="secondary" testID="add-customer-button" />
       ) : null}
-      <SearchBar value={query} onChangeText={setQuery} placeholder="جستجویِ مشتری با نام یا کد..." />
+      <SearchBar value={query} onChangeText={setQuery} placeholder="جستجوی مشتری با نام یا کد..." />
       {loading ? (
         <SkeletonList count={5} />
       ) : error ? (
@@ -70,7 +70,7 @@ export function CustomersScreen({ apiClient, onOpenCustomer, title, onAddCustome
           renderItem={({ item }) => (
             <CustomerCard code={item.code} name={item.name} onPress={() => onOpenCustomer(item.detail_account_id)} />
           )}
-          ListEmptyComponent={<EmptyState title="مشتری‌ای پیدا نشد" description="کلیدواژه‌یِ دیگری امتحان کنید." />}
+          ListEmptyComponent={<EmptyState title="مشتری‌ای پیدا نشد" description="کلیدواژهٔ دیگری امتحان کنید." />}
         />
       )}
     </View>

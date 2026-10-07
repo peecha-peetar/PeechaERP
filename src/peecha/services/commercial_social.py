@@ -1,9 +1,9 @@
-"""پستِ خودکار در تلگرام/بله + تقویمِ محتوایی (طبقِ درخواستِ صریحِ کاربر).
+"""پست خودکار در تلگرام/بله + تقویم محتوایی (طبق درخواست صریح کاربر).
 
-بله (tapi.bale.ir) دقیقاً همان Bot APIِ استانداردِ تلگرام را پیاده
-می‌کند -- پس این‌جا با یک platform_code واحد به هردو سرویس می‌شود.
-معماری هم‌الگو با commercial_ecommerce.py است: توکنِ بات رمزنگاری‌شده
-ذخیره می‌شود، و run_due_posts (تیکِ دوره‌ایِ شل) دقیقاً هم‌شکلِ
+بله (tapi.bale.ir) دقیقاً همان Bot API استاندارد تلگرام را پیاده
+می‌کند — پس این‌جا با یک platform_code واحد به هردو سرویس می‌شود.
+معماری هم‌الگو با commercial_ecommerce.py است: توکن بات رمزنگاری‌شده
+ذخیره می‌شود، و run_due_posts (تیک دوره‌ای شل) دقیقاً هم‌شکل
 run_due_auto_syncs عمل می‌کند."""
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ def list_connections(company_id: int) -> list[SocialConnection]:
 
 def create_connection(company_id: int, platform_code: str, display_name: str, chat_id: str, bot_token: str) -> int:
     if platform_code not in _SUPPORTED_PLATFORMS:
-        raise ValueError("پلتفرمِ نامعتبر است.")
+        raise ValueError("پلتفرم نامعتبر است.")
     if not display_name.strip() or not chat_id.strip() or not bot_token.strip():
-        raise ValueError("نام، شناسه‌یِ چت، و توکنِ بات الزامی‌اند.")
+        raise ValueError("نام، شناسهٔ چت، و توکن بات الزامی‌اند.")
     from peecha.services import ecommerce_credentials
 
     with new_session() as session:
@@ -64,7 +64,7 @@ def _decrypt_bot_token(connection: SocialConnection) -> str:
     creds = ecommerce_credentials.decrypt_credentials(connection.bot_token_encrypted)
     bot_token = creds.get("bot_token", "")
     if not bot_token:
-        raise ValueError("این اتصال توکنِ باتِ معتبری ندارد.")
+        raise ValueError("این اتصال توکن بات معتبری ندارد.")
     return bot_token
 
 
@@ -91,7 +91,7 @@ def send_message_now(connection_id: int, text: str) -> None:
 # ---------------------------------------------------------------------
 def create_post(company_id: int, connection_id: int, title: str | None, body_text: str, scheduled_at: datetime.datetime) -> int:
     if not body_text.strip():
-        raise ValueError("متنِ پست نمی‌تواند خالی باشد.")
+        raise ValueError("متن پست نمی‌تواند خالی باشد.")
     with new_session() as session:
         row = ContentCalendarPost(
             company_id=company_id, connection_id=connection_id, title=(title or "").strip() or None,
@@ -119,15 +119,15 @@ def cancel_post(post_id: int) -> None:
         if row is None:
             raise ValueError("پست نامعتبر است.")
         if row.status_code != "SCHEDULED":
-            raise ValueError("فقط پستِ زمان‌بندی‌شده قابلِ‌لغو است.")
+            raise ValueError("فقط پست زمان‌بندی‌شده قابل‌لغو است.")
         row.status_code = "CANCELED"
         session.commit()
 
 
 def _record_connection_health(connection_id: int, error_message: str | None) -> None:
-    """طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): هم‌الگو با
-    commercial_ecommerce._record_connection_health -- شکستِ پیاپیِ
-    ارسالِ پستِ خودکار قبل از این کاملاً بی‌صدا بود."""
+    """طبق ادامهٔ اولویت‌بندی («نگهبان اتصال»): هم‌الگو با
+    commercial_ecommerce._record_connection_health — شکست پیاپی
+    ارسال پست خودکار قبل از این کاملاً بی‌صدا بود."""
     with new_session() as session:
         row = session.get(SocialConnection, connection_id)
         if row is None:
@@ -143,9 +143,9 @@ def _record_connection_health(connection_id: int, error_message: str | None) -> 
 
 
 def send_post_now(post_id: int) -> None:
-    """طبقِ رفعِ باگِ واقعیِ بالقوه (هم‌الگو با انضباطِ سینکِ فروشِ
+    """طبق رفع باگ واقعی بالقوه (هم‌الگو با انضباط همگام‌سازی فروش
     اینترنتی): وضعیت همیشه صریحاً به SENT یا FAILED به‌روزرسانی می‌شود --
-    نه اینکه در حالتِ نامشخص باقی بماند."""
+    نه اینکه در حالت نامشخص باقی بماند."""
     with new_session() as session:
         row = session.get(ContentCalendarPost, post_id)
         if row is None:
@@ -190,9 +190,9 @@ class PostSendResult:
 
 
 def run_due_posts(company_id: int, now: datetime.datetime | None = None) -> list[PostSendResult]:
-    """طبقِ درخواستِ صریح («تقویمِ محتوایی» + «پستِ خودکار»): تیکِ دوره‌ایِ
-    شل (هم‌الگو با run_due_auto_syncs) این تابع را صدا می‌زند -- شکستِ
-    ارسالِ یک پست نباید بقیه را متوقف کند."""
+    """طبق درخواست صریح («تقویم محتوایی» + «پست خودکار»): تیک دوره‌ای
+    شل (هم‌الگو با run_due_auto_syncs) این تابع را صدا می‌زند — شکست
+    ارسال یک پست نباید بقیه را متوقف کند."""
     results: list[PostSendResult] = []
     for post in list_due_posts(company_id, now):
         try:
@@ -208,7 +208,7 @@ def run_due_posts(company_id: int, now: datetime.datetime | None = None) -> list
 # ---------------------------------------------------------------------
 def set_ai_api_key(company_id: int, api_key: str) -> None:
     if not api_key.strip():
-        raise ValueError("کلیدِ API نمی‌تواند خالی باشد.")
+        raise ValueError("کلید API نمی‌تواند خالی باشد.")
     from peecha.services import ecommerce_credentials
 
     with new_session() as session:
@@ -227,21 +227,21 @@ def has_ai_api_key(company_id: int) -> bool:
 
 
 def generate_post_text(company_id: int, topic: str) -> str:
-    """طبقِ درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»): از رویِ
-    یک موضوعِ کوتاه (مثلاً عنوانِ پست)، متنِ کاملِ پست را با Gemini
-    می‌سازد -- کاربر می‌تواند نتیجه را قبل از ارسال ویرایش کند."""
+    """طبق درخواست صریح («تولید محتوای خودکار با هوش مصنوعی»): از روی
+    یک موضوع کوتاه (مثلاً عنوان پست)، متن کامل پست را با Gemini
+    می‌سازد — کاربر می‌تواند نتیجه را قبل از ارسال ویرایش کند."""
     if not topic.strip():
-        raise ValueError("برایِ تولیدِ خودکار، ابتدا موضوع/عنوانِ پست را وارد کنید.")
+        raise ValueError("برای تولید خودکار، ابتدا موضوع/عنوان پست را وارد کنید.")
     from peecha.integrations.ai import gemini_client
     from peecha.services import ecommerce_credentials
 
     with new_session() as session:
         row = session.get(AiContentSettings, company_id)
     if row is None or not row.api_key_encrypted:
-        raise ValueError("ابتدا کلیدِ APIِ Gemini را در تنظیمات وارد کنید.")
+        raise ValueError("ابتدا کلید API Gemini را در تنظیمات وارد کنید.")
     api_key = ecommerce_credentials.decrypt_credentials(row.api_key_encrypted).get("api_key", "")
     prompt = (
-        f"یک متنِ کوتاه، جذاب، و تبلیغاتی به زبانِ فارسی برایِ پستِ شبکه‌هایِ اجتماعی "
-        f"(تلگرام/بله) درباره‌یِ «{topic.strip()}» بنویس. حداکثر سه جمله، بدونِ هشتگ."
+        f"یک متن کوتاه، جذاب، و تبلیغاتی به زبان فارسی برای پست شبکه‌های اجتماعی "
+        f"(تلگرام/بله) دربارهٔ «{topic.strip()}» بنویس. حداکثر سه جمله، بدون هشتگ."
     )
     return gemini_client.generate_text(api_key, prompt)

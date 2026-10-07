@@ -1,7 +1,7 @@
-"""کدینگِ حساب‌ها — معادلِ Qt برایِ chart_of_accounts.py/.kv در Kivy.
+"""کدینگ حساب‌ها — معادل Qt برای chart_of_accounts.py/.kv در Kivy.
 
-فهرست (چپ) + فرمِ ساخت/ویرایش (راست، طبقِ ترتیبِ RTLِ Qt، «راست» یعنی
-اولین‌اعلام‌شده در QHBoxLayout, بر خلافِ Kivy که نیاز به ترتیبِ معکوس
+فهرست (چپ) + فرم ساخت/ویرایش (راست، طبق ترتیب RTL Qt، «راست» یعنی
+اولین‌اعلام‌شده در QHBoxLayout, بر خلاف Kivy که نیاز به ترتیب معکوس
 داشت)."""
 
 from __future__ import annotations
@@ -44,27 +44,27 @@ from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, 
 # ردیف‌هایِ سطحِ گروه (بدونِ خط‌تیره در کد) لازم‌اند — بقیه از والدشان
 # به‌ارث می‌برند (دقیقاً هم‌رفتار با فرمِ دستی).
 _COA_IMPORT_TARGET_FIELDS: list[tuple[str, str, bool]] = [
-    ("full_code", "کدِ کاملِ حساب (مثلِ 1-01-001)", True),
+    ("full_code", "کد کامل حساب (مثل 1-01-001)", True),
     ("name", "نام", True),
-    ("nature_code", "ماهیت (فقط سطحِ گروه: بدهکار/بستانکار/دوطرفه)", False),
-    ("category_code", "دسته (فقط سطحِ گروه)", False),
-    ("account_type_code", "نوعِ حساب (فقط سطحِ گروه)", False),
-    ("is_postable", "قابلِ ثبتِ سند؟ (بله/خیر)", False),
+    ("nature_code", "ماهیت (فقط سطح گروه: بدهکار/بستانکار/دوطرفه)", False),
+    ("category_code", "دسته (فقط سطح گروه)", False),
+    ("account_type_code", "نوع حساب (فقط سطح گروه)", False),
+    ("is_postable", "قابل ثبت سند؟ (بله/خیر)", False),
 ]
 _COA_IMPORT_GUESS_KEYWORDS: dict[str, list[str]] = {
     "full_code": ["کد کامل", "کدحساب", "کد حساب", "کد"],
     "name": ["نام"],
     "nature_code": ["ماهیت"],
     "category_code": ["دسته"],
-    "account_type_code": ["نوع حساب", "نوعِ حساب"],
-    "is_postable": ["قابل ثبت", "قابلِ ثبت"],
+    "account_type_code": ["نوع حساب", "نوع حساب"],
+    "is_postable": ["قابل ثبت", "قابل ثبت"],
 }
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
     ("ASSET", "دارایی"), ("LIABILITY", "بدهی"), ("EQUITY", "حقوق صاحبان سهام"),
-    ("REVENUE", "درآمد"), ("COGS", "بهایِ تمام‌شده"), ("EXPENSE", "هزینه"),
-    ("STATISTICAL", "حساب‌هایِ آماری"),
+    ("REVENUE", "درآمد"), ("COGS", "بهای تمام‌شده"), ("EXPENSE", "هزینه"),
+    ("STATISTICAL", "حساب‌های آماری"),
 ]
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت"), ("STATISTICAL", "انتظامی")]
 # طبقِ درخواستِ صریح: برخلافِ سه فیلدِ بالا، این یکی اختیاری است — گزینه‌ی
@@ -72,33 +72,33 @@ _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY",
 # (مثلِ خودِ صندوق/بانک، یا حساب‌هایِ درآمد/هزینه که در سودِ خالص از قبل
 # لحاظ شده‌اند).
 _CASH_FLOW_SECTION_OPTIONS = [
-    (None, "— بدونِ طبقه‌بندی —"),
+    (None, "— بدون طبقه‌بندی —"),
     ("OPERATING", "عملیاتی"),
     ("INVESTING", "سرمایه‌گذاری"),
-    ("FINANCING", "تامینِ مالی"),
+    ("FINANCING", "تامین مالی"),
 ]
 # طبقِ همان الگویِ بالا: اختیاری — فقط حساب‌هایِ دارایی/بدهی که باید در
 # نسبتِ جاری/آنی (گزارشِ نسبت‌هایِ مالی) دیده شوند طبقه‌بندی می‌شوند.
 # CURRENT_INVENTORY زیرمجموعه‌یِ دارایی‌هایِ جاری است ولی از دارایی‌هایِ
 # آنی (Quick Assets) کم می‌شود.
 _LIQUIDITY_CLASS_OPTIONS = [
-    (None, "— بدونِ طبقه‌بندی —"),
+    (None, "— بدون طبقه‌بندی —"),
     ("CURRENT", "جاری"),
     ("CURRENT_INVENTORY", "جاری (موجودی)"),
-    ("NON_CURRENT", "غیرِجاری"),
+    ("NON_CURRENT", "غیرجاری"),
 ]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _LEVEL_COLORS = {1: theme.LEVEL_GROUP, 2: theme.LEVEL_KOL, 3: theme.LEVEL_MOEIN}
 # طبقِ درخواستِ صریح: برچسبِ فیلدهایِ کد/نام باید متناسب با سطحِ حسابِ
 # درحالِ‌ساخت (بر اساسِ والدِ انتخاب‌شده) تغییر کند، نه همیشه «کدِ بخش»/«نام».
-_SEGMENT_CODE_LABELS = {1: "کدِ گروه", 2: "کدِ کل", 3: "کدِ معین"}
-_ACCOUNT_NAME_LABELS = {1: "نامِ گروه", 2: "نامِ حسابِ کل", 3: "نامِ حسابِ معین"}
+_SEGMENT_CODE_LABELS = {1: "کد گروه", 2: "کد کل", 3: "کد معین"}
+_ACCOUNT_NAME_LABELS = {1: "نام گروه", 2: "نام حساب کل", 3: "نام حساب معین"}
 
 # طبقِ گزارشِ صریح: ترتیبِ نمایشِ ستون‌ها راست‌چین نبود — چون QTableWidget
 # با راست‌چین بودنِ برنامه ترتیبِ افزودنِ ستون‌ها را آینه می‌کند (اولین
 # ستون در راست‌ترین جا می‌نشیند)، «کدِ کامل» (مهم‌ترین/اولین ستون از نظرِ
 # خواندن) باید *اول* در این فهرست بیاید، نه آخر.
-_COLUMNS = ["کدِ کامل", "نام", "سطح", "قابلِ ثبت", "فعال؟"]
+_COLUMNS = ["کد کامل", "نام", "سطح", "قابل ثبت", "فعال؟"]
 
 
 def _fill_combo(combo: QComboBox, options: list[tuple[str, str]]) -> None:
@@ -134,7 +134,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         form_panel = self._build_form_panel()
         outer.addWidget(form_panel, stretch=2)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="حسابِ جدید")
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="حساب جدید")
 
     # --- فهرست --------------------------------------------------------------
     def _build_list_panel(self) -> QWidget:
@@ -145,7 +145,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setSpacing(12)
 
         header_row = QHBoxLayout()
-        title = QLabel("کدینگِ حساب‌ها")
+        title = QLabel("کدینگ حساب‌ها")
         title.setObjectName("pageTitle")
         header_row.addWidget(title)
         header_row.addStretch(1)
@@ -161,18 +161,18 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
         header_row.addWidget(pdf_button)
-        excel_export_button = QPushButton("📊 خروجیِ اکسل")
+        excel_export_button = QPushButton("📊 خروجی اکسل")
         excel_export_button.setObjectName("flatButton")
         excel_export_button.clicked.connect(self._on_export_excel)
         header_row.addWidget(excel_export_button)
-        import_excel_button = QPushButton("📥 ایمپورت از اکسل")
+        import_excel_button = QPushButton("📥 ورود از اکسل")
         import_excel_button.setObjectName("flatButton")
         import_excel_button.clicked.connect(self._on_import_excel)
         header_row.addWidget(import_excel_button)
         layout.addLayout(header_row)
 
         self.search_field = QLineEdit()
-        self.search_field.setPlaceholderText("جستجو در کد یا نامِ حساب")
+        self.search_field.setPlaceholderText("جستجو در کد یا نام حساب")
         self.search_field.textChanged.connect(self._apply_filter)
         layout.addWidget(self.search_field)
 
@@ -209,7 +209,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("حسابِ جدید")
+        self.form_title = QLabel("حساب جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -223,7 +223,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # QLabelِ واقعیِ خودشان را دارند (نه متنِ ثابتِ FieldSpec.label) و
         # با یک wrapperِ کوچک به‌جایِ برچسبِ خودکارِ FieldGrid قرار
         # می‌گیرند — بقیه‌یِ منطقِ setText/setEnabled دست‌نخورده می‌ماند.
-        self.segment_code_label = QLabel("کدِ گروه")
+        self.segment_code_label = QLabel("کد گروه")
         self.segment_code_field = QLineEdit()
         segment_code_container = QWidget()
         segment_code_layout = QVBoxLayout(segment_code_container)
@@ -232,7 +232,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         segment_code_layout.addWidget(self.segment_code_label)
         segment_code_layout.addWidget(self.segment_code_field)
 
-        self.name_label = QLabel("نامِ گروه")
+        self.name_label = QLabel("نام گروه")
         self.name_field = QLineEdit()
         name_container = QWidget()
         name_layout = QVBoxLayout(name_container)
@@ -256,7 +256,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.liquidity_class_combo = QComboBox()
         _fill_combo(self.liquidity_class_combo, _LIQUIDITY_CLASS_OPTIONS)
 
-        self.is_postable_checkbox = QCheckBox("قابلِ ثبتِ سند")
+        self.is_postable_checkbox = QCheckBox("قابل ثبت سند")
         self.is_postable_checkbox.toggled.connect(self._update_dimension_checklists_visibility)
 
         self.form_grid = FieldGrid([
@@ -265,9 +265,9 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("name", "", name_container, span=3),
             FieldSpec("nature", "ماهیت", self.nature_combo, span=1),
             FieldSpec("category", "دسته", self.category_combo, span=1),
-            FieldSpec("account_type", "نوعِ حساب", self.account_type_combo, span=2),
-            FieldSpec("cash_flow_section", "بخشِ گردشِ وجوهِ نقد", self.cash_flow_section_combo, span=2),
-            FieldSpec("liquidity_class", "طبقه‌یِ نقدینگی", self.liquidity_class_combo, span=2),
+            FieldSpec("account_type", "نوع حساب", self.account_type_combo, span=2),
+            FieldSpec("cash_flow_section", "بخش گردش وجوه نقد", self.cash_flow_section_combo, span=2),
+            FieldSpec("liquidity_class", "طبقهٔ نقدینگی", self.liquidity_class_combo, span=2),
             FieldSpec("is_postable", "", self.is_postable_checkbox, span=3),
         ])
         layout.addWidget(self.form_grid)
@@ -289,13 +289,13 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # و به‌جایِ اسکرولِ داخلیِ یک کادرِ کوچک، ارتفاعش با تعدادِ آیتم‌ها
         # هم‌اندازه می‌شود (_fit_list_height) تا معمولاً نیازی به اسکرول
         # نباشد؛ اگر خیلی زیاد شد، خودِ اسکرولِ بیرونیِ کلِ فرم کار می‌کند.
-        self.detail_types_label = QLabel("تفصیلی‌هایِ الزامی برایِ این معین")
+        self.detail_types_label = QLabel("تفصیلی‌های الزامی برای این معین")
         self.detail_types_label.setObjectName("sectionHint")
         layout.addWidget(self.detail_types_label)
         self.detail_types_list = QListWidget()
         layout.addWidget(self.detail_types_list)
 
-        self.cost_project_label = QLabel("مرکزِ هزینه و پروژه (ستونِ مجزا در سند)")
+        self.cost_project_label = QLabel("مرکز هزینه و پروژه (ستون مجزا در سند)")
         self.cost_project_label.setObjectName("sectionHint")
         layout.addWidget(self.cost_project_label)
         self.cost_project_list = QListWidget()
@@ -308,51 +308,51 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addStretch(1)
 
         self.set_field_help([
-            (self.search_field, "جست‌وجو در کد یا نامِ حساب برایِ فیلترکردنِ درختِ حساب‌ها."),
+            (self.search_field, "جست‌وجو در کد یا نام حساب برای فیلترکردن درخت حساب‌ها."),
             (
                 self.parent_combo,
-                "اگر این حساب زیرمجموعه‌یِ یک حسابِ دیگر است، والدش را این‌جا انتخاب کنید. "
-                "بدونِ والد یعنی «گروه» است، یعنی سطحِ ۱. "
-                "ماهیت، دسته، نوعِ حساب، بخشِ وجوهِ نقد و طبقه‌یِ نقدینگی از والد به‌ارث می‌رسند.",
+                "اگر این حساب زیرمجموعهٔ یک حساب دیگر است، والدش را این‌جا انتخاب کنید. "
+                "بدون والد یعنی «گروه» است، یعنی سطح ۱. "
+                "ماهیت، دسته، نوع حساب، بخش وجوه نقد و طبقهٔ نقدینگی از والد به‌ارث می‌رسند.",
             ),
             (
                 self.segment_code_field,
-                "فقط کدِ همین سطح را بنویسید، نه کدِ کامل. کدِ کامل خودش از کدِ والد + این کد ساخته می‌شود. "
-                "مثلاً اگر گروه «۱» باشد و این کل «۰۱» بگیرد، کدِ کاملش «۱-۰۱» می‌شود.",
+                "فقط کد همین سطح را بنویسید، نه کد کامل. کد کامل خودش از کد والد + این کد ساخته می‌شود. "
+                "مثلاً اگر گروه «۱» باشد و این کل «۰۱» بگیرد، کد کاملش «۱-۰۱» می‌شود.",
             ),
-            (self.name_field, "نامی که در فهرستِ حساب‌ها، سندها و گزارش‌ها نشان داده می‌شود."),
+            (self.name_field, "نامی که در فهرست حساب‌ها، سندها و گزارش‌ها نشان داده می‌شود."),
             (
                 self.nature_combo,
                 "ماهیت یعنی این حساب معمولاً با بدهکار زیاد می‌شود یا بستانکار. "
-                "«بدهکار» برایِ دارایی‌ها و هزینه‌هاست. «بستانکار» برایِ بدهی‌ها، سرمایه و درآمد است. "
-                "«دوطرفه» برایِ حساب‌هایی مثلِ صندوق و بانک است که هردو طرف زیاد می‌شوند.",
+                "«بدهکار» برای دارایی‌ها و هزینه‌هاست. «بستانکار» برای بدهی‌ها، سرمایه و درآمد است. "
+                "«دوطرفه» برای حساب‌هایی مثل صندوق و بانک است که هردو طرف زیاد می‌شوند.",
             ),
             (
                 self.category_combo,
-                "این حساب به کدام دسته‌یِ اصلیِ حسابداری تعلق دارد؟ دارایی، بدهی، حقوقِ صاحبانِ سهام، درآمد یا هزینه. "
-                "همین انتخاب مشخص می‌کند حساب در ترازنامه بیاید یا در صورتِ سود و زیان.",
+                "این حساب به کدام دستهٔ اصلی حسابداری تعلق دارد؟ دارایی، بدهی، حقوق صاحبان سهام، درآمد یا هزینه. "
+                "همین انتخاب مشخص می‌کند حساب در ترازنامه بیاید یا در صورت سود و زیان.",
             ),
             (
                 self.account_type_combo,
-                "«ترازنامه‌ای» یعنی مانده‌اش تا آخرِ عمرِ شرکت می‌ماند، مثلِ دارایی و بدهی. در ترازنامه می‌آید. "
-                "«موقت» یعنی هر دوره از نو شروع می‌شود، مثلِ درآمد و هزینه. در صورتِ سود و زیان می‌آید.",
+                "«ترازنامه‌ای» یعنی مانده‌اش تا آخر عمر شرکت می‌ماند، مثل دارایی و بدهی. در ترازنامه می‌آید. "
+                "«موقت» یعنی هر دوره از نو شروع می‌شود، مثل درآمد و هزینه. در صورت سود و زیان می‌آید.",
             ),
             (
                 self.cash_flow_section_combo,
-                "این حساب در کدام بخشِ صورتِ گردشِ وجوهِ نقد می‌آید؟ "
-                "«عملیاتی» یعنی فعالیتِ روزمره. «سرمایه‌گذاری» یعنی خرید یا فروشِ دارایی‌هایِ ثابت. "
-                "«تامینِ مالی» یعنی وام یا سرمایه. این فیلد اختیاری است؛ اگر مطمئن نیستید خالی بگذارید.",
+                "این حساب در کدام بخش صورت گردش وجوه نقد می‌آید؟ "
+                "«عملیاتی» یعنی فعالیت روزمره. «سرمایه‌گذاری» یعنی خرید یا فروش دارایی‌های ثابت. "
+                "«تامین مالی» یعنی وام یا سرمایه. این فیلد اختیاری است؛ اگر مطمئن نیستید خالی بگذارید.",
             ),
             (
                 self.liquidity_class_combo,
-                "این فیلد برایِ محاسبه‌یِ نسبتِ جاری و آنی در گزارشِ نسبت‌هایِ مالی است. "
-                "«جاری» یعنی حدودِ یک سالِ دیگر نقد می‌شود، مثلِ صندوق و بانک و دریافتنی/پرداختنی. "
-                "«جاری (موجودی)» فقط برایِ حساب‌هایِ موجودیِ کالاست. «غیرِجاری» یعنی بلندمدت است. اختیاری است.",
+                "این فیلد برای محاسبهٔ نسبت جاری و آنی در گزارش نسبت‌های مالی است. "
+                "«جاری» یعنی حدود یک سال دیگر نقد می‌شود، مثل صندوق و بانک و دریافتنی/پرداختنی. "
+                "«جاری (موجودی)» فقط برای حساب‌های موجودی کالاست. «غیرجاری» یعنی بلندمدت است. اختیاری است.",
             ),
             (
                 self.is_postable_checkbox,
-                "فقط حساب‌هایِ سطحِ معین (آخرین سطح) می‌توانند رویشان سند ثبت شود. "
-                "گروه و کل فقط برایِ دسته‌بندی و جمعِ حساب‌هایِ زیرشان به‌کار می‌روند.",
+                "فقط حساب‌های سطح معین (آخرین سطح) می‌توانند رویشان سند ثبت شود. "
+                "گروه و کل فقط برای دسته‌بندی و جمع حساب‌های زیرشان به‌کار می‌روند.",
             ),
         ])
 
@@ -406,8 +406,8 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- خروجیِ اکسل/چاپ (طبقِ درخواستِ صریح: بکاپ/انتقالِ کدینگ به
     # دیتابیسِ جدید) ------------------------------------------------------
     _EXPORT_HEADERS = [
-        "کدِ کاملِ حساب (مثلِ 1-01-001)", "نام", "ماهیت (فقط سطحِ گروه: بدهکار/بستانکار/دوطرفه)",
-        "دسته (فقط سطحِ گروه)", "نوعِ حساب (فقط سطحِ گروه)", "قابلِ ثبتِ سند؟ (بله/خیر)", "سطح",
+        "کد کامل حساب (مثل 1-01-001)", "نام", "ماهیت (فقط سطح گروه: بدهکار/بستانکار/دوطرفه)",
+        "دسته (فقط سطح گروه)", "نوع حساب (فقط سطح گروه)", "قابل ثبت سند؟ (بله/خیر)", "سطح",
     ]
 
     def _export_rows(self) -> tuple[list[str], list[list], list]:
@@ -435,27 +435,27 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _on_print(self) -> None:
         headers, rows, footer = self._export_rows()
-        report_export.print_report(self, "کدینگِ حساب‌ها", headers, rows, footer, **self._export_kwargs())
+        report_export.print_report(self, "کدینگ حساب‌ها", headers, rows, footer, **self._export_kwargs())
 
     def _on_export_pdf(self) -> None:
         headers, rows, footer = self._export_rows()
-        report_export.export_report_pdf(self, "کدینگِ حساب‌ها", headers, rows, footer, **self._export_kwargs())
+        report_export.export_report_pdf(self, "کدینگ حساب‌ها", headers, rows, footer, **self._export_kwargs())
 
     def _on_export_excel(self) -> None:
         _headers, rows, _footer = self._export_rows()
-        report_export.export_plain_excel(self, "کدینگِ حساب‌ها", self._EXPORT_HEADERS, rows)
+        report_export.export_plain_excel(self, "کدینگ حساب‌ها", self._EXPORT_HEADERS, rows)
 
     def _on_import_excel(self) -> None:
-        """طبقِ درخواستِ صریح: ایمپورتِ کدینگِ حساب‌ها از اکسل — هم‌الگو با
-        ایمپورتِ ردیف‌هایِ سند در journal_entry.py (همان دیالوگِ تناظرِ
-        ستون‌ها، از excel_import.py). ردیف‌ها بر اساسِ تعدادِ بخش‌هایِ
+        """طبق درخواست صریح: ورود کدینگ حساب‌ها از اکسل — هم‌الگو با
+        ورود ردیف‌های سند در journal_entry.py (همان دیالوگ تناظر
+        ستون‌ها، از excel_import.py). ردیف‌ها بر اساس تعداد بخش‌های
         full_code (گروه قبل از کل، کل قبل از معین) مرتب می‌شوند تا والد
         همیشه پیش از فرزند ساخته شده باشد."""
         company_id = self._company_id()
         if company_id is None:
             self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
             return
-        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایلِ اکسل", "", "Excel Files (*.xlsx)")
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخاب فایل اکسل", "", "Excel Files (*.xlsx)")
         if not path:
             return
         rows = read_excel_rows(self, path)
@@ -467,7 +467,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             _COA_IMPORT_GUESS_KEYWORDS,
             rows[0],
             self,
-            title="ایمپورتِ کدینگِ حساب‌ها از اکسل — تناظرِ ستون‌ها",
+            title="ورود کدینگ حساب‌ها از اکسل — تناظر ستون‌ها",
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -499,7 +499,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             full_code = cell(row, "full_code")
             name = cell(row, "name")
             if not full_code or not name:
-                errors.append(f"ردیفِ {excel_row_no}: کدِ کامل یا نام خالی است.")
+                errors.append(f"ردیف {excel_row_no}: کد کامل یا نام خالی است.")
                 continue
             parsed_rows.append((excel_row_no, full_code, name, row))
 
@@ -519,7 +519,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             parent_full_code = "-".join(segments[:-1]) if len(segments) > 1 else None
             parent_account = existing_by_full_code.get(parent_full_code) if parent_full_code else None
             if parent_full_code is not None and parent_account is None:
-                errors.append(f"ردیفِ {excel_row_no}: والدِ «{parent_full_code}» پیدا نشد (باید پیش از فرزندانش بیاید).")
+                errors.append(f"ردیف {excel_row_no}: والد «{parent_full_code}» پیدا نشد (باید پیش از فرزندانش بیاید).")
                 continue
 
             is_group_level = parent_full_code is None
@@ -531,13 +531,13 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 category_text = cell(row, "category_code")
                 account_type_text = cell(row, "account_type_code")
                 if not nature_text or nature_text not in nature_by_label:
-                    errors.append(f"ردیفِ {excel_row_no}: ماهیت (بدهکار/بستانکار/دوطرفه) برایِ حسابِ سطحِ گروه لازم است.")
+                    errors.append(f"ردیف {excel_row_no}: ماهیت (بدهکار/بستانکار/دوطرفه) برای حساب سطح گروه لازم است.")
                     continue
                 if not category_text or category_text not in category_by_label:
-                    errors.append(f"ردیفِ {excel_row_no}: دسته‌یِ حساب برایِ حسابِ سطحِ گروه لازم است.")
+                    errors.append(f"ردیف {excel_row_no}: دستهٔ حساب برای حساب سطح گروه لازم است.")
                     continue
                 if not account_type_text or account_type_text not in account_type_by_label:
-                    errors.append(f"ردیفِ {excel_row_no}: نوعِ حساب برایِ حسابِ سطحِ گروه لازم است.")
+                    errors.append(f"ردیف {excel_row_no}: نوع حساب برای حساب سطح گروه لازم است.")
                     continue
                 nature_code = nature_by_label[nature_text]
                 category_code = category_by_label[category_text]
@@ -563,7 +563,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     changed_by_user_id=user_id,
                 )
             except ValueError as exc:
-                errors.append(f"ردیفِ {excel_row_no} ({full_code}): {exc}")
+                errors.append(f"ردیف {excel_row_no} ({full_code}): {exc}")
                 continue
             existing_by_full_code[full_code] = created
             created_count += 1
@@ -571,24 +571,24 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if errors:
             preview = "\n".join(errors[:30])
             if len(errors) > 30:
-                preview += f"\n… و {len(errors) - 30} موردِ دیگر."
+                preview += f"\n… و {len(errors) - 30} مورد دیگر."
             QMessageBox.warning(
                 self,
-                "خطاهایِ ایمپورت",
+                "خطاهای ورود",
                 f"{len(errors)} ردیف با خطا مواجه شد و وارد نشدند:\n\n{preview}\n\n"
-                f"{created_count} حسابِ دیگر با موفقیت ساخته شد.",
+                f"{created_count} حساب دیگر با موفقیت ساخته شد.",
             )
-        message = f"{created_count} حسابِ تازه ساخته شد."
+        message = f"{created_count} حساب تازه ساخته شد."
         if skipped_existing:
             message += f" ({skipped_existing} ردیف چون از قبل وجود داشت، رد شد.)"
-        QMessageBox.information(self, "ایمپورت انجام شد", message)
+        QMessageBox.information(self, "ورود اطلاعات انجام شد", message)
         self.refresh()
 
     def _reload_parent_options(self) -> None:
         self._parent_options = [r for r in self._rows if r.account_level < coa_service.MAX_ACCOUNT_LEVEL]
         self.parent_combo.blockSignals(True)
         self.parent_combo.clear()
-        self.parent_combo.addItem("— بدونِ والد (سطحِ گروه) —", None)
+        self.parent_combo.addItem("— بدون والد (سطح گروه) —", None)
         for account in self._parent_options:
             self.parent_combo.addItem(f"{account.full_code} — {account.name}", account.account_id)
         self.parent_combo.blockSignals(False)
@@ -625,7 +625,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- فرم: بارگذاری/ذخیره/حذف -----------------------------------------
     def _load_into_form(self, account: coa_service.AccountRow) -> None:
         self._editing_account_id = account.account_id
-        self.form_title.setText(f"ویرایشِ حساب — {account.full_code}")
+        self.form_title.setText(f"ویرایش حساب — {account.full_code}")
         self.status_label.setText("")
         self.level_preview_label.setVisible(False)
         self.segment_code_label.setText(_SEGMENT_CODE_LABELS[account.account_level])
@@ -674,8 +674,8 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.status_label.setObjectName("sectionHint")
             self.status_label.setStyleSheet("")
             self.status_label.setText(
-                "این حساب در سندهای حسابداری استفاده شده؛ نام/ماهیت/دسته/نوع قابلِ‌ویرایش نیستند — "
-                "فقط چک‌لیستِ تفصیلی‌هایِ الزامیِ زیر همچنان قابلِ‌تغییر و ذخیره است."
+                "این حساب در سندهای حسابداری استفاده شده؛ نام/ماهیت/دسته/نوع قابل‌ویرایش نیستند — "
+                "فقط چک‌لیست تفصیلی‌های الزامی زیر همچنان قابل‌تغییر و ذخیره است."
             )
 
         self._populate_dimension_checklists(account.account_id if is_leaf_level else None)
@@ -683,7 +683,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_account_id = None
-        self.form_title.setText("حسابِ جدید")
+        self.form_title.setText("حساب جدید")
         self.status_label.setText("")
         self.segment_code_field.clear()
         self.segment_code_field.setEnabled(True)
@@ -727,7 +727,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         else:
             parent = next((r for r in self._parent_options if r.account_id == parent_id), None)
             level = (parent.account_level + 1) if parent is not None else 1
-        self.level_preview_label.setText(f"سطحِ حسابِ جدید: {_LEVEL_LABELS[level]}")
+        self.level_preview_label.setText(f"سطح حساب جدید: {_LEVEL_LABELS[level]}")
         if self._editing_account_id is None:
             self.segment_code_label.setText(_SEGMENT_CODE_LABELS[level])
             self.name_label.setText(_ACCOUNT_NAME_LABELS[level])
@@ -771,9 +771,9 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     @staticmethod
     def _fit_list_height(list_widget: QListWidget, *, max_height: int = 320, min_height: int = 40) -> None:
-        """طبقِ درخواستِ صریح: به‌جایِ یک کادرِ کوچکِ ثابت با اسکرولِ داخلی،
-        ارتفاعِ فهرست با تعدادِ آیتم‌هایش هم‌اندازه می‌شود — اسکرولِ کلِ
-        فرم (که خودش از قبل در یک QScrollArea است) برایِ حالت‌هایِ خیلی
+        """طبق درخواست صریح: به‌جای یک کادر کوچک ثابت با اسکرول داخلی،
+        ارتفاع فهرست با تعداد آیتم‌هایش هم‌اندازه می‌شود — اسکرول کل
+        فرم (که خودش از قبل در یک QScrollArea است) برای حالت‌های خیلی
         پرتعداد کافی است."""
         count = list_widget.count()
         if count == 0:
@@ -827,11 +827,11 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._fit_list_height(self.cost_project_list)
 
     def _save_dimensions(self) -> None:
-        """طبقِ درخواستِ صریح، این تابع دیگر پشتِ دکمه‌یِ جداگانه‌ای نیست —
-        از _save فراخوانی می‌شود (درونِ همان try/except)، فقط وقتی
-        چک‌لیست اصلاً نمایان است (یعنی حسابِ از-قبل-ذخیره‌شده‌یِ
-        قابلِ‌ثبتِ سند در حالِ ویرایش است). خطا را raise می‌کند تا _save
-        همان‌جا با پیامِ یکسان مدیریتش کند، نه با پیامِ جداگانه."""
+        """طبق درخواست صریح، این تابع دیگر پشت دکمهٔ جداگانه‌ای نیست —
+        از _save فراخوانی می‌شود (درون همان try/except)، فقط وقتی
+        چک‌لیست اصلاً نمایان است (یعنی حساب از-قبل-ذخیره‌شدهٔ
+        قابل‌ثبت سند در حال ویرایش است). خطا را raise می‌کند تا _save
+        همان‌جا با پیام یکسان مدیریتش کند، نه با پیام جداگانه."""
         if self._editing_account_id is None or not self.is_postable_checkbox.isChecked():
             return
         company_id = self._company_id()
@@ -907,7 +907,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             else:
                 segment_code = self.segment_code_field.text().strip()
                 if not segment_code:
-                    self.status_label.setText("کدِ بخش را وارد کنید.")
+                    self.status_label.setText("کد بخش را وارد کنید.")
                     return
                 created = coa_service.create_account(
                     company_id,
@@ -971,7 +971,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if company_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ حساب", "این حساب حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف حساب", "این حساب حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

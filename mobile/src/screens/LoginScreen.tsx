@@ -76,11 +76,11 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
   return (
     <View style={{ flex: 1, justifyContent: "center", padding: spacing.xl, backgroundColor: colors.background }}>
       <Text style={[typography.h2, { color: colors.textPrimary, textAlign: "center", marginBottom: spacing.xl }]}>
-        ورود به پیچا -- پخشِ سرد/گرم
+        ورود به پیچا — پخش سرد/گرم
       </Text>
       <TextInput
         style={inputStyle}
-        placeholder="نامِ کاربری"
+        placeholder="نام کاربری"
         placeholderTextColor={colors.textSecondary}
         value={username}
         onChangeText={setUsername}
@@ -88,7 +88,7 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
       />
       <TextInput
         style={inputStyle}
-        placeholder="رمزِ عبور"
+        placeholder="رمز عبور"
         placeholderTextColor={colors.textSecondary}
         value={password}
         onChangeText={setPassword}
@@ -101,21 +101,21 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
         <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
           <TextInput
             style={inputStyle}
-            placeholder="آدرسِ سرور (مثلاً http://192.168.1.10:8000)"
+            placeholder="آدرس سرور (مثلاً http://192.168.1.10:8000)"
             placeholderTextColor={colors.textSecondary}
             value={serverUrl}
             onChangeText={setServerUrl}
             autoCapitalize="none"
             keyboardType="url"
           />
-          <Button label="ذخیره‌یِ آدرسِ سرور" variant="secondary" onPress={saveServerUrl} />
+          <Button label="ذخیرهٔ آدرس سرور" variant="secondary" onPress={saveServerUrl} />
         </View>
       ) : (
         <Text
           style={[typography.caption, { color: colors.primary, textAlign: "center", marginTop: spacing.xl }]}
           onPress={() => setShowServerField(true)}
         >
-          آدرسِ سرور: {serverUrl}  (تغییر)
+          آدرس سرور: {serverUrl}  (تغییر)
         </Text>
       )}
     </View>

@@ -2,7 +2,7 @@
   "name": "peecha-field-sales",
   "version": "0.1.0",
   "private": true,
-  "description": "اپِ موبایلِ پخشِ سرد/گرم -- کلاینتِ React Native برایِ peecha_api (R132). طبقِ تصمیمِ کاربر: بدونِ Flutter، آفلاین-اول، رویِ همان حساب‌کاربریِ ERP. طبقِ نیازِ اجرا رویِ گوشیِ واقعی: زیرِ Expo Go (بدونِ نیازِ Android SDK/Xcode/بیلدِ نیتیو).",
+  "description": "اپ موبایل پخش سرد/گرم — کلاینت React Native برای peecha_api (R132). طبق تصمیم کاربر: بدون Flutter، آفلاین-اول، روی همان حساب‌کاربری ERP. طبق نیاز اجرا روی گوشی واقعی: زیر Expo Go (بدون نیاز Android SDK/Xcode/بیلد نیتیو).",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

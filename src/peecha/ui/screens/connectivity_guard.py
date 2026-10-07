@@ -1,8 +1,8 @@
-"""نگهبانِ اتصال و بررسیِ سلامتِ سایت -- طبقِ ادامه‌یِ اولویت‌بندیِ بخشِ
-عملیاتی: نمایِ یک‌جایِ سلامتِ همه‌یِ اتصال‌هایِ فروشگاهی/تلگرام/بله/
-وردپرس، با رنگ‌آمیزیِ اتصال‌هایِ ناسالم (شکستِ پیاپیِ سینک/ارسال/انتشار)
-+ دکمه‌یِ «بررسیِ سلامتِ الان» برایِ آزمایشِ فعالانه‌یِ همه‌یِ اتصال‌ها
-بدونِ نیاز به منتظرِ تیکِ خودکارِ بعدی بودن."""
+"""نگهبان اتصال و بررسی سلامت سایت — طبق ادامهٔ اولویت‌بندی بخش
+عملیاتی: نمای یک‌جای سلامت همهٔ اتصال‌های فروشگاهی/تلگرام/بله/
+وردپرس، با رنگ‌آمیزی اتصال‌های ناسالم (شکست پیاپی همگام‌سازی/ارسال/انتشار)
++ دکمهٔ «بررسی سلامت الان» برای آزمایش فعالانهٔ همهٔ اتصال‌ها
+بدون نیاز به منتظر تیک خودکار بعدی بودن."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from peecha.ui import theme
 from peecha.ui.widgets import LayoutEditMixin
 
 _UNHEALTHY_THRESHOLD = 3
-_TYPE_LABELS = {"ECOMMERCE": "فروشِ اینترنتی", "SOCIAL": "تلگرام/بله", "CMS": "سینکِ محتوا (CMS)"}
+_TYPE_LABELS = {"ECOMMERCE": "فروش اینترنتی", "SOCIAL": "تلگرام/بله", "CMS": "همگام‌سازی محتوا (CMS)"}
 
 
 class ConnectivityGuardScreen(LayoutEditMixin, QWidget):
@@ -35,7 +35,7 @@ class ConnectivityGuardScreen(LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("نگهبانِ اتصال و سلامتِ سایت")
+        title = QLabel("نگهبان اتصال و سلامت سایت")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
@@ -47,9 +47,9 @@ class ConnectivityGuardScreen(LayoutEditMixin, QWidget):
         refresh_button = QPushButton("🔄 بازآوری")
         refresh_button.clicked.connect(self.refresh)
         button_row.addWidget(refresh_button)
-        health_check_button = QPushButton("🩺 بررسیِ سلامتِ الان")
+        health_check_button = QPushButton("🩺 بررسی سلامت الان")
         health_check_button.setObjectName("primaryIconButton")
-        health_check_button.setToolTip("همینِ الان به همه‌یِ اتصال‌ها سر می‌زند -- بدونِ نیاز به منتظرِ تیکِ خودکارِ بعدی بودن")
+        health_check_button.setToolTip("همین الان به همهٔ اتصال‌ها سر می‌زند — بدون نیاز به منتظر تیک خودکار بعدی بودن")
         health_check_button.clicked.connect(self._run_health_check_now)
         button_row.addWidget(health_check_button)
         button_row.addStretch(1)
@@ -60,7 +60,7 @@ class ConnectivityGuardScreen(LayoutEditMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["نوع", "پلتفرم", "نام/آدرس", "شکستِ پیاپی", "آخرین خطا"])
+        self.table.setHorizontalHeaderLabels(["نوع", "پلتفرم", "نام/آدرس", "شکست پیاپی", "آخرین خطا"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -96,4 +96,4 @@ class ConnectivityGuardScreen(LayoutEditMixin, QWidget):
             return
         rows = guard_service.run_health_check_now(company_id)
         self._fill_table(rows)
-        theme.set_status_label(self.status_label, "بررسیِ سلامتِ همه‌یِ اتصال‌ها انجام شد.", ok=True)
+        theme.set_status_label(self.status_label, "بررسی سلامت همهٔ اتصال‌ها انجام شد.", ok=True)

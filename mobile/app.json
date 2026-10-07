@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "پیچا -- پخش سرد/گرم",
+    "name": "پیچا — پخش سرد/گرم",
     "slug": "peecha-field-sales",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -29,19 +29,19 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "پیچا برای ثبتِ محلِ ویزیت و تحویل به دسترسیِ موقعیتِ مکانی نیاز دارد."
+          "locationAlwaysAndWhenInUsePermission": "پیچا برای ثبت محل ویزیت و تحویل به دسترسی موقعیت مکانی نیاز دارد."
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "پیچا برای ثبتِ عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد."
+          "cameraPermission": "پیچا برای ثبت عکس رسید تحویل به دسترسی دوربین نیاز دارد."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "پیچا برای اسکنِ بارکدِ کالا و عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد.",
+          "cameraPermission": "پیچا برای اسکن بارکد کالا و عکس رسید تحویل به دسترسی دوربین نیاز دارد.",
           "recordAudioAndroid": false
         }
       ],

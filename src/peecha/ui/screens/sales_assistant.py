@@ -1,8 +1,8 @@
-"""دستیارِ فروشِ پیچا -- طبقِ درخواستِ صریحِ کاربر («یک پنلِ دائمی...
-دستیارِ فروش پیچا... ۵ اقدامِ مهمِ امروز»). این نسخه یک صفحه‌یِ قابلِ‌
-ناوبریِ معمولی است (نه یک پنلِ شناورِ همیشه‌-نمایان)، چون در کلِ این
-پروژه هیچ زیرساختِ dock-widget/پنلِ کناریِ سراسری وجود ندارد و همه‌یِ
-ماژول‌ها با همین الگویِ «صفحه‌یِ قابلِ‌بازشدن از منو» ساخته شده‌اند."""
+"""دستیار فروش پیچا — طبق درخواست صریح کاربر («یک پنل دائمی...
+دستیار فروش پیچا... ۵ اقدام مهم امروز»). این نسخه یک صفحهٔ قابل‌
+ناوبری معمولی است (نه یک پنل شناور همیشه‌-نمایان)، چون در کل این
+پروژه هیچ زیرساخت dock-widget/پنل کناری سراسری وجود ندارد و همهٔ
+ماژول‌ها با همین الگوی «صفحهٔ قابل‌بازشدن از منو» ساخته شده‌اند."""
 
 from __future__ import annotations
 
@@ -75,10 +75,10 @@ class _ActionCard(QFrame):
 
         action_button = QPushButton()
         if item.category == "growth":
-            action_button.setText("💳 افزایشِ سقفِ اعتبار")
+            action_button.setText("💳 افزایش سقف اعتبار")
             action_button.clicked.connect(lambda: self._screen.raise_credit_limit(item))
         else:
-            action_button.setText("👤 بازکردنِ فرمِ مشتری")
+            action_button.setText("👤 بازکردن فرم مشتری")
             action_button.clicked.connect(lambda: self._screen.open_customer_form(item.customer_id))
         bottom_row.addWidget(action_button)
 
@@ -108,7 +108,7 @@ class SalesAssistantScreen(QWidget):
         outer.setSpacing(12)
 
         header_row = QHBoxLayout()
-        title = QLabel("🧠 دستیارِ فروشِ پیچا")
+        title = QLabel("🧠 دستیار فروش پیچا")
         title.setObjectName("pageTitle")
         header_row.addWidget(title)
         header_row.addStretch(1)
@@ -118,14 +118,14 @@ class SalesAssistantScreen(QWidget):
         outer.addLayout(header_row)
 
         hint = QLabel(
-            "طبقِ سابقه‌یِ فروش، مهم‌ترین اقداماتِ امروز -- ریسکِ ریزشِ مشتری، فرصتِ فروشِ مکمل، "
-            "و مشتریانِ روبه‌رشد -- این‌جا رتبه‌بندی می‌شوند."
+            "طبق سابقهٔ فروش، مهم‌ترین اقدامات امروز — ریسک ریزش مشتری، فرصت فروش مکمل، "
+            "و مشتریان روبه‌رشد — این‌جا رتبه‌بندی می‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
-        self._empty_label = QLabel("امروز هیچ اقدامِ ویژه‌ای برایِ پیشنهاد نیست.")
+        self._empty_label = QLabel("امروز هیچ اقدام ویژه‌ای برای پیشنهاد نیست.")
         self._empty_label.setAlignment(Qt.AlignCenter)
         outer.addWidget(self._empty_label)
 
@@ -182,7 +182,7 @@ class SalesAssistantScreen(QWidget):
         profile = partners_service.get_customer_profile(item.customer_id)
         current_limit = float(profile.credit_limit_amount) if profile is not None and profile.credit_limit_amount else 0.0
         new_limit, accepted = QInputDialog.getDouble(
-            self, "افزایشِ سقفِ اعتبار", f"سقفِ اعتبارِ تازه برایِ «{item.customer_name}»:",
+            self, "افزایش سقف اعتبار", f"سقف اعتبار تازه برای «{item.customer_name}»:",
             value=current_limit, minValue=0, maxValue=1_000_000_000_000, decimals=0,
         )
         if not accepted:

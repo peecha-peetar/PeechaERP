@@ -60,17 +60,17 @@ from peecha.services import users as users_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("3", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
 k2 = A("31", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g2.account_id)
-ap_gl = A("3101", "حسابِ پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k2.account_id)
+ap_gl = A("3101", "حساب پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k2.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 
-keeper = users_service.create_user("keeper1", "انباردارِ یک", "secret123", None, lang_id, False, [company_id], company_id)
-wh_main = locations_service.create_warehouse(company_id, "WH1", "انبارِ اصلی", locations_service.WarehouseFields(manager_user_id=keeper.user_id))
-wh_other = locations_service.create_warehouse(company_id, "WH2", "انبارِ دیگر", locations_service.WarehouseFields())
+keeper = users_service.create_user("keeper1", "انباردار یک", "secret123", None, lang_id, False, [company_id], company_id)
+wh_main = locations_service.create_warehouse(company_id, "WH1", "انبار اصلی", locations_service.WarehouseFields(manager_user_id=keeper.user_id))
+wh_other = locations_service.create_warehouse(company_id, "WH2", "انبار دیگر", locations_service.WarehouseFields())
 
 pcs = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT", decimal_places=0)
 box = catalog_service.create_uom(company_id, "BOX", "کارتن", "COUNT", decimal_places=0)
@@ -88,93 +88,93 @@ def new_po(qty, uom=pcs, price=1000):
 
 # ===== ۳: تبدیلِ واحد -- خرید به کارتن، موجودی به عدد =====
 options = catalog_service.list_item_uom_options(item_id)
-check([o.uom_id for o in options] == [pcs, box], "گزینه‌هایِ واحد: عدد (پایه) و کارتن")
+check([o.uom_id for o in options] == [pcs, box], "گزینه‌های واحد: عدد (پایه) و کارتن")
 po_box, po_box_line = new_po(2, uom=box, price=48000)
 _, lines = documents_service.get_document(po_box, company_id)
-check(lines[0].quantity == 2 and lines[0].quantity_base == 48, f"۲ کارتن = ۴۸ عدد در مقدارِ پایه (got {lines[0].quantity_base})")
-check(documents_service.list_purchase_order_goods_receipt_queue(company_id) == [], "صفِ رسید بدونِ Toggle خالی است")
+check(lines[0].quantity == 2 and lines[0].quantity_base == 48, f"۲ کارتن = ۴۸ عدد در مقدار پایه (got {lines[0].quantity_base})")
+check(documents_service.list_purchase_order_goods_receipt_queue(company_id) == [], "صف رسید بدون Toggle خالی است")
 
 # ===== ۱: سفارشِ تاییدشده قابلِ‌ویرایش در فرم نیست =====
 documents_service.confirm_document(po_box, company_id, user.user_id)
 from peecha.ui.screens.commercial_document import CommercialDocumentScreen
 screen = CommercialDocumentScreen("PURCHASE_ORDER", None)
 screen.edit_document(po_box)
-check(not screen._lines_are_editable(), "سفارشِ تاییدشده در فرم فقط-خواندنی است")
+check(not screen._lines_are_editable(), "سفارش تاییدشده در فرم فقط-خواندنی است")
 # R226: ذخیره فقط برایِ مرکزِ هزینه/پروژه فعال می‌ماند؛ بقیهٔ هدر قفل است.
 check(not screen.counterparty_combo.isEnabled() and screen.cost_center_combo.isEnabled(),
-      "در سفارشِ تاییدشده فقط مرکزِ هزینه/پروژه قابلِ‌تغییر است")
-check(screen.revert_button.isEnabled(), "بازگشت به پیش‌نویس برایِ ویرایش فعال است")
+      "در سفارش تاییدشده فقط مرکز هزینه/پروژه قابل‌تغییر است")
+check(screen.revert_button.isEnabled(), "بازگشت به پیش‌نویس برای ویرایش فعال است")
 documents_service.approve_document(po_box, company_id)
 screen.edit_document(po_box)
-check(screen.revert_button.isEnabled(), "سفارشِ تصویب‌شده هم به پیش‌نویس برمی‌گردد")
+check(screen.revert_button.isEnabled(), "سفارش تصویب‌شده هم به پیش‌نویس برمی‌گردد")
 documents_service.revert_to_draft(po_box, company_id)
 screen.edit_document(po_box)
-check(screen._lines_are_editable(), "بعدِ بازگشت به پیش‌نویس، سفارش دوباره قابلِ‌ویرایش است")
+check(screen._lines_are_editable(), "بعد بازگشت به پیش‌نویس، سفارش دوباره قابل‌ویرایش است")
 documents_service.confirm_document(po_box, company_id, user.user_id)
 
 # ===== ۲/۴/۵: رسیدِ کالا =====
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST", True)  # R230: رفتارِ پیشین (رسید پیش از ثبتِ نهایی)
 check(raises(lambda: documents_service.convert_to_invoice(po_box, company_id, user.user_id, datetime.date.today())),
-      "پیش از تاییدِ رسید، تبدیل به فاکتور مجاز نیست")
+      "پیش از تایید رسید، تبدیل به فاکتور مجاز نیست")
 screen.edit_document(po_box)
 check(not screen.convert_button.isEnabled(), "دکمهٔ تبدیل به فاکتور پیش از رسید غیرفعال است")
-check("اختیاری" in screen.warehouse_label.text(), "انبارِ سفارشِ خرید اختیاری نمایش داده می‌شود")
+check("اختیاری" in screen.warehouse_label.text(), "انبار سفارش خرید اختیاری نمایش داده می‌شود")
 
 queue_keeper = documents_service.list_purchase_order_goods_receipt_queue(company_id, keeper.user_id)
-check(any(d.document_id == po_box for d in queue_keeper), "سفارشِ بدونِ انبار در صفِ انباردار دیده می‌شود")
-check(raises(lambda: documents_service.approve_warehouse(po_box, company_id, keeper.user_id)), "رسید بدونِ انتخابِ انبار رد می‌شود")
+check(any(d.document_id == po_box for d in queue_keeper), "سفارش بدون انبار در صف انباردار دیده می‌شود")
+check(raises(lambda: documents_service.approve_warehouse(po_box, company_id, keeper.user_id)), "رسید بدون انتخاب انبار رد می‌شود")
 check(raises(lambda: documents_service.approve_warehouse(po_box, company_id, keeper.user_id, warehouse_id=wh_other)),
       "انباردار نمی‌تواند در انباری که مسئولش نیست رسید بزند")
 documents_service.approve_warehouse(po_box, company_id, keeper.user_id, warehouse_id=wh_main)
 doc, _ = documents_service.get_document(po_box, company_id)
-check(doc.warehouse_id == wh_main, "انبارِ سفارش در لحظه‌یِ رسید ثبت شد")
-check(raises(lambda: documents_service.revert_to_draft(po_box, company_id)), "بعدِ رسید، بازگشت به پیش‌نویس ممنوع است")
+check(doc.warehouse_id == wh_main, "انبار سفارش در لحظهٔ رسید ثبت شد")
+check(raises(lambda: documents_service.revert_to_draft(po_box, company_id)), "بعد رسید، بازگشت به پیش‌نویس ممنوع است")
 
 po_other, _ = new_po(5)
 documents_service.confirm_document(po_other, company_id, user.user_id)
 documents_service.approve_warehouse(po_other, company_id, user.user_id, warehouse_id=wh_other)
 queue_keeper = documents_service.list_purchase_order_goods_receipt_queue(company_id, keeper.user_id)
-check(not any(d.document_id == po_other for d in queue_keeper), "سفارشِ انبارِ دیگر در صفِ این انباردار نیست")
+check(not any(d.document_id == po_other for d in queue_keeper), "سفارش انبار دیگر در صف این انباردار نیست")
 check(any(d.document_id == po_other for d in documents_service.list_purchase_order_goods_receipt_queue(company_id, user.user_id)),
-      "مدیر همه‌یِ سفارش‌ها را می‌بیند")
+      "مدیر همهٔ سفارش‌ها را می‌بیند")
 
 # ===== ۶: قفلِ مقدار پس از رسید =====
 # R226: قفلِ مقدار دیگر Toggle نیست و همیشه پس از رسید اعمال می‌شود.
 check(raises(lambda: documents_service.convert_to_invoice(po_box, company_id, user.user_id, datetime.date.today(), {po_box_line: decimal.Decimal(1)})),
-      "تبدیلِ جزئی (کمتر از مقدارِ رسیدشده) با قفل ممنوع است")
+      "تبدیل جزئی (کمتر از مقدار رسیدشده) با قفل ممنوع است")
 inv_id = documents_service.convert_to_invoice(po_box, company_id, user.user_id, datetime.date.today())
 inv_doc, inv_lines = documents_service.get_document(inv_id, company_id)
-check(inv_doc.warehouse_id == wh_main, "فاکتور انبارِ رسید را گرفت")
-check(inv_lines[0].uom_id == box and inv_lines[0].quantity_base == 48, "فاکتور با واحدِ کارتن و مقدارِ پایهٔ ۴۸")
+check(inv_doc.warehouse_id == wh_main, "فاکتور انبار رسید را گرفت")
+check(inv_lines[0].uom_id == box and inv_lines[0].quantity_base == 48, "فاکتور با واحد کارتن و مقدار پایهٔ ۴۸")
 locked = documents_service.get_quantity_locked_line_ids(inv_id, company_id)
-check(inv_lines[0].line_id in locked, "ردیفِ فاکتور قفل است")
+check(inv_lines[0].line_id in locked, "ردیف فاکتور قفل است")
 check(raises(lambda: documents_service.update_line(inv_lines[0].line_id, inv_id, company_id, decimal.Decimal(3), inv_lines[0].unit_price)),
-      "تغییرِ مقدارِ ردیفِ قفل‌شده ممنوع است")
+      "تغییر مقدار ردیف قفل‌شده ممنوع است")
 documents_service.update_line(inv_lines[0].line_id, inv_id, company_id, inv_lines[0].quantity, decimal.Decimal(50000))
-check(True, "تغییرِ قیمت (بدونِ تغییرِ مقدار) مجاز است")
-check(raises(lambda: documents_service.delete_line(inv_lines[0].line_id, inv_id, company_id)), "حذفِ ردیفِ قفل‌شده ممنوع است")
+check(True, "تغییر قیمت (بدون تغییر مقدار) مجاز است")
+check(raises(lambda: documents_service.delete_line(inv_lines[0].line_id, inv_id, company_id)), "حذف ردیف قفل‌شده ممنوع است")
 inv_screen = CommercialDocumentScreen("PURCHASE_INVOICE", None)
 inv_screen.edit_document(inv_id)
 qty_widget = inv_screen.lines_table.cellWidget(0, 2)
-check(qty_widget is not None and not qty_widget.isEnabled(), "فیلدِ مقدار در فاکتور غیرفعال است")
+check(qty_widget is not None and not qty_widget.isEnabled(), "فیلد مقدار در فاکتور غیرفعال است")
 
 # ===== ۷: مراحلِ فاکتور -- حذفِ تصویبِ مدیر =====
 documents_service.confirm_document(inv_id, company_id, user.user_id)
 settlements_service.save_settlement_plan(inv_id, company_id, user.user_id, [])
 settlements_service.approve_settlement_plan(inv_id, company_id, user.user_id)
-check(raises(lambda: documents_service.post_document(inv_id, company_id, user.user_id)), "بدونِ Toggle، فاکتورِ خرید تصویبِ مدیر لازم دارد")
+check(raises(lambda: documents_service.post_document(inv_id, company_id, user.user_id)), "بدون Toggle، فاکتور خرید تصویب مدیر لازم دارد")
 settings_service.set_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL", True)
 inv_screen.edit_document(inv_id)
-check(not inv_screen.approve_button.isVisibleTo(inv_screen), "با Toggle، دکمهٔ تصویب در فاکتورِ خرید پنهان است")
+check(not inv_screen.approve_button.isVisibleTo(inv_screen), "با Toggle، دکمهٔ تصویب در فاکتور خرید پنهان است")
 documents_service.post_document(inv_id, company_id, user.user_id)
-check(True, "با Toggle، فاکتورِ خریدِ تاییدشده مستقیم ثبتِ نهایی شد")
+check(True, "با Toggle، فاکتور خرید تاییدشده مستقیم ثبت نهایی شد")
 
 stock = {r.warehouse_id: r.quantity_on_hand for r in engine_service.get_item_stock_by_warehouse(company_id, item_id)}
-check(stock.get(wh_main) == 48, f"موجودی به واحدِ پایه: ۴۸ عدد در انبارِ رسید (got {stock.get(wh_main)})")
+check(stock.get(wh_main) == 48, f"موجودی به واحد پایه: ۴۸ عدد در انبار رسید (got {stock.get(wh_main)})")
 balances = engine_service.list_balances(company_id, item_id=item_id)
 avg = next(b.average_unit_cost for b in balances if b.warehouse_id == wh_main)
-check(abs(avg - decimal.Decimal(50000) / 24) < decimal.Decimal("0.01"), f"بهایِ واحدِ پایه = ۵۰۰۰۰÷۲۴ (got {avg})")
+check(abs(avg - decimal.Decimal(50000) / 24) < decimal.Decimal("0.01"), f"بهای واحد پایه = ۵۰۰۰۰÷۲۴ (got {avg})")
 
 # ===== ۷: ثبتِ یک‌مرحله‌ای =====
 settings_service.set_feature_enabled(company_id, "INVOICE_ONE_STEP_POST", True)
@@ -187,18 +187,18 @@ inv_screen.edit_document(inv2)
 QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)  # «پرداختی انجام شده؟» خیر = نسیه
 inv_screen._confirm_button_clicked()
 doc2, _ = documents_service.get_document(inv2, company_id)
-check(doc2.status_code == "POSTED", f"ثبتِ یک‌مرحله‌ای: فاکتور با دکمهٔ تایید ثبتِ نهایی شد (got {doc2.status_code})")
+check(doc2.status_code == "POSTED", f"ثبت یک‌مرحله‌ای: فاکتور با دکمهٔ تایید ثبت نهایی شد (got {doc2.status_code})")
 
 # ===== ۳: کمبویِ واحد در دیالوگِ ردیف =====
 from peecha.ui.screens.commercial_document import _LineDialog
 dialog = _LineDialog(None, catalog_service.list_items(company_id), company_id, None, 0, document_type_code="PURCHASE_ORDER")
 dialog.item_combo.setCurrentIndex(dialog.item_combo.findData(item_id))
-check(dialog.uom_combo.currentData() == box, "در سفارشِ خرید، واحدِ پیش‌فرضِ خرید (کارتن) انتخاب می‌شود")
+check(dialog.uom_combo.currentData() == box, "در سفارش خرید، واحد پیش‌فرض خرید (کارتن) انتخاب می‌شود")
 dialog.quantity_field.setValue(3)
 fields = dialog.result_fields()
-check(fields["uom_id"] == box and fields["quantity_base"] == 72, f"۳ کارتن -> مقدارِ پایهٔ ۷۲ (got {fields['quantity_base']})")
+check(fields["uom_id"] == box and fields["quantity_base"] == 72, f"۳ کارتن -> مقدار پایهٔ ۷۲ (got {fields['quantity_base']})")
 dialog.uom_combo.setCurrentIndex(dialog.uom_combo.findData(pcs))
-check(dialog.result_fields()["uom_id"] == pcs, "تغییرِ واحد به عدد در دیالوگ اعمال می‌شود")
+check(dialog.result_fields()["uom_id"] == pcs, "تغییر واحد به عدد در دیالوگ اعمال می‌شود")
 dialog.close()
 
 print("FAIL" if FAIL else "RESULT: ALL PASS")

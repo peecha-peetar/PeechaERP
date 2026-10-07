@@ -33,7 +33,7 @@ describe("ApiClient", () => {
     expect(await store.getRefreshToken()).toBe("ref-1");
   });
 
-  it("۴۰۱ اتفاق‌افتاده روی توکنِ منقضی، یک‌بار رفرش کرده و درخواست را تکرار می‌کند", async () => {
+  it("۴۰۱ اتفاق‌افتاده روی توکن منقضی، یک‌بار رفرش کرده و درخواست را تکرار می‌کند", async () => {
     const store = new TokenStore(new InMemoryKeyValueStore());
     await store.setTokens("expired-token", "ref-1");
 
@@ -56,7 +56,7 @@ describe("ApiClient", () => {
     expect(await store.getAccessToken()).toBe("fresh-token");
   });
 
-  it("خطایِ سرور را با پیامِ فارسیِ detail پرتاب می‌کند", async () => {
+  it("خطای سرور را با پیام فارسی detail پرتاب می‌کند", async () => {
     const store = new TokenStore(new InMemoryKeyValueStore());
     await store.setTokens("acc", "ref");
     const fetcher: Fetcher = jest.fn(async () =>

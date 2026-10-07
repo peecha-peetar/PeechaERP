@@ -1,5 +1,5 @@
-"""برچسبِ محلِ انبار -- R248: QR (segno) + بارکدِ Code128 (python-barcode) + کدِ محل، رسم با QPainter
-(همان الگویِ barcode_print.py برایِ برچسبِ کالا، بدونِ HTML)."""
+"""برچسب محل انبار — R248: QR (segno) + بارکد Code128 (python-barcode) + کد محل، رسم با QPainter
+(همان الگوی barcode_print.py برای برچسب کالا، بدون HTML)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ _LABEL_W_MM, _LABEL_H_MM, _GAP_MM, _PAGE_MARGIN_MM = 70.0, 35.0, 3.0, 6.0
 
 
 def draw_label(painter: QPainter, rect: QRectF, location_id: int, location_code: str, title: str = "") -> None:
-    """QR در یک سو، بارکدِ Code128 و کدِ محل در سویِ دیگر."""
+    """QR در یک سو، بارکد Code128 و کد محل در سوی دیگر."""
     painter.save()
     painter.setPen(QColor("#000000"))
     inner = rect.adjusted(rect.width() * 0.03, rect.height() * 0.06, -rect.width() * 0.03, -rect.height() * 0.06)
@@ -49,7 +49,7 @@ def draw_label(painter: QPainter, rect: QRectF, location_id: int, location_code:
 
 
 def label_image(location_id: int, location_code: str, title: str = "", dpi: int = 300) -> QImage:
-    """تصویرِ یک برچسب (برایِ پیش‌نمایش/ذخیره/تست)."""
+    """تصویر یک برچسب (برای پیش‌نمایش/ذخیره/تست)."""
     w, h = int(_LABEL_W_MM / 25.4 * dpi), int(_LABEL_H_MM / 25.4 * dpi)
     image = QImage(w, h, QImage.Format_RGB32)
     image.fill(QColor("#ffffff"))
@@ -60,7 +60,7 @@ def label_image(location_id: int, location_code: str, title: str = "", dpi: int 
 
 
 def print_location_labels(parent: QWidget | None, labels: list[tuple[int, str, str]], printer: QPrinter | None = None) -> bool:
-    """چاپِ گروهیِ برچسب‌ها رویِ A4 (چند ستون/ردیف). labels: (شناسه، کدِ کامل، عنوان)."""
+    """چاپ گروهی برچسب‌ها روی A4 (چند ستون/ردیف). labels: (شناسه، کد کامل، عنوان)."""
     if not labels:
         return False
     if printer is None:

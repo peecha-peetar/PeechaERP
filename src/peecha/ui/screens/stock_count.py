@@ -1,6 +1,6 @@
-"""انبارگردانی با واحدِ شمارش (R225): کاربر هر کالا را با واحدِ دلخواه
-می‌شمارد (مثلاً ۱۰ کارتن)، سیستم به واحدِ پایه تبدیل و با موجودیِ دفتری
-مقایسه می‌کند؛ «ثبتِ نهایی» اختلاف را با سندِ اصلاحِ موجودی ثبت می‌کند.
+"""انبارگردانی با واحد شمارش (R225): کاربر هر کالا را با واحد دلخواه
+می‌شمارد (مثلاً ۱۰ کارتن)، سیستم به واحد پایه تبدیل و با موجودی دفتری
+مقایسه می‌کند؛ «ثبت نهایی» اختلاف را با سند اصلاح موجودی ثبت می‌کند.
 همهٔ منطق در services/stock_count.py و services/unit_conversion.py است."""
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from peecha.services import stock_count as count_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _AmountField, _make_searchable_combo
 
-_COLUMNS = ["کالا", "واحدِ شمارش", "مقدارِ شمارش", "معادل به واحدِ پایه", "موجودیِ دفتری", "اختلاف", "بچ/سریال"]
+_COLUMNS = ["کالا", "واحد شمارش", "مقدار شمارش", "معادل به واحد پایه", "موجودی دفتری", "اختلاف", "بچ/سریال"]
 
 
 class StockCountScreen(QWidget):
@@ -44,8 +44,8 @@ class StockCountScreen(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "هر کالا را با واحدِ دلخواه (عدد/بسته/کارتن/...) بشمارید؛ مقدار به واحدِ پایه تبدیل و با موجودیِ دفتری "
-            "مقایسه می‌شود. «ثبتِ نهایی» اختلاف را با سندِ اصلاحِ موجودی (مازاد/کسری) ثبت می‌کند."
+            "هر کالا را با واحد دلخواه (عدد/بسته/کارتن/...) بشمارید؛ مقدار به واحد پایه تبدیل و با موجودی دفتری "
+            "مقایسه می‌شود. «ثبت نهایی» اختلاف را با سند اصلاح موجودی (مازاد/کسری) ثبت می‌کند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -55,7 +55,7 @@ class StockCountScreen(QWidget):
         session_row.addWidget(QLabel("انبار"))
         self.warehouse_combo = QComboBox()
         session_row.addWidget(self.warehouse_combo, stretch=1)
-        new_button = QPushButton("➕ انبارگردانیِ جدید")
+        new_button = QPushButton("➕ انبارگردانی جدید")
         new_button.setObjectName("primaryButton")
         new_button.clicked.connect(self._new_session)
         session_row.addWidget(new_button)
@@ -75,11 +75,11 @@ class StockCountScreen(QWidget):
         self.quantity_field = _AmountField()
         self.quantity_field.setDecimals(3)
         entry_row.addWidget(self.quantity_field, stretch=1)
-        self.record_button = QPushButton("ثبتِ شمارش")
+        self.record_button = QPushButton("ثبت شمارش")
         self.record_button.clicked.connect(self._record)
         entry_row.addWidget(self.record_button)
         # R228: شمارش به تفکیکِ بچ/سریال (موجودیِ دفتریِ هر بچ پیش‌پر می‌شود)
-        self.track_count_button = QPushButton("🏷 شمارش به تفکیکِ بچ/سریال")
+        self.track_count_button = QPushButton("🏷 شمارش به تفکیک بچ/سریال")
         self.track_count_button.setEnabled(False)
         self.track_count_button.clicked.connect(lambda: self._open_tracking_count(self.item_combo.currentData()))
         entry_row.addWidget(self.track_count_button)
@@ -94,7 +94,7 @@ class StockCountScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         layout.addWidget(self.table, stretch=1)
 
-        self.finalize_button = QPushButton("✅ ثبتِ نهایی و صدورِ سندِ اختلاف")
+        self.finalize_button = QPushButton("✅ ثبت نهایی و صدور سند اختلاف")
         self.finalize_button.setObjectName("primaryButton")
         self.finalize_button.clicked.connect(self._finalize)
         layout.addWidget(self.finalize_button)
@@ -127,7 +127,7 @@ class StockCountScreen(QWidget):
         company_id = self._company_id()
         self.session_combo.blockSignals(True)
         self.session_combo.clear()
-        status_labels = {"COUNTING": "در حالِ شمارش", "POSTED": "ثبت‌شده"}
+        status_labels = {"COUNTING": "در حال شمارش", "POSTED": "ثبت‌شده"}
         for s in count_service.list_count_sessions(company_id):
             self.session_combo.addItem(f"{s.session_code} ({status_labels.get(s.status_code, s.status_code)})", s.session_id)
         if select_session_id is not None:
@@ -244,7 +244,7 @@ class StockCountScreen(QWidget):
         session_id = self.session_combo.currentData()
         if company_id is None or session_id is None:
             return
-        if QMessageBox.question(self, "ثبتِ نهایی", "اختلاف‌ها با سندِ اصلاحِ موجودی ثبت شوند؟", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if QMessageBox.question(self, "ثبت نهایی", "اختلاف‌ها با سند اصلاح موجودی ثبت شوند؟", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
         try:
             documents = count_service.finalize_count_session(session_id, company_id, app_session.current_user.user_id)
@@ -254,6 +254,6 @@ class StockCountScreen(QWidget):
         self._reload_sessions(session_id)
         theme.set_status_label(
             self.status_label,
-            f"انبارگردانی ثبت شد؛ {numerals.to_persian_digits(str(len(documents)))} سندِ اصلاحِ موجودی صادر شد." if documents
-            else "انبارگردانی بدونِ اختلاف بسته شد.", ok=True,
+            f"انبارگردانی ثبت شد؛ {numerals.to_persian_digits(str(len(documents)))} سند اصلاح موجودی صادر شد." if documents
+            else "انبارگردانی بدون اختلاف بسته شد.", ok=True,
         )

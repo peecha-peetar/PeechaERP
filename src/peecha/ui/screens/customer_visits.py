@@ -1,5 +1,5 @@
-"""پخشِ سرد/گرم -- R130: رصدِ ویزیت‌هایِ واقعی از دسکتاپ -- ثبتِ خودِ
-چک‌این/چک‌اوت کارِ اپِ موبایل است (R132)، این صفحه فقط نمایش/فیلتر
+"""پخش سرد/گرم — R130: رصد ویزیت‌های واقعی از دسکتاپ — ثبت خود
+چک‌این/چک‌اوت کار برنامهٔ موبایل است (R132)، این صفحه فقط نمایش/فیلتر
 می‌دهد (services/field_sales.py، R129)."""
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from peecha.services import field_sales as field_sales_service
 from peecha.services import users as users_service
 from peecha.ui.widgets import FieldHelpMixin
 
-_COLUMNS = ["وضعیت", "مشتری", "ویزیتور", "ساعتِ ورود", "ساعتِ خروج", "فاصله (متر)", "دلیلِ رد/یادداشت"]
-_STATUS_LABELS = {"IN_PROGRESS": "درحالِ‌انجام", "COMPLETED": "انجام‌شده", "SKIPPED": "رد‌شده"}
+_COLUMNS = ["وضعیت", "مشتری", "ویزیتور", "ساعت ورود", "ساعت خروج", "فاصله (متر)", "دلیل رد/یادداشت"]
+_STATUS_LABELS = {"IN_PROGRESS": "درحال‌انجام", "COMPLETED": "انجام‌شده", "SKIPPED": "رد‌شده"}
 
 
 class CustomerVisitsScreen(FieldHelpMixin, QWidget):
@@ -66,8 +66,8 @@ class CustomerVisitsScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self.table, stretch=1)
 
         self.set_field_help([
-            (self.visitor_combo, "فقط ویزیت‌هایِ همین ویزیتور نشان داده شوند."),
-            (self.status_combo, "فقط ویزیت‌هایِ همین وضعیت نشان داده شوند."),
+            (self.visitor_combo, "فقط ویزیت‌های همین ویزیتور نشان داده شوند."),
+            (self.status_combo, "فقط ویزیت‌های همین وضعیت نشان داده شوند."),
         ])
 
     def _company_id(self) -> int | None:

@@ -1,8 +1,8 @@
-"""طراحیِ گردشِ کار — تعریفِ زنجیره‌ی تاییدِ کارتابل برایِ هر فرمِ برنامه.
-طبقِ درخواستِ صریح («سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»)
-این صفحه رویِ کاتالوگِ عمومیِ فرم‌ها (roles_service.list_forms — همان
-فرم‌هایی که در جدولِ نقش‌ها/دسترسی‌ها هم دیده می‌شوند) کار می‌کند، نه
-فقط حسابداری؛ هر ماژولِ تازه که فرمش را به nav_catalog.py اضافه کند
+"""طراحی گردش کار — تعریف زنجیرهٔ تایید کارتابل برای هر فرم برنامه.
+طبق درخواست صریح («سیستم کارتابل قابل‌گسترش برای همهٔ ماژول‌ها»)
+این صفحه روی کاتالوگ عمومی فرم‌ها (roles_service.list_forms — همان
+فرم‌هایی که در جدول نقش‌ها/دسترسی‌ها هم دیده می‌شوند) کار می‌کند، نه
+فقط حسابداری؛ هر ماژول تازه که فرمش را به nav_catalog.py اضافه کند
 خودکار در این فهرست هم ظاهر می‌شود."""
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class _StepRow(QWidget):
         remove_button = QPushButton("🗑️")
         remove_button.setObjectName("iconButton")
         remove_button.setFixedWidth(44)
-        remove_button.setToolTip("حذفِ مرحله")
+        remove_button.setToolTip("حذف مرحله")
         remove_button.clicked.connect(lambda: on_remove(self))
         layout.addWidget(remove_button)
 
@@ -66,13 +66,13 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("طراحیِ گردشِ کار")
+        title = QLabel("طراحی گردش کار")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "برایِ هر فرمِ برنامه می‌توانید زنجیره‌ای از نقش‌هایِ تاییدکننده تعریف کنید — با ثبتِ سند، به‌ترتیب "
-            "به کارتابلِ هر نقش می‌رود؛ بدونِ تعریف، همان رفتارِ مستقیم (بدونِ کارتابل) باقی می‌ماند."
+            "برای هر فرم برنامه می‌توانید زنجیره‌ای از نقش‌های تاییدکننده تعریف کنید — با ثبت سند، به‌ترتیب "
+            "به کارتابل هر نقش می‌رود؛ بدون تعریف، همان رفتار مستقیم (بدون کارتابل) باقی می‌ماند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -85,7 +85,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         selector_row.addWidget(self.form_combo, stretch=1)
         layout.addLayout(selector_row)
 
-        self.active_checkbox = QCheckBox("این گردشِ کار فعال باشد")
+        self.active_checkbox = QCheckBox("این گردش کار فعال باشد")
         layout.addWidget(self.active_checkbox)
 
         self.status_label = QLabel("")
@@ -100,7 +100,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         add_step_button = QPushButton("➕")
         add_step_button.setObjectName("iconButton")
         add_step_button.setFixedWidth(44)
-        add_step_button.setToolTip("افزودنِ مرحله")
+        add_step_button.setToolTip("افزودن مرحله")
         add_step_button.clicked.connect(self._add_step)
         layout.addWidget(add_step_button)
 
@@ -115,9 +115,9 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.form_combo,
-                "با انتخابِ خالی‌گذاشتنِ همه‌ی مراحل و ذخیره، گردشِ کارِ این فرم حذف می‌شود و به حالتِ بدونِ‌کارتابل برمی‌گردد.",
+                "با انتخاب خالی‌گذاشتن همهٔ مراحل و ذخیره، گردش کار این فرم حذف می‌شود و به حالت بدون‌کارتابل برمی‌گردد.",
             ),
-            (self.active_checkbox, "اگر خاموش باشد، این گردشِ کار روی سندهایِ تازه اعمال نمی‌شود -- انگار اصلاً تعریف نشده."),
+            (self.active_checkbox, "اگر خاموش باشد، این گردش کار روی سندهای تازه اعمال نمی‌شود — انگار اصلاً تعریف نشده."),
         ])
 
     def _company_id(self) -> int | None:
@@ -158,7 +158,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         is_active, steps = cartable_service.get_workflow_steps(company_id, form_code)
         self.active_checkbox.setChecked(is_active)
         if not self._roles:
-            self.status_label.setText("هیچ نقشی برایِ این شرکت تعریف نشده — ابتدا از صفحه‌ی «نقش‌ها» یک نقش بسازید.")
+            self.status_label.setText("هیچ نقشی برای این شرکت تعریف نشده — ابتدا از صفحهٔ «نقش‌ها» یک نقش بسازید.")
             return
         for step in steps:
             self._append_step_row(step.approver_role_id)
@@ -170,7 +170,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
 
     def _add_step(self) -> None:
         if not self._roles:
-            self.status_label.setText("هیچ نقشی برایِ این شرکت تعریف نشده — ابتدا از صفحه‌ی «نقش‌ها» یک نقش بسازید.")
+            self.status_label.setText("هیچ نقشی برای این شرکت تعریف نشده — ابتدا از صفحهٔ «نقش‌ها» یک نقش بسازید.")
             return
         self._append_step_row(None)
 
@@ -188,9 +188,9 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
             return
         role_ids = [row.approver_role_id() for row in self._step_rows]
         if any(r is None for r in role_ids):
-            self.status_label.setText("برایِ هر مرحله باید یک نقش انتخاب شود.")
+            self.status_label.setText("برای هر مرحله باید یک نقش انتخاب شود.")
             return
         cartable_service.save_workflow_steps(company_id, form_code, self.active_checkbox.isChecked(), role_ids)
         self.status_label.setText("")
-        QMessageBox.information(self, "ذخیره شد", "گردشِ کار ذخیره شد.")
+        QMessageBox.information(self, "ذخیره شد", "گردش کار ذخیره شد.")
         self.refresh()

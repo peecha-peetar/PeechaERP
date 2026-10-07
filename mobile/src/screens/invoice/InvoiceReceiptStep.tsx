@@ -59,7 +59,7 @@ export function InvoiceReceiptStep({ actionKey, localPrintData, apiClient, syncE
     try {
       await action(printData);
     } catch {
-      toast.show("چاپ/ساختِ PDF انجام نشد.", "danger");
+      toast.show("چاپ/ساخت PDF انجام نشد.", "danger");
     } finally {
       setBusy(false);
     }
@@ -79,25 +79,25 @@ export function InvoiceReceiptStep({ actionKey, localPrintData, apiClient, syncE
         <Text style={[typography.body, { color: colors.textSecondary }]}>مانده (نسیه): {formatAmount(printData.remaining_amount)}</Text>
       </Card>
 
-      {syncing ? <InlineSpinner label="در حالِ همگام‌سازی با سرور..." /> : null}
+      {syncing ? <InlineSpinner label="در حال همگام‌سازی با سرور..." /> : null}
       {!syncing && !synced ? (
         <Card style={{ borderColor: colors.warning }}>
           <Text style={[typography.caption, { color: colors.warning }]}>
-            اتصال به سرور برقرار نشد -- فاکتور در صفِ آفلاین است و خودکار ارسال می‌شود. چاپِ فعلی پیش‌نمایش (بدونِ شمارهٔ رسمی) است.
+            اتصال به سرور برقرار نشد — فاکتور در صف آفلاین است و خودکار ارسال می‌شود. چاپ فعلی پیش‌نمایش (بدون شمارهٔ رسمی) است.
           </Text>
-          <Button label="تلاشِ دوباره" variant="ghost" fullWidth={false} onPress={refresh} />
+          <Button label="تلاش دوباره" variant="ghost" fullWidth={false} onPress={refresh} />
         </Card>
       ) : null}
       {warning ? (
         <Card style={{ borderColor: colors.danger }}>
           <Text style={[typography.caption, { color: colors.danger }]}>{warning}</Text>
-          <Text style={[typography.caption, { color: colors.textSecondary }]}>دریافتِ این فاکتور را در دسکتاپ (خزانه‌داری) ثبت کنید.</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>دریافت این فاکتور را در دسکتاپ (خزانه‌داری) ثبت کنید.</Text>
         </Card>
       ) : null}
 
-      <Button label="چاپِ فاکتور" onPress={() => run(printInvoice)} loading={busy} disabled={busy || syncing} />
-      <Button label="فایلِ PDF (ذخیره/ارسال)" variant="secondary" onPress={() => run(shareInvoicePdf)} disabled={busy || syncing} />
-      <Button label="فاکتورِ جدید" variant="ghost" onPress={onNewInvoice} />
+      <Button label="چاپ فاکتور" onPress={() => run(printInvoice)} loading={busy} disabled={busy || syncing} />
+      <Button label="فایل PDF (ذخیره/ارسال)" variant="secondary" onPress={() => run(shareInvoicePdf)} disabled={busy || syncing} />
+      <Button label="فاکتور جدید" variant="ghost" onPress={onNewInvoice} />
     </ScrollView>
   );
 }

@@ -1,7 +1,7 @@
-"""لایه‌یِ ارتباطِ خامِ HTTP با Gemini APIِ گوگل (generateContent) -- طبقِ
-درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»). دقیقاً هم‌الگو با
-wc_client.py/telegram_client.py -- فقط پارامتر می‌گیرد و پاسخِ خام
-برمی‌گرداند؛ تصمیم/متنِ خواسته‌شده در commercial_social.py ساخته
+"""لایهٔ ارتباط خام HTTP با Gemini API گوگل (generateContent) — طبق
+درخواست صریح («تولید محتوای خودکار با هوش مصنوعی»). دقیقاً هم‌الگو با
+wc_client.py/telegram_client.py — فقط پارامتر می‌گیرد و پاسخ خام
+برمی‌گرداند؛ تصمیم/متن خواسته‌شده در commercial_social.py ساخته
 می‌شود."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ _DEFAULT_TIMEOUT = 30
 
 
 class AIContentError(RuntimeError):
-    """خطایِ ارتباط با Gemini -- پیامِ HTTP/شبکه به فارسی ترجمه می‌شود."""
+    """خطای ارتباط با Gemini — پیام HTTP/شبکه به فارسی ترجمه می‌شود."""
 
 
 def generate_text(api_key: str, prompt: str, model: str = _DEFAULT_MODEL) -> str:
@@ -30,8 +30,8 @@ def generate_text(api_key: str, prompt: str, model: str = _DEFAULT_MODEL) -> str
         data = None
     if resp.status_code >= 400:
         message = (data or {}).get("error", {}).get("message") if isinstance(data, dict) else None
-        raise AIContentError(f"تولیدِ محتوا -- خطایِ Gemini (HTTP {resp.status_code}): {message or resp.text[:300]}")
+        raise AIContentError(f"تولید محتوا — خطای Gemini (HTTP {resp.status_code}): {message or resp.text[:300]}")
     try:
         return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except (KeyError, IndexError, TypeError) as exc:
-        raise AIContentError("پاسخِ Gemini فاقدِ متنِ تولیدشده بود.") from exc
+        raise AIContentError("پاسخ Gemini فاقد متن تولیدشده بود.") from exc

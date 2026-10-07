@@ -114,48 +114,48 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
         <View style={{ marginTop: spacing.sm }}>
           <StatusBadge
             statusCode={phase}
-            label={{ NOT_STARTED: "شروع‌نشده", IN_PROGRESS: "درحالِ‌انجام", DONE: "ثبت‌شد" }[phase]}
+            label={{ NOT_STARTED: "شروع‌نشده", IN_PROGRESS: "درحال‌انجام", DONE: "ثبت‌شد" }[phase]}
           />
         </View>
       </View>
 
       {phase === "NOT_STARTED" ? (
-        <Button label="ثبتِ ورود (شروعِ ویزیت)" onPress={start} loading={busy} />
+        <Button label="ثبت ورود (شروع ویزیت)" onPress={start} loading={busy} />
       ) : (
         <>
           <Card>
             <Text style={[typography.body, { color: gpsCaptured ? colors.success : colors.textSecondary }]}>
-              {gpsCaptured ? "موقعیتِ مکانی ثبت شد" : "موقعیتِ مکانی در دسترس نبود"}
+              {gpsCaptured ? "موقعیت مکانی ثبت شد" : "موقعیت مکانی در دسترس نبود"}
             </Text>
           </Card>
 
           {phase === "IN_PROGRESS" ? (
             <>
-              {/* طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت
-                  و عکس و سفارش باشه»): اختیاری -- گرفتنِ عکسی از مغازه/
-                  ویترین به‌عنوانِ مستندِ ویزیت. */}
+              {/* طبق درخواست صریح کاربر («برای ویزیت پخش سرد هم ویزیت
+                  و عکس و سفارش باشه»): اختیاری — گرفتن عکسی از مغازه/
+                  ویترین به‌عنوان مستند ویزیت. */}
               <Button
-                label={photoBase64 ? "عکس گرفته شد (دوباره بگیر)" : "گرفتنِ عکس (اختیاری)"}
+                label={photoBase64 ? "عکس گرفته شد (دوباره بگیر)" : "گرفتن عکس (اختیاری)"}
                 variant="secondary"
                 onPress={capturePhoto}
                 loading={capturingPhoto}
               />
               <Button
-                label={signatureBase64 ? "امضا ثبت شد (دوباره بگیر)" : "ثبتِ امضا (اختیاری)"}
+                label={signatureBase64 ? "امضا ثبت شد (دوباره بگیر)" : "ثبت امضا (اختیاری)"}
                 variant="secondary"
                 onPress={captureSignature}
                 loading={capturingSignature}
               />
-              <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} placeholder="مثلاً: قفسه‌چینیِ محصولات انجام شد" />
-              <Button label="تکمیلِ ویزیت" onPress={complete} />
+              <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} placeholder="مثلاً: قفسه‌چینی محصولات انجام شد" />
+              <Button label="تکمیل ویزیت" onPress={complete} />
 
               <Input
-                label="دلیلِ ردِ ویزیت (فقط اگر ویزیت انجام نشد)"
+                label="دلیل رد ویزیت (فقط اگر ویزیت انجام نشد)"
                 value={skipReason}
                 onChangeText={setSkipReason}
                 placeholder="مثلاً: فروشگاه بسته بود"
               />
-              <Button label="ردِ ویزیت" variant="danger" onPress={skip} disabled={!skipReason.trim()} />
+              <Button label="رد ویزیت" variant="danger" onPress={skip} disabled={!skipReason.trim()} />
             </>
           ) : (
             <Text style={[typography.body, { color: colors.textSecondary }]}>ویزیت ثبت شد.</Text>

@@ -92,8 +92,8 @@ export function SettingsScreen({
 
   const clearOfflineQueue = () => {
     Alert.alert(
-      "پاکسازیِ صفِ آفلاین",
-      "همه‌یِ عملیات‌هایِ درحالِ‌انتظارِ ارسال (که هنوز به سرور نرسیده‌اند) برایِ همیشه حذف می‌شوند. این کار را فقط وقتی بزن که صف قفل شده و ارسال نمی‌شود.",
+      "پاکسازی صف آفلاین",
+      "همهٔ عملیات‌های درحال‌انتظار ارسال (که هنوز به سرور نرسیده‌اند) برای همیشه حذف می‌شوند. این کار را فقط وقتی بزن که صف قفل شده و ارسال نمی‌شود.",
       [
         { text: "انصراف", style: "cancel" },
         {
@@ -101,7 +101,7 @@ export function SettingsScreen({
           style: "destructive",
           onPress: async () => {
             await offlineQueue.clear();
-            Alert.alert("انجام شد", "صفِ آفلاین پاک شد.");
+            Alert.alert("انجام شد", "صف آفلاین پاک شد.");
             await refreshSyncInfo();
           },
         },
@@ -120,19 +120,19 @@ export function SettingsScreen({
 
       <Card>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={[typography.body, { color: colors.textPrimary }]}>پوسته‌یِ تیره</Text>
-          <Button label={mode === "dark" ? "فعال" : "غیرِفعال"} variant="secondary" fullWidth={false} onPress={toggleMode} />
+          <Text style={[typography.body, { color: colors.textPrimary }]}>پوستهٔ تیره</Text>
+          <Button label={mode === "dark" ? "فعال" : "غیرفعال"} variant="secondary" fullWidth={false} onPress={toggleMode} />
         </View>
       </Card>
 
       <Card>
-        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginBottom: spacing.sm }]}>وضعیتِ همگام‌سازی</Text>
+        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginBottom: spacing.sm }]}>وضعیت همگام‌سازی</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
-          {pendingCount === 0 ? "همه‌چیز همگام است." : `${pendingCount} عملیاتِ درحالِ‌انتظار`}
+          {pendingCount === 0 ? "همه‌چیز همگام است." : `${pendingCount} عملیات درحال‌انتظار`}
         </Text>
         <View style={{ marginTop: spacing.sm }}>
           <Button
-            label={syncing ? "در حالِ همگام‌سازی..." : "همگام‌سازیِ دستی"}
+            label={syncing ? "در حال همگام‌سازی..." : "همگام‌سازی دستی"}
             variant="secondary"
             onPress={syncNow}
             disabled={syncing}
@@ -143,7 +143,7 @@ export function SettingsScreen({
       {errors.length > 0 ? (
         <Card>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm }}>
-            <Text style={[typography.bodyBold, { color: colors.danger }]}>آخرین خطاهایِ همگام‌سازی</Text>
+            <Text style={[typography.bodyBold, { color: colors.danger }]}>آخرین خطاهای همگام‌سازی</Text>
             <Button label="پاکسازی" variant="ghost" fullWidth={false} onPress={clearErrorLog} />
           </View>
           {errors.map((e, index) => (
@@ -158,19 +158,19 @@ export function SettingsScreen({
         </Card>
       ) : null}
 
-      <Button label="تغییرِ حالتِ پخش (گرم/سرد)" variant="secondary" onPress={onChangeMode} />
+      <Button label="تغییر حالت پخش (گرم/سرد)" variant="secondary" onPress={onChangeMode} />
 
-      <Button label="داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
+      <Button label="داشبورد مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 
-      <Button label="صندوقِ تاییدها" variant="secondary" onPress={onOpenApprovals} />
+      <Button label="صندوق تاییدها" variant="secondary" onPress={onOpenApprovals} />
 
       {onOpenWarehouse ? <Button label="انبار: اسکن، وظایف و انتقال" variant="secondary" onPress={onOpenWarehouse} /> : null}
 
       {onOpenVehicleSettlement ? (
-        <Button label="تسویهٔ پایانِ روزِ خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />
+        <Button label="تسویهٔ پایان روز خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />
       ) : null}
 
-      <Button label="پاکسازیِ صفِ آفلاین (اضطراری)" variant="secondary" onPress={clearOfflineQueue} />
+      <Button label="پاکسازی صف آفلاین (اضطراری)" variant="secondary" onPress={clearOfflineQueue} />
 
       <Button label="خروج از حساب" variant="danger" onPress={logout} />
     </ScrollView>

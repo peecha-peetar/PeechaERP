@@ -35,7 +35,7 @@ for mod, names in ((prd, ["MasterDataScreen", "PlanningScreen", "PrdCostingScree
         w = getattr(mod, n)()
         plain = [b.text() for b in w.findChildren(QPushButton) if len(b.text()) > 2 and not b.objectName()]
         check(not plain, f"{n}: no unstyled text buttons {plain}")
-check(set(ms.ICONS) >= {"ذخیره", "ثبتِ تولید", "فروش", "اجرایِ MRP"}, "icon map covers main actions")
+check(set(ms.ICONS) >= {"ذخیره", "ثبت تولید", "فروش", "محاسبهٔ نیاز مواد (MRP)"}, "icon map covers main actions")
 
 fx.finish()
 sys.stdout.flush()

@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -178,43 +178,43 @@ tracked_receipt(10, pick1, "B-LATE", late)
 # --- ۱) بچ به تفکیکِ محل ---------------------------------------------------------
 bb = wl.bin_batches(company_id, wh, drug)
 check([(x.batch_no, x.quantity) for x in bb[(bulk1, drug)]] == [("B-EARLY", 10)] and
-      [(x.batch_no, x.quantity) for x in bb[(pick1, drug)]] == [("B-LATE", 10)], "ورودِ بچ با محلِ همان ردیف ثبت شد")
+      [(x.batch_no, x.quantity) for x in bb[(pick1, drug)]] == [("B-LATE", 10)], "ورود بچ با محل همان ردیف ثبت شد")
 issue = post(draft("ISSUE", drug, 4, bin_id=pick1, src=wh))
 with new_session() as s:
     from peecha.db.models.inventory import StockDocumentLine as SDL
     moves = list(s.scalars(select(LotMovement).join(SDL, SDL.line_id == LotMovement.stock_document_line_id)
                            .where(SDL.stock_document_id == issue)))
 check(len(moves) == 1 and moves[0].bin_location_id == pick1 and moves[0].batch_id ==
-      next(x.batch_id for x in bb[(pick1, drug)]), "خروج از محل، بچِ همان محل را برداشت (نه زودانقضایِ محلِ دیگر)")
+      next(x.batch_id for x in bb[(pick1, drug)]), "خروج از محل، بچ همان محل را برداشت (نه زودانقضای محل دیگر)")
 check(wl.bin_batches(company_id, wh, drug)[(pick1, drug)][0].quantity == 6, "ماندهٔ بچ در محل")
 cont = {c.item_id: c for c in wl.contents(company_id, bulk1)}
-check(cont[drug].batches == "B-EARLY" and cont[drug].expiry == early, "محتوایِ محل: بچ و انقضایِ همان محل")
+check(cont[drug].batches == "B-EARLY" and cont[drug].expiry == early, "محتوای محل: بچ و انقضای همان محل")
 cont = {c.item_id: c for c in wl.contents(company_id, pick1)}
-check(cont[drug].batches == "B-LATE" and cont[drug].expiry == late, "محتوایِ محلِ دیگر: بچِ خودش")
+check(cont[drug].batches == "B-LATE" and cont[drug].expiry == late, "محتوای محل دیگر: بچ خودش")
 wl.transfer(company_id, user.user_id, drug, bulk1, bulk2, D(5))
 bb = wl.bin_batches(company_id, wh, drug)
 check(bb[(bulk2, drug)][0].batch_no == "B-EARLY" and bb[(bulk2, drug)][0].quantity == 5 and bb[(bulk1, drug)][0].quantity == 5,
-      "انتقال بینِ محل‌ها بچ را با خود می‌برد")
+      "انتقال بین محل‌ها بچ را با خود می‌برد")
 exp = wl.heatmap(company_id, wh, "EXPIRY")
-check(exp[bulk2] == 10 and exp[pick1] == 100, f"نقشهٔ انقضا به تفکیکِ محل ({exp.get(bulk2)}, {exp.get(pick1)})")
+check(exp[bulk2] == 10 and exp[pick1] == 100, f"نقشهٔ انقضا به تفکیک محل ({exp.get(bulk2)}, {exp.get(pick1)})")
 # پرکردنِ سوابق از دفترِ انبار (همان دستورِ migration)
 with new_session() as s:
     s.execute(text("UPDATE inv.lot_movements SET bin_location_id = NULL WHERE item_id = :i"), {"i": drug}); s.commit()
-check(wl.bin_batches(company_id, wh, drug) == {}, "بدونِ ستونِ محل، بچ به محل نسبت داده نمی‌شود")
+check(wl.bin_batches(company_id, wh, drug) == {}, "بدون ستون محل، بچ به محل نسبت داده نمی‌شود")
 sql = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "db", "schema", "188_lot_movements_bin.sql"), encoding="utf-8").read()
 update_sql = sql[sql.index("UPDATE inv.lot_movements"):sql.index("CREATE INDEX")]
 with new_session() as s:
     s.execute(text(update_sql)); s.commit()
 check({k: [(x.batch_no, x.quantity) for x in v] for k, v in wl.bin_batches(company_id, wh, drug).items()} ==
-      {k: [(x.batch_no, x.quantity) for x in v] for k, v in bb.items()}, "پرکردنِ سوابق از دفترِ انبار همان نتیجه را می‌دهد")
+      {k: [(x.batch_no, x.quantity) for x in v] for k, v in bb.items()}, "پرکردن سوابق از دفتر انبار همان نتیجه را می‌دهد")
 
 # --- ۲) شمارشِ محلِ بچ‌دار ---------------------------------------------------------
 sid = lc.create_location_count(company_id, wh, [rb], user.user_id)
 lines = {(l.location_id, l.item_id, l.batch_no): l for l in lc.count_lines(company_id, sid)}
 check(lines[(bulk1, drug, "B-EARLY")].expected == 5 and lines[(bulk2, drug, "B-EARLY")].expected == 5 and (bulk1, item, None) in lines,
-      "ردیفِ شمارش به تفکیکِ بچ در هر محل")
-check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, drug, D(5))), "کالایِ بچ‌دار بدونِ شمارهٔ بچ رد شد")
-check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, drug, D(5), batch_no="NOPE")), "بچِ ناشناخته رد شد")
+      "ردیف شمارش به تفکیک بچ در هر محل")
+check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, drug, D(5))), "کالای بچ‌دار بدون شمارهٔ بچ رد شد")
+check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, drug, D(5), batch_no="NOPE")), "بچ ناشناخته رد شد")
 lc.record_location_count(company_id, sid, bulk1, drug, D(3), user.user_id, "B-EARLY")
 lc.record_location_count(company_id, sid, bulk2, drug, D(1), user.user_id, "B-LATE")  # بچِ پیدا‌شده در محلِ دیگر
 lc.record_location_count(company_id, sid, bulk2, drug, D(5), user.user_id, "B-EARLY")
@@ -222,7 +222,7 @@ docs = lc.finalize_location_count(company_id, sid, user.user_id)
 bb = wl.bin_batches(company_id, wh, drug)
 check(len(docs) == 2 and [(x.batch_no, x.quantity) for x in bb[(bulk1, drug)]] == [("B-EARLY", 3)]
       and sorted((x.batch_no, x.quantity) for x in bb[(bulk2, drug)]) == [("B-EARLY", 5), ("B-LATE", 1)],
-      "اصلاحِ اختلاف به تفکیکِ بچ و محل")
+      "اصلاح اختلاف به تفکیک بچ و محل")
 
 # --- ۳) داشبوردِ عملیات ------------------------------------------------------------
 ids = ops.generate_tasks(company_id, "PICK", ("STOCK", draft("ISSUE", item, 2, src=wh)), user.user_id)
@@ -233,13 +233,13 @@ ops.complete_pick(ids2[0], company_id, user.user_id, D(2))
 ops.generate_tasks(company_id, "PICK", ("STOCK", draft("ISSUE", item, 1, src=wh)), user.user_id)
 r = wms_kpis.dashboard(company_id, today - datetime.timedelta(days=30), today, wh)
 k = {c: v for c, _t, v, _u in r.kpis}
-check(len(r.kpis) == 12 and k["TASKS_DONE"] == 2 and k["TASKS_OPEN"] == 1 and k["PICK_ACCURACY"] == 50, f"شاخص‌هایِ وظایف ({k})")
+check(len(r.kpis) == 12 and k["TASKS_DONE"] == 2 and k["TASKS_OPEN"] == 1 and k["PICK_ACCURACY"] == 50, f"شاخص‌های وظایف ({k})")
 check(k["COUNT_LINES"] == 3 and k["COUNT_ACCURACY"] == 33.3 and k["LOCATION_USE"] is not None and k["FULL_LOCATIONS"] >= 0,
-      f"شاخص‌هایِ شمارش و محل ({k['COUNT_LINES']}, {k['COUNT_ACCURACY']})")
-check(r.by_type["PICK"].done == 2 and r.by_type["PICK"].open == 1 and r.operators[user.user_id].picks == 2, "به تفکیکِ نوع و اپراتور")
+      f"شاخص‌های شمارش و محل ({k['COUNT_LINES']}, {k['COUNT_ACCURACY']})")
+check(r.by_type["PICK"].done == 2 and r.by_type["PICK"].open == 1 and r.operators[user.user_id].picks == 2, "به تفکیک نوع و اپراتور")
 from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 screen = WarehouseOperationsScreen(); screen.refresh()
-check(len(screen.kpi_tab.card_labels) == 12 and screen.kpi_tab.operator_table.rowCount() == 1, "زبانهٔ داشبوردِ عملیات")
+check(len(screen.kpi_tab.card_labels) == 12 and screen.kpi_tab.operator_table.rowCount() == 1, "زبانهٔ داشبورد عملیات")
 screen.count_tab.refresh()
 
 # --- ۴) API: شاخص‌ها، برچسب، شمارشِ بچ ------------------------------------------------
@@ -248,16 +248,16 @@ import peecha_api.main as api_main
 client = TestClient(api_main.app)
 H = {"Authorization": "Bearer " + client.post("/auth/login", json={"username": "admin", "password": "secret123"}).json()["access_token"]}
 kp = client.get("/locations/kpis", params={"days": 30}, headers=H).json()
-check(len(kp["kpis"]) == 12 and any(t["type"] == "PICK" for t in kp["by_type"]), "API: داشبوردِ عملیات")
+check(len(kp["kpis"]) == 12 and any(t["type"] == "PICK" for t in kp["by_type"]), "API: داشبورد عملیات")
 lab = client.get(f"/locations/{bulk1}/label", headers=H).json()
 check(lab["code"] == "WH01-Z01-R01-L01-B01" and lab["qr_svg"].startswith("<svg") and lab["barcode_svg"].count("<rect") > 20
-      and lab["qr_payload"] == wl.qr_payload(bulk1, lab["code"]), "API: برچسبِ محل (QR و بارکد)")
-check(client.get("/locations/999999/label", headers=H).status_code == 400, "API: برچسبِ محلِ نامعتبر")
+      and lab["qr_payload"] == wl.qr_payload(bulk1, lab["code"]), "API: برچسب محل (QR و بارکد)")
+check(client.get("/locations/999999/label", headers=H).status_code == 400, "API: برچسب محل نامعتبر")
 sid2 = lc.create_location_count(company_id, wh, [bulk1], user.user_id)
 det = client.get(f"/locations/counts/{sid2}", headers=H).json()
-check(any(d["batch_no"] == "B-EARLY" for d in det), "API: شمارهٔ بچ در ردیفِ شمارش")
+check(any(d["batch_no"] == "B-EARLY" for d in det), "API: شمارهٔ بچ در ردیف شمارش")
 r = client.post(f"/locations/counts/{sid2}/record", json={"location_id": bulk1, "item_id": drug, "quantity": "3", "batch_no": "B-EARLY"}, headers=H)
-check(r.status_code == 200 and any(l.batch_no == "B-EARLY" and l.counted == 3 for l in lc.count_lines(company_id, sid2)), "API: ثبتِ شمارشِ بچ")
+check(r.status_code == 200 and any(l.batch_no == "B-EARLY" and l.counted == 3 for l in lc.count_lines(company_id, sid2)), "API: ثبت شمارش بچ")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

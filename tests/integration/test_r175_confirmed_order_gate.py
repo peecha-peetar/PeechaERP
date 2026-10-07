@@ -49,14 +49,14 @@ from peecha.services import commercial_pricing as pricing_service
 
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "7001", "کالایِ عادی",
+    company_id, "7001", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
+    company_id, "WH-1", "انبار آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
 )
-customer_id = dimensions_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی")
-channel_code = pricing_service.create_channel(company_id, "COLD-1", "پخشِ سردِ منطقه‌یِ ۱", "PRE_SALES")
+customer_id = dimensions_service.create_customer(company_id, "C-1", "مشتری آزمایشی")
+channel_code = pricing_service.create_channel(company_id, "COLD-1", "پخش سرد منطقهٔ ۱", "PRE_SALES")
 
 order_id = documents_service.create_document(
     company_id, user.user_id, "SALES_ORDER", datetime.date.today(),
@@ -75,17 +75,17 @@ documents_service.confirm_document(order_id, company_id, user.user_id)
 # دکمهٔ جداگانهٔ «تصویبِ مدیر» (APPROVED) هنوز زده نشده -- باید همین حالا
 # در صفِ تاییدِ انبار ظاهر شود.
 doc = documents_service.get_document(order_id, company_id)[0]
-check(doc.status_code == "CONFIRMED", f"سفارش در وضعیتِ CONFIRMED است (got {doc.status_code})")
+check(doc.status_code == "CONFIRMED", f"سفارش در وضعیت CONFIRMED است (got {doc.status_code})")
 
 pending = documents_service.list_pre_sales_pending_warehouse_approval(company_id)
-check(order_id in [d.document_id for d in pending], "سفارشِ فقط-تاییدشده (بدونِ تصویبِ مدیر) هم در صفِ تاییدِ انبار ظاهر شد")
+check(order_id in [d.document_id for d in pending], "سفارش فقط-تاییدشده (بدون تصویب مدیر) هم در صف تایید انبار ظاهر شد")
 
 documents_service.approve_warehouse(order_id, company_id, user.user_id)
 doc = documents_service.get_document(order_id, company_id)[0]
-check(doc.warehouse_approved_at is not None, "تاییدِ انبار رویِ سفارشِ CONFIRMED با موفقیت ثبت شد")
+check(doc.warehouse_approved_at is not None, "تایید انبار روی سفارش CONFIRMED با موفقیت ثبت شد")
 
 invoice_id = documents_service.convert_to_invoice(order_id, company_id, user.user_id, datetime.date.today())
-check(invoice_id is not None, "تبدیل به فاکتور برایِ سفارشِ CONFIRMED (بدونِ نیازِ APPROVED) موفق شد")
+check(invoice_id is not None, "تبدیل به فاکتور برای سفارش CONFIRMED (بدون نیاز APPROVED) موفق شد")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

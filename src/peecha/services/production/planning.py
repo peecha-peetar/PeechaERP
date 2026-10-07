@@ -1,8 +1,8 @@
-"""برنامه‌ریزیِ تولید -- R269: برنامهٔ تولید (روز/هفته/ماه)، MRPِ سبک، بارِ ظرفیت و تقویمِ تولید.
+"""برنامه‌ریزی تولید — R269: برنامهٔ تولید (روز/هفته/ماه)، MRP سبک، بار ظرفیت و تقویم تولید.
 
-MRP از داده‌هایِ موجودِ ERP می‌خواند: سفارش‌هایِ فروشِ باز (همان فرمولِ «تعهدِ سفارش» در گزارش‌هایِ انبار)، حداقلِ
-موجودی (inv.reorder_policies)، دستورهایِ تولیدِ باز، BOM، موجودی/رزرو (inv.stock_balance) و سفارش‌هایِ خریدِ باز.
-پیشنهادِ «خرید» به «درخواستِ خریدِ» موجود و پیشنهادِ «تولید» به دستورِ تولید تبدیل می‌شود.
+MRP از داده‌های موجود ERP می‌خواند: سفارش‌های فروش باز (همان فرمول «تعهد سفارش» در گزارش‌های انبار)، حداقل
+موجودی (inv.reorder_policies)، دستورهای تولید باز، فهرست مواد، موجودی/رزرو (inv.stock_balance) و سفارش‌های خرید باز.
+پیشنهاد «خرید» به «درخواست خرید» موجود و پیشنهاد «تولید» به دستور تولید تبدیل می‌شود.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from peecha.services.production import master as pm
 
 ZERO = c.ZERO
 _OPEN_PRODUCTION = ("DRAFT", "PLANNED", "RELEASED", "IN_PROGRESS", "ON_HOLD")
-PLAN_STATUS = {"DRAFT": "پیش‌نویس", "APPROVED": "تأییدشده", "CLOSED": "بسته"}
+PLAN_STATUS = {"DRAFT": "پیش‌نویس", "APPROVED": "تاییدشده", "CLOSED": "بسته"}
 ACTION_LABELS = {"PURCHASE": "خرید", "PRODUCE": "تولید", "NONE": "-"}
 
 
@@ -37,10 +37,10 @@ def create_plan(company_id: int, user_id: int, code: str, name: str, start_date:
     if period_type not in ("DAY", "WEEK", "MONTH"):
         raise ValueError("دورهٔ برنامه نامعتبر است.")
     if not code.strip() or not name.strip() or end_date < start_date:
-        raise ValueError("کد، نام و بازهٔ تاریخِ معتبر الزامی است.")
+        raise ValueError("کد، نام و بازهٔ تاریخ معتبر الزامی است.")
     with new_session() as session:
         if session.scalar(select(ProductionPlan.plan_id).where(ProductionPlan.company_id == company_id, ProductionPlan.code == code.strip())):
-            raise ValueError("این کدِ برنامه قبلاً تعریف شده است.")
+            raise ValueError("این کد برنامه قبلاً تعریف شده است.")
         row = ProductionPlan(company_id=company_id, code=code.strip(), name=name.strip(), period_type=period_type,
                              start_date=start_date, end_date=end_date, status_code="DRAFT", notes=notes, created_by_user_id=user_id)
         session.add(row)
@@ -55,7 +55,7 @@ def _plan(session, company_id: int, plan_id: int, editable: bool = False) -> Pro
     if plan is None or plan.company_id != company_id:
         raise ValueError("برنامهٔ تولید نامعتبر است.")
     if editable and plan.status_code != "DRAFT":
-        raise ValueError("فقط برنامهٔ پیش‌نویس قابلِ ویرایش است.")
+        raise ValueError("فقط برنامهٔ پیش‌نویس قابل ویرایش است.")
     return plan
 
 
@@ -69,9 +69,9 @@ def add_plan_line(company_id: int, plan_id: int, item_id: int, planned_date: dat
         plan = _plan(session, company_id, plan_id, editable=True)
         c.item_of(session, company_id, item_id)
         if not plan.start_date <= planned_date <= plan.end_date:
-            raise ValueError("تاریخِ ردیف خارج از بازهٔ برنامه است.")
+            raise ValueError("تاریخ ردیف خارج از بازهٔ برنامه است.")
         if pm.effective_bom_id(session, item_id, planned_date) is None:
-            raise ValueError(f"برایِ «{c.item_label(session, item_id)}» BOMِ معتبری وجود ندارد.")
+            raise ValueError(f"برای «{c.item_label(session, item_id)}» فهرست مواد معتبری وجود ندارد.")
         work_center_id = work_center_id or _main_work_center(session, item_id)
         row = ProductionPlanLine(plan_id=plan_id, item_id=item_id, planned_date=planned_date, quantity=quantity,
                                  work_center_id=work_center_id, source_type=source_type, sales_order_line_id=sales_order_line_id,
@@ -91,14 +91,14 @@ def remove_plan_line(company_id: int, line_id: int) -> None:
     with new_session() as session:
         row = session.get(ProductionPlanLine, line_id)
         if row is None:
-            raise ValueError("ردیفِ برنامه نامعتبر است.")
+            raise ValueError("ردیف برنامه نامعتبر است.")
         _plan(session, company_id, row.plan_id, editable=True)
         session.delete(row)
         session.commit()
 
 
 def _period_dates(plan: ProductionPlan) -> list[datetime.date]:
-    """تاریخِ شروعِ هر بازهٔ برنامه (روزانه/هفتگی/ماهانهٔ شمسی)."""
+    """تاریخ شروع هر بازهٔ برنامه (روزانه/هفتگی/ماهانهٔ شمسی)."""
     from peecha.services.fixed_assets.common import add_months, period_of
 
     dates, d = [], plan.start_date
@@ -114,7 +114,7 @@ def _period_dates(plan: ProductionPlan) -> list[datetime.date]:
 
 
 def generate_from_sales_orders(company_id: int, plan_id: int) -> int:
-    """ردیفِ برنامه برایِ ماندهٔ سفارش‌هایِ فروشِ باز (کالاهایِ ساختنی، کسرِ موجودیِ آزاد و دستورهایِ باز)."""
+    """ردیف برنامه برای ماندهٔ سفارش‌های فروش باز (کالاهای ساختنی، کسر موجودی آزاد و دستورهای باز)."""
     demand = open_sales_demand(company_id)
     added = 0
     with new_session() as session:
@@ -133,14 +133,14 @@ def generate_from_sales_orders(company_id: int, plan_id: int) -> int:
             date = min(max(d.date, plan.start_date), plan.end_date)
             session.add(ProductionPlanLine(plan_id=plan_id, item_id=d.item_id, planned_date=date, quantity=c.qty(qty),
                                            work_center_id=_main_work_center(session, d.item_id), source_type="SALES_ORDER", sales_order_line_id=d.line_id,
-                                           notes=f"سفارشِ فروش {d.document_no}"))
+                                           notes=f"سفارش فروش {d.document_no}"))
             added += 1
         session.commit()
     return added
 
 
 def generate_from_min_stock(company_id: int, plan_id: int) -> int:
-    """ردیفِ برنامه برایِ کالاهایِ ساختنی که موجودیِ آزاد + تأمینِ باز به حداقلِ موجودی نمی‌رسد."""
+    """ردیف برنامه برای کالاهای ساختنی که موجودی آزاد + تامین باز به حداقل موجودی نمی‌رسد."""
     added = 0
     with new_session() as session:
         plan = _plan(session, company_id, plan_id, editable=True)
@@ -155,7 +155,7 @@ def generate_from_min_stock(company_id: int, plan_id: int) -> int:
                 continue
             qty = decimal.Decimal(max_qty or min_qty) - projected
             session.add(ProductionPlanLine(plan_id=plan_id, item_id=item_id, planned_date=plan.start_date, quantity=c.qty(qty),
-                                           work_center_id=_main_work_center(session, item_id), source_type="MIN_STOCK", notes="رسیدن به حداقل/حداکثرِ موجودی"))
+                                           work_center_id=_main_work_center(session, item_id), source_type="MIN_STOCK", notes="رسیدن به حداقل/حداکثر موجودی"))
             added += 1
         session.commit()
     return added
@@ -172,14 +172,14 @@ def approve_plan(company_id: int, user_id: int, plan_id: int) -> None:
 
 
 def convert_plan_to_orders(company_id: int, user_id: int, plan_id: int) -> list[int]:
-    """ساختِ دستورِ تولید (پیش‌نویس) برایِ ردیف‌هایِ تبدیل‌نشدهٔ برنامهٔ تأییدشده."""
+    """ساخت دستور تولید (پیش‌نویس) برای ردیف‌های تبدیل‌نشدهٔ برنامهٔ تاییدشده."""
     from peecha.services.production import orders as po
 
     created = []
     with new_session() as session:
         plan = _plan(session, company_id, plan_id)
         if plan.status_code != "APPROVED":
-            raise ValueError("ابتدا برنامه را تأیید کنید.")
+            raise ValueError("ابتدا برنامه را تایید کنید.")
         for ln in session.scalars(select(ProductionPlanLine).where(ProductionPlanLine.plan_id == plan_id,
                                                                    ProductionPlanLine.order_id.is_(None)).with_for_update()):
             prof = session.get(ItemProductionProfile, ln.item_id)
@@ -220,7 +220,7 @@ def plan_lines(company_id: int, plan_id: int) -> list[SimpleNamespace]:
 
 
 def plan_summary(company_id: int, plan_id: int) -> list[SimpleNamespace]:
-    """جمعِ برنامه به تفکیکِ بازه (روز/هفته/ماه) و کالا."""
+    """جمع برنامه به تفکیک بازه (روز/هفته/ماه) و کالا."""
     with new_session() as session:
         plan = _plan(session, company_id, plan_id)
         starts = _period_dates(plan)
@@ -238,7 +238,7 @@ def plan_summary(company_id: int, plan_id: int) -> list[SimpleNamespace]:
 # داده‌هایِ تقاضا/عرضه (از ماژول‌هایِ موجود)
 # =====================================================================================
 def open_sales_demand(company_id: int) -> list[SimpleNamespace]:
-    """ماندهٔ فاکتورنشدهٔ سفارش‌هایِ فروشِ باز -- همان فرمولِ «تعهدِ سفارش»."""
+    """ماندهٔ فاکتورنشدهٔ سفارش‌های فروش باز — همان فرمول «تعهد سفارش»."""
     from peecha.services import purchase_reports as base
     from peecha.services.purchase_reports_ext import _OPEN_ORDER_STATUSES
 
@@ -256,7 +256,7 @@ def open_sales_demand(company_id: int) -> list[SimpleNamespace]:
 
 
 def open_purchase_supply(company_id: int) -> dict[int, decimal.Decimal]:
-    """ماندهٔ دریافت‌نشدهٔ سفارش‌هایِ خریدِ باز به تفکیکِ کالا."""
+    """ماندهٔ دریافت‌نشدهٔ سفارش‌های خرید باز به تفکیک کالا."""
     from peecha.services import purchase_reports as base
     from peecha.services.purchase_reports_ext import _OPEN_ORDER_STATUSES
 
@@ -305,7 +305,7 @@ def _is_made(session, item_id: int) -> bool:
 # MRP
 # =====================================================================================
 def _levels(session, company_id: int) -> dict[int, int]:
-    """سطحِ پایین‌ترین کاربردِ هر کالا در BOMهایِ فعال (low-level code)."""
+    """سطح پایین‌ترین کاربرد هر کالا در فهرست موادهای فعال (low-level code)."""
     edges = defaultdict(set)
     for parent, child in session.execute(select(BomHeader.finished_item_id, BomLine.component_item_id)
                                          .join(BomLine, BomLine.bom_id == BomHeader.bom_id)
@@ -337,7 +337,7 @@ def _lot_size(prof: ItemProductionProfile | None, qty: decimal.Decimal) -> decim
 
 def run_mrp(company_id: int, user_id: int | None = None, horizon_days: int = 30, include_sales: bool = True,
             include_min_stock: bool = True, include_plans: bool = True, include_orders: bool = True) -> int:
-    """MRPِ سطح‌به‌سطح: نیازِ ناخالص (مستقل + وابسته) − موجودیِ آزاد − تأمینِ باز + حداقلِ موجودی ← نیازِ خالص و پیشنهاد."""
+    """MRP سطح‌به‌سطح: نیاز ناخالص (مستقل + وابسته) − موجودی آزاد − تامین باز + حداقل موجودی ← نیاز خالص و پیشنهاد."""
     today = datetime.date.today()
     horizon = today + datetime.timedelta(days=horizon_days)
     sales = open_sales_demand(company_id) if include_sales else []
@@ -456,7 +456,7 @@ def mrp_lines(company_id: int, run_id: int | None = None) -> list[SimpleNamespac
                 return []
         run = session.get(MrpRun, run_id)
         if run is None or run.company_id != company_id:
-            raise ValueError("اجرایِ MRP نامعتبر است.")
+            raise ValueError("محاسبهٔ نیاز مواد (MRP) نامعتبر است.")
         rows = list(session.scalars(select(MrpLine).where(MrpLine.run_id == run_id).order_by(MrpLine.level, MrpLine.item_id)))
         labels = c.item_labels(session, [r.item_id for r in rows])
         return [SimpleNamespace(**{k: getattr(r, k) for k in (
@@ -467,7 +467,7 @@ def mrp_lines(company_id: int, run_id: int | None = None) -> list[SimpleNamespac
 
 
 def convert_mrp(company_id: int, user_id: int, mrp_line_ids: list[int]) -> SimpleNamespace:
-    """پیشنهادِ «تولید» ← دستورِ تولیدِ پیش‌نویس؛ پیشنهادِ «خرید» ← یک «درخواستِ خریدِ» موجود (ماژولِ تدارکات)."""
+    """پیشنهاد «تولید» ← دستور تولید پیش‌نویس؛ پیشنهاد «خرید» ← یک «درخواست خرید» موجود (ماژول تدارکات)."""
     from peecha.services import purchase_requests as pr_service
     from peecha.services.production import orders as po
 
@@ -483,7 +483,7 @@ def convert_mrp(company_id: int, user_id: int, mrp_line_ids: list[int]) -> Simpl
         today = datetime.date.today()
         request_id = pr_service.create_request(company_id, user_id, pr_service.RequestFields(
             request_date=today, required_date=max(today, min((s[4] for s in buy if s[4]), default=today)),
-            description="پیشنهادِ MRPِ تولید"))
+            description="پیشنهاد MRP تولید"))
         with new_session() as session:
             uoms = dict(session.execute(select(Item.item_id, Item.base_uom_id).where(Item.item_id.in_([s[1] for s in buy]))).all())
         for mid, item_id, _a, qty, nd, _rd in buy:
@@ -508,7 +508,7 @@ def convert_mrp(company_id: int, user_id: int, mrp_line_ids: list[int]) -> Simpl
 # ظرفیت و تقویم
 # =====================================================================================
 def _order_load(session, company_id: int) -> list[tuple]:
-    """(مرکزِ کاری، دستور، شروع، پایان، ساعتِ باقیمانده) برایِ دستورهایِ باز -- ساعتِ مانده = استانداردِ عملیات × نسبتِ مانده."""
+    """(مرکز کاری، دستور، شروع، پایان، ساعت باقیمانده) برای دستورهای باز — ساعت مانده = استاندارد عملیات × نسبت مانده."""
     out = []
     for o in session.scalars(select(ProductionOrder).where(ProductionOrder.company_id == company_id,
                                                            ProductionOrder.status_code.in_(_OPEN_PRODUCTION))):
@@ -530,7 +530,7 @@ def _order_load(session, company_id: int) -> list[tuple]:
 
 
 def capacity_load(company_id: int, date_from: datetime.date, date_to: datetime.date) -> list[SimpleNamespace]:
-    """بار در برابرِ ظرفیتِ هر مرکزِ کاری در بازه (بارِ هر دستور یکنواخت رویِ روزهایِ شروع تا پایانش پخش می‌شود)."""
+    """بار در برابر ظرفیت هر مرکز کاری در بازه (بار هر دستور یکنواخت روی روزهای شروع تا پایانش پخش می‌شود)."""
     with new_session() as session:
         centers = {w.work_center_id: w for w in session.scalars(select(WorkCenter).where(
             WorkCenter.company_id == company_id, WorkCenter.is_active.is_(True)))}
@@ -566,7 +566,7 @@ def capacity_load(company_id: int, date_from: datetime.date, date_to: datetime.d
 
 def calendar(company_id: int, date_from: datetime.date, date_to: datetime.date, work_center_id: int | None = None
              ) -> list[SimpleNamespace]:
-    """تقویمِ تولید: چه چیزی، چه مقدار، چه روزی، در چه خط/مرکزِ کاری -- دستورهایِ باز (پخشِ روزانه) + ردیف‌هایِ برنامه."""
+    """تقویم تولید: چه چیزی، چه مقدار، چه روزی، در چه خط/مرکز کاری — دستورهای باز (پخش روزانه) + ردیف‌های برنامه."""
     from peecha.services.production.orders import STATUS_LABELS
 
     out = []

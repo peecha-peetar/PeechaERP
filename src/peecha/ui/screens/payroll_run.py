@@ -1,5 +1,5 @@
-"""اجرایِ محاسبهٔ حقوق (فصلِ ۱۱) — انتخاب/ساختِ دوره، اجرایِ موتور، و
-نمایشِ نتیجه به‌ازایِ هر کارمند."""
+"""اجرای محاسبهٔ حقوق (فصل ۱۱) — انتخاب/ساخت دوره، اجرای موتور، و
+نمایش نتیجه به‌ازای هر کارمند."""
 
 from __future__ import annotations
 
@@ -44,8 +44,8 @@ from peecha.ui.widgets import (
 )
 
 _PERIOD_COLUMNS = ["وضعیت", "تا تاریخ", "از تاریخ", "ماه", "سال"]
-_RUN_COLUMNS = ["پایانِ اجرا", "وضعیت", "نوع", "شمارهٔ اجرا"]
-_PAYSLIP_COLUMNS = ["خالصِ پرداختنی", "کسورات", "ناخالص", "نامِ کارمند"]
+_RUN_COLUMNS = ["پایان اجرا", "وضعیت", "نوع", "شمارهٔ اجرا"]
+_PAYSLIP_COLUMNS = ["خالص پرداختنی", "کسورات", "ناخالص", "نام کارمند"]
 
 
 def _company_id() -> int | None:
@@ -69,9 +69,9 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_results_panel(), stretch=3)
 
         self.set_field_help([
-            (self.year_field, "سالِ شمسیِ دوره."),
-            (self.month_field, "ماهِ شمسیِ دوره (۱ تا ۱۲)."),
-            (self.bank_combo, "بانکی که فایلِ واریزِ دسته‌جمعیِ حقوق برایِ آن تولید می‌شود."),
+            (self.year_field, "سال شمسی دوره."),
+            (self.month_field, "ماه شمسی دوره (۱ تا ۱۲)."),
+            (self.bank_combo, "بانکی که فایل واریز دسته‌جمعی حقوق برای آن تولید می‌شود."),
         ])
 
     def _build_periods_panel(self) -> QWidget:
@@ -80,7 +80,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("دوره‌هایِ حقوقی")
+        title = QLabel("دوره‌های حقوقی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -93,13 +93,13 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         self.periods_table.cellClicked.connect(self._on_period_clicked)
         layout.addWidget(self.periods_table, stretch=1)
 
-        layout.addWidget(QLabel("سالِ شمسی"))
+        layout.addWidget(QLabel("سال شمسی"))
         self.year_field = ZeroPaddedSpinBox()
         self.year_field.setRange(1390, 1450)
         self.year_field.setValue(1404)
         layout.addWidget(self.year_field)
 
-        layout.addWidget(QLabel("ماهِ شمسی"))
+        layout.addWidget(QLabel("ماه شمسی"))
         self.month_field = ZeroPaddedSpinBox()
         self.month_field.setRange(1, 12)
         layout.addWidget(self.month_field)
@@ -124,7 +124,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         create_period_button.clicked.connect(self._create_period)
 
         # R276: حذفِ دورهٔ بی‌محاسبه (دورهٔ دارایِ اجرایِ حقوق قابلِ حذف نیست)
-        delete_period_button = delete_button("حذفِ دورهٔ انتخاب‌شده (اگر هنوز محاسبه‌ای ندارد)")
+        delete_period_button = delete_button("حذف دورهٔ انتخاب‌شده (اگر هنوز محاسبه‌ای ندارد)")
         delete_period_button.clicked.connect(self._delete_period)
         return wrap_scrollable_with_footer(panel, [create_period_button, delete_period_button])
 
@@ -134,7 +134,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("اجراهایِ محاسبه")
+        title = QLabel("اجراهای محاسبه")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -155,31 +155,31 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         run_button = QPushButton("🧮")
         run_button.setObjectName("primaryIconButton")
         run_button.setFixedWidth(48)
-        run_button.setToolTip("اجرایِ محاسبه برایِ این دوره")
+        run_button.setToolTip("اجرای محاسبه برای این دوره")
         run_button.clicked.connect(self._create_and_run)
 
         recalc_button = QPushButton("🔄")
         recalc_button.setObjectName("iconButton")
         recalc_button.setFixedWidth(44)
-        recalc_button.setToolTip("بازمحاسبهٔ اجرایِ انتخاب‌شده")
+        recalc_button.setToolTip("بازمحاسبهٔ اجرای انتخاب‌شده")
         recalc_button.clicked.connect(self._recalculate_selected)
 
         approve_button = QPushButton("✅")
         approve_button.setObjectName("iconButton")
         approve_button.setFixedWidth(44)
-        approve_button.setToolTip("تاییدِ نهاییِ اجرا")
+        approve_button.setToolTip("تایید نهایی اجرا")
         approve_button.clicked.connect(self._approve_selected)
 
         finalize_button = QPushButton("🔒")
         finalize_button.setObjectName("iconButton")
         finalize_button.setFixedWidth(44)
-        finalize_button.setToolTip("قطعی‌سازیِ فیش‌ها (فصلِ ۱۴)")
+        finalize_button.setToolTip("قطعی‌سازی فیش‌ها (فصل ۱۴)")
         finalize_button.clicked.connect(self._finalize_selected)
 
         post_journal_button = QPushButton("📄")
         post_journal_button.setObjectName("primaryIconButton")
         post_journal_button.setFixedWidth(48)
-        post_journal_button.setToolTip("صدورِ سندِ حسابداری (فصلِ ۱۶)")
+        post_journal_button.setToolTip("صدور سند حسابداری (فصل ۱۶)")
         post_journal_button.clicked.connect(self._post_journal_selected)
 
         return wrap_scrollable_with_footer(
@@ -212,7 +212,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         print_button = QPushButton("🖨️")
         print_button.setObjectName("iconButton")
         print_button.setFixedWidth(44)
-        print_button.setToolTip("چاپِ فیشِ انتخاب‌شده")
+        print_button.setToolTip("چاپ فیش انتخاب‌شده")
         print_button.clicked.connect(self._print_selected_payslip)
         layout.addWidget(print_button)
 
@@ -222,7 +222,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         bank_batch_button = QPushButton("📁")
         bank_batch_button.setObjectName("iconButton")
         bank_batch_button.setFixedWidth(44)
-        bank_batch_button.setToolTip("تولیدِ فایلِ بانکی (فصلِ ۱۵)")
+        bank_batch_button.setToolTip("تولید فایل بانکی (فصل ۱۵)")
         bank_batch_button.clicked.connect(self._create_bank_batch)
         bank_row.addWidget(bank_batch_button)
         layout.addLayout(bank_row)
@@ -272,8 +272,8 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
             return
         self._runs = engine.list_runs(self._selected_period_id)
         status_labels = {
-            "DRAFT": "پیش‌نویس", "CALCULATING": "درحالِ محاسبه", "CALCULATED": "محاسبه‌شده",
-            "UNDER_REVIEW": "درحالِ بازبینی", "APPROVED": "تاییدشده", "POSTED": "سندخورده", "LOCKED": "قفل‌شده",
+            "DRAFT": "پیش‌نویس", "CALCULATING": "درحال محاسبه", "CALCULATED": "محاسبه‌شده",
+            "UNDER_REVIEW": "درحال بازبینی", "APPROVED": "تاییدشده", "POSTED": "سندخورده", "LOCKED": "قفل‌شده",
         }
         type_labels = {"REGULAR": "معمولی", "CORRECTION": "اصلاحی", "OFF_CYCLE": "بین‌دوره‌ای"}
         self.runs_table.setRowCount(len(self._runs))
@@ -301,8 +301,8 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         payslips = engine.list_payslips(run_id)
         total_gross = sum((p.gross_amount for p in payslips), decimal.Decimal(0))
         total_net = sum((p.net_pay for p in payslips), decimal.Decimal(0))
-        summary = f"تعدادِ کارمندانِ محاسبه‌شده: {numerals.to_persian_digits(str(len(payslips)))} — " \
-                  f"جمعِ ناخالص: {numerals.format_company_amount(total_gross)} — جمعِ خالص: {numerals.format_company_amount(total_net)}"
+        summary = f"تعداد کارمندان محاسبه‌شده: {numerals.to_persian_digits(str(len(payslips)))} — " \
+                  f"جمع ناخالص: {numerals.format_company_amount(total_gross)} — جمع خالص: {numerals.format_company_amount(total_net)}"
         if run is not None and run.error_log:
             summary += f"\nخطاها: {run.error_log}"
         self.summary_label.setText(summary)
@@ -348,7 +348,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
 
     def _create_and_run(self) -> None:
         if self._selected_period_id is None:
-            QMessageBox.information(self, "اجرایِ محاسبه", "یک دوره را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "اجرای محاسبه", "یک دوره را از فهرست انتخاب کنید.")
             return
         run_id = engine.create_run(self._selected_period_id)
         self._execute_run(run_id)
@@ -373,7 +373,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
 
     def _approve_selected(self) -> None:
         if self._selected_run_id is None:
-            QMessageBox.information(self, "تاییدِ اجرا", "یک اجرا را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "تایید اجرا", "یک اجرا را از فهرست انتخاب کنید.")
             return
         try:
             engine.approve_run(self._selected_run_id)
@@ -385,7 +385,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
 
     def _finalize_selected(self) -> None:
         if self._selected_run_id is None:
-            QMessageBox.information(self, "قطعی‌سازیِ فیش‌ها", "یک اجرا را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "قطعی‌سازی فیش‌ها", "یک اجرا را از فهرست انتخاب کنید.")
             return
         try:
             result = payslip_service.finalize_payslips_for_run(self._selected_run_id)
@@ -394,14 +394,14 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
             return
         message = (
             f"فیش‌ها قطعی شدند — تعداد: {numerals.to_persian_digits(str(result.finalized_count))}، "
-            f"اقساطِ کسرشده: {numerals.to_persian_digits(str(result.loan_installments_deducted))}، "
-            f"اقساطِ موکول‌شده: {numerals.to_persian_digits(str(result.loan_installments_deferred))}"
+            f"اقساط کسرشده: {numerals.to_persian_digits(str(result.loan_installments_deducted))}، "
+            f"اقساط موکول‌شده: {numerals.to_persian_digits(str(result.loan_installments_deferred))}"
         )
         theme.set_status_label(self.run_status_label, message, ok=True)
 
     def _post_journal_selected(self) -> None:
         if self._selected_run_id is None:
-            QMessageBox.information(self, "صدورِ سندِ حسابداری", "یک اجرا را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "صدور سند حسابداری", "یک اجرا را از فهرست انتخاب کنید.")
             return
         if not app_session.current_user:
             return
@@ -416,7 +416,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
 
     def _print_selected_payslip(self) -> None:
         if self._selected_payslip_id is None:
-            QMessageBox.information(self, "چاپِ فیش", "یک فیش را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "چاپ فیش", "یک فیش را از فهرست انتخاب کنید.")
             return
         printable = payslip_service.get_printable_payslip(self._selected_payslip_id)
         headers = ["نوع", "شرح", "مبلغ"]
@@ -424,16 +424,16 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         rows += [["کسورات", l.label, numerals.format_company_amount(l.amount)] for l in printable.deduction_lines]
         footer = [
             ["", "ناخالص", numerals.format_company_amount(printable.gross_amount)],
-            ["", "جمعِ کسورات", numerals.format_company_amount(printable.total_deductions)],
-            ["", "خالصِ پرداختنی", numerals.format_company_amount(printable.net_pay)],
+            ["", "جمع کسورات", numerals.format_company_amount(printable.total_deductions)],
+            ["", "خالص پرداختنی", numerals.format_company_amount(printable.net_pay)],
         ]
-        title = f"فیشِ حقوقی — {printable.employee_full_name} — {numerals.to_persian_digits(f'{printable.jalali_year}/{printable.jalali_month:02d}')}"
+        title = f"فیش حقوقی — {printable.employee_full_name} — {numerals.to_persian_digits(f'{printable.jalali_year}/{printable.jalali_month:02d}')}"
         company_name = app_session.current_company.display_name if app_session.current_company else ""
         report_export.print_report(self, title, headers, rows, footer, company_name=company_name)
 
     def _create_bank_batch(self) -> None:
         if self._selected_run_id is None:
-            QMessageBox.information(self, "فایلِ بانکی", "یک اجرا را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "فایل بانکی", "یک اجرا را از فهرست انتخاب کنید.")
             return
         bank_id = self.bank_combo.currentData()
         if bank_id is None:
@@ -444,12 +444,12 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         except ValueError as exc:
             theme.set_status_label(self.bank_status_label, str(exc), ok=False)
             return
-        message = f"batch ساخته شد — شامل: {numerals.to_persian_digits(str(result.included_count))} نفر، جمع: {numerals.format_company_amount(result.total_amount)}"
+        message = f"فایل پرداخت گروهی ساخته شد — شامل: {numerals.to_persian_digits(str(result.included_count))} نفر، جمع: {numerals.format_company_amount(result.total_amount)}"
         if result.exceptions:
             message += "\nاستثناها: " + "، ".join(f"{e.employee_name} ({e.reason})" for e in result.exceptions)
         theme.set_status_label(self.bank_status_label, message, ok=True)
 
-        path, _filter = QFileDialog.getSaveFileName(self, "ذخیره‌یِ فایلِ بانکی", "bank_batch.csv", "CSV (*.csv)")
+        path, _filter = QFileDialog.getSaveFileName(self, "ذخیرهٔ فایل بانکی", "bank_batch.csv", "CSV (*.csv)")
         if path:
             csv_text = bank_service.export_bank_batch_csv(result.batch_id)
             with open(path, "w", encoding="utf-8-sig", newline="") as f:

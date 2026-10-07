@@ -1,6 +1,6 @@
-"""کاردکسِ کالا -- گردشِ کاملِ یک کالا (ورود/خروج/مانده‌یِ رواگرد) طبقِ
-inv.stock_ledger. طبقِ درخواستِ صریح («دکمه‌ای برایِ نمایشِ کاردکسِ کالا»)،
-از فرم‌هایِ ردیفِ کالایِ اسنادِ انبار/بازرگانی هم قابلِ بازشدن است
+"""کاردکس کالا — گردش کامل یک کالا (ورود/خروج/ماندهٔ رواگرد) طبق
+inv.stock_ledger. طبق درخواست صریح («دکمه‌ای برای نمایش کاردکس کالا»)،
+از فرم‌های ردیف کالای اسناد انبار/بازرگانی هم قابل بازشدن است
 (show_ledger_for_item)."""
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 # (COGS) است -- قیمتِ فروش، ستونِ جداگانه‌ای است که فقط برایِ خروجیِ
 # آمده از فاکتورِ فروش پر می‌شود، تا بتوان حاشیهٔ سود را هم دید.
 _COLUMNS = [
-    "تاریخ", "نوعِ سند", "شماره‌یِ سند", "انبار", "طرفِ‌حساب", "ورود", "خروج", "بهایِ واحد",
-    "بهایِ کلِ ورود", "بهایِ کلِ خروج", "قیمتِ فروش", "مانده", "مانده‌یِ ریالی",
+    "تاریخ", "نوع سند", "شمارهٔ سند", "انبار", "طرف‌حساب", "ورود", "خروج", "بهای واحد",
+    "بهای کل ورود", "بهای کل خروج", "قیمت فروش", "مانده", "ماندهٔ ریالی",
 ]
 
 
@@ -55,7 +55,7 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(10)
 
-        title = QLabel("کاردکسِ کالا")
+        title = QLabel("کاردکس کالا")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -79,13 +79,13 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
 
         # سیستمِ واحد (R225): نمایشِ مقدار/مانده بر حسبِ هر واحدِ کالا (مثلاً
         # ۲۸۸۰ عدد = ۱۲۰ کارتن)؛ داده‌یِ کاردکس همچنان به واحدِ پایه است.
-        filters_row.addWidget(QLabel("واحدِ نمایش"))
+        filters_row.addWidget(QLabel("واحد نمایش"))
         self.display_uom_combo = QComboBox()
         self.display_uom_combo.setMinimumWidth(110)
         self.display_uom_combo.currentIndexChanged.connect(lambda _i=0: self._refresh_table())
         filters_row.addWidget(self.display_uom_combo)
 
-        self.date_filter_checkbox = QCheckBox("فیلترِ تاریخ")
+        self.date_filter_checkbox = QCheckBox("فیلتر تاریخ")
         filters_row.addWidget(self.date_filter_checkbox)
         self.date_from_field = JalaliDateEdit()
         filters_row.addWidget(self.date_from_field)
@@ -98,8 +98,8 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
 
         self.print_professional_button = QPushButton("📄 گزارش")
         self.print_professional_button.setToolTip(
-            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به کاردکس -- "
-            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+            "اجرای یکی از گزارش‌های حرفه‌ای تخصیص‌داده‌شده به کاردکس -- "
+            "برای تعریف/ویرایش گزارش‌ها به «تنظیمات سیستم ›  گزارش‌های حرفه‌ای» مراجعه کنید."
         )
         self.print_professional_button.clicked.connect(self._print_professional)
         filters_row.addWidget(self.print_professional_button)
@@ -122,10 +122,10 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         self.date_to_field.editingFinished.connect(self._on_filters_changed)
 
         self.set_field_help([
-            (self.item_combo, "کالایی که می‌خواهید گردشِ کاملِ ورود/خروج/موجودی‌اش را ببینید."),
-            (self.warehouse_combo, "فقط گردشِ همین انبار نشان داده شود -- خالی یعنی همه‌یِ انبارها."),
-            (self.date_filter_checkbox, "فیلترِ بازه‌یِ تاریخِ زیر را فعال/غیرِفعال می‌کند -- خاموش یعنی کلِ تاریخچه."),
-            (self.print_professional_button, "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به کاردکس."),
+            (self.item_combo, "کالایی که می‌خواهید گردش کامل ورود/خروج/موجودی‌اش را ببینید."),
+            (self.warehouse_combo, "فقط گردش همین انبار نشان داده شود — خالی یعنی همهٔ انبارها."),
+            (self.date_filter_checkbox, "فیلتر بازهٔ تاریخ زیر را فعال/غیرفعال می‌کند — خاموش یعنی کل تاریخچه."),
+            (self.print_professional_button, "اجرای یکی از گزارش‌های حرفه‌ای تخصیص‌داده‌شده به کاردکس."),
         ])
 
     def _company_id(self) -> int | None:
@@ -146,7 +146,7 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         current_warehouse_id = self.warehouse_combo.currentData()
         warehouses = locations_service.list_warehouses(company_id)
         _fill_options(self.warehouse_combo, [(w.warehouse_id, w.name) for w in warehouses])
-        self.warehouse_combo.setItemText(0, "(همه‌یِ انبارها)")
+        self.warehouse_combo.setItemText(0, "(همهٔ انبارها)")
         if current_warehouse_id is not None:
             index = self.warehouse_combo.findData(current_warehouse_id)
             if index >= 0:
@@ -188,9 +188,9 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         return getattr(self, "_display_factors", {}).get(self.display_uom_combo.currentData(), decimal.Decimal(1))
 
     def _load_ledger_context(self):
-        """طبقِ اشتراکِ منطق بینِ نمایشِ رویِ صفحه و چاپِ حرفه‌ای -- هردو
-        باید دقیقاً همان دیتا/فرمت را ببینند، تا گزارشِ Jasper هیچ‌وقت با
-        جدولِ رویِ صفحه فرق نکند."""
+        """طبق اشتراک منطق بین نمایش روی صفحه و چاپ حرفه‌ای — هردو
+        باید دقیقاً همان دیتا/قالب را ببینند، تا گزارش Jasper هیچ‌وقت با
+        جدول روی صفحه فرق نکند."""
         company_id = self._company_id()
         item_id = self.item_combo.currentData()
         if company_id is None or item_id is None:
@@ -274,27 +274,27 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
                 self.table.setItem(row_index, col_index, cell)
         self.table.resizeRowsToContents()
         if not rows:
-            self.status_label.setText("برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
+            self.status_label.setText("برای این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
         elif context["variant_count"] > 0:
             self.status_label.setText(
                 f"این کالا {numerals.to_persian_digits(str(context['variant_count']))} متغیر دارد -- "
-                "هر ردیفِ بالا مجموعِ مقدار/مبلغِ متغیرهایِ همان سند است. "
-                "برایِ کاردکسِ مستقلِ یک متغیرِ خاص، خودِ همان متغیر را از کمبویِ کالا انتخاب کنید."
+                "هر ردیف بالا مجموع مقدار/مبلغ متغیرهای همان سند است. "
+                "برای کاردکس مستقل یک متغیر خاص، خود همان متغیر را از فهرست کالا انتخاب کنید."
             )
         else:
             self.status_label.setText("")
 
     def _print_professional(self) -> None:
-        """طبقِ درخواستِ صریحِ کاربر («بخشِ گزارشات را حرفه‌ای کنیم»):
-        همان دیتایِ رویِ صفحه را با موتورِ JasperReports (نه دیگر با
+        """طبق درخواست صریح کاربر («بخش گزارشات را حرفه‌ای کنیم»):
+        همان دیتای روی صفحه را با موتور JasperReports (نه دیگر با
         report_export.py دستی) به PDF/Excel تبدیل می‌کند."""
         context = self._load_ledger_context()
         if context is None:
-            QMessageBox.information(self, "چاپِ حرفه‌ای", "ابتدا یک کالا انتخاب کنید.")
+            QMessageBox.information(self, "چاپ حرفه‌ای", "ابتدا یک کالا انتخاب کنید.")
             return
         rows = context["rows"]
         if not rows:
-            QMessageBox.information(self, "چاپِ حرفه‌ای", "برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
+            QMessageBox.information(self, "چاپ حرفه‌ای", "برای این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
             return
 
         company_id = self._company_id()
@@ -345,5 +345,5 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
             "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
         }
 
-        dialog = JasperReportPreviewDialog(self, template_path, print_rows, params, "کاردکس", title="کاردکسِ کالا")
+        dialog = JasperReportPreviewDialog(self, template_path, print_rows, params, "کاردکس", title="کاردکس کالا")
         dialog.exec()

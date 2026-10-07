@@ -65,7 +65,7 @@ check(scr.action("labor", {"order_operation_id": scr.view.operations[0].order_op
                            "overtime_hours": D(0), "rate": None}), "labor entry")
 check(scr.action("receipt", {"quantity": D(60), "batch_no": None, f"out_{byp}": D(6)}), "report production with by-product")
 check(scr.action("scrap", {"quantity": D(2), "reason": "شکستگی", "scrap_item_id": None, "recovery": D(0)}), "report scrap")
-check(scr.action("hold", {"reason": "قطعیِ برق"}) and scr.view.order.status_code == "ON_HOLD", "hold")
+check(scr.action("hold", {"reason": "قطعی برق"}) and scr.view.order.status_code == "ON_HOLD", "hold")
 check(not scr.actions["complete"].isEnabled(), "complete disabled while on hold")
 check(scr.action("resume"), "resume")
 check(scr.action("complete", {"quantity": D(38), "joint_method": "QUANTITY"}), "complete with final receipt")
@@ -91,7 +91,7 @@ check(md.wc_action("new", {"code": "PCK", "name": "بسته‌بندی", "center
                            "branch_id": None}), "create work center from screen")
 check(md.t_wcs.rowCount() == 2, "work centers listed")
 ui.set_combo(md.rt_item, semi)
-check(md.routing_action("new", {"name": "مسیرِ نیمه"}), "create routing")
+check(md.routing_action("new", {"name": "مسیر نیمه"}), "create routing")
 check(md.routing_action("op", {"seq": D(10), "name": "پرس", "work_center_id": wc, "setup_minutes": D(0), "run_minutes": D(3),
                                "machine_minutes": None, "queue_minutes": D(0), "move_minutes": D(0), "labor_count": D(1),
                                "labor_rate": None, "machine_rate": None, "overhead_rate": None}) and md.t_ops.rowCount() == 1, "routing op")
@@ -122,7 +122,7 @@ check(st.create_roles(), "create production role templates")
 
 dash = ui.PrdDashboard()
 dash.refresh()
-check(dash.cards["QTY"]._title_label.text() == "مقدارِ تولید", "dashboard KPI cards")
+check(dash.cards["QTY"]._title_label.text() == "مقدار تولید", "dashboard KPI cards")
 check(dash.alerts_table.rowCount() >= 0, "dashboard alerts")
 
 # ===== گزارش‌ها =================================================================================

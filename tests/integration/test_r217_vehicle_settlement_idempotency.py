@@ -53,19 +53,19 @@ from peecha.services import audit as audit_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 
 central_warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-MAIN", "انبارِ مرکزی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
+    company_id, "WH-MAIN", "انبار مرکزی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
 )
 vehicle_warehouse_id = locations_service.create_warehouse(
-    company_id, "VEH-1", "خودرویِ ۱", locations_service.WarehouseFields(warehouse_type_code="VEHICLE", allow_negative_stock=True),
+    company_id, "VEH-1", "خودروی ۱", locations_service.WarehouseFields(warehouse_type_code="VEHICLE", allow_negative_stock=True),
 )
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی", catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
+    company_id, "9101", "کالای عادی", catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 
 distributor = users_service.create_user("dist_1", "توزیع‌کننده", "secret123", None, lang_id, False, [company_id], company_id)
@@ -106,15 +106,15 @@ check(r1.status_code == 200, f"تسویهٔ اول موفق بود (status={r1.s
 settlement_id_1 = r1.json()["vehicle_settlement_id"]
 
 r2 = client.post("/vehicle-settlement", headers={**auth(distributor_token), "Idempotency-Key": idem_key}, json=payload)
-check(r2.status_code == 200, f"تلاشِ دومِ همان کلید هم ۲۰۰ برمی‌گرداند (status={r2.status_code}, body={r2.text})")
-check(r2.json()["vehicle_settlement_id"] == settlement_id_1, f"تلاشِ دوم همان تسویه را برمی‌گرداند، نه رکوردِ تازه (got {r2.json()})")
+check(r2.status_code == 200, f"تلاش دوم همان کلید هم ۲۰۰ برمی‌گرداند (status={r2.status_code}, body={r2.text})")
+check(r2.json()["vehicle_settlement_id"] == settlement_id_1, f"تلاش دوم همان تسویه را برمی‌گرداند، نه رکورد تازه (got {r2.json()})")
 
 rows = settlement_service.list_settlements(company_id)
 same_day = [s for s in rows if s.vehicle_warehouse_id == vehicle_warehouse_id and s.settlement_date == today]
-check(len(same_day) == 1, f"با وجودِ دو POST با یک کلید، فقط یک رکوردِ تسویه ساخته شد (got {len(same_day)})")
+check(len(same_day) == 1, f"با وجود دو POST با یک کلید، فقط یک رکورد تسویه ساخته شد (got {len(same_day)})")
 
 log_rows = audit_service.list_activity_log(company_id=company_id, entity_type="VehicleSettlement")
-check(len(log_rows) == 1, f"دقیقاً یک رکوردِ حسابرسی برایِ همین تسویه ثبت شد (got {len(log_rows)})")
-check(log_rows and log_rows[0].entity_id == settlement_id_1 and log_rows[0].action == "CREATE", f"جزئیاتِ رکوردِ حسابرسی درست است (got {log_rows[0] if log_rows else None})")
+check(len(log_rows) == 1, f"دقیقاً یک رکورد حسابرسی برای همین تسویه ثبت شد (got {len(log_rows)})")
+check(log_rows and log_rows[0].entity_id == settlement_id_1 and log_rows[0].action == "CREATE", f"جزئیات رکورد حسابرسی درست است (got {log_rows[0] if log_rows else None})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")

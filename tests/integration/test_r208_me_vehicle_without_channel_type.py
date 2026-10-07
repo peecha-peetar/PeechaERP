@@ -47,7 +47,7 @@ vehicle_wh = locations_service.create_warehouse(
 )
 # سناریویِ دقیقِ گزارش‌شده: «نوعِ کانالِ موبایل» کاربر در دسکتاپ تنظیم
 # نشده (از R205 انتخابِ گرم/سرد در خودِ موبایل است).
-check(users_service.get_mobile_channel_type(user.user_id, company_id) is None, "نوعِ کانالِ موبایلِ کاربر تنظیم نشده (مثلِ گزارش)")
+check(users_service.get_mobile_channel_type(user.user_id, company_id) is None, "نوع کانال موبایل کاربر تنظیم نشده (مثل گزارش)")
 
 # ذخیره از همان صفحهٔ دسکتاپِ «تیمِ خودرو» -- هر سه نقش = همان کاربر.
 from peecha.ui.screens.vehicle_team import VehicleTeamScreen
@@ -67,7 +67,7 @@ client = TestClient(app)
 token = client.post("/auth/login", json={"username": "admin", "password": "secret123"}).json()["access_token"]
 resp = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
 check(resp.status_code == 200 and resp.json()["assigned_vehicle_warehouse_id"] == vehicle_wh,
-      f"/auth/me خودرو را برمی‌گرداند حتی بدونِ تنظیمِ نوعِ کانال (body={resp.text})")
+      f"/auth/me خودرو را برمی‌گرداند حتی بدون تنظیم نوع کانال (body={resp.text})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

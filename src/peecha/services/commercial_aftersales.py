@@ -1,6 +1,6 @@
-"""خدماتِ پس‌ازفروش و گارانتی (مرحلهٔ ۹): گارانتیِ سریالی، تیکتِ خدماتی
-با محاسبهٔ خودکارِ رایگان/هزینه‌بردار، و RMA به‌عنوانِ دروازهٔ پیشِ‌از
-برگشتِ فروش."""
+"""خدمات پس‌ازفروش و گارانتی (مرحلهٔ ۹): گارانتی سریالی، تیکت خدماتی
+با محاسبهٔ خودکار رایگان/هزینه‌بردار، و مجوز مرجوعی به‌عنوان دروازهٔ پیش‌از
+برگشت فروش."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ _REASON_CODES = ("DEFECTIVE", "WRONG_ITEM", "NOT_SATISFIED", "DAMAGED_IN_TRANSIT
 # ---------------------------------------------------------------------
 def create_warranty(sales_document_line_id: int, item_id: int, duration_months: int, terms: str | None = None, serial_id: int | None = None, start_date: datetime.date | None = None) -> int:
     if duration_months <= 0:
-        raise ValueError("مدتِ گارانتی باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مدت گارانتی باید بزرگ‌تر از صفر باشد.")
     start_date = start_date or datetime.date.today()
     end_date = _add_months(start_date, duration_months)
     with new_session() as session:
@@ -62,7 +62,7 @@ def void_warranty(warranty_id: int, reason: str) -> None:
 
 
 def get_effective_warranty_status(warranty_id: int) -> str:
-    """EXPIRED محاسبه‌شده در لحظهٔ پرس‌وجو، نه یک Job (مرحلهٔ ۹، بخشِ ۶)."""
+    """EXPIRED محاسبه‌شده در لحظهٔ پرس‌وجو، نه یک Job (مرحلهٔ ۹، بخش ۶)."""
     with new_session() as session:
         row = session.get(Warranty, warranty_id)
         if row is None:
@@ -110,13 +110,13 @@ def open_ticket(customer_detail_account_id: int, subject: str, warranty_id: int 
 
 def advance_ticket_status(ticket_id: int, status_code: str) -> None:
     if status_code not in ("OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"):
-        raise ValueError("وضعیتِ نامعتبر است.")
+        raise ValueError("وضعیت نامعتبر است.")
     with new_session() as session:
         row = session.get(ServiceTicket, ticket_id)
         if row is None:
             raise ValueError("تیکت نامعتبر است.")
         if status_code == "CLOSED" and row.is_billable and row.resulting_invoice_document_id is None:
-            raise ValueError("تیکتِ هزینه‌بردار بدونِ فاکتورِ تسویه قابلِ‌بستن نیست.")
+            raise ValueError("تیکت هزینه‌بردار بدون فاکتور تسویه قابل‌بستن نیست.")
         row.status_code = status_code
         if status_code == "CLOSED":
             row.closed_at = datetime.datetime.now(datetime.timezone.utc)
@@ -165,7 +165,7 @@ def list_service_ticket_parts_used(ticket_id: int) -> list[ServiceTicketPartUsed
 # ---------------------------------------------------------------------
 def request_rma(customer_detail_account_id: int, original_document_id: int, reason_code: str, requested_quantity: decimal.Decimal, related_ticket_id: int | None = None) -> int:
     if reason_code not in _REASON_CODES:
-        raise ValueError("دلیلِ نامعتبر است.")
+        raise ValueError("دلیل نامعتبر است.")
     with new_session() as session:
         row = RmaRequest(
             customer_detail_account_id=customer_detail_account_id, original_document_id=original_document_id,
@@ -180,18 +180,18 @@ def reject_rma(rma_id: int) -> None:
     with new_session() as session:
         row = session.get(RmaRequest, rma_id)
         if row is None or row.status_code != "REQUESTED":
-            raise ValueError("فقط RMAیِ درانتظار قابلِ‌رد است.")
+            raise ValueError("فقط مجوز مرجوعی درانتظار قابل‌رد است.")
         row.status_code = "REJECTED"
         session.commit()
 
 
 def approve_rma(rma_id: int, company_id: int, created_by_user_id: int, warehouse_id: int, currency_id: int) -> int:
-    """پسِ تایید، یک SALES_RETURNِ استاندارد ساخته می‌شود — RMA خودش سند
-    نیست، فقط دروازهٔ تایید (مرحلهٔ ۹، بخشِ ۲)."""
+    """پس تایید، یک SALES_RETURN استاندارد ساخته می‌شود — مجوز مرجوعی خودش سند
+    نیست، فقط دروازهٔ تایید (مرحلهٔ ۹، بخش ۲)."""
     with new_session() as session:
         rma = session.get(RmaRequest, rma_id)
         if rma is None or rma.status_code != "REQUESTED":
-            raise ValueError("فقط RMAیِ درانتظار قابلِ‌تایید است.")
+            raise ValueError("فقط مجوز مرجوعی درانتظار قابل‌تایید است.")
         original_document_id = rma.original_document_id
         requested_quantity = rma.requested_quantity
         rma.status_code = "APPROVED"

@@ -67,21 +67,21 @@ A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_
     company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
 k3 = A("12", "موجودی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
-wip_gl = A("122", "کالایِ در جریانِ ساخت", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+wip_gl = A("122", "کالای در جریان ساخت", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
 k7 = A("21", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("211", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+ap_gl = A("211", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
-k6 = A("52", "هزینه‌هایِ تولید", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-labor_gl = A("521", "دستمزدِ جذب‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
-machine_gl = A("522", "ماشینِ جذب‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
-overhead_gl = A("523", "سربارِ جذب‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
-variance_gl = A("524", "انحرافِ تولید", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
-scrap_gl = A("525", "زیانِ ضایعات", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k6 = A("52", "هزینه‌های تولید", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+labor_gl = A("521", "دستمزد جذب‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+machine_gl = A("522", "ماشین جذب‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+overhead_gl = A("523", "سربار جذب‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+variance_gl = A("524", "انحراف تولید", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+scrap_gl = A("525", "زیان ضایعات", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 for key, acc in (("INVENTORY_ASSET", inv_gl), ("COGS", cogs_gl), ("INVENTORY_ADJUSTMENT_GAIN", adj_gl),
                  ("INVENTORY_ADJUSTMENT_LOSS", adj_gl), ("SUPPLIER_PAYABLE", ap_gl), ("INVENTORY_COST_VARIANCE", variance_gl),
                  ("PRODUCTION_WIP", wip_gl), ("PRODUCTION_LABOR_APPLIED", labor_gl),
@@ -94,10 +94,10 @@ kg = catalog_service.create_uom(company_id, "KG", "کیلوگرم", "WEIGHT", de
 supplier = dimensions_service.create_supplier(company_id, "S1", "تامین‌کنندهٔ مواد")
 
 WF = locations_service.WarehouseFields
-wh_rm = locations_service.create_warehouse(company_id, "RM", "انبارِ مواد", WF(is_default=True))
-wh_line = locations_service.create_warehouse(company_id, "LINE", "خطِ تولید", WF())
-wh_fg = locations_service.create_warehouse(company_id, "FG", "انبارِ محصول", WF())
-wh_scrap = locations_service.create_warehouse(company_id, "SCR", "انبارِ ضایعات", WF())
+wh_rm = locations_service.create_warehouse(company_id, "RM", "انبار مواد", WF(is_default=True))
+wh_line = locations_service.create_warehouse(company_id, "LINE", "خط تولید", WF())
+wh_fg = locations_service.create_warehouse(company_id, "FG", "انبار محصول", WF())
+wh_scrap = locations_service.create_warehouse(company_id, "SCR", "انبار ضایعات", WF())
 
 
 def item(code, name, kind="RAW_MATERIAL", uom=None, **kw):
@@ -105,14 +105,14 @@ def item(code, name, kind="RAW_MATERIAL", uom=None, **kw):
         item_kind_code=kind, base_uom_id=uom or pcs, **kw))
 
 
-fg = item("FG-A", "محصولِ A", "FINISHED_GOOD")
+fg = item("FG-A", "محصول A", "FINISHED_GOOD")
 semi = item("SF-1", "نیمه‌ساختهٔ ۱", "SEMI_FINISHED")
 r1 = item("RM-1", "مادهٔ اولیهٔ ۱", uom=kg)
 r2 = item("RM-2", "مادهٔ اولیهٔ ۲", uom=kg)
 r3 = item("RM-3", "مادهٔ اولیهٔ ۳", uom=kg)
 pk = item("PK-1", "کارتن")
-byp = item("BY-1", "محصولِ جانبی", "GOOD")
-scrap_item = item("SC-1", "ضایعاتِ قابلِ فروش", "GOOD", uom=kg)
+byp = item("BY-1", "محصول جانبی", "GOOD")
+scrap_item = item("SC-1", "ضایعات قابل فروش", "GOOD", uom=kg)
 
 
 def base_uom(item_id):

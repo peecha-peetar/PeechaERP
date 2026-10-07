@@ -1,6 +1,6 @@
-"""شاخص‌هایِ عملیاتِ انبار (WMS) -- R251.
+"""شاخص‌های عملیات انبار (WMS) — R251.
 
-فقط خواندنی: از وظایفِ انبار، موج‌ها، رزروها، شمارش‌هایِ محل و همان اشغالِ محل (موجودیِ سیستم) محاسبه می‌شود.
+فقط خواندنی: از وظایف انبار، موج‌ها، رزروها، شمارش‌های محل و همان اشغال محل (موجودی سیستم) محاسبه می‌شود.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _hours(start, end) -> float | None:
 
 
 def dashboard(company_id: int, date_from: datetime.date, date_to: datetime.date, warehouse_id: int | None = None) -> SimpleNamespace:
-    """kpis: [(کد، عنوان، مقدار، واحد)]، operators: بهره‌وریِ هر اپراتور، by_type: وظایف به تفکیکِ نوع."""
+    """kpis: [(کد، عنوان، مقدار، واحد)]، operators: بهره‌وری هر اپراتور، by_type: وظایف به تفکیک نوع."""
     start = datetime.datetime.combine(date_from, datetime.time.min)
     end = datetime.datetime.combine(date_to, datetime.time.max)
     with new_session() as session:
@@ -92,18 +92,18 @@ def dashboard(company_id: int, date_from: datetime.date, date_to: datetime.date,
     needs = ops.replenishment_needs(company_id, warehouse_id)
     pct = lambda a, b: round(a * 100 / b, 1) if b else None  # noqa: E731
     kpis = [
-        ("TASKS_DONE", "وظایفِ انجام‌شده", len(done), "وظیفه"),
-        ("TASKS_OPEN", "وظایفِ باز", len(open_tasks), "وظیفه"),
-        ("PICK_ACCURACY", "دقتِ برداشت", pct(exact, len(picks)), "٪"),
-        ("LOCATION_USE", "محل‌هایِ دارایِ کالا", pct(occupied, leaves), "٪"),
-        ("AVG_OCCUPANCY", "میانگینِ اشغالِ محل‌ها", round(sum(occ_values) / len(occ_values), 1) if occ_values else None, "٪"),
-        ("FULL_LOCATIONS", "محل‌هایِ پر (≥۹۰٪)", full, "محل"),
-        ("WAVES", "موج‌هایِ برداشت", len(waves), "موج"),
-        ("WAVE_DISTANCE", "میانگینِ مسیرِ موج",
+        ("TASKS_DONE", "وظایف انجام‌شده", len(done), "وظیفه"),
+        ("TASKS_OPEN", "وظایف باز", len(open_tasks), "وظیفه"),
+        ("PICK_ACCURACY", "دقت برداشت", pct(exact, len(picks)), "٪"),
+        ("LOCATION_USE", "محل‌های دارای کالا", pct(occupied, leaves), "٪"),
+        ("AVG_OCCUPANCY", "میانگین اشغال محل‌ها", round(sum(occ_values) / len(occ_values), 1) if occ_values else None, "٪"),
+        ("FULL_LOCATIONS", "محل‌های پر (≥۹۰٪)", full, "محل"),
+        ("WAVES", "موج‌های برداشت", len(waves), "موج"),
+        ("WAVE_DISTANCE", "میانگین مسیر موج",
          round(sum(float(w.path_distance or 0) for w in waves) / len(waves) / wl.UNITS_PER_M, 1) if waves else None, "متر"),
-        ("REPLENISH_NEEDS", "محل‌هایِ زیرِ حداقل", len(needs), "محل"),
-        ("RESERVED", "رزروِ فعالِ وظایف", sum(reserved.values(), _ZERO), "واحد"),
-        ("COUNT_LINES", "ردیف‌هایِ شمرده‌شده", len(counted_lines), "ردیف"),
-        ("COUNT_ACCURACY", "دقتِ موجودی (شمارشِ محل)", pct(accurate, len(counted_lines)), "٪"),
+        ("REPLENISH_NEEDS", "محل‌های زیر حداقل", len(needs), "محل"),
+        ("RESERVED", "رزرو فعال وظایف", sum(reserved.values(), _ZERO), "واحد"),
+        ("COUNT_LINES", "ردیف‌های شمرده‌شده", len(counted_lines), "ردیف"),
+        ("COUNT_ACCURACY", "دقت موجودی (شمارش محل)", pct(accurate, len(counted_lines)), "٪"),
     ]
     return SimpleNamespace(kpis=kpis, by_type=by_type, operators=dict(operators))

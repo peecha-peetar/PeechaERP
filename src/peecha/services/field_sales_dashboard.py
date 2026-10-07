@@ -1,8 +1,8 @@
-"""داشبوردِ سرپرست -- R134 (آخرین فازِ ماژولِ پخشِ سرد/گرم، طبقِ نقشه‌راهِ
-تاییدشده R128→R134). این ماژول هیچ منطقِ تجاریِ جدیدی ندارد -- فقط
-دیتایِ سرویس‌هایِ موجود (field_sales.py, vehicle_loading.py,
-commercial_documents.py, delivery_confirmation.py) را برایِ نمایشِ
-KPIِ سرپرستی تجمیع می‌کند."""
+"""داشبورد سرپرست — R134 (آخرین فاز ماژول پخش سرد/گرم، طبق نقشه‌راه
+تاییدشده R128→R134). این ماژول هیچ منطق تجاری جدیدی ندارد — فقط
+دیتای سرویس‌های موجود (field_sales.py, vehicle_loading.py,
+commercial_documents.py, delivery_confirmation.py) را برای نمایش
+KPI سرپرستی تجمیع می‌کند."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def compute_visit_coverage(company_id: int, target_date: datetime.date, visitor_
         rate = (decimal.Decimal(completed) / planned * 100) if planned else _ZERO
         rows.append(
             VisitCoverageRow(
-                visitor_id, names.get(visitor_id, f"کاربرِ #{visitor_id}"), planned, completed, skipped,
+                visitor_id, names.get(visitor_id, f"کاربر #{visitor_id}"), planned, completed, skipped,
                 in_progress, not_visited, rate.quantize(decimal.Decimal("0.1")),
             )
         )
@@ -113,7 +113,7 @@ def compute_visitor_performance(company_id: int, date_from: datetime.date, date_
     for created_by_user_id, document_type_code, channel_type_code, total_amount in rows:
         row = by_visitor.setdefault(
             created_by_user_id,
-            VisitorPerformanceRow(created_by_user_id, names.get(created_by_user_id, f"کاربرِ #{created_by_user_id}"), 0, _ZERO, 0, _ZERO),
+            VisitorPerformanceRow(created_by_user_id, names.get(created_by_user_id, f"کاربر #{created_by_user_id}"), 0, _ZERO, 0, _ZERO),
         )
         if channel_type_code == "PRE_SALES" and document_type_code == "SALES_ORDER":
             row.pre_sales_order_count += 1
@@ -166,7 +166,7 @@ def compute_delivery_compliance(company_id: int, date_from: datetime.date, date_
         MissingDeliveryConfirmationRow(
             c.document_id, c.document_no, c.document_date,
             dimensions_service.get_detail_account_label(c.counterparty_detail_account_id), c.total_amount,
-            names.get(c.created_by_user_id, f"کاربرِ #{c.created_by_user_id}"),
+            names.get(c.created_by_user_id, f"کاربر #{c.created_by_user_id}"),
         )
         for c in candidates
         if c.document_id not in confirmed_ids

@@ -1,5 +1,5 @@
-"""صورتِ سود و زیان — حساب‌هایِ درآمد/هزینه در سطحِ کل، با مقایسه‌یِ همان
-بازه در یک سالِ پیش."""
+"""صورت سود و زیان — حساب‌های درآمد/هزینه در سطح کل، با مقایسهٔ همان
+بازه در یک سال پیش."""
 
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ from peecha.services import currencies as currencies_service
 from peecha.services import reports as reports_service
 from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range
 
-_CATEGORY_LABELS = {"REVENUE": "درآمدها", "COGS": "بهایِ تمام‌شده", "EXPENSE": "هزینه‌ها"}
+_CATEGORY_LABELS = {"REVENUE": "درآمدها", "COGS": "بهای تمام‌شده", "EXPENSE": "هزینه‌ها"}
 
 
 class IncomeStatementScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("صورتِ سود و زیان")
+        super().__init__("صورت سود و زیان")
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
         self.enable_jasper_report("INCOME_STATEMENT")
@@ -52,7 +52,7 @@ class IncomeStatementScreen(ReportScreenBase):
             cost_center_id=self.cost_center_id(),
         )
 
-        headers = ["کد", "نام", "دسته", "دوره‌یِ جاری", "دوره‌یِ مشابهِ سالِ قبل"]
+        headers = ["کد", "نام", "دسته", "دورهٔ جاری", "دورهٔ مشابه سال قبل"]
         rows: list[list] = []
         for r in result.rows:
             if not code_in_range(r.full_code, code_from, code_to):
@@ -66,16 +66,16 @@ class IncomeStatementScreen(ReportScreenBase):
                     self._fmt(r.previous_amount),
                 ]
             )
-        rows.append(["", "جمعِ درآمدها", "", self._fmt(result.total_revenue), ""])
-        rows.append(["", "جمعِ بهایِ تمام‌شده", "", self._fmt(result.total_cogs), ""])
-        rows.append(["", "سودِ (زیانِ) ناخالص", "", self._fmt(result.gross_profit), ""])
-        rows.append(["", "جمعِ هزینه‌ها", "", self._fmt(result.total_expense), ""])
-        footer = ["", "سودِ (زیانِ) خالص", "", self._fmt(result.net_income), ""]
+        rows.append(["", "جمع درآمدها", "", self._fmt(result.total_revenue), ""])
+        rows.append(["", "جمع بهای تمام‌شده", "", self._fmt(result.total_cogs), ""])
+        rows.append(["", "سود (زیان) ناخالص", "", self._fmt(result.gross_profit), ""])
+        rows.append(["", "جمع هزینه‌ها", "", self._fmt(result.total_expense), ""])
+        footer = ["", "سود (زیان) خالص", "", self._fmt(result.net_income), ""]
         return headers, rows, footer
 
     def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
         if not self._rows:
-            QMessageBox.information(self, "گزارش", "داده‌ای برایِ چاپ وجود ندارد.")
+            QMessageBox.information(self, "گزارش", "داده‌ای برای چاپ وجود ندارد.")
             return None
 
         field_names = ["account_code", "account_name", "category_label", "current_amount_display", "previous_amount_display"]

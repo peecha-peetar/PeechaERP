@@ -1,11 +1,11 @@
-"""موتورِ استهلاک -- R262.
+"""موتور استهلاک — R262.
 
-روش‌ها (آینده‌نگر؛ تغییرِ بها/کاهشِ ارزش/تجدیدِ ارزیابی از دورهٔ بعد اثر می‌گذارد):
-  خطِ مستقیم: (ارزشِ دفتری − اسقاط) ÷ ماه‌هایِ باقی‌ماندهٔ عمر  ← برایِ داراییِ دست‌نخورده = (بها − اسقاط) ÷ عمر
-  نزولی: ارزشِ دفتری × نرخِ سالانه ÷ ۱۲ (کف = اسقاط؛ ماهِ آخرِ عمر تمامِ مانده)
-  بر اساسِ تولید: (ارزشِ دفتری − اسقاط) × کارکردِ دوره ÷ کارکردِ باقی‌مانده
-اجرایِ دوره: محاسبه ← بررسی ← تأیید ← ثبت (اتمیک: سند + دفترِ دارایی + وضعیت؛ هر خطا = هیچ تغییری).
-هر دوره/دفتر فقط یک اجرایِ فعال دارد (ایندکسِ یکتا)؛ ثبتِ دوباره سندِ دوم نمی‌سازد. اصلاح فقط با برگشت.
+روش‌ها (آینده‌نگر؛ تغییر بها/کاهش ارزش/تجدید ارزیابی از دورهٔ بعد اثر می‌گذارد):
+  خط مستقیم: (ارزش دفتری − اسقاط) ÷ ماه‌های باقی‌ماندهٔ عمر  ← برای دارایی دست‌نخورده = (بها − اسقاط) ÷ عمر
+  نزولی: ارزش دفتری × نرخ سالانه ÷ ۱۲ (کف = اسقاط؛ ماه آخر عمر تمام مانده)
+  بر اساس تولید: (ارزش دفتری − اسقاط) × کارکرد دوره ÷ کارکرد باقی‌مانده
+اجرای دوره: محاسبه ← بررسی ← تایید ← ثبت (اتمیک: سند + دفتر دارایی + وضعیت؛ هر خطا = هیچ تغییری).
+هر دوره/دفتر فقط یک اجرای فعال دارد (ایندکس یکتا)؛ ثبت دوباره سند دوم نمی‌سازد. اصلاح فقط با برگشت.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from peecha.db.models.fixed_assets import (
 from peecha.services.fixed_assets import common as c
 
 ZERO = c.ZERO
-RUN_STATUS_LABELS = {"CALCULATED": "محاسبه‌شده", "REVIEWED": "بررسی‌شده", "APPROVED": "تأییدشده", "POSTED": "ثبت‌شده",
+RUN_STATUS_LABELS = {"CALCULATED": "محاسبه‌شده", "REVIEWED": "بررسی‌شده", "APPROVED": "تاییدشده", "POSTED": "ثبت‌شده",
                      "REVERSED": "برگشت‌خورده"}
 
 
@@ -58,8 +58,8 @@ class Calc:
 def compute(asset, period_start: datetime.date, period_end: datetime.date, *, book_value: decimal.Decimal | None = None,
             units: decimal.Decimal | None = None, units_consumed: decimal.Decimal | None = None,
             months_done: int = 0) -> Calc:
-    """استهلاکِ یک دوره برایِ یک دارایی (بدونِ اثر روی دیتابیس). months_done = ماه‌هایِ ثبت‌شدهٔ قبلی؛
-    ماه‌هایِ عقب‌افتاده در همین دوره جبران می‌شوند."""
+    """استهلاک یک دوره برای یک دارایی (بدون اثر روی دیتابیس). months_done = ماه‌های ثبت‌شدهٔ قبلی؛
+    ماه‌های عقب‌افتاده در همین دوره جبران می‌شوند."""
     nbv = asset.book_value if book_value is None else book_value
     zero = Calc(ZERO, nbv, nbv, units)
     if (asset.depreciation_method == "NONE" or asset.depreciation_start_date is None
@@ -94,8 +94,8 @@ def compute(asset, period_start: datetime.date, period_end: datetime.date, *, bo
 
 
 def months_done(session, asset_id: int) -> int:
-    """ماه‌هایِ مستهلک‌شده = از شروعِ استهلاک تا پایانِ آخرین دورهٔ ثبت‌شده (هر اجرا ماه‌هایِ عقب‌افتاده را هم پوشش
-    می‌دهد). داراییِ حاصل از تقسیم/جزء پیش از نخستین اجرایِ خودش ماه‌هایِ مبدأ را دارد (depreciated_months_offset)."""
+    """ماه‌های مستهلک‌شده = از شروع استهلاک تا پایان آخرین دورهٔ ثبت‌شده (هر اجرا ماه‌های عقب‌افتاده را هم پوشش
+    می‌دهد). دارایی حاصل از تقسیم/جزء پیش از نخستین اجرای خودش ماه‌های مبدأ را دارد (depreciated_months_offset)."""
     last_end = session.scalar(select(func.max(DepreciationRun.period_end)).join(
         DepreciationLine, DepreciationLine.run_id == DepreciationRun.run_id).where(
         DepreciationLine.asset_id == asset_id, DepreciationRun.status_code == "POSTED"))
@@ -126,15 +126,15 @@ def calculate_run(company_id: int, user_id: int | None, period_code: str, postin
     with new_session() as session:
         book = c.primary_book(session, company_id) if book_id is None else session.get(c.AssetBook, book_id)
         if book is None or not book.is_primary:
-            raise ValueError("فعلاً فقط دفترِ اصلیِ حسابداری فعال است.")
+            raise ValueError("فعلاً فقط دفتر اصلی حسابداری فعال است.")
         run = _active_run(session, company_id, book.book_id, code)
         if run is not None and run.status_code == "POSTED":
-            raise ValueError(f"استهلاکِ دورهٔ {code} قبلاً ثبت شده است؛ برایِ اصلاح ابتدا آن را برگشت بزنید.")
+            raise ValueError(f"استهلاک دورهٔ {code} قبلاً ثبت شده است؛ برای اصلاح ابتدا آن را برگشت بزنید.")
         later = session.scalar(select(DepreciationRun.period_code).where(
             DepreciationRun.company_id == company_id, DepreciationRun.book_id == book.book_id,
             DepreciationRun.status_code == "POSTED", DepreciationRun.period_start > start).limit(1))
         if later:
-            raise ValueError(f"دورهٔ بعدی ({later}) ثبت شده است؛ دورهٔ قبلی قابلِ‌محاسبه نیست.")
+            raise ValueError(f"دورهٔ بعدی ({later}) ثبت شده است؛ دورهٔ قبلی قابل‌محاسبه نیست.")
         if run is None:
             run = DepreciationRun(company_id=company_id, book_id=book.book_id, period_code=code, period_start=start,
                                   period_end=end, posting_date=posting_date or end, created_by_user_id=user_id)
@@ -167,7 +167,7 @@ def calculate_run(company_id: int, user_id: int | None, period_code: str, postin
             total += calc.amount
             count += 1
         if problems:
-            raise ValueError("نگاشتِ حسابِ استهلاک ناقص است:\n" + "\n".join(problems))
+            raise ValueError("نگاشت حساب استهلاک ناقص است:\n" + "\n".join(problems))
         run.total_amount, run.asset_count = total, count
         c.audit(session, company_id, user_id, run.run_id, "CALCULATE", {"period": code, "total": str(total), "assets": count},
                 entity_type="DepreciationRun")
@@ -179,9 +179,9 @@ def _transition(company_id: int, user_id: int | None, run_id: int, from_states: 
     with new_session() as session:
         run = session.scalar(select(DepreciationRun).where(DepreciationRun.run_id == run_id).with_for_update())
         if run is None or run.company_id != company_id:
-            raise ValueError("اجرایِ استهلاک نامعتبر است.")
+            raise ValueError("اجرای استهلاک نامعتبر است.")
         if run.status_code not in from_states:
-            raise ValueError(f"اجرا در وضعیتِ «{RUN_STATUS_LABELS[run.status_code]}» است.")
+            raise ValueError(f"اجرا در وضعیت «{RUN_STATUS_LABELS[run.status_code]}» است.")
         run.status_code = to_state
         setattr(run, attr, user_id)
         c.audit(session, company_id, user_id, run_id, to_state, {"period": run.period_code}, entity_type="DepreciationRun")
@@ -197,15 +197,15 @@ def approve_run(company_id: int, user_id: int | None, run_id: int) -> None:
 
 
 def post_run(company_id: int, user_id: int, run_id: int) -> int | None:
-    """ثبتِ اتمیک: سندِ حسابداری (هزینه به مرکزِ هزینهٔ هر دارایی) + دفترِ دارایی + وضعیت. ثبتِ دوباره = همان سند."""
+    """ثبت اتمیک: سند حسابداری (هزینه به مرکز هزینهٔ هر دارایی) + دفتر دارایی + وضعیت. ثبت دوباره = همان سند."""
     with new_session() as session:
         run = session.scalar(select(DepreciationRun).where(DepreciationRun.run_id == run_id).with_for_update())
         if run is None or run.company_id != company_id:
-            raise ValueError("اجرایِ استهلاک نامعتبر است.")
+            raise ValueError("اجرای استهلاک نامعتبر است.")
         if run.status_code == "POSTED":
             return run.journal_entry_id
         if run.status_code != "APPROVED":
-            raise ValueError("فقط اجرایِ تأییدشده قابلِ‌ثبت است.")
+            raise ValueError("فقط اجرای تاییدشده قابل‌ثبت است.")
         lines = list(session.scalars(select(DepreciationLine).where(DepreciationLine.run_id == run_id)
                                      .order_by(DepreciationLine.asset_id)))
         assets = {}
@@ -219,7 +219,7 @@ def post_run(company_id: int, user_id: int, run_id: int) -> int | None:
             jl.append(c.JLine(ln.expense_account_id, debit=ln.amount, detail_ids=dims))
             jl.append(c.JLine(ln.accumulated_account_id, credit=ln.amount,
                               detail_ids=(ln.cost_center_detail_account_id, asset.detail_account_id)))
-        memo = f"استهلاکِ دارایی‌هایِ ثابت -- دورهٔ {run.period_code}"
+        memo = f"استهلاک دارایی‌های ثابت — دورهٔ {run.period_code}"
         je_id = c.post_journal(session, company_id, user_id, run.posting_date, memo, jl) if jl else None
         for ln in lines:
             asset = assets[ln.asset_id]
@@ -238,11 +238,11 @@ def post_run(company_id: int, user_id: int, run_id: int) -> int | None:
 
 
 def reverse_run(company_id: int, user_id: int, run_id: int, date: datetime.date | None = None, reason: str | None = None) -> int | None:
-    """برگشتِ آخرین اجرایِ ثبت‌شده با سندِ معکوس و ردیف‌هایِ برگشتیِ دفترِ دارایی (هیچ ردیفی حذف/ویرایش نمی‌شود)."""
+    """برگشت آخرین اجرای ثبت‌شده با سند معکوس و ردیف‌های برگشتی دفتر دارایی (هیچ ردیفی حذف/ویرایش نمی‌شود)."""
     with new_session() as session:
         run = session.scalar(select(DepreciationRun).where(DepreciationRun.run_id == run_id).with_for_update())
         if run is None or run.company_id != company_id or run.status_code != "POSTED":
-            raise ValueError("فقط اجرایِ ثبت‌شده قابلِ‌برگشت است.")
+            raise ValueError("فقط اجرای ثبت‌شده قابل‌برگشت است.")
         later = session.scalar(select(DepreciationRun.period_code).where(
             DepreciationRun.company_id == company_id, DepreciationRun.book_id == run.book_id,
             DepreciationRun.status_code == "POSTED", DepreciationRun.period_start > run.period_start).limit(1))
@@ -259,7 +259,7 @@ def reverse_run(company_id: int, user_id: int, run_id: int, date: datetime.date 
                               detail_ids=(ln.cost_center_detail_account_id, asset.detail_account_id)))
             jl.append(c.JLine(ln.expense_account_id, credit=ln.amount,
                               detail_ids=(ln.cost_center_detail_account_id, asset.project_detail_account_id, asset.detail_account_id)))
-        memo = f"برگشتِ استهلاکِ دورهٔ {run.period_code}" + (f" -- {reason}" if reason else "")
+        memo = f"برگشت استهلاک دورهٔ {run.period_code}" + (f" -- {reason}" if reason else "")
         je_id = c.post_journal(session, company_id, user_id, date, memo, jl) if jl else None
         for ln in lines:
             asset = assets[ln.asset_id]
@@ -308,7 +308,7 @@ def record_usage(company_id: int, user_id: int | None, asset_id: int, date: date
                                 .where(DepreciationLine.asset_id == asset_id, DepreciationRun.period_code == code,
                                        DepreciationRun.status_code == "POSTED"))
         if posted:
-            raise ValueError(f"استهلاکِ دورهٔ {code} برایِ این دارایی ثبت شده است؛ کارکردِ آن دوره بسته است.")
+            raise ValueError(f"استهلاک دورهٔ {code} برای این دارایی ثبت شده است؛ کارکرد آن دوره بسته است.")
         row = AssetUsage(company_id=company_id, asset_id=asset_id, usage_date=date, units=decimal.Decimal(units),
                          source_code=source_code, production_order_ref=production_order_ref, note=note,
                          created_by_user_id=user_id)
@@ -320,7 +320,7 @@ def record_usage(company_id: int, user_id: int | None, asset_id: int, date: date
 
 def forecast(company_id: int, asset_id: int, months: int | None = None,
              monthly_units: decimal.Decimal | None = None) -> list[SimpleNamespace]:
-    """پیش‌بینیِ استهلاک تا پایانِ عمر (یا n ماه) از دورهٔ ثبت‌نشدهٔ بعدی -- بدونِ اثر روی دیتابیس."""
+    """پیش‌بینی استهلاک تا پایان عمر (یا n ماه) از دورهٔ ثبت‌نشدهٔ بعدی — بدون اثر روی دیتابیس."""
     with new_session() as session:
         asset = session.get(Asset, asset_id)
         if asset is None or asset.company_id != company_id:
@@ -353,7 +353,7 @@ def forecast(company_id: int, asset_id: int, months: int | None = None,
 
 
 def schedule(company_id: int, asset_id: int) -> list[SimpleNamespace]:
-    """جدولِ کاملِ استهلاک: دوره‌هایِ ثبت‌شده + پیش‌بینی تا پایانِ عمر."""
+    """جدول کامل استهلاک: دوره‌های ثبت‌شده + پیش‌بینی تا پایان عمر."""
     with new_session() as session:
         posted = session.execute(select(DepreciationRun.period_code, DepreciationLine.amount, DepreciationLine.closing_book_value)
                                  .join(DepreciationLine, DepreciationLine.run_id == DepreciationRun.run_id)
@@ -367,7 +367,7 @@ def schedule(company_id: int, asset_id: int) -> list[SimpleNamespace]:
 
 
 def depreciation_for_period(session, asset_id: int, period_code: str) -> decimal.Decimal:
-    """استهلاکِ ثبت‌شدهٔ یک دارایی در یک دوره (برایِ بهایِ ماشین در تولید)."""
+    """استهلاک ثبت‌شدهٔ یک دارایی در یک دوره (برای بهای ماشین در تولید)."""
     return decimal.Decimal(session.scalar(select(func.coalesce(func.sum(AssetTransaction.depreciation_delta), 0)).where(
         AssetTransaction.asset_id == asset_id, AssetTransaction.reference == period_code,
         AssetTransaction.txn_type.in_(("DEPRECIATION", "REVERSAL")))) or 0)

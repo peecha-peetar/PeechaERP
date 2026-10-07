@@ -51,18 +51,18 @@ from peecha.services import roles as roles_service
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
 k1 = coa_service.create_account(company_id, "11", "صندوق", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-cash_gl = coa_service.create_account(company_id, "101", "صندوقِ اصلی", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+cash_gl = coa_service.create_account(company_id, "101", "صندوق اصلی", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k1.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
 
 customer_group_id = dimensions_service.get_person_group_id(company_id, dimensions_service.CUSTOMER_GROUP_CODE)
 treasury_service.create_counterparty_mapping(company_id, "RECEIPT", ar_gl.account_id, person_group_id=customer_group_id)
 treasury_service.set_account_mapping(company_id, "RECEIPT_CASH", cash_gl.account_id)
 
-customer_id = dimensions_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی")
+customer_id = dimensions_service.create_customer(company_id, "C-1", "مشتری آزمایشی")
 
 visitor_user = users_service.create_user(
-    "visitor1", "ویزیتورِ یک", "secret123", None, company.default_language_id, False, [company_id], company_id,
+    "visitor1", "ویزیتور یک", "secret123", None, company.default_language_id, False, [company_id], company_id,
 )
 
 # ==========================================================================
@@ -84,12 +84,12 @@ client = TestClient(app)
 
 def _login(username, password):
     resp = client.post("/auth/login", json={"username": username, "password": password, "device_name": "test"})
-    check(resp.status_code == 200, f"ورودِ {username} موفق بود (status={resp.status_code})")
+    check(resp.status_code == 200, f"ورود {username} موفق بود (status={resp.status_code})")
     return resp.json()["access_token"]
 
 
 no_role_user = users_service.create_user(
-    "norole1", "کاربرِ بدونِ نقش", "secret123", None, company.default_language_id, False, [company_id], company_id,
+    "norole1", "کاربر بدون نقش", "secret123", None, company.default_language_id, False, [company_id], company_id,
 )
 
 admin_token = _login("admin", "secret123")
@@ -105,43 +105,43 @@ def _auth(token):
 # ۰: RBACِ واقعی -- کاربرِ بدونِ نقش (نه GL_DIM/CREATE، نه TREASURY_RECEIPT/CREATE)
 # نباید بتواند مشتری بسازد یا وصول ثبت کند.
 # ==========================================================================
-resp = client.post("/customers", json={"code": "C-X", "name": "بدونِ‌دسترسی"}, headers=_auth(no_role_token))
-check(resp.status_code == 403, f"کاربرِ بدونِ نقشِ GL_DIM/CREATE از ثبتِ مشتری منع شد (status={resp.status_code})")
+resp = client.post("/customers", json={"code": "C-X", "name": "بدون‌دسترسی"}, headers=_auth(no_role_token))
+check(resp.status_code == 403, f"کاربر بدون نقش GL_DIM/CREATE از ثبت مشتری منع شد (status={resp.status_code})")
 
 resp = client.post(
     "/payments",
     json={"customer_detail_account_id": customer_id, "method_lines": [{"method": "CASH", "amount": "1000"}]},
     headers=_auth(no_role_token),
 )
-check(resp.status_code == 403, f"کاربرِ بدونِ نقشِ TREASURY_RECEIPT/CREATE از ثبتِ وصول منع شد (status={resp.status_code})")
+check(resp.status_code == 403, f"کاربر بدون نقش TREASURY_RECEIPT/CREATE از ثبت وصول منع شد (status={resp.status_code})")
 
 # ==========================================================================
 # ۱: پذیرشِ مشتری (Customer Acquisition) -- ویزیتور می‌سازد، ادمین تایید می‌کند.
 # ==========================================================================
 resp = client.post(
     "/customers",
-    json={"code": "C-2", "name": "مشتریِ جدیدِ میدانی", "phone": "09120000000", "address": "تهران"},
+    json={"code": "C-2", "name": "مشتری جدید میدانی", "phone": "09120000000", "address": "تهران"},
     headers=_auth(visitor_token),
 )
-check(resp.status_code == 200, f"ثبتِ مشتریِ جدید از موبایل موفق بود (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"ثبت مشتری جدید از موبایل موفق بود (status={resp.status_code}, body={resp.text})")
 new_customer_id = resp.json()["detail_account_id"]
-check(resp.json()["status_code"] == "PENDING_APPROVAL", "مشتریِ تازه‌ساخته در وضعیتِ درانتظارِ تایید است")
+check(resp.json()["status_code"] == "PENDING_APPROVAL", "مشتری تازه‌ساخته در وضعیت درانتظار تایید است")
 
 with new_session() as s:
     from peecha.db.models.accounting import CustomerDetail
     detail = s.get(CustomerDetail, new_customer_id)
-    check(detail is not None and detail.phone == "09120000000" and detail.address == "تهران", "فیلدهایِ تلفن/آدرس واقعاً ذخیره شدند")
+    check(detail is not None and detail.phone == "09120000000" and detail.address == "تهران", "فیلدهای تلفن/آدرس واقعاً ذخیره شدند")
 
 # ویزیتور (غیرِمدیر) نباید بتواند تایید کند.
 resp = client.post(f"/customers/{new_customer_id}/approve", headers=_auth(visitor_token))
-check(resp.status_code == 403, f"تاییدِ مشتری توسطِ ویزیتورِ غیرِمدیر رد شد (status={resp.status_code})")
+check(resp.status_code == 403, f"تایید مشتری توسط ویزیتور غیرمدیر رد شد (status={resp.status_code})")
 
 resp = client.post(f"/customers/{new_customer_id}/approve", headers=_auth(admin_token))
-check(resp.status_code == 200 and resp.json()["status_code"] == "ACTIVE", "تاییدِ مشتری توسطِ ادمین موفق بود")
+check(resp.status_code == 200 and resp.json()["status_code"] == "ACTIVE", "تایید مشتری توسط ادمین موفق بود")
 
 profile = partners_service.get_customer_profile(new_customer_id)
 check(profile is not None and profile.status_code == "ACTIVE" and profile.submitted_by_user_id == visitor_user.user_id,
-      "پروفایلِ مشتری واقعاً ACTIVE شد و ثبت‌کننده‌یِ اصلی حفظ شد")
+      "پروفایل مشتری واقعاً ACTIVE شد و ثبت‌کنندهٔ اصلی حفظ شد")
 
 # ==========================================================================
 # ۲: وصول/دریافتِ وجه (Collection) از مشتریِ موجود.
@@ -155,19 +155,19 @@ resp = client.post(
     },
     headers=_auth(visitor_token),
 )
-check(resp.status_code == 200, f"ثبتِ وصولِ نقدی موفق بود (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"ثبت وصول نقدی موفق بود (status={resp.status_code}, body={resp.text})")
 je_id = resp.json()["journal_entry_id"]
-check(je_id is not None, "شناسهٔ سندِ حسابداری برگردانده شد")
+check(je_id is not None, "شناسهٔ سند حسابداری برگردانده شد")
 
 with new_session() as s:
     from peecha.db.models.accounting import JournalEntry, JournalEntryLine
     entry = s.get(JournalEntry, je_id)
-    check(entry is not None, "سندِ حسابداریِ وصول واقعاً ساخته شد")
-    check("بازدید #42" in (entry.description or ""), "شناسهٔ بازدید در توضیحاتِ سند حفظ شد")
+    check(entry is not None, "سند حسابداری وصول واقعاً ساخته شد")
+    check("بازدید #42" in (entry.description or ""), "شناسهٔ بازدید در توضیحات سند حفظ شد")
     lines = s.scalars(select(JournalEntryLine).where(JournalEntryLine.journal_entry_id == je_id)).all()
-    check(len(lines) == 2, "سند دقیقاً دو ردیف (طرفِ‌حساب + نقد) دارد")
+    check(len(lines) == 2, "سند دقیقاً دو ردیف (طرف‌حساب + نقد) دارد")
     amounts = {ln.debit_amount_fc or ln.credit_amount_fc for ln in lines}
-    check(decimal.Decimal("150000") in amounts, "مبلغِ وصول درست در سند ثبت شد")
+    check(decimal.Decimal("150000") in amounts, "مبلغ وصول درست در سند ثبت شد")
 
 # روشِ نامعتبر (مثلاً INSTALLMENT که فقط برایِ کاربردهایِ پیچیده‌ی دسکتاپ است) رد شود.
 resp = client.post(
@@ -175,7 +175,7 @@ resp = client.post(
     json={"customer_detail_account_id": customer_id, "method_lines": [{"method": "INSTALLMENT", "amount": "1000"}]},
     headers=_auth(visitor_token),
 )
-check(resp.status_code == 400, f"روشِ وصولِ نامعتبر رد شد (status={resp.status_code})")
+check(resp.status_code == 400, f"روش وصول نامعتبر رد شد (status={resp.status_code})")
 
 # مشتریِ بدونِ نگاشتِ حساب (چون مشتریِ C-2 قبل از این تست نگاشتِ گروهیِ مشترکی دارد، یک تفصیلیِ غیرِمشتری امتحان می‌شود)
 no_detail_id = dimensions_service.get_no_detail_account_id(company_id)
@@ -184,7 +184,7 @@ resp = client.post(
     json={"customer_detail_account_id": no_detail_id, "method_lines": [{"method": "CASH", "amount": "1000"}]},
     headers=_auth(visitor_token),
 )
-check(resp.status_code == 400, f"طرفِ‌حسابِ بدونِ نگاشتِ حساب با خطایِ روشن رد شد (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 400, f"طرف‌حساب بدون نگاشت حساب با خطای روشن رد شد (status={resp.status_code}, body={resp.text})")
 
 # ==========================================================================
 # ۳: ایدمپوتنسی -- تکرارِ همان کلید نباید سندِ دومی بسازد.
@@ -200,17 +200,17 @@ resp2 = client.post(
     json={"customer_detail_account_id": customer_id, "method_lines": [{"method": "CASH", "amount": "5000"}]},
     headers={**_auth(visitor_token), "Idempotency-Key": idem_key},
 )
-check(resp1.status_code == 200 and resp2.status_code == 200, "هردو درخواستِ ایدمپوتنت موفق برگشتند")
-check(resp1.json() == resp2.json(), "پاسخِ دوم دقیقاً همانِ پاسخِ اول (بدونِ اجرایِ دوباره) بود")
+check(resp1.status_code == 200 and resp2.status_code == 200, "هردو درخواست ایدمپوتنت موفق برگشتند")
+check(resp1.json() == resp2.json(), "پاسخ دوم دقیقاً همان پاسخ اول (بدون اجرای دوباره) بود")
 
 with new_session() as s:
     from peecha.db.models.accounting import JournalEntry
     matching = s.scalars(
-        select(JournalEntry).where(JournalEntry.company_id == company_id, JournalEntry.description.like("%وصولِ میدانی%"))
+        select(JournalEntry).where(JournalEntry.company_id == company_id, JournalEntry.description.like("%وصول میدانی%"))
     ).all()
     # سه سند از قبل (وصولِ ۱۵۰۰۰۰ + وصولِ ایدمپوتنت که فقط یک‌بار باید ساخته شده باشد)
     cash_5000_count = sum(1 for e in matching if any(l.debit_amount_fc == decimal.Decimal(5000) or l.credit_amount_fc == decimal.Decimal(5000) for l in e.lines))
-check(cash_5000_count == 1, f"با وجودِ دو درخواست، فقط یک سندِ ۵۰۰۰تومانی ساخته شد (count={cash_5000_count})")
+check(cash_5000_count == 1, f"با وجود دو درخواست، فقط یک سند ۵۰۰۰تومانی ساخته شد (count={cash_5000_count})")
 
 # ==========================================================================
 # ۴: Audit Log برایِ عملیاتِ حساس (ثبت/تاییدِ مشتری، ثبتِ وصول) از موبایل.
@@ -221,9 +221,9 @@ with new_session() as s:
         (a.entity_type, a.action)
         for a in s.scalars(select(ActivityLog).where(ActivityLog.company_id == company_id)).all()
     }
-check(("CustomerProfile", "CREATE") in actions, "ثبتِ مشتری از موبایل Audit شد")
-check(("CustomerProfile", "APPROVE") in actions, "تاییدِ مشتری از موبایل Audit شد")
-check(("JournalEntry", "CREATE") in actions, "ثبتِ وصول از موبایل Audit شد")
+check(("CustomerProfile", "CREATE") in actions, "ثبت مشتری از موبایل Audit شد")
+check(("CustomerProfile", "APPROVE") in actions, "تایید مشتری از موبایل Audit شد")
+check(("JournalEntry", "CREATE") in actions, "ثبت وصول از موبایل Audit شد")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

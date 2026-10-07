@@ -1,11 +1,11 @@
-"""مدل‌هایِ ماژولِ مدیریتِ بازرگانی (Commercial Management).
+"""مدل‌های ماژول مدیریت بازرگانی (Commercial Management).
 
-معادلِ db/schema/065 تا 077_commercial_*.sql — طبقِ سندِ معماریِ
-۱۱مرحله‌ای: خرید و فروش یک اسکلتِ سندِ واحد دارند (commercial_documents/
-_lines، متمایزشده با document_type_code)؛ مشتری/تامین‌کننده جدولِ
-اقماریِ یک‌به‌یکِ تفصیلیِ گروهِ CUSTOMER/SUPPLIER هستند (هم‌الگو با
-inv.items)؛ POS/عمده/آنلاین/نماینده/مارکت‌پلیس همگی کانال (بُعدی رویِ
-همان سند) هستند، نه ماژولِ جدا.
+معادل db/schema/065 تا 077_commercial_*.sql — طبق سند معماری
+۱۱مرحله‌ای: خرید و فروش یک اسکلت سند واحد دارند (commercial_documents/
+_lines، متمایزشده با document_type_code)؛ مشتری/تامین‌کننده جدول
+اقماری یک‌به‌یک تفصیلی گروه CUSTOMER/SUPPLIER هستند (هم‌الگو با
+inv.items)؛ POS/عمده/آنلاین/نماینده/مارکت‌پلیس همگی کانال (بُعدی روی
+همان سند) هستند، نه ماژول جدا.
 """
 
 from __future__ import annotations
@@ -109,11 +109,11 @@ class PriceListItem(Base):
 
 
 class PriceListItemPriceHistory(Base):
-    """طبقِ درخواستِ صریح («لاگِ قیمت‌ها را نگه دار تا سابقه حفظ شود و
-    اگر اشتباهی شد بشه قیمتو برگردوند»): هر تغییرِ unit_price در
-    PriceListItem (چه دستی، چه از وارداتِ قیمتِ تامین‌کننده) این‌جا یک
-    ردیف ثبت می‌کند -- old_price=NULL یعنی این اولین‌بار است که این
-    ترکیب (کالا/واحد/حداقلِ‌مقدار) در این فهرستِ قیمت مقدار گرفته."""
+    """طبق درخواست صریح («لاگ قیمت‌ها را نگه دار تا سابقه حفظ شود و
+    اگر اشتباهی شد بشه قیمتو برگردوند»): هر تغییر unit_price در
+    PriceListItem (چه دستی، چه از واردات قیمت تامین‌کننده) این‌جا یک
+    ردیف ثبت می‌کند — old_price=NULL یعنی این اولین‌بار است که این
+    ترکیب (کالا/واحد/حداقل‌مقدار) در این فهرست قیمت مقدار گرفته."""
 
     __tablename__ = "price_list_item_price_history"
     __table_args__ = {"schema": "comm"}
@@ -132,10 +132,10 @@ class PriceListItemPriceHistory(Base):
 
 
 class SupplierPriceImportTemplate(Base):
-    """طبقِ درخواستِ صریح («این تطبیق را برایِ دفعاتِ بعد ذخیره کن»):
-    تنظیماتِ ستون‌بندیِ فایلِ قیمتِ هر تامین‌کننده (اکسل/PDF) -- کدامین
-    ستون کد است، کدامین قیمت، و چند ردیفِ اول (هدر/عنوان) نادیده گرفته
-    شود -- تا واردکردنِ دفعاتِ بعدیِ همان تامین‌کننده نیازِ تطبیقِ دستی
+    """طبق درخواست صریح («این تطبیق را برای دفعات بعد ذخیره کن»):
+    تنظیمات ستون‌بندی فایل قیمت هر تامین‌کننده (اکسل/PDF) — کدامین
+    ستون کد است، کدامین قیمت، و چند ردیف اول (هدر/عنوان) نادیده گرفته
+    شود — تا واردکردن دفعات بعدی همان تامین‌کننده نیاز تطبیق دستی
     نداشته باشد."""
 
     __tablename__ = "supplier_price_import_templates"
@@ -389,10 +389,10 @@ class PosSettings(Base):
 
 
 class PosMenuGroup(Base):
-    """گروه‌بندیِ کاملاً مستقلِ POS برایِ چیدمانِ تب‌هایِ دسترسیِ‌سریع --
-    معادلِ 113_pos_menu_groups.sql. طبقِ درخواستِ صریح («دسته‌بندیِ
-    مخصوصِ POS، جدا از دسته‌بندیِ عمومیِ انبار»)، این هیچ ربطی به
-    inv.item_categories (سلسله‌مراتبِ کاردکس/گزارش) ندارد."""
+    """گروه‌بندی کاملاً مستقل POS برای چیدمان تب‌های دسترسی‌سریع --
+    معادل 113_pos_menu_groups.sql. طبق درخواست صریح («دسته‌بندی
+    مخصوص POS، جدا از دسته‌بندی عمومی انبار»)، این هیچ ربطی به
+    inv.item_categories (سلسله‌مراتب کاردکس/گزارش) ندارد."""
 
     __tablename__ = "pos_menu_groups"
     __table_args__ = ({"schema": "comm"},)
@@ -410,9 +410,9 @@ class PosMenuGroup(Base):
 
 
 class PosCashierSettings(Base):
-    """تنظیماتِ صندوق‌داریِ هر (کاربر، شرکت) -- معادلِ
-    112_pos_cashier_settings.sql. ترمینال/فهرستِ‌قیمت/مشتری هرکدام به یک
-    شرکتِ مشخص تعلق دارند، پس این تنظیمات هم به‌ازایِ شرکت جداست."""
+    """تنظیمات صندوق‌داری هر (کاربر، شرکت) — معادل
+    112_pos_cashier_settings.sql. ترمینال/فهرست‌قیمت/مشتری هرکدام به یک
+    شرکت مشخص تعلق دارند، پس این تنظیمات هم به‌ازای شرکت جداست."""
 
     __tablename__ = "pos_cashier_settings"
     __table_args__ = ({"schema": "comm"},)
@@ -758,8 +758,8 @@ class PartyContact(Base):
 
 
 class CustomerGuarantee(Base):
-    """چک/سفته/ضمانت‌نامه/ضامن/وثیقه به‌عنوانِ اطلاعاتِ اعتباریِ خودِ
-    مشتری (R219، بخشِ ۵) -- مستقل از خزانه‌داری تا وقتی صراحتاً وصول/ضبط شود."""
+    """چک/سفته/ضمانت‌نامه/ضامن/وثیقه به‌عنوان اطلاعات اعتباری خود
+    مشتری (R219، بخش ۵) — مستقل از خزانه‌داری تا وقتی صراحتاً وصول/ضبط شود."""
 
     __tablename__ = "customer_guarantees"
     __table_args__ = ({"schema": "comm"},)
@@ -782,8 +782,8 @@ class CustomerGuarantee(Base):
 
 
 class CustomerActivity(Base):
-    """CRMِ کامل: شکایت/جلسه/فرصتِ فروش/وظیفه (R219، بخشِ ۱۱) -- یک
-    جدولِ عمومیِ فعالیت، نه چهار جدولِ موازی."""
+    """CRM کامل: شکایت/جلسه/فرصت فروش/وظیفه (R219، بخش ۱۱) — یک
+    جدول عمومی فعالیت، نه چهار جدول موازی."""
 
     __tablename__ = "customer_activities"
     __table_args__ = ({"schema": "comm"},)
@@ -805,8 +805,8 @@ class CustomerActivity(Base):
 
 
 class CustomerMerchandising(Base):
-    """اطلاعاتِ فروشگاهی/Merchandising (R219، بخشِ ۱۰) -- فقط برایِ
-    مشتریانِ نوعِ فروشگاه معنا دارد؛ ماهولِ جداگانه از customer_profiles."""
+    """اطلاعات فروشگاهی/Merchandising (R219، بخش ۱۰) — فقط برای
+    مشتریان نوع فروشگاه معنا دارد؛ ماهول جداگانه از customer_profiles."""
 
     __tablename__ = "customer_merchandising"
     __table_args__ = ({"schema": "comm"},)
@@ -1000,10 +1000,10 @@ class InstallmentLine(Base):
 
 
 class InstallmentCollection(Base):
-    """طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): هر رویدادِ
-    وصول (کامل یا جزئی) رویِ یک قسط، جداگانه این‌جا ثبت می‌شود -- مجموعِ
-    amount این ردیف‌ها برایِ یک line_id همان مبلغِ وصول‌شده‌یِ آن قسط
-    است. هم‌الگو با InvoiceSettlement برایِ فاکتورها."""
+    """طبق درخواست صریح («ممکنه بخشی از اقساط وصول بشه»): هر رویداد
+    وصول (کامل یا جزئی) روی یک قسط، جداگانه این‌جا ثبت می‌شود — مجموع
+    amount این ردیف‌ها برای یک line_id همان مبلغ وصول‌شدهٔ آن قسط
+    است. هم‌الگو با InvoiceSettlement برای فاکتورها."""
 
     __tablename__ = "installment_collections"
     __table_args__ = ({"schema": "comm"},)
@@ -1424,8 +1424,8 @@ class CommercialDocumentSettlementPlanLine(Base):
 
 
 class PosSettlementMethodDefault(Base):
-    """پیش‌فرضِ تفصیلی (+ مرکزِ هزینه/پروژه) به‌ازایِ هر روشِ دریافت/پرداختِ
-    فرمِ «نحوهٔ تسویه»یِ تک‌فروشی -- تا در لحظهٔ فروش دوباره پرسیده نشود."""
+    """پیش‌فرض تفصیلی (+ مرکز هزینه/پروژه) به‌ازای هر روش دریافت/پرداخت
+    فرم «نحوهٔ تسویه»ی تک‌فروشی — تا در لحظهٔ فروش دوباره پرسیده نشود."""
 
     __tablename__ = "pos_settlement_method_defaults"
     __table_args__ = (UniqueConstraint("company_id", "method_code"), {"schema": "comm"})
@@ -1442,7 +1442,7 @@ class PosSettlementMethodDefault(Base):
 # مدیریتِ سفارشات — معادلِ 103_order_management.sql
 # =======================================================================
 class OrderTrackingSetting(Base):
-    """تنظیمِ یک‌بارهٔ هر شرکت: کدام گروهِ تفصیلی «سفارشاتِ در راه» است."""
+    """تنظیم یک‌بارهٔ هر شرکت: کدام گروه تفصیلی «سفارشات در راه» است."""
 
     __tablename__ = "order_tracking_settings"
     __table_args__ = ({"schema": "comm"},)
@@ -1456,11 +1456,11 @@ class OrderTrackingSetting(Base):
 
 
 class OrderTracking(Base):
-    """یک سفارش -- دقیقاً یک تفصیلیِ همان گروهِ تعیین‌شده در
-    OrderTrackingSetting را دنبال می‌کند. پرداخت‌هایِ خودِ سفارش این‌جا
-    ذخیره نمی‌شوند -- با پرس‌وجویِ acc.journal_entry_line_details بر
-    اساسِ همین detail_account_id به‌دست می‌آیند (طبقِ اصلِ «هرچه از
-    داده‌هایِ حسابداریِ موجود مشتق می‌شود، دوباره ذخیره نشود»)."""
+    """یک سفارش — دقیقاً یک تفصیلی همان گروه تعیین‌شده در
+    OrderTrackingSetting را دنبال می‌کند. پرداخت‌های خود سفارش این‌جا
+    ذخیره نمی‌شوند — با پرس‌وجوی acc.journal_entry_line_details بر
+    اساس همین detail_account_id به‌دست می‌آیند (طبق اصل «هرچه از
+    داده‌های حسابداری موجود مشتق می‌شود، دوباره ذخیره نشود»)."""
 
     __tablename__ = "order_trackings"
     __table_args__ = ({"schema": "comm"},)
@@ -1477,9 +1477,9 @@ class OrderTracking(Base):
 
 
 class OrderPaymentTitle(Base):
-    """طبقِ درخواستِ صریح («عنوانِ پرداخت» در فرمِ افزودنِ پرداختِ سفارش):
-    فهرستِ قابلِ‌گسترشِ عنوان‌هایی مثلِ «هزینه‌یِ ترخیص»/«بهایِ اولیه‌یِ
-    کالا» که کاربر با دکمه‌یِ + همان‌جا اضافه می‌کند -- معادلِ
+    """طبق درخواست صریح («عنوان پرداخت» در فرم افزودن پرداخت سفارش):
+    فهرست قابل‌گسترش عنوان‌هایی مثل «هزینهٔ ترخیص»/«بهای اولیهٔ
+    کالا» که کاربر با دکمهٔ + همان‌جا اضافه می‌کند — معادل
     104_order_payment_titles.sql."""
 
     __tablename__ = "order_payment_titles"
@@ -1491,9 +1491,9 @@ class OrderPaymentTitle(Base):
 
 
 class PosInvoiceAuditLog(Base):
-    """طبقِ درخواستِ صریح («فاکتورهایِ صادرشده تا قبل از ثبتِ سند توسطِ
-    صندوق‌دار هم بتونه حذف و اصلاح کنه و در هنگامِ بستنِ شیفت، فاکتورهایِ
-    اصلاح‌شده و حذف‌شده به سرپرست گزارش بشه»): معادلِ 117_pos_invoice_
+    """طبق درخواست صریح («فاکتورهای صادرشده تا قبل از ثبت سند توسط
+    صندوق‌دار هم بتونه حذف و اصلاح کنه و در هنگام بستن شیفت، فاکتورهای
+    اصلاح‌شده و حذف‌شده به سرپرست گزارش بشه»): معادل 117_pos_invoice_
     audit.sql."""
 
     __tablename__ = "pos_invoice_audit_log"
@@ -1510,9 +1510,9 @@ class PosInvoiceAuditLog(Base):
 
 
 class SocialConnection(Base):
-    """طبقِ درخواستِ صریح («پستِ خودکار در تلگرام و بله»): تلگرام و بله
-    (tapi.bale.ai) هردو دقیقاً همان Bot APIِ استاندارد را پیاده می‌کنند --
-    یک جدولِ اتصالِ مشترک با platform_code کافی است."""
+    """طبق درخواست صریح («پست خودکار در تلگرام و بله»): تلگرام و بله
+    (tapi.bale.ai) هردو دقیقاً همان Bot API استاندارد را پیاده می‌کنند --
+    یک جدول اتصال مشترک با platform_code کافی است."""
 
     __tablename__ = "social_connections"
     __table_args__ = (CheckConstraint("platform_code IN ('TELEGRAM', 'BALE')"), {"schema": "comm"})
@@ -1531,8 +1531,8 @@ class SocialConnection(Base):
 
 
 class VoipConnection(Base):
-    """طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال یا وویپ»): تنظیماتِ
-    اتصالِ AMIِ آستریسک/ایزابل -- برخلافِ SocialConnection که چندگانگی
+    """طبق درخواست صریح («وصل بشه به سیستم سانترال یا وویپ»): تنظیمات
+    اتصال AMI آستریسک/ایزابل — برخلاف SocialConnection که چندگانگی
     (چند بات) معنا دارد، هر شرکت معمولاً فقط یک سانترال دارد، پس
     company_id یکتا است (هم‌الگو با PricingPolicy)."""
 
@@ -1555,10 +1555,10 @@ class VoipConnection(Base):
 
 
 class SmsGatewaySettings(Base):
-    """طبقِ درخواستِ صریح («ارسالِ پیامکِ زمان‌بندی‌شده»): چون ارائه‌دهنده
-    مشخص نبود و APIِ دقیقش پیدا نشد، به‌جایِ سخت‌کدکردن، کلِ الگویِ URL
-    (با {phone}/{text}) رمزنگاری‌شده ذخیره می‌شود -- هم‌الگو با
-    VoipConnection (یک ردیفِ یکتا به‌ازایِ هر شرکت)."""
+    """طبق درخواست صریح («ارسال پیامک زمان‌بندی‌شده»): چون ارائه‌دهنده
+    مشخص نبود و API دقیقش پیدا نشد، به‌جای سخت‌کدکردن، کل الگوی URL
+    (با {phone}/{text}) رمزنگاری‌شده ذخیره می‌شود — هم‌الگو با
+    VoipConnection (یک ردیف یکتا به‌ازای هر شرکت)."""
 
     __tablename__ = "sms_gateway_settings"
     __table_args__ = (UniqueConstraint("company_id"), {"schema": "comm"})
@@ -1571,7 +1571,7 @@ class SmsGatewaySettings(Base):
 
 
 class SmsCampaign(Base):
-    """طبقِ درخواستِ صریح («یک تب برایِ بازاریابی و ارسالِ پیامکِ
+    """طبق درخواست صریح («یک تب برای بازاریابی و ارسال پیامک
     زمان‌بندی‌شده»)."""
 
     __tablename__ = "sms_campaigns"
@@ -1589,8 +1589,8 @@ class SmsCampaign(Base):
 
 
 class SmsCampaignRecipient(Base):
-    """طبقِ تصمیمِ طراحیِ MVP: گیرندگان در لحظهٔ ساختِ کمپین، از فهرستِ
-    مشتریانِ اختصاص‌یافته به کاربرِ سازنده (telesales.list_assigned_customers،
+    """طبق تصمیم طراحی MVP: گیرندگان در لحظهٔ ساخت کمپین، از فهرست
+    مشتریان اختصاص‌یافته به کاربر سازنده (telesales.list_assigned_customers،
     R135) عکس‌برداری می‌شوند."""
 
     __tablename__ = "sms_campaign_recipients"
@@ -1606,9 +1606,9 @@ class SmsCampaignRecipient(Base):
 
 
 class ContentCalendarPost(Base):
-    """طبقِ درخواستِ صریح («تقویمِ محتوایی»): هر پست به یک اتصالِ مشخص
-    زمان‌بندی می‌شود؛ run_due_posts (تیکِ هر یک‌دقیقه‌ایِ شل، هم‌الگو با
-    اتوسینکِ فروشِ اینترنتی) پست‌هایِ سررسیده را خودکار ارسال می‌کند."""
+    """طبق درخواست صریح («تقویم محتوایی»): هر پست به یک اتصال مشخص
+    زمان‌بندی می‌شود؛ run_due_posts (تیک هر یک‌دقیقه‌ای شل، هم‌الگو با
+    اتوهمگام‌سازی فروش اینترنتی) پست‌های سررسیده را خودکار ارسال می‌کند."""
 
     __tablename__ = "content_calendar_posts"
     __table_args__ = (
@@ -1628,8 +1628,8 @@ class ContentCalendarPost(Base):
 
 
 class AiContentSettings(Base):
-    """طبقِ درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»): کلیدِ
-    APIِ Geminiِ هر شرکت -- هم‌الگو با اعتبارِ رمزنگاری‌شده‌یِ اتصال‌هایِ
+    """طبق درخواست صریح («تولید محتوای خودکار با هوش مصنوعی»): کلید
+    API Gemini هر شرکت — هم‌الگو با اعتبار رمزنگاری‌شدهٔ اتصال‌های
     فروشگاه/بات."""
 
     __tablename__ = "ai_content_settings"
@@ -1640,9 +1640,9 @@ class AiContentSettings(Base):
 
 
 class CmsConnection(Base):
-    """طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): اتصال به وردپرس از
-    طریقِ WP REST APIِ استاندارد (Application Password) -- هم‌الگو با
-    اتصالِ فروشگاهی/بات."""
+    """طبق ادامهٔ اولویت بخش محتوا («همگام‌سازی CMS»): اتصال به وردپرس از
+    طریق WP REST API استاندارد (Application Password) — هم‌الگو با
+    اتصال فروشگاهی/بات."""
 
     __tablename__ = "cms_connections"
     __table_args__ = (CheckConstraint("platform_code IN ('WORDPRESS')"), {"schema": "comm"})
@@ -1663,9 +1663,9 @@ class CmsConnection(Base):
 
 
 class CmsArticle(Base):
-    """طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): external_post_id پس
-    از اولین انتشار پر می‌شود تا سینک‌هایِ بعدی همان پستِ وردپرس را
-    به‌روزرسانی کنند، نه اینکه هر بار پستِ تازه بسازند."""
+    """طبق ادامهٔ اولویت بخش محتوا («همگام‌سازی CMS»): external_post_id پس
+    از اولین انتشار پر می‌شود تا همگام‌سازی‌های بعدی همان پست وردپرس را
+    به‌روزرسانی کنند، نه اینکه هر بار پست تازه بسازند."""
 
     __tablename__ = "cms_articles"
     __table_args__ = (CheckConstraint("status_code IN ('DRAFT', 'PUBLISHED', 'FAILED')"), {"schema": "comm"})
@@ -1684,9 +1684,9 @@ class CmsArticle(Base):
 
 
 class OnlineCoupon(Base):
-    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- کوپن/
-    کدِ تخفیفِ فروشگاهی»): کوپن در ERP تعریف می‌شود و به فروشگاه پوش
-    می‌شود -- external_coupon_id پس از اولین سینک پر می‌شود."""
+    """طبق بازخورد صریح کاربر («امکانات حیاتی PeechaSync — کوپن/
+    کد تخفیف فروشگاهی»): کوپن در ERP تعریف می‌شود و به فروشگاه پوش
+    می‌شود — external_coupon_id پس از اولین همگام‌سازی پر می‌شود."""
 
     __tablename__ = "online_coupons"
     __table_args__ = (
@@ -1714,8 +1714,8 @@ class OnlineCoupon(Base):
 
 
 class SmartPublishSettings(Base):
-    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- Smart
-    Publish»): تنظیماتِ پردازشِ خودکارِ تصویرِ محصول -- یک ردیف به‌ازایِ
+    """طبق بازخورد صریح کاربر («امکانات حیاتی PeechaSync — Smart
+    Publish»): تنظیمات پردازش خودکار تصویر محصول — یک ردیف به‌ازای
     هر شرکت، هم‌الگو با AiContentSettings."""
 
     __tablename__ = "smart_publish_settings"
@@ -1867,9 +1867,9 @@ class PromotionRule(Base):
 
 
 class CustomerSalesNote(Base):
-    """صفحه‌یِ فروشِ تلفنی -- برخلافِ acc.customer_details.notes (یک
-    فیلدِ تکیِ قابلِ‌بازنویسی)، این یک لاگِ تاریخ‌دار است تا یادداشتِ
-    تماس‌هایِ قبلی از دست نرود."""
+    """صفحهٔ فروش تلفنی — برخلاف acc.customer_details.notes (یک
+    فیلد تکی قابل‌بازنویسی)، این یک لاگ تاریخ‌دار است تا یادداشت
+    تماس‌های قبلی از دست نرود."""
 
     __tablename__ = "customer_sales_notes"
     __table_args__ = ({"schema": "comm"},)
@@ -1883,9 +1883,9 @@ class CustomerSalesNote(Base):
 
 
 class CustomerCallLog(Base):
-    """طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره بشه») --
-    این‌جا فقط تماس‌هایِ خودمان (Originateِ AMIِ R137) ثبت می‌شود؛
-    تماسِ ورودی/CDR فازِ بعدی است (نیازِ اتصالِ MySQLِ جداگانه دارد)."""
+    """طبق درخواست صریح («مکالمات هر مشتری در پروفایلش ذخیره بشه») --
+    این‌جا فقط تماس‌های خودمان (Originate AMI R137) ثبت می‌شود؛
+    تماس ورودی/CDR فاز بعدی است (نیاز اتصال MySQL جداگانه دارد)."""
 
     __tablename__ = "customer_call_logs"
     __table_args__ = ({"schema": "comm"},)
@@ -1901,7 +1901,7 @@ class CustomerCallLog(Base):
 
 
 class PurchaseType(Base):
-    """R240: نوعِ خرید (برنامه‌ریزی‌شده/اضطراری/...)."""
+    """R240: نوع خرید (برنامه‌ریزی‌شده/اضطراری/...)."""
 
     __tablename__ = "purchase_types"
     __table_args__ = {"schema": "comm"}
@@ -1915,7 +1915,7 @@ class PurchaseType(Base):
 
 
 class CancellationReason(Base):
-    """R240: علتِ لغوِ سند."""
+    """R240: علت لغو سند."""
 
     __tablename__ = "cancellation_reasons"
     __table_args__ = {"schema": "comm"}
@@ -1928,7 +1928,7 @@ class CancellationReason(Base):
 
 
 class DocumentChangeLog(Base):
-    """R240: تاریخچهٔ وضعیت و تغییراتِ اسنادِ بازرگانی -- فقط افزودنی."""
+    """R240: تاریخچهٔ وضعیت و تغییرات اسناد بازرگانی — فقط افزودنی."""
 
     __tablename__ = "document_change_log"
     __table_args__ = {"schema": "comm"}
@@ -1946,7 +1946,7 @@ class DocumentChangeLog(Base):
 
 
 class PurchaseRequest(Base):
-    """R241: درخواستِ خرید."""
+    """R241: درخواست خرید."""
 
     __tablename__ = "purchase_requests"
     __table_args__ = {"schema": "comm"}
@@ -1993,7 +1993,7 @@ class PurchaseRequestLine(Base):
 
 
 class Rfq(Base):
-    """R242: استعلامِ قیمت."""
+    """R242: استعلام قیمت."""
 
     __tablename__ = "rfqs"
     __table_args__ = {"schema": "comm"}
@@ -2058,7 +2058,7 @@ class RfqQuote(Base):
 
 
 class PurchaseBudget(Base):
-    """R243: بودجهٔ خرید برایِ یک دوره و ترکیبی از مرکزِ هزینه/پروژه/گروهِ کالا."""
+    """R243: بودجهٔ خرید برای یک دوره و ترکیبی از مرکز هزینه/پروژه/گروه کالا."""
 
     __tablename__ = "purchase_budgets"
     __table_args__ = {"schema": "comm"}
@@ -2095,7 +2095,7 @@ class Branch(Base):
 
 
 class ReportView(Base):
-    """R244: نمایِ ذخیره‌شدهٔ گزارش -- شخصی یا اشتراکی."""
+    """R244: نمای ذخیره‌شدهٔ گزارش — شخصی یا اشتراکی."""
 
     __tablename__ = "report_views"
     __table_args__ = {"schema": "comm"}

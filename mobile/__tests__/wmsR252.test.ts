@@ -19,8 +19,8 @@ async function build(calls: { url: string; method: string; body: unknown }[]) {
   return { api, queue, engine: new SyncEngine(api, queue, new LocalCache(kv)) };
 }
 
-describe("R252: شمارشِ سریال، شروعِ شمارش، جانمایی و برچسبِ گروهی", () => {
-  it("سریال‌هایِ اسکن‌شده از صف به سرور می‌روند", async () => {
+describe("R252: شمارش سریال، شروع شمارش، جانمایی و برچسب گروهی", () => {
+  it("سریال‌های اسکن‌شده از صف به سرور می‌روند", async () => {
     const calls: { url: string; method: string; body: unknown }[] = [];
     const { queue, engine } = await build(calls);
     const outcome = await submitWmsAction(queue, engine, {
@@ -31,7 +31,7 @@ describe("R252: شمارشِ سریال، شروعِ شمارش، جانمایی
       body: { location_id: 5, item_id: 6, serial_nos: ["S1", "S2"] } }]);
   });
 
-  it("مسیرهایِ شروعِ شمارش، رسیدهایِ جانمایی و برچسبِ زیرمحل‌ها", async () => {
+  it("مسیرهای شروع شمارش، رسیدهای جانمایی و برچسب زیرمحل‌ها", async () => {
     const calls: { url: string; method: string; body: unknown }[] = [];
     const { api } = await build(calls);
     await api.createLocationCount(2, [7]);

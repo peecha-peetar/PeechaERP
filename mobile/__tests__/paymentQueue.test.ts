@@ -21,8 +21,8 @@ async function buildEngine(fetcher: Fetcher) {
 
 /** طبقِ Phase 5/6: ثبتِ وصول هم مثلِ سفارش باید آفلاین صف شود و بعدِ
  * اتصال Sync شود -- بدونِ Duplicate در تلاشِ دوباره (Idempotency-Key). */
-describe("CREATE_PAYMENT در صفِ آفلاین", () => {
-  it("وصولِ صف‌شده به /payments با Idempotency-Key ارسال می‌شود", async () => {
+describe("CREATE_PAYMENT در صف آفلاین", () => {
+  it("وصول صف‌شده به /payments با Idempotency-Key ارسال می‌شود", async () => {
     const calls: { url: string; headers: Record<string, string> }[] = [];
     const fetcher: Fetcher = jest.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url: String(url), headers: (init?.headers as Record<string, string>) ?? {} });
@@ -44,9 +44,9 @@ describe("CREATE_PAYMENT در صفِ آفلاین", () => {
     expect(await queue.size()).toBe(0);
   });
 
-  it("وصولِ ناموفق (۴xx) به‌جایِ توقفِ کلِ صف در failedButKept ثبت می‌شود", async () => {
+  it("وصول ناموفق (۴xx) به‌جای توقف کل صف در failedButKept ثبت می‌شود", async () => {
     const fetcher: Fetcher = jest.fn(async () =>
-      jsonResponse(400, { detail: "برایِ این طرفِ‌حساب، نگاشتِ حساب در تنظیماتِ خزانه‌داری تعریف نشده است." }),
+      jsonResponse(400, { detail: "برای این طرف‌حساب، نگاشت حساب در تنظیمات خزانه‌داری تعریف نشده است." }),
     ) as unknown as Fetcher;
     const { engine, queue } = await buildEngine(fetcher);
 

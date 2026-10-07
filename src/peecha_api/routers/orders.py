@@ -1,7 +1,7 @@
-"""ثبتِ سفارش/فاکتور از موبایل -- روی همان services/commercial_documents.py
-موجود سوار می‌شود، بدونِ بازنویسیِ منطقِ قیمت‌گذاری/تخفیف/مالیات. طبقِ
-تفاوتِ دو ماژول: پخشِ سرد (SALES_ORDER) فقط سفارش می‌سازد و همان‌جا
-متوقف می‌شود (تبدیل به فاکتور بعداً در خودِ ERP)؛ پخشِ گرم (SALES_INVOICE
+"""ثبت سفارش/فاکتور از موبایل — روی همان services/commercial_documents.py
+موجود سوار می‌شود، بدون بازنویسی منطق قیمت‌گذاری/تخفیف/مالیات. طبق
+تفاوت دو ماژول: پخش سرد (SALES_ORDER) فقط سفارش می‌سازد و همان‌جا
+متوقف می‌شود (تبدیل به فاکتور بعداً در خود ERP)؛ پخش گرم (SALES_INVOICE
 با post_immediately=True) بلافاصله تاییدوپست می‌شود چون کالا همان‌لحظه
 از خودرو تحویل داده شده."""
 
@@ -51,12 +51,12 @@ def create_order(
     idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> dict:
     if payload.document_type_code not in _FORM_BY_TYPE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="نوعِ سند برایِ اپِ موبایل فقط سفارش یا فاکتورِ فروش می‌تواند باشد.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="نوع سند برای برنامهٔ موبایل فقط سفارش یا فاکتور فروش می‌تواند باشد.")
     if not payload.lines:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="حداقل یک ردیف لازم است.")
     form_code = _FORM_BY_TYPE[payload.document_type_code]
     if not roles_service.user_has_permission(ctx.user_id, ctx.company_id, form_code, "CREATE"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"دسترسیِ ثبتِ {form_code} وجود ندارد.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"دسترسی ثبت {form_code} وجود ندارد.")
     # طبقِ درخواستِ صریحِ کاربر («فقط مشتریانِ خودش»): مدیر از این محدودیت
     # معاف است (باید بتواند به‌جایِ هر ویزیتوری هم عمل کند).
     if not roles_service.is_manager(ctx.user_id, ctx.company_id) and not field_sales_service.is_customer_assigned_to_user(
@@ -80,36 +80,36 @@ def create_order(
 
 
 def _validate_settlement_lines(company_id: int, lines: list[OrderSettlementLineRequest]) -> None:
-    """فقط خطاهایِ «شکلِ داده» (که فرمِ موبایل خودش از آن‌ها جلوگیری
-    می‌کند) این‌جا رد می‌شوند. کمبودِ تنظیماتِ خزانه‌داری (نگاشتِ حساب/
-    صندوقِ پیش‌فرض) عمداً رد نمی‌شود: فاکتورِ پخشِ گرم از صفِ آفلاین
-    می‌آید و ۴۰۰ یعنی حذفِ همیشگیِ آن از صف -- یعنی فروشی که واقعاً
-    انجام شده از سیستم گم می‌شود. آن حالت در مرحلهٔ ساختِ سندِ دریافت به
-    هشدار (فاکتورِ نسیه) تبدیل می‌شود."""
+    """فقط خطاهای «شکل داده» (که فرم موبایل خودش از آن‌ها جلوگیری
+    می‌کند) این‌جا رد می‌شوند. کمبود تنظیمات خزانه‌داری (نگاشت حساب/
+    صندوق پیش‌فرض) عمداً رد نمی‌شود: فاکتور پخش گرم از صف آفلاین
+    می‌آید و ۴۰۰ یعنی حذف همیشگی آن از صف — یعنی فروشی که واقعاً
+    انجام شده از سیستم گم می‌شود. آن حالت در مرحلهٔ ساخت سند دریافت به
+    هشدار (فاکتور نسیه) تبدیل می‌شود."""
     enabled_codes = settlements_service.list_enabled_mobile_settlement_method_codes(company_id)
     labels = {m.method_code: m.label for m in settlements_service.list_mobile_settlement_methods(company_id)}
     for line in lines:
         label = labels.get(line.method_code, line.method_code)
         if line.method_code not in enabled_codes:
-            raise ValueError(f"روشِ تسویهٔ «{line.method_code}» برایِ موبایل فعال نیست.")
+            raise ValueError(f"روش تسویهٔ «{line.method_code}» برای موبایل فعال نیست.")
         if line.amount <= 0:
-            raise ValueError(f"مبلغِ روشِ «{label}» باید مثبت باشد.")
+            raise ValueError(f"مبلغ روش «{label}» باید مثبت باشد.")
         if line.detail_account_id is not None:
             _requires, options = settlements_service.mobile_method_detail_options(company_id, line.method_code)
             if line.detail_account_id not in {o.detail_account_id for o in options}:
-                raise ValueError(f"صندوق/حسابِ انتخاب‌شده برایِ روشِ «{label}» معتبر نیست.")
+                raise ValueError(f"صندوق/حساب انتخاب‌شده برای روش «{label}» معتبر نیست.")
         if line.method_code == "CHECK":
             if not line.checks:
-                raise ValueError("برایِ روشِ چک، مشخصاتِ حداقل یک چک لازم است.")
+                raise ValueError("برای روش چک، مشخصات حداقل یک چک لازم است.")
             for check in line.checks:
                 if not check.check_no.strip():
-                    raise ValueError("شماره‌یِ چک الزامی است.")
+                    raise ValueError("شمارهٔ چک الزامی است.")
                 if check.amount <= 0:
-                    raise ValueError("مبلغِ هر چک باید مثبت باشد.")
+                    raise ValueError("مبلغ هر چک باید مثبت باشد.")
             if sum((c.amount for c in line.checks), decimal.Decimal(0)) != line.amount:
-                raise ValueError("جمعِ مبلغِ چک‌ها با مبلغِ ردیفِ چک برابر نیست.")
+                raise ValueError("جمع مبلغ چک‌ها با مبلغ ردیف چک برابر نیست.")
         elif line.checks:
-            raise ValueError("مشخصاتِ چک فقط برایِ روشِ چک معنا دارد.")
+            raise ValueError("مشخصات چک فقط برای روش چک معنا دارد.")
 
 
 def _settlement_extras(company_id: int, line: OrderSettlementLineRequest) -> dict:
@@ -137,11 +137,11 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
     # موبایل (فقط ۴xx حذف‌شدنی از صف است) کلِ صفِ آفلاین را برایِ همیشه
     # قفل می‌کرد، چون این اقدام هیچ‌وقت با تلاشِ دوباره موفق نمی‌شود.
     if locations_service.get_warehouse(payload.warehouse_id, ctx.company_id) is None:
-        raise ValueError("انبارِ انتخاب‌شده برایِ این شرکت معتبر نیست.")
+        raise ValueError("انبار انتخاب‌شده برای این شرکت معتبر نیست.")
     if not any(ch.channel_code == payload.channel_code for ch in pricing_service.list_channels(ctx.company_id)):
-        raise ValueError("کانالِ فروشِ انتخاب‌شده برایِ این شرکت معتبر نیست.")
+        raise ValueError("کانال فروش انتخاب‌شده برای این شرکت معتبر نیست.")
     if not any(c.currency_id == payload.currency_id for c in currencies_service.list_all_currencies()):
-        raise ValueError("ارزِ انتخاب‌شده معتبر نیست.")
+        raise ValueError("ارز انتخاب‌شده معتبر نیست.")
     if payload.document_type_code == "SALES_INVOICE" and payload.post_immediately and payload.settlement_lines:
         _validate_settlement_lines(ctx.company_id, payload.settlement_lines)
 
@@ -211,7 +211,7 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
         # توضیحِ check_settlement_credit_exposure) -- کالا فیزیکاً تحویل
         # شده، پس فروش هرگز رد نمی‌شود؛ فقط برایِ آگاهیِ مدیر هُلد می‌سازد.
         if settlements_service.check_settlement_credit_exposure(document_id, ctx.company_id, ctx.user_id):
-            settlement_warning = "این فاکتور از سقفِ اعتبارِ مشتری عبور کرده -- برایِ بررسیِ مدیر علامت‌گذاری شد."
+            settlement_warning = "این فاکتور از سقف اعتبار مشتری عبور کرده — برای بررسی مدیر علامت‌گذاری شد."
         # طبقِ رفعِ کمبودِ واقعی: قبلاً فقط «نقشه‌یِ» تسویه ذخیره می‌شد و هیچ
         # سندِ دریافتِ واقعی/چکی در خزانه ثبت نمی‌شد. حالا دقیقاً هم‌الگو با
         # تاییدِ سرپرستِ POS در دسکتاپ (commercial_pos_approval.py): پس از
@@ -223,24 +223,24 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
             try:
                 pos_service.record_mixed_payment_and_settle(ctx.company_id, ctx.user_id, document_id, settlement_lines)
             except ValueError as exc:
-                settlement_warning = f"فاکتور ثبت شد ولی سندِ دریافت ساخته نشد و فاکتور نسیه ماند: {exc}"
+                settlement_warning = f"فاکتور ثبت شد ولی سند دریافت ساخته نشد و فاکتور نسیه ماند: {exc}"
     audit_log.record(
         ctx.company_id, ctx.user_id, "CommercialDocument", document_id, "CREATE",
         {"source": "mobile", "document_type_code": payload.document_type_code, "line_count": len(line_ids)},
     )
     document_no = documents_service.get_document(document_id, ctx.company_id)[0].document_no
     if unit_warnings:
-        note = "هشدارِ واحد: " + "؛ ".join(unit_warnings)
+        note = "هشدار واحد: " + "؛ ".join(unit_warnings)
         settlement_warning = f"{settlement_warning} | {note}" if settlement_warning else note
     return document_id, line_ids, document_no, settlement_warning
 
 
 @router.get("/{document_id}/print-data")
 def print_data(document_id: int, ctx: AuthContext = Depends(get_current_context)) -> dict:
-    """طبقِ درخواستِ صریحِ کاربر («در ادامه پرینتِ فاکتور و فایلِ pdf»):
-    دادهٔ کاملِ چاپِ یک فاکتور/سفارش (سرِبرگِ شرکت، مشتری، ردیف‌ها، جمع‌ها،
-    تسویهٔ واقعیِ ثبت‌شده و چک‌ها) -- خودِ صفحه‌آرایی/PDF رویِ موبایل
-    ساخته می‌شود. ویزیتور فقط سندهایِ خودش را می‌تواند چاپ کند."""
+    """طبق درخواست صریح کاربر («در ادامه پرینت فاکتور و فایل pdf»):
+    دادهٔ کامل چاپ یک فاکتور/سفارش (سربرگ شرکت، مشتری، ردیف‌ها، جمع‌ها،
+    تسویهٔ واقعی ثبت‌شده و چک‌ها) — خود صفحه‌آرایی/PDF روی موبایل
+    ساخته می‌شود. ویزیتور فقط سندهای خودش را می‌تواند چاپ کند."""
     try:
         doc, lines = documents_service.get_document(document_id, ctx.company_id)
     except ValueError as exc:

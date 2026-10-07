@@ -1,6 +1,6 @@
-"""دستیارِ فروشگاهِ اینترنتی -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ
-حیاتیِ PeechaSync -- دستیارِ فروشگاهِ اینترنتی»): جمع‌بندیِ سلامتِ
-اتصال + کاملیِ سئو + آمادگیِ عکسِ کالاها در یک فهرستِ اولویت‌بندی‌شده."""
+"""دستیار فروشگاه اینترنتی — طبق بازخورد صریح کاربر («امکانات
+حیاتی PeechaSync — دستیار فروشگاه اینترنتی»): جمع‌بندی سلامت
+اتصال + کاملی سئو + آمادگی عکس کالاها در یک فهرست اولویت‌بندی‌شده."""
 
 from __future__ import annotations
 
@@ -56,16 +56,16 @@ class OnlineStoreAdvisorScreen(LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("دستیارِ فروشگاهِ اینترنتی")
+        title = QLabel("دستیار فروشگاه اینترنتی")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         top_row = QHBoxLayout()
-        self.connectivity_card = _ScoreCard("سلامتِ اتصال")
+        self.connectivity_card = _ScoreCard("سلامت اتصال")
         top_row.addWidget(self.connectivity_card)
-        self.seo_card = _ScoreCard("کاملیِ سئو")
+        self.seo_card = _ScoreCard("کاملی سئو")
         top_row.addWidget(self.seo_card)
-        self.image_card = _ScoreCard("آمادگیِ عکسِ کالاها")
+        self.image_card = _ScoreCard("آمادگی عکس کالاها")
         top_row.addWidget(self.image_card)
         outer.addLayout(top_row)
 
@@ -80,7 +80,7 @@ class OnlineStoreAdvisorScreen(LayoutEditMixin, QWidget):
         outer.addWidget(self.online_count_label)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["شدت", "مشکل", "راهنمایِ رفع"])
+        self.table.setHorizontalHeaderLabels(["شدت", "مشکل", "راهنمای رفع"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -98,7 +98,7 @@ class OnlineStoreAdvisorScreen(LayoutEditMixin, QWidget):
         self.connectivity_card.set_score(summary.connectivity_score)
         self.seo_card.set_score(summary.seo_score)
         self.image_card.set_score(summary.image_score)
-        self.online_count_label.setText(f"تعدادِ کالاهایِ منتشرشده در فروشگاه: {summary.online_item_count}")
+        self.online_count_label.setText(f"تعداد کالاهای منتشرشده در فروشگاه: {summary.online_item_count}")
 
         self.table.setRowCount(len(summary.issues))
         for row_index, issue in enumerate(summary.issues):
@@ -110,7 +110,7 @@ class OnlineStoreAdvisorScreen(LayoutEditMixin, QWidget):
                 self.table.setItem(row_index, col_index, cell)
         if not summary.issues:
             self.table.setRowCount(1)
-            ok_item = QTableWidgetItem("هیچ مشکلی یافت نشد -- فروشگاه در وضعیتِ خوبی است.")
+            ok_item = QTableWidgetItem("هیچ مشکلی یافت نشد — فروشگاه در وضعیت خوبی است.")
             self.table.setItem(0, 0, QTableWidgetItem(""))
             self.table.setItem(0, 1, ok_item)
             self.table.setItem(0, 2, QTableWidgetItem(""))

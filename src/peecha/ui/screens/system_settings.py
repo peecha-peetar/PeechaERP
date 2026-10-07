@@ -1,6 +1,6 @@
-"""فرمِ یکپارچه‌ی «تنظیماتِ سیستم» — همه‌ی فرم‌هایی که قبلاً آیتم‌هایِ
-جداگانه‌ی زیرمجموعه‌ی «مدیریتِ سیستم» در نوارِ کناری بودند، این‌جا به‌صورتِ
-تب‌هایِ سازمان‌یافته (و در هر تب، زیرتب‌هایِ مرتبط) کنار هم قرار گرفته‌اند."""
+"""فرم یکپارچهٔ «تنظیمات سیستم» — همهٔ فرم‌هایی که قبلاً آیتم‌های
+جداگانهٔ زیرمجموعهٔ «مدیریت سیستم» در نوار کناری بودند، این‌جا به‌صورت
+تب‌های سازمان‌یافته (و در هر تب، زیرتب‌های مرتبط) کنار هم قرار گرفته‌اند."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ from peecha.ui.widgets import FieldHelpMixin
 # R272: دسترسیِ هر تب/زیرتب جداگانه از جدولِ نقش‌ها (VIEW). مدیرِ کل یا دارندهٔ دسترسیِ کلِ
 # «تنظیمات سیستم» (system_settings) همه را می‌بیند؛ بقیه فقط تب‌هایی که فرمشان را دارند.
 _TAB_FORMS: dict[str, tuple[str, ...]] = {
-    "کدینگِ حسابداری": ("accounting_coding",),
+    "کدینگ حسابداری": ("accounting_coding",),
     "خزانه‌داری": ("treasury_settings",),
     "عمومی": ("companies",),
     "کاربران و دسترسی‌ها": ("users",),
@@ -71,19 +71,19 @@ _TAB_FORMS: dict[str, tuple[str, ...]] = {
     "امنیت": ("audit_log",),
     "حقوق و دستمزد": ("payroll_settings",),
     "انبار و موجودی": ("inventory_settings",),
-    "مدیریتِ بازرگانی": ("commercial_settings",),
+    "مدیریت بازرگانی": ("commercial_settings",),
     "چاپ و گزارش‌ها": ("report_settings",),
-    "دارایی‌هایِ ثابت": ("fa_setup",),
+    "دارایی‌های ثابت": ("fa_setup",),
     "تولید": ("prd_settings",),
 }
 _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
-    ("کدینگِ حسابداری", "تعدادِ رقمِ سطوحِ تفصیلی"): ("detail_level_digits",),
-    ("کدینگِ حسابداری", "تنظیماتِ صورت‌هایِ مالی"): ("financial_statement_mapping",),
+    ("کدینگ حسابداری", "تعداد رقم سطوح تفصیلی"): ("detail_level_digits",),
+    ("کدینگ حسابداری", "تنظیمات صورت‌های مالی"): ("financial_statement_mapping",),
     ("عمومی", "زبان‌ها"): ("languages",),
     ("عمومی", "ارزها"): ("currencies",),
     ("عمومی", "سال‌های مالی"): ("fiscal_years",),
     ("کاربران و دسترسی‌ها", "نقش‌ها و دسترسی‌ها"): ("roles",),
-    ("کاربران و دسترسی‌ها", "طراحیِ گردشِ کار"): ("workflow_designer",),
+    ("کاربران و دسترسی‌ها", "طراحی گردش کار"): ("workflow_designer",),
     ("داده‌های حسابداری", "ترجمه‌ها"): ("translations",),
     ("انبار و موجودی", "قیمت‌گذاری"): ("inventory_settings", "costing_settings"),
 }
@@ -150,7 +150,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self.tabs = QTabWidget()
         # طبقِ درخواستِ صریح: کدینگِ حسابداری باید اولین کاری باشد که در
         # تنظیماتِ حسابداری انجام می‌شود — به همین دلیل اولین تب است.
-        self._add_outer_tab("کدینگِ حسابداری", self._build_coding_tab())
+        self._add_outer_tab("کدینگ حسابداری", self._build_coding_tab())
         self._add_outer_tab("خزانه‌داری", self._build_treasury_tab())
         self._add_outer_tab("عمومی", self._build_general_tab())
         self._add_outer_tab("کاربران و دسترسی‌ها", self._build_users_tab())
@@ -165,18 +165,18 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self._add_outer_tab("انبار و موجودی", self._build_inventory_tab())
         # طبقِ همان الگو: تنظیماتِ مدیریتِ بازرگانی هم این‌جا و هم از
         # آیکونِ چرخ‌دنده‌یِ کنارِ گروه‌هایِ «فروش»/«خرید» در دسترس است.
-        self._add_outer_tab("مدیریتِ بازرگانی", self._build_commercial_tab())
+        self._add_outer_tab("مدیریت بازرگانی", self._build_commercial_tab())
         # طبقِ درخواستِ صریح («برایِ هر فرم بتوان چند گزارشِ نام‌گذاری‌شده
         # تعریف/ویرایش/اجرا کرد»): رجیستریِ گزارش‌هایِ حرفه‌ای (Jasper) --
         # هر فرمِ پشتیبانی‌شده (کاردکس، فاکتور) یک پنلِ مستقل این‌جا دارد.
         self._add_outer_tab("چاپ و گزارش‌ها", self._build_reports_tab())
         # R272: تنظیماتِ دارایی و تولید هم مثلِ بقیهٔ ماژول‌ها این‌جاست (چرخ‌دندهٔ کنارِ منو)؛
         # تنظیماتِ بهایِ تمام‌شده همان «انبار و موجودی › قیمت‌گذاری» است.
-        self._add_outer_tab("دارایی‌هایِ ثابت", self._build_fixed_assets_tab())
+        self._add_outer_tab("دارایی‌های ثابت", self._build_fixed_assets_tab())
         self._add_outer_tab("تولید", self._build_production_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
-        self.no_access_label = QLabel("به هیچ بخشی از تنظیمات دسترسی ندارید؛ از مدیرِ سیستم بخواهید در «نقش‌ها و دسترسی‌ها» فعال کند.")
+        self.no_access_label = QLabel("به هیچ بخشی از تنظیمات دسترسی ندارید؛ از مدیر سیستم بخواهید در «نقش‌ها و دسترسی‌ها» فعال کند.")
         self.no_access_label.setObjectName("sectionHint")
         self.no_access_label.setWordWrap(True)
         self.no_access_label.hide()
@@ -246,20 +246,20 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # در یک صفحه‌ی اسکرول‌شونده.
         return self._sub_tabs(
             [
-                ("کدینگِ حساب‌ها", AccountingCodingSettingsScreen()),
-                ("تعدادِ رقمِ سطوحِ تفصیلی", DetailLevelDigitSettingsScreen()),
-                ("تنظیماتِ صورت‌هایِ مالی", FinancialStatementMappingScreen()),
+                ("کدینگ حساب‌ها", AccountingCodingSettingsScreen()),
+                ("تعداد رقم سطوح تفصیلی", DetailLevelDigitSettingsScreen()),
+                ("تنظیمات صورت‌های مالی", FinancialStatementMappingScreen()),
             ]
         )
 
     def _build_treasury_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("انواعِ سندِ دریافت/پرداخت", TreasuryCounterpartySettingsScreen()),
+                ("انواع سند دریافت/پرداخت", TreasuryCounterpartySettingsScreen()),
                 ("بانک‌ها", TreasuryBanksScreen()),
                 # طبقِ درخواستِ صریح («تمامیِ تنظیماتِ POS از منوها برداشته
                 # شود و در تنظیماتِ اصلی، زیرِ خزانه‌داری بیاید»).
-                ("ترمینال‌ها، شیفت‌ها و تنظیماتِ تک‌فروشی", CommercialPosSessionsScreen()),
+                ("ترمینال‌ها، شیفت‌ها و تنظیمات تک‌فروشی", CommercialPosSessionsScreen()),
             ]
         )
 
@@ -313,14 +313,14 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
             [
                 ("کاربران", UsersScreen()),
                 ("نقش‌ها و دسترسی‌ها", RolesScreen()),
-                ("طراحیِ گردشِ کار", WorkflowDesignerScreen()),
+                ("طراحی گردش کار", WorkflowDesignerScreen()),
             ]
         )
 
     def _build_accounting_data_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("عنوانِ فیلدها", FieldLabelsScreen()),
+                ("عنوان فیلدها", FieldLabelsScreen()),
                 ("ترجمه‌ها", TranslationsScreen()),
             ]
         )
@@ -338,51 +338,51 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
     def _build_inventory_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("واحدهایِ اندازه‌گیری", _UomTab()),
-                ("مدیریتِ بارکد", _BarcodeManagerTab()),
+                ("واحدهای اندازه‌گیری", _UomTab()),
+                ("مدیریت بارکد", _BarcodeManagerTab()),
                 ("برند و تولیدکننده", _BrandManufacturerTab()),
-                ("دسته‌بندیِ کالا", _CategoriesTab()),
+                ("دسته‌بندی کالا", _CategoriesTab()),
                 ("قیمت‌گذاری", _CostingSettingsTab()),
-                ("نگاشتِ حساب‌ها", _AccountMappingsTab()),
-                ("دلیل‌هایِ اصلاح/برگشت", _ReasonCodesTab()),
-                ("قابلیت‌هایِ فعال", _InventoryFeatureToggleTab()),
+                ("نگاشت حساب‌ها", _AccountMappingsTab()),
+                ("دلیل‌های اصلاح/برگشت", _ReasonCodesTab()),
+                ("قابلیت‌های فعال", _InventoryFeatureToggleTab()),
             ]
         )
 
     def _build_payroll_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("تنظیماتِ کلی", _GeneralSettingsTab()),
-                ("حداقلِ دستمزد", _MinimumWageTab()),
-                ("قوانینِ حقوق و دستمزد", _PoliciesTab()),
-                ("آیتم‌هایِ حقوقی", _PayItemsTab()),
+                ("تنظیمات کلی", _GeneralSettingsTab()),
+                ("حداقل دستمزد", _MinimumWageTab()),
+                ("قوانین حقوق و دستمزد", _PoliciesTab()),
+                ("آیتم‌های حقوقی", _PayItemsTab()),
                 ("بیمه", _InsuranceTab()),
                 ("مالیات", _TaxTab()),
-                ("قوانینِ اضافه‌کاری", _OvertimeRulesTab()),
-                ("الگوهایِ ایمپورتِ حضوروغیاب", _AttendanceTemplatesTab()),
+                ("قوانین اضافه‌کاری", _OvertimeRulesTab()),
+                ("الگوهای ورود حضور و غیاب", _AttendanceTemplatesTab()),
             ]
         )
 
     def _build_commercial_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("نگاشتِ حساب‌ها", _CommercialAccountMappingsTab()),
-                ("قابلیت‌هایِ فعال", _FeatureToggleTab()),
+                ("نگاشت حساب‌ها", _CommercialAccountMappingsTab()),
+                ("قابلیت‌های فعال", _FeatureToggleTab()),
                 ("نمایهٔ صنعتی", _IndustryProfileTab()),
-                ("شماره‌گذاریِ اسناد", _NumberingSequencesTab()),
+                ("شماره‌گذاری اسناد", _NumberingSequencesTab()),
                 ("کانال‌ها", _CommercialChannelsTab()),
-                ("انواعِ تسویهٔ پخش", _DistributionSettlementTypesTab()),
-                ("روش‌هایِ تسویهٔ موبایل", _MobileSettlementMethodsTab()),
-                ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
-                ("حاشیهٔ سود و پیشنهادِ قیمت", _PricingPolicyTab()),
+                ("انواع تسویهٔ پخش", _DistributionSettlementTypesTab()),
+                ("روش‌های تسویهٔ موبایل", _MobileSettlementMethodsTab()),
+                ("هشدار موعد تسویه", _SettlementAlarmTab()),
+                ("حاشیهٔ سود و پیشنهاد قیمت", _PricingPolicyTab()),
                 ("سانترال / وویپ", _VoipSettingsTab()),
-                ("درگاهِ پیامک", _SmsGatewaySettingsTab()),
+                ("درگاه پیامک", _SmsGatewaySettingsTab()),
                 # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط
                 # سفارش‌هایِ فروشِ مشتری بیاید، و تنظیمات به تبِ تنظیماتِ
                 # فروشِ اینترنتی برود»): اتصالات/نگاشتِ کالا-مشتری/سینکِ
                 # خودکار/مسیریابیِ سفارش -- همان صفحه‌ای که قبلاً خودش یک
                 # آیتمِ مستقلِ ناوبری بود، حالا این‌جاست.
-                ("تنظیماتِ فروشِ اینترنتی", CommercialEcommerceScreen()),
+                ("تنظیمات فروش اینترنتی", CommercialEcommerceScreen()),
             ]
         )
 
@@ -391,7 +391,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         from peecha.ui.screens.report_branding import ReportBrandingScreen
 
         self.report_branding = ReportBrandingScreen()
-        return self._sub_tabs([("لوگو و سربرگ", self.report_branding), ("قالب‌هایِ حرفه‌ای (Jasper)", _ReportTemplatesTab())])
+        return self._sub_tabs([("لوگو و سربرگ", self.report_branding), ("قالب‌های حرفه‌ای (Jasper)", _ReportTemplatesTab())])
 
     def _build_fixed_assets_tab(self):
         from peecha.ui.screens.fixed_assets import SetupScreen
@@ -401,7 +401,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
     def _build_production_tab(self):
         from peecha.ui.screens.production import PrdSettingsScreen
 
-        return self._sub_tabs([("تنظیماتِ کلیِ تولید", PrdSettingsScreen())])
+        return self._sub_tabs([("تنظیمات کلی تولید", PrdSettingsScreen())])
 
     def apply_permissions(self) -> None:
         cache: dict[str, bool] = {}
@@ -440,8 +440,8 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self._on_outer_tab_changed(self.tabs.currentIndex())
 
     def select_tab(self, index: int, inner_label: str | None = None) -> None:
-        """برایِ دکمه‌ی چرخ‌دنده‌یِ ریبون — پرش مستقیم به تبِ تنظیماتِ همان
-        بخش (مثلاً «کدینگِ حسابداری» برایِ بخشِ «مالی و حسابداری»)."""
+        """برای دکمهٔ چرخ‌دندهٔ ریبون — پرش مستقیم به تب تنظیمات همان
+        بخش (مثلاً «کدینگ حسابداری» برای بخش «مالی و حسابداری»)."""
         self.apply_permissions()
         if not self.tabs.isTabVisible(index):
             return

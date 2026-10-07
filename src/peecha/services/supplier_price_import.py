@@ -1,22 +1,22 @@
-"""واردکردنِ لیستِ قیمتِ تامین‌کننده از اکسل/PDF/عکس -- طبقِ درخواستِ صریح:
-هر کالا می‌تواند چند «کدِ تامین‌کننده» داشته باشد (کدِ خودِ کالا نزدِ آن
-تامین‌کننده، که با کدِ داخلیِ ما فرق دارد) تا ردیف‌هایِ فایلِ قیمتِ او
-خودکار به کالایِ داخلی متصل شوند. سپس رویِ قیمتِ تامین‌کننده چند ستونِ
-افزایشیِ درصدی/مبلغی اعمال و نتیجه در یک فهرستِ قیمتِ موجود ثبت می‌شود.
+"""واردکردن لیست قیمت تامین‌کننده از اکسل/PDF/عکس — طبق درخواست صریح:
+هر کالا می‌تواند چند «کد تامین‌کننده» داشته باشد (کد خود کالا نزد آن
+تامین‌کننده، که با کد داخلی ما فرق دارد) تا ردیف‌های فایل قیمت او
+خودکار به کالای داخلی متصل شوند. سپس روی قیمت تامین‌کننده چند ستون
+افزایشی درصدی/مبلغی اعمال و نتیجه در یک فهرست قیمت موجود ثبت می‌شود.
 
-فازِ اول فقط اکسل و PDFِ متنی را پشتیبانی می‌کرد. **فازِ دوم**: پشتیبانیِ
-عکس (jpg/png) و PDFِ اسکن‌شده (بدونِ لایه‌یِ متن) با OCR -- از Tesseract
-OCR (مجوزِ Apache-2.0، سازگار با توزیعِ تجاری/بسته) از طریقِ pytesseract
-استفاده شده. برخلافِ استخراجِ PDFِ متنی که تقریباً همیشه دقیق است، OCR
-ذاتاً خطاپذیر است (خصوصاً وقتی کد/توضیح به خطِ فارسی باشد کنارِ کدهایِ
-لاتین) -- به همین دلیل: (۱) در UI همیشه یک هشدارِ «نیازمندِ بازبینیِ
-دستی» نشان داده می‌شود، (۲) همان مسیرِ «🔗 اتصال»ِ فازِ اول برایِ
+فاز اول فقط اکسل و PDF متنی را پشتیبانی می‌کرد. **فاز دوم**: پشتیبانی
+عکس (jpg/png) و PDF اسکن‌شده (بدون لایهٔ متن) با OCR — از Tesseract
+OCR (مجوز Apache-2.0، سازگار با توزیع تجاری/بسته) از طریق pytesseract
+استفاده شده. برخلاف استخراج PDF متنی که تقریباً همیشه دقیق است، OCR
+ذاتاً خطاپذیر است (خصوصاً وقتی کد/توضیح به خط فارسی باشد کنار کدهای
+لاتین) — به همین دلیل: (۱) در UI همیشه یک هشدار «نیازمند بازبینی
+دستی» نشان داده می‌شود، (۲) همان مسیر «🔗 اتصال» فاز اول برای
 ردیف‌هایی که کدشان غلط خوانده شده هم کار می‌کند (چون آن ردیف صرفاً
-تطبیق‌نیافته دیده می‌شود، نه اینکه به کالایِ اشتباه بچسبد). آزمایش نشان
-داد OCR با lang="eng" برایِ ستون‌هایِ کد/قیمت (که تقریباً همیشه
-لاتین/رقمی‌اند) دقیقِ بسیار بهتری از حالتِ ترکیبیِ "fas+eng" دارد --
-چون توضیحِ فارسی برایِ تطبیق استفاده نمی‌شود، پیش‌فرض را رویِ "eng"
-گذاشتیم و "fas+eng" را به‌عنوانِ گزینه برایِ کدهایِ فارسی/مختلط نگه
+تطبیق‌نیافته دیده می‌شود، نه اینکه به کالای اشتباه بچسبد). آزمایش نشان
+داد OCR با lang="eng" برای ستون‌های کد/قیمت (که تقریباً همیشه
+لاتین/رقمی‌اند) دقیق بسیار بهتری از حالت ترکیبی "fas+eng" دارد --
+چون توضیح فارسی برای تطبیق استفاده نمی‌شود، پیش‌فرض را روی "eng"
+گذاشتیم و "fas+eng" را به‌عنوان گزینه برای کدهای فارسی/مختلط نگه
 داشتیم."""
 
 from __future__ import annotations
@@ -65,9 +65,9 @@ def _normalize_code(code: str) -> str:
 
 
 def _normalize_name(name: str) -> str:
-    """طبقِ درخواستِ صریح («بعضی تامین‌کننده‌ها فقط نامِ کالا دارند»):
-    نام‌ها معمولاً در چاپ‌هایِ مختلف با فاصله/نیم‌فاصله متفاوت‌اند --
-    این تابع همه را به یک شکلِ یکسان می‌رساند تا تطبیقِ دقیق ممکن شود."""
+    """طبق درخواست صریح («بعضی تامین‌کننده‌ها فقط نام کالا دارند»):
+    نام‌ها معمولاً در چاپ‌های مختلف با فاصله/نیم‌فاصله متفاوت‌اند --
+    این تابع همه را به یک شکل یکسان می‌رساند تا تطبیق دقیق ممکن شود."""
     text = _strip_invisible_chars(numerals.to_ascii_digits(name)).strip().casefold()
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -106,7 +106,7 @@ def add_item_supplier_code(
     item_id: int, supplier_code: str, supplier_detail_account_id: int | None = None, value_type: str = "CODE",
 ) -> int:
     if value_type not in ("CODE", "NAME"):
-        raise ValueError("نوعِ مقدار باید کد یا نام باشد.")
+        raise ValueError("نوع مقدار باید کد یا نام باشد.")
     supplier_code = supplier_code.strip()
     if not supplier_code:
         raise ValueError("مقدار نمی‌تواند خالی باشد.")
@@ -121,7 +121,7 @@ def add_item_supplier_code(
             )
         )
         if existing is not None:
-            raise ValueError("این مقدار قبلاً برایِ همین کالا (نزدِ همین تامین‌کننده) ثبت شده است.")
+            raise ValueError("این مقدار قبلاً برای همین کالا (نزد همین تامین‌کننده) ثبت شده است.")
         row = ItemSupplierCode(
             item_id=item_id, supplier_detail_account_id=supplier_detail_account_id, value_type=value_type,
             supplier_code=supplier_code, normalized_code=normalized,
@@ -135,7 +135,7 @@ def update_item_supplier_code(
     item_supplier_code_id: int, supplier_code: str, supplier_detail_account_id: int | None, value_type: str,
 ) -> None:
     if value_type not in ("CODE", "NAME"):
-        raise ValueError("نوعِ مقدار باید کد یا نام باشد.")
+        raise ValueError("نوع مقدار باید کد یا نام باشد.")
     supplier_code = supplier_code.strip()
     if not supplier_code:
         raise ValueError("مقدار نمی‌تواند خالی باشد.")
@@ -154,7 +154,7 @@ def update_item_supplier_code(
             )
         )
         if duplicate is not None:
-            raise ValueError("این مقدار قبلاً برایِ همین کالا (نزدِ همین تامین‌کننده) ثبت شده است.")
+            raise ValueError("این مقدار قبلاً برای همین کالا (نزد همین تامین‌کننده) ثبت شده است.")
         row.supplier_code = supplier_code
         row.supplier_detail_account_id = supplier_detail_account_id
         row.value_type = value_type
@@ -174,8 +174,8 @@ def delete_item_supplier_code(item_supplier_code_id: int) -> None:
 def _lookup_item_by_typed_value(
     session, company_id: int, raw_text: str, value_type: str, supplier_detail_account_id: int | None,
 ) -> int | None:
-    """جست‌وجویِ یک مقدار (کد یا نام) از یک نوعِ مشخص -- اول نزدِ همین
-    تامین‌کننده، اگر پیدا نشد، نزدِ مقدارِ عمومی (بدونِ تامین‌کننده)."""
+    """جست‌وجوی یک مقدار (کد یا نام) از یک نوع مشخص — اول نزد همین
+    تامین‌کننده، اگر پیدا نشد، نزد مقدار عمومی (بدون تامین‌کننده)."""
     normalized = _normalize_by_type(raw_text, value_type)
     if not normalized:
         return None
@@ -206,10 +206,10 @@ def _lookup_item_by_typed_value(
 
 
 def find_item_by_supplier_reference(company_id: int, raw_text: str, supplier_detail_account_id: int | None) -> int | None:
-    """تشخیصِ ترکیبی: اول کد را امتحان می‌کند (اول نزدِ همین تامین‌کننده،
-    بعد کدِ عمومی)؛ اگر چیزی پیدا نشد، همان متن را به‌عنوانِ «نام» امتحان
-    می‌کند (باز هم اول نزدِ همین تامین‌کننده، بعد نامِ عمومی) -- چون
-    بعضی تامین‌کننده‌ها به‌جایِ کد، فقط نامِ کالا را در فایل می‌نویسند."""
+    """تشخیص ترکیبی: اول کد را امتحان می‌کند (اول نزد همین تامین‌کننده،
+    بعد کد عمومی)؛ اگر چیزی پیدا نشد، همان متن را به‌عنوان «نام» امتحان
+    می‌کند (باز هم اول نزد همین تامین‌کننده، بعد نام عمومی) — چون
+    بعضی تامین‌کننده‌ها به‌جای کد، فقط نام کالا را در فایل می‌نویسند."""
     if not raw_text:
         return None
     with new_session() as session:
@@ -223,8 +223,8 @@ def find_item_by_supplier_reference(company_id: int, raw_text: str, supplier_det
 def find_item_by_supplier_code_and_name(
     company_id: int, raw_code: str, raw_name: str, supplier_detail_account_id: int | None,
 ) -> int | None:
-    """وقتی فایل هم ستونِ کدِ کالا و هم ستونِ نامِ کالا را جداگانه دارد
-    (نه یک ستونِ ترکیبی): اول کد امتحان می‌شود، اگر تطبیق نیافت، نام."""
+    """وقتی فایل هم ستون کد کالا و هم ستون نام کالا را جداگانه دارد
+    (نه یک ستون ترکیبی): اول کد امتحان می‌شود، اگر تطبیق نیافت، نام."""
     with new_session() as session:
         if raw_code:
             item_id = _lookup_item_by_typed_value(session, company_id, raw_code, "CODE", supplier_detail_account_id)
@@ -310,9 +310,9 @@ def extract_excel_grid(file_path: str, sheet_name: str | None = None) -> list[li
 
 
 def is_pdf_text_based(file_path: str) -> bool:
-    """اگر حتی یک صفحه لایهٔ متنِ واقعی داشته باشد True -- یعنی PDF متنی
+    """اگر حتی یک صفحه لایهٔ متن واقعی داشته باشد True — یعنی PDF متنی
     است و extract_pdf_grid کافی است. اگر False باشد یعنی این PDF یک
-    اسکنِ عکسی است و باید با extract_pdf_grid_ocr خوانده شود."""
+    اسکن عکسی است و باید با extract_pdf_grid_ocr خوانده شود."""
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
             if page.extract_words():
@@ -321,9 +321,9 @@ def is_pdf_text_based(file_path: str) -> bool:
 
 
 def is_ocr_available() -> bool:
-    """آیا Tesseract OCR رویِ این سیستم نصب است. pytesseract فقط یک پوستهٔ
-    نازک است -- خودِ برنامهٔ Tesseract باید جداگانه رویِ سیستم نصب شده
-    باشد (این یک وابستگیِ سیستمی است، نه یک بستهٔ pip)."""
+    """آیا Tesseract OCR روی این سیستم نصب است. pytesseract فقط یک پوستهٔ
+    نازک است — خود برنامهٔ Tesseract باید جداگانه روی سیستم نصب شده
+    باشد (این یک وابستگی سیستمی است، نه یک بستهٔ pip)."""
     try:
         import pytesseract
 
@@ -339,12 +339,12 @@ _OCR_PSM = 6  # «یک بلوکِ یکنواختِ متن» -- برایِ متن
 
 
 def _looks_like_grid_line_artifact(text: str, width: int, height: int) -> bool:
-    """در تصاویرِ جدولِ خط‌کشی‌شده، pytesseract گاهی خودِ خطِ عمودیِ جدول
-    را به‌اشتباه یک «کلمه»یِ تک‌کاراکتری (مثلِ | ) تشخیص می‌دهد که هیچ
-    حرف/رقمی ندارد و کادرِ بسیار کشیده (خیلی باریک-و-بلند یا خیلی
-    پهن-و-کوتاه) دارد. اگر چنین نشانه‌ای در محاسبه‌یِ قدِ متوسطِ کلمه‌ها
-    وارد شود، آستانه‌یِ تشخیصِ فاصله‌یِ ستون‌ها به‌شدت منحرف می‌شود و چند
-    ستونِ واقعی در یکی ادغام می‌شوند (دقیقاً همان علتِ گزارش‌شده)."""
+    """در تصاویر جدول خط‌کشی‌شده، pytesseract گاهی خود خط عمودی جدول
+    را به‌اشتباه یک «کلمه»ی تک‌کاراکتری (مثل | ) تشخیص می‌دهد که هیچ
+    حرف/رقمی ندارد و کادر بسیار کشیده (خیلی باریک-و-بلند یا خیلی
+    پهن-و-کوتاه) دارد. اگر چنین نشانه‌ای در محاسبهٔ قد متوسط کلمه‌ها
+    وارد شود، آستانهٔ تشخیص فاصلهٔ ستون‌ها به‌شدت منحرف می‌شود و چند
+    ستون واقعی در یکی ادغام می‌شوند (دقیقاً همان علت گزارش‌شده)."""
     if any(ch.isalnum() for ch in text):
         return False
     if len(text) > 2 or width <= 0 or height <= 0:
@@ -353,16 +353,16 @@ def _looks_like_grid_line_artifact(text: str, width: int, height: int) -> bool:
 
 
 def _compute_ocr_gap_threshold(words: list[dict]) -> float:
-    """آستانه‌یِ فاصله‌یِ افقیِ لازم برایِ شروعِ ستونِ تازه. روشِ اصلی این
-    است که همه‌یِ فاصله‌هایِ افقیِ بینِ کلمه‌هایِ متوالیِ هم‌ردیف را جمع
-    می‌کند و بزرگ‌ترین «جهش» در توزیعِ مرتب‌شده‌یِ این فاصله‌ها را مرزِ
-    بینِ «فاصله‌یِ داخلِ یک سلول» و «فاصله‌یِ بینِ دو ستون» در نظر
-    می‌گیرد -- این روش مستقیماً همان چیزی را اندازه می‌گیرد که به آن نیاز
-    داریم (فاصله‌یِ افقی)، برخلافِ روشِ قدیمی که بر اساسِ قدِ متوسطِ
-    باکسِ OCR حدس می‌زد و با لمسِ خط‌کشیِ جدول یا نویز به‌آسانی منحرف
-    می‌شد. اگر داده‌یِ کافی برایِ این تشخیص نبود (مثلاً هر ردیف فقط یک
-    کلمه دارد، یا همه‌یِ فاصله‌ها یکدست‌اند)، به روشِ پشتیبانِ مبتنی‌بر
-    قدِ متوسطِ کلمه‌ها برمی‌گردد."""
+    """آستانهٔ فاصلهٔ افقی لازم برای شروع ستون تازه. روش اصلی این
+    است که همهٔ فاصله‌های افقی بین کلمه‌های متوالی هم‌ردیف را جمع
+    می‌کند و بزرگ‌ترین «جهش» در توزیع مرتب‌شدهٔ این فاصله‌ها را مرز
+    بین «فاصلهٔ داخل یک سلول» و «فاصلهٔ بین دو ستون» در نظر
+    می‌گیرد — این روش مستقیماً همان چیزی را اندازه می‌گیرد که به آن نیاز
+    داریم (فاصلهٔ افقی)، برخلاف روش قدیمی که بر اساس قد متوسط
+    باکس OCR حدس می‌زد و با لمس خط‌کشی جدول یا نویز به‌آسانی منحرف
+    می‌شد. اگر دادهٔ کافی برای این تشخیص نبود (مثلاً هر ردیف فقط یک
+    کلمه دارد، یا همهٔ فاصله‌ها یکدست‌اند)، به روش پشتیبان مبتنی‌بر
+    قد متوسط کلمه‌ها برمی‌گردد."""
     rows: dict[tuple, list[dict]] = {}
     for w in words:
         rows.setdefault(w["line_key"], []).append(w)
@@ -394,10 +394,10 @@ def _compute_ocr_gap_threshold(words: list[dict]) -> float:
 
 
 def _extract_grid_from_ocr_image(image, lang: str) -> list[list[str]]:
-    """معادلِ _extract_grid_from_words ولی رویِ خروجیِ OCR: کلمه‌هایِ
-    هم‌خط (بر اساسِ block/paragraph/line) را کنارِ هم می‌گذارد و هرجا
-    فاصله‌یِ افقی از یک آستانه (بر اساسِ تحلیلِ توزیعِ فاصله‌ها --
-    _compute_ocr_gap_threshold) بیشتر شود، ستونِ تازه شروع می‌کند."""
+    """معادل _extract_grid_from_words ولی روی خروجی OCR: کلمه‌های
+    هم‌خط (بر اساس block/paragraph/line) را کنار هم می‌گذارد و هرجا
+    فاصلهٔ افقی از یک آستانه (بر اساس تحلیل توزیع فاصله‌ها --
+    _compute_ocr_gap_threshold) بیشتر شود، ستون تازه شروع می‌کند."""
     import pytesseract
 
     data = pytesseract.image_to_data(image, lang=lang, config=f"--psm {_OCR_PSM}", output_type=pytesseract.Output.DICT)
@@ -451,7 +451,7 @@ def extract_image_grid(file_path: str, lang: str = "eng") -> list[list[str]]:
 
 
 def extract_pdf_grid_ocr(file_path: str, lang: str = "eng", dpi: int = 300) -> list[list[str]]:
-    """رندرِ هر صفحهٔ PDFِ اسکن‌شده به تصویر و سپس OCR -- برایِ زمانی که
+    """رندر هر صفحهٔ PDF اسکن‌شده به تصویر و سپس OCR — برای زمانی که
     is_pdf_text_based همان فایل False برگردانده باشد."""
     import pypdfium2 as pdfium
 
@@ -468,13 +468,13 @@ def extract_pdf_grid_ocr(file_path: str, lang: str = "eng", dpi: int = 300) -> l
 
 
 def extract_pdf_grid(file_path: str) -> list[list[str]]:
-    """اول با تشخیصِ جدولِ بومیِ pdfplumber (بهترین دقت، وقتی PDF واقعاً
-    خط‌کشیِ جدول دارد)؛ اگر چیزی پیدا نشد (رایج در فاکتور/لیست‌هایِ
-    بدونِ خط‌کشیِ صریح)، به استخراجِ متنِ خام برمی‌گردد و ستون‌ها را از
-    رویِ فاصله‌هایِ متوالی (رایج‌ترین الگویِ تراز-چپ/راستِ جدولی) حدس
-    می‌زند. اگر PDF یک اسکنِ عکسی باشد (بدونِ لایه‌یِ متن)، هردو راه چیزی
-    برنمی‌گردانند -- این حالت را UI با is_pdf_text_based از قبل تشخیص
-    می‌دهد و به‌جایِ این تابع، extract_pdf_grid_ocr را صدا می‌زند."""
+    """اول با تشخیص جدول بومی pdfplumber (بهترین دقت، وقتی PDF واقعاً
+    خط‌کشی جدول دارد)؛ اگر چیزی پیدا نشد (رایج در فاکتور/لیست‌های
+    بدون خط‌کشی صریح)، به استخراج متن خام برمی‌گردد و ستون‌ها را از
+    روی فاصله‌های متوالی (رایج‌ترین الگوی تراز-چپ/راست جدولی) حدس
+    می‌زند. اگر PDF یک اسکن عکسی باشد (بدون لایهٔ متن)، هردو راه چیزی
+    برنمی‌گردانند — این حالت را UI با is_pdf_text_based از قبل تشخیص
+    می‌دهد و به‌جای این تابع، extract_pdf_grid_ocr را صدا می‌زند."""
     grid: list[list[str]] = []
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
@@ -550,13 +550,13 @@ def match_grid_rows(
     company_id: int, grid: list[list[str]], code_column: int | None, price_column: int, header_row_index: int,
     supplier_detail_account_id: int | None, name_column: int | None = None,
 ) -> list[MatchedPriceRow]:
-    """کدِ ستون و/یا نامِ ستون -- لااقل یکی از این دو باید مشخص شود. اگر
-    هردو مشخص باشند (فایل هم کد و هم نامِ کالا را جداگانه دارد)، اول
-    تلاشِ تطبیق بر اساسِ کد و اگر نیافت بر اساسِ نام انجام می‌شود."""
+    """کد ستون و/یا نام ستون — لااقل یکی از این دو باید مشخص شود. اگر
+    هردو مشخص باشند (فایل هم کد و هم نام کالا را جداگانه دارد)، اول
+    تلاش تطبیق بر اساس کد و اگر نیافت بر اساس نام انجام می‌شود."""
     from peecha.services import inventory_catalog as catalog_service
 
     if code_column is None and name_column is None:
-        raise ValueError("لااقل یکی از ستونِ کدِ کالا یا نامِ کالا باید مشخص شود.")
+        raise ValueError("لااقل یکی از ستون کد کالا یا نام کالا باید مشخص شود.")
 
     items_by_id = {i.item_id: i for i in catalog_service.list_items(company_id)}
     results: list[MatchedPriceRow] = []
@@ -602,5 +602,5 @@ def apply_adjustments(base_price: decimal.Decimal, steps: list[PriceAdjustmentSt
         elif step.kind == "AMOUNT":
             price = price + step.value
         else:
-            raise ValueError(f"نوعِ ستونِ افزایشی نامعتبر است: {step.kind}")
+            raise ValueError(f"نوع ستون افزایشی نامعتبر است: {step.kind}")
     return price.quantize(_Q2, rounding=decimal.ROUND_HALF_UP)

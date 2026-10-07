@@ -1,8 +1,8 @@
-"""زیرماژولِ «مدیریتِ سفارشات» — طبقِ درخواستِ صریح: انتخابِ یک تفصیلیِ
-خاص از گروهِ تفصیلیِ «سفارشاتِ در راه» در بالایِ فرم، ثبتِ پرداخت‌هایِ
-مختلف (هر روش/ارزی) با بازکردنِ همان فرمِ دریافت/پرداختِ خزانه‌داری
-(سندِ حسابداریِ هر پرداخت دقیقاً همان‌جا صادر می‌شود)، الصاقِ عکس برایِ
-هر پرداخت، و درنهایت بستنِ سفارش."""
+"""زیرماژول «مدیریت سفارشات» — طبق درخواست صریح: انتخاب یک تفصیلی
+خاص از گروه تفصیلی «سفارشات در راه» در بالای فرم، ثبت پرداخت‌های
+مختلف (هر روش/ارزی) با بازکردن همان فرم دریافت/پرداخت خزانه‌داری
+(سند حسابداری هر پرداخت دقیقاً همان‌جا صادر می‌شود)، الصاق عکس برای
+هر پرداخت، و درنهایت بستن سفارش."""
 
 from __future__ import annotations
 
@@ -42,17 +42,17 @@ from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, add_quick_add_butt
 
 
 class _PaymentCurrencyDialog(QDialog):
-    """طبقِ درخواستِ صریح («اکثرا با ارزهای دیگه هم کار می‌کنن، بعدِ زدنِ
-    کلیدِ پرداخت بپرسه ارز کدومه و چقدر بوده و نرخِ روز را وارد کنیم»):
-    قبل از بازشدنِ فرمِ دریافت/پرداختِ خزانه‌داری، ارز/مبلغ/نرخِ همان
-    پرداخت این‌جا پرسیده می‌شود -- فرمِ خزانه‌داری با همین سه مقدار
-    پیش‌پر باز می‌شود (کاربر فقط روشِ پرداخت را انتخاب می‌کند)."""
+    """طبق درخواست صریح («اکثرا با ارزهای دیگه هم کار می‌کنن، بعد زدن
+    کلید پرداخت بپرسه ارز کدومه و چقدر بوده و نرخ روز را وارد کنیم»):
+    قبل از بازشدن فرم دریافت/پرداخت خزانه‌داری، ارز/مبلغ/نرخ همان
+    پرداخت این‌جا پرسیده می‌شود — فرم خزانه‌داری با همین سه مقدار
+    پیش‌پر باز می‌شود (کاربر فقط روش پرداخت را انتخاب می‌کند)."""
 
     def __init__(
         self, company_id: int, base_currency_id: int, detail_account_id: int, decimal_places: int, parent=None
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("مشخصاتِ پرداخت")
+        self.setWindowTitle("مشخصات پرداخت")
         self._company_id = company_id
         self._base_currency_id = base_currency_id
         self._detail_account_id = detail_account_id
@@ -68,14 +68,14 @@ class _PaymentCurrencyDialog(QDialog):
         # کالا/...) از یک فهرستِ قابلِ‌گسترش انتخاب می‌شود؛ دکمه‌یِ + همان‌جا
         # (بدونِ بستنِ همین دیالوگ) عنوانِ تازه اضافه می‌کند.
         title_row = QHBoxLayout()
-        title_row.addWidget(QLabel("عنوانِ پرداخت:"))
+        title_row.addWidget(QLabel("عنوان پرداخت:"))
         self.title_combo = QComboBox()
         self._reload_titles()
         title_row.addWidget(self.title_combo, stretch=1)
         add_title_button = QPushButton("+")
         add_title_button.setObjectName("iconButton")
         add_title_button.setFixedWidth(28)
-        add_title_button.setToolTip("افزودنِ عنوانِ پرداختِ تازه")
+        add_title_button.setToolTip("افزودن عنوان پرداخت تازه")
         add_title_button.clicked.connect(self._add_title)
         title_row.addWidget(add_title_button)
         # طبقِ گزارشِ صریح («عنوانِ پرداخت وقتی وارد می‌شود نمی‌شود حذف یا
@@ -86,13 +86,13 @@ class _PaymentCurrencyDialog(QDialog):
         edit_title_button = QPushButton("✎")
         edit_title_button.setObjectName("iconButton")
         edit_title_button.setFixedWidth(28)
-        edit_title_button.setToolTip("ویرایشِ عنوانِ انتخاب‌شده")
+        edit_title_button.setToolTip("ویرایش عنوان انتخاب‌شده")
         edit_title_button.clicked.connect(self._edit_title)
         title_row.addWidget(edit_title_button)
         delete_title_button = QPushButton("🗑")
         delete_title_button.setObjectName("dangerIconButton")
         delete_title_button.setFixedWidth(28)
-        delete_title_button.setToolTip("حذفِ عنوانِ انتخاب‌شده")
+        delete_title_button.setToolTip("حذف عنوان انتخاب‌شده")
         delete_title_button.clicked.connect(self._delete_title)
         title_row.addWidget(delete_title_button)
         layout.addLayout(title_row)
@@ -115,7 +115,7 @@ class _PaymentCurrencyDialog(QDialog):
         self.rate_row_widget = QWidget()
         rate_row = QHBoxLayout(self.rate_row_widget)
         rate_row.setContentsMargins(0, 0, 0, 0)
-        rate_row.addWidget(QLabel("نرخِ روز:"))
+        rate_row.addWidget(QLabel("نرخ روز:"))
         self.rate_field = QLineEdit()
         rate_row.addWidget(self.rate_field, stretch=1)
         layout.addWidget(self.rate_row_widget)
@@ -133,7 +133,7 @@ class _PaymentCurrencyDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.addStretch(1)
-        ok_button = QPushButton("تایید و رفتن به فرمِ پرداخت")
+        ok_button = QPushButton("تایید و رفتن به فرم پرداخت")
         ok_button.clicked.connect(self._on_accept)
         button_row.addWidget(ok_button)
         cancel_button = QPushButton("انصراف")
@@ -154,7 +154,7 @@ class _PaymentCurrencyDialog(QDialog):
 
     def _reload_titles(self, select_title_id: int | None = None) -> None:
         self.title_combo.clear()
-        self.title_combo.addItem("— بدونِ عنوان —", None)
+        self.title_combo.addItem("— بدون عنوان —", None)
         for t in order_tracking_service.list_payment_titles(self._company_id):
             self.title_combo.addItem(t.label, t.payment_title_id)
         if select_title_id is not None:
@@ -163,7 +163,7 @@ class _PaymentCurrencyDialog(QDialog):
                 self.title_combo.setCurrentIndex(index)
 
     def _add_title(self) -> None:
-        label, ok = QInputDialog.getText(self, "افزودنِ عنوانِ پرداخت", "عنوانِ تازه (مثلاً «هزینه‌یِ ترخیص»):")
+        label, ok = QInputDialog.getText(self, "افزودن عنوان پرداخت", "عنوان تازه (مثلاً «هزینهٔ ترخیص»):")
         if not ok or not label.strip():
             return
         try:
@@ -176,9 +176,9 @@ class _PaymentCurrencyDialog(QDialog):
     def _edit_title(self) -> None:
         title_id = self.title_combo.currentData()
         if title_id is None:
-            QMessageBox.information(self, "ویرایشِ عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "ویرایش عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
             return
-        new_label, ok = QInputDialog.getText(self, "ویرایشِ عنوانِ پرداخت", "عنوانِ تازه:", text=self.title_combo.currentText())
+        new_label, ok = QInputDialog.getText(self, "ویرایش عنوان پرداخت", "عنوان تازه:", text=self.title_combo.currentText())
         if not ok or not new_label.strip():
             return
         try:
@@ -191,12 +191,12 @@ class _PaymentCurrencyDialog(QDialog):
     def _delete_title(self) -> None:
         title_id = self.title_combo.currentData()
         if title_id is None:
-            QMessageBox.information(self, "حذفِ عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "حذف عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
             return
         confirm = QMessageBox.question(
-            self, "حذفِ عنوان",
-            f"عنوانِ «{self.title_combo.currentText()}» حذف شود؟ (سندهایِ پرداختِ قبلی که با این عنوان ثبت شده‌اند "
-            "بدونِ تغییر باقی می‌مانند.)",
+            self, "حذف عنوان",
+            f"عنوان «{self.title_combo.currentText()}» حذف شود؟ (سندهای پرداخت قبلی که با این عنوان ثبت شده‌اند "
+            "بدون تغییر باقی می‌مانند.)",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -211,7 +211,7 @@ class _PaymentCurrencyDialog(QDialog):
     def _refresh_balance_footer(self) -> None:
         balance, nature = treasury_service.get_counterparty_balance(self._company_id, self._detail_account_id)
         self.balance_footer_label.setText(
-            f"ماندهٔ فعلیِ سفارش: {numerals.format_money(balance, self._decimal_places)} ({nature})"
+            f"ماندهٔ فعلی سفارش: {numerals.format_money(balance, self._decimal_places)} ({nature})"
         )
 
     def _on_accept(self) -> None:
@@ -227,7 +227,7 @@ class _PaymentCurrencyDialog(QDialog):
             except ValueError:
                 exchange_rate = decimal.Decimal(0)
             if exchange_rate <= 0:
-                self.status_label.setText("نرخِ روزِ ارز را وارد کنید.")
+                self.status_label.setText("نرخ روز ارز را وارد کنید.")
                 return
         self.result_currency_id = currency_id
         self.result_amount = amount
@@ -240,17 +240,17 @@ _IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp", "gif"}
 
 
 class _AttachmentManagerDialog(QDialog):
-    """طبقِ گزارشِ صریح («ستونِ الصاقِ عکس هیچ آیکنی نداره، عکسِ الصاق‌شده
-    پیش‌نمایش/حذف/تعویض ندارد» + «امکانِ الصاقِ فایل‌هایِ دیگر مثلِ
-    PDF»): با کلیک رویِ دکمهٔ عکسِ هر ردیف، این دیالوگ همه‌یِ ضمیمه‌هایِ
-    همان پرداخت (عکس یا هر فایلِ دیگری) را نشان می‌دهد -- پیش‌نمایشِ
-    کوچک برایِ عکس‌ها، برچسبِ پسوند برایِ بقیه؛ هرکدام با دکمه‌یِ «بازکردنِ
-    تمام‌صفحه/با برنامهٔ پیش‌فرض» و دکمه‌یِ حذفِ خودش، به‌علاوه‌یِ دکمه‌یِ
-    افزودنِ فایلِ تازه."""
+    """طبق گزارش صریح («ستون الصاق عکس هیچ آیکنی نداره، عکس الصاق‌شده
+    پیش‌نمایش/حذف/تعویض ندارد» + «امکان الصاق فایل‌های دیگر مثل
+    PDF»): با کلیک روی دکمهٔ عکس هر ردیف، این دیالوگ همهٔ ضمیمه‌های
+    همان پرداخت (عکس یا هر فایل دیگری) را نشان می‌دهد — پیش‌نمایش
+    کوچک برای عکس‌ها، برچسب پسوند برای بقیه؛ هرکدام با دکمهٔ «بازکردن
+    تمام‌صفحه/با برنامهٔ پیش‌فرض» و دکمهٔ حذف خودش، به‌علاوهٔ دکمهٔ
+    افزودن فایل تازه."""
 
     def __init__(self, company_id: int, journal_entry_id: int, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ضمیمه‌هایِ این پرداخت")
+        self.setWindowTitle("ضمیمه‌های این پرداخت")
         self.resize(460, 420)
         self._company_id = company_id
         self._journal_entry_id = journal_entry_id
@@ -265,7 +265,7 @@ class _AttachmentManagerDialog(QDialog):
         scroll.setWidget(self._list_widget)
         layout.addWidget(scroll, stretch=1)
 
-        add_button = QPushButton("➕ افزودنِ فایلِ تازه (عکس، PDF، ...)")
+        add_button = QPushButton("➕ افزودن فایل تازه (عکس، PDF، ...)")
         add_button.clicked.connect(self._add_file)
         layout.addWidget(add_button)
 
@@ -305,7 +305,7 @@ class _AttachmentManagerDialog(QDialog):
             open_button = QPushButton("🔍")
             open_button.setObjectName("iconButton")
             open_button.setFixedWidth(36)
-            open_button.setToolTip("بازکردنِ این فایل (تمام‌صفحه، با برنامهٔ پیش‌فرضِ سیستم)")
+            open_button.setToolTip("بازکردن این فایل (تمام‌صفحه، با برنامهٔ پیش‌فرض سیستم)")
             open_button.clicked.connect(
                 lambda _checked=False, storage_key=attachment.storage_key: self._open_file(storage_key)
             )
@@ -313,19 +313,19 @@ class _AttachmentManagerDialog(QDialog):
             delete_button = QPushButton("🗑")
             delete_button.setObjectName("dangerIconButton")
             delete_button.setFixedWidth(36)
-            delete_button.setToolTip("حذفِ این ضمیمه")
+            delete_button.setToolTip("حذف این ضمیمه")
             delete_button.clicked.connect(
                 lambda _checked=False, attachment_id=attachment.attachment_id: self._delete_file(attachment_id)
             )
             row_layout.addWidget(delete_button)
             self._list_layout.insertWidget(self._list_layout.count() - 1, row)
         if not files:
-            empty_label = QLabel("هنوز فایلی برایِ این پرداخت الصاق نشده.")
+            empty_label = QLabel("هنوز فایلی برای این پرداخت الصاق نشده.")
             self._list_layout.insertWidget(0, empty_label)
 
     def _open_file(self, storage_key: str) -> None:
         if not Path(storage_key).is_file():
-            QMessageBox.warning(self, "خطا", "فایل در مسیرِ ذخیره‌شده یافت نشد.")
+            QMessageBox.warning(self, "خطا", "فایل در مسیر ذخیره‌شده یافت نشد.")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(storage_key))
 
@@ -334,8 +334,8 @@ class _AttachmentManagerDialog(QDialog):
         if user is None:
             return
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "انتخابِ فایل", "",
-            "همه‌یِ فایل‌ها (*.*);;تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;PDF (*.pdf)",
+            self, "انتخاب فایل", "",
+            "همهٔ فایل‌ها (*.*);;تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;PDF (*.pdf)",
         )
         if not file_path:
             return
@@ -350,7 +350,7 @@ class _AttachmentManagerDialog(QDialog):
         user = app_session.current_user
         if user is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ ضمیمه", "این فایل حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف ضمیمه", "این فایل حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
@@ -370,7 +370,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self._base_currency_id: int | None = None
         self._currency_iso_by_id: dict[int, str] = {}
 
-        title = QLabel("مدیریتِ سفارشات")
+        title = QLabel("مدیریت سفارشات")
         title.setObjectName("pageTitle")
         self.body_layout.addWidget(title)
 
@@ -378,11 +378,11 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         # سفارشاتِ در راه»): تنظیمِ یک‌بارهٔ همین گروه، بالایِ خودِ همین
         # صفحه (بدونِ نیازِ به یک صفحهٔ تنظیماتِ جداگانه).
         settings_row = QHBoxLayout()
-        settings_row.addWidget(QLabel("گروهِ تفصیلیِ «سفارشاتِ در راه»:"))
+        settings_row.addWidget(QLabel("گروه تفصیلی «سفارشات در راه»:"))
         self.dimension_combo = QComboBox()
         settings_row.addWidget(self.dimension_combo, stretch=1)
         save_dimension_button = QPushButton("ذخیره")
-        save_dimension_button.setToolTip("تعیینِ گروهِ تفصیلی‌ای که هر «سفارش» یک عضوِ آن است")
+        save_dimension_button.setToolTip("تعیین گروه تفصیلی‌ای که هر «سفارش» یک عضو آن است")
         save_dimension_button.clicked.connect(self._save_dimension_setting)
         settings_row.addWidget(save_dimension_button)
         self.body_layout.addLayout(settings_row)
@@ -393,12 +393,12 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         # شبکه‌ایِ اشتراکی (که رویِ همه‌یِ کامپیوترهایِ کاربران به یک
         # پوشه اشاره کند)، همه می‌توانند همان فایل‌ها را ببینند.
         attachments_dir_row = QHBoxLayout()
-        attachments_dir_row.addWidget(QLabel("پوشهٔ اشتراکیِ ضمیمه‌ها (شبکه):"))
+        attachments_dir_row.addWidget(QLabel("پوشهٔ اشتراکی ضمیمه‌ها (شبکه):"))
         self.attachments_dir_field = QLineEdit()
-        self.attachments_dir_field.setPlaceholderText(r"مثلاً \\SERVER\Share\PeechaAttachments -- خالی یعنی پوشهٔ محلی")
+        self.attachments_dir_field.setPlaceholderText(r"مثلاً \\SERVER\Share\PeechaAttachments — خالی یعنی پوشهٔ محلی")
         attachments_dir_row.addWidget(self.attachments_dir_field, stretch=1)
         save_attachments_dir_button = QPushButton("ذخیره")
-        save_attachments_dir_button.setToolTip("این مسیر باید رویِ همه‌یِ کامپیوترهایِ کاربران به یک پوشهٔ مشترک اشاره کند")
+        save_attachments_dir_button.setToolTip("این مسیر باید روی همهٔ کامپیوترهای کاربران به یک پوشهٔ مشترک اشاره کند")
         save_attachments_dir_button.clicked.connect(self._save_attachments_dir_setting)
         attachments_dir_row.addWidget(save_attachments_dir_button)
         self.body_layout.addLayout(attachments_dir_row)
@@ -411,10 +411,10 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         order_row.addWidget(self.order_combo, stretch=1)
         self.order_status_label = QLabel("")
         order_row.addWidget(self.order_status_label)
-        self.close_button = QPushButton("🔒 بستنِ سفارش")
+        self.close_button = QPushButton("🔒 بستن سفارش")
         self.close_button.clicked.connect(self._close_order)
         order_row.addWidget(self.close_button)
-        self.reopen_button = QPushButton("🔓 بازگشاییِ سفارش")
+        self.reopen_button = QPushButton("🔓 بازگشایی سفارش")
         self.reopen_button.clicked.connect(self._reopen_order)
         order_row.addWidget(self.reopen_button)
         self.body_layout.addLayout(order_row)
@@ -429,11 +429,11 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.new_detail_combo.setEditable(True)
         self.new_detail_combo.setInsertPolicy(QComboBox.NoInsert)
         new_order_row.addWidget(self.new_detail_combo, stretch=1)
-        add_quick_add_button(new_order_row, self.new_detail_combo, main_window, "GL_DIM", "تعریفِ تفصیلیِ تازه برایِ سفارش")
+        add_quick_add_button(new_order_row, self.new_detail_combo, main_window, "GL_DIM", "تعریف تفصیلی تازه برای سفارش")
         self.new_description_field = QLineEdit()
-        self.new_description_field.setPlaceholderText("شرحِ سفارش (اختیاری)")
+        self.new_description_field.setPlaceholderText("شرح سفارش (اختیاری)")
         new_order_row.addWidget(self.new_description_field, stretch=1)
-        add_order_button = QPushButton("➕ شروعِ پیگیریِ سفارش")
+        add_order_button = QPushButton("➕ شروع پیگیری سفارش")
         add_order_button.clicked.connect(self._add_order)
         new_order_row.addWidget(add_order_button)
         self.body_layout.addLayout(new_order_row)
@@ -442,15 +442,15 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.body_layout.addWidget(self.balance_label)
 
         payment_row = QHBoxLayout()
-        self.add_payment_button = QPushButton("➕ افزودنِ پرداخت")
+        self.add_payment_button = QPushButton("➕ افزودن پرداخت")
         self.add_payment_button.setToolTip(
-            "فرمِ دریافت/پرداختِ خزانه‌داری با تفصیلیِ همین سفارش باز می‌شود — "
-            "هر روش (نقد/بانک/چک/ارزی) که آن‌جا موجود است قابلِ‌استفاده است؛ "
-            "سندِ حسابداری همان‌جا صادر می‌شود."
+            "فرم دریافت/پرداخت خزانه‌داری با تفصیلی همین سفارش باز می‌شود — "
+            "هر روش (نقد/بانک/چک/ارزی) که آن‌جا موجود است قابل‌استفاده است؛ "
+            "سند حسابداری همان‌جا صادر می‌شود."
         )
         self.add_payment_button.clicked.connect(self._open_payment_form)
         payment_row.addWidget(self.add_payment_button)
-        refresh_button = QPushButton("🔄 بروزرسانیِ فهرست")
+        refresh_button = QPushButton("🔄 بروزرسانی فهرست")
         refresh_button.clicked.connect(self._refresh_payments)
         payment_row.addWidget(refresh_button)
         payment_row.addStretch(1)
@@ -462,7 +462,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         # خالی می‌مانند.
         self.payments_table = QTableWidget(0, 8)
         self.payments_table.setHorizontalHeaderLabels(
-            ["تاریخ", "شرح", "بدهکار", "بستانکار", "ارز", "نرخِ ارز", "مبلغِ ارزی", "عکس"]
+            ["تاریخ", "شرح", "بدهکار", "بستانکار", "ارز", "نرخ ارز", "مبلغ ارزی", "عکس"]
         )
         self.payments_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.payments_table.verticalHeader().setVisible(False)
@@ -481,14 +481,14 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.body_layout.addWidget(self.status_label)
 
         self.set_field_help([
-            (self.dimension_combo, "گروهِ تفصیلی‌ای که هر «سفارش» یک عضوِ آن است -- یک‌بار تنظیم می‌شود."),
+            (self.dimension_combo, "گروه تفصیلی‌ای که هر «سفارش» یک عضو آن است — یک‌بار تنظیم می‌شود."),
             (
                 self.attachments_dir_field,
-                "مسیرِ یک پوشهٔ اشتراکیِ شبکه برایِ ضمیمه‌ها -- خالی یعنی هر کاربر فقط ضمیمه‌هایِ ذخیره‌شده رویِ کامپیوترِ خودش را می‌بیند.",
+                "مسیر یک پوشهٔ اشتراکی شبکه برای ضمیمه‌ها — خالی یعنی هر کاربر فقط ضمیمه‌های ذخیره‌شده روی کامپیوتر خودش را می‌بیند.",
             ),
             (self.order_combo, "سفارشی که می‌خواهید پرداخت‌ها/ضمیمه‌هایش را ببینید یا مدیریت کنید."),
-            (self.new_detail_combo, "تفصیلیِ سطحِ آخرِ گروهِ سفارش که پیگیری‌اش تازه شروع می‌شود."),
-            (self.new_description_field, "شرحِ اختیاریِ این سفارشِ تازه."),
+            (self.new_detail_combo, "تفصیلی سطح آخر گروه سفارش که پیگیری‌اش تازه شروع می‌شود."),
+            (self.new_description_field, "شرح اختیاری این سفارش تازه."),
         ])
 
     def _company_id(self) -> int | None:
@@ -535,12 +535,12 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         dimension_type_id = self.dimension_combo.currentData()
         if company_id is None or dimension_type_id is None:
-            self.status_label.setText("ابتدا یک گروهِ تفصیلی انتخاب کنید.")
+            self.status_label.setText("ابتدا یک گروه تفصیلی انتخاب کنید.")
             return
         order_tracking_service.set_dimension_type_id(company_id, dimension_type_id)
         self.status_label.setText("")
         self.status_label.setObjectName("statusOk")
-        self.status_label.setText("گروهِ تفصیلیِ «سفارشاتِ در راه» ذخیره شد.")
+        self.status_label.setText("گروه تفصیلی «سفارشات در راه» ذخیره شد.")
         # طبقِ گزارشِ صریح: بلافاصله بعدِ ذخیره، تفصیلی‌هایِ سطحِ آخرِ همین
         # گروه در کمبویِ «سفارشِ تازه» نمایش داده شوند -- بدونِ نیازِ کاربر
         # به خروج/ورودِ دوباره به این صفحه.
@@ -557,7 +557,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             return
         self.status_label.setObjectName("statusOk")
-        self.status_label.setText("پوشهٔ اشتراکیِ ضمیمه‌ها ذخیره شد.")
+        self.status_label.setText("پوشهٔ اشتراکی ضمیمه‌ها ذخیره شد.")
 
     def _add_order(self) -> None:
         company_id = self._company_id()
@@ -567,7 +567,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         detail_account_id = self.new_detail_combo.currentData()
         if detail_account_id is None:
             self.status_label.setObjectName("statusError")
-            self.status_label.setText("یک تفصیلی از گروهِ «سفارشاتِ در راه» انتخاب کنید.")
+            self.status_label.setText("یک تفصیلی از گروه «سفارشات در راه» انتخاب کنید.")
             return
         description = self.new_description_field.text().strip() or None
         try:
@@ -609,7 +609,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             self.balance_label.setText("")
             return
         balance, nature = treasury_service.get_counterparty_balance(company_id, self._selected_order.detail_account_id)
-        self.balance_label.setText(f"ماندهٔ فعلیِ سفارش: {numerals.format_money(balance, self._decimal_places)} ({nature})")
+        self.balance_label.setText(f"ماندهٔ فعلی سفارش: {numerals.format_money(balance, self._decimal_places)} ({nature})")
 
     def _refresh_payments(self) -> None:
         company_id = self._company_id()
@@ -648,7 +648,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             # iconButton این‌جا هم اعمال شد.
             file_button = QPushButton("📎" if has_file else "➕📎")
             file_button.setObjectName("iconButton")
-            file_button.setToolTip("مدیریتِ ضمیمه‌هایِ این پرداخت (افزودن/پیش‌نمایش/حذف — عکس، PDF، ...)")
+            file_button.setToolTip("مدیریت ضمیمه‌های این پرداخت (افزودن/پیش‌نمایش/حذف — عکس، PDF، ...)")
             file_button.clicked.connect(
                 lambda _checked=False, journal_entry_id=payment.journal_entry_id: self._open_attachment_manager(journal_entry_id)
             )
@@ -662,9 +662,9 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         mappings = treasury_service.list_counterparty_mappings(company_id, "PAYMENT")
         if not any(m.dimension_type_id == dimension_type_id for m in mappings):
             QMessageBox.warning(
-                self, "تنظیمِ ناقص",
-                "برایِ اینکه این سفارش در فرمِ پرداخت قابلِ‌انتخاب باشد، ابتدا باید در «تنظیماتِ خزانه‌داری → "
-                "طرفِ‌حساب‌هایِ دریافت/پرداخت» یک حساب برایِ همین گروهِ تفصیلی (جهتِ پرداخت) مشخص کنید.",
+                self, "تنظیم ناقص",
+                "برای اینکه این سفارش در فرم پرداخت قابل‌انتخاب باشد، ابتدا باید در «تنظیمات خزانه‌داری → "
+                "طرف‌حساب‌های دریافت/پرداخت» یک حساب برای همین گروه تفصیلی (جهت پرداخت) مشخص کنید.",
             )
             return
         # طبقِ درخواستِ صریح («اکثرا با ارزهای دیگه هم کار می‌کنن»): پیش
@@ -675,7 +675,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         if dialog.exec() != QDialog.Accepted:
             return
         title_part = f"{dialog.result_title_label} — " if dialog.result_title_label else ""
-        description = f"{title_part}پرداختِ سفارشِ {self._selected_order.code} — {self._selected_order.name or ''}"
+        description = f"{title_part}پرداخت سفارش {self._selected_order.code} — {self._selected_order.name or ''}"
         currency_id = dialog.result_currency_id
         amount = dialog.result_amount
         exchange_rate = dialog.result_exchange_rate
@@ -702,8 +702,8 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         balance, nature = treasury_service.get_counterparty_balance(company_id, self._selected_order.detail_account_id)
         if balance != 0:
             confirm = QMessageBox.question(
-                self, "بستنِ سفارش",
-                f"مانده‌یِ این سفارش هنوز صفر نیست ({numerals.format_money(balance, self._decimal_places)} {nature}). "
+                self, "بستن سفارش",
+                f"ماندهٔ این سفارش هنوز صفر نیست ({numerals.format_money(balance, self._decimal_places)} {nature}). "
                 "همچنان بسته شود؟",
                 QMessageBox.Yes | QMessageBox.No,
             )

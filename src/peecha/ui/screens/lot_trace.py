@@ -1,8 +1,8 @@
-"""ردیابیِ بچ/سریال/انقضا و کالایِ امانی -- R227.
+"""ردیابی بچ/سریال/انقضا و کالای امانی — R227.
 
-تبِ «موجودیِ ردیابی»: موجودیِ هر بچ/سریال در هر انبار، با تاریخِ انقضا و
-تامین‌کننده (و جدا شدنِ کالایِ امانی). تبِ «تاریخچه»: مسیرِ کاملِ یک بچ/سریال/
-کالایِ یک تامین‌کننده از ورود تا خروج. همهٔ منطق در services/lot_tracking.py.
+تب «موجودی ردیابی»: موجودی هر بچ/سریال در هر انبار، با تاریخ انقضا و
+تامین‌کننده (و جدا شدن کالای امانی). تب «تاریخچه»: مسیر کامل یک بچ/سریال/
+کالای یک تامین‌کننده از ورود تا خروج. همهٔ منطق در services/lot_tracking.py.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import lot_tracking
 
-_BALANCE_COLUMNS = ["کالا", "انبار", "بچ", "تاریخِ تولید", "تاریخِ انقضا", "سریال", "تامین‌کننده", "امانی", "موجودی"]
+_BALANCE_COLUMNS = ["کالا", "انبار", "بچ", "تاریخ تولید", "تاریخ انقضا", "سریال", "تامین‌کننده", "امانی", "موجودی"]
 _TRACE_COLUMNS = ["زمان", "سند", "کالا", "انبار", "بچ", "سریال", "تامین‌کننده", "امانی", "مقدار"]
 
 
@@ -58,7 +58,7 @@ class LotTraceScreen(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
-        title = QLabel("ردیابیِ بچ / سریال / انقضا و کالایِ امانی")
+        title = QLabel("ردیابی بچ / سریال / انقضا و کالای امانی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -77,7 +77,7 @@ class LotTraceScreen(QWidget):
         self.expiring_days.setRange(0, 3650)
         self.expiring_days.setSuffix(" روز")
         self.expiring_days.setSpecialValueText("همه")
-        self.expiring_days.setToolTip("فقط بچ‌هایی که تا این تعداد روزِ آینده منقضی می‌شوند (۰ = همه)")
+        self.expiring_days.setToolTip("فقط بچ‌هایی که تا این تعداد روز آینده منقضی می‌شوند (۰ = همه)")
         for label, w in (("کالا", self.item_combo), ("انبار", self.warehouse_combo), ("تامین‌کننده", self.supplier_combo)):
             filters.addWidget(QLabel(label))
             filters.addWidget(w, stretch=1)
@@ -92,7 +92,7 @@ class LotTraceScreen(QWidget):
         self.balance_table = _table(_BALANCE_COLUMNS)
         self.balance_table.cellDoubleClicked.connect(self._trace_from_balance)
         b_layout.addWidget(self.balance_table)
-        self.tabs.addTab(balance_tab, "موجودیِ ردیابی")
+        self.tabs.addTab(balance_tab, "موجودی ردیابی")
 
         # --- تاریخچه
         trace_tab = QWidget()

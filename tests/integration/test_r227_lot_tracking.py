@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -134,14 +134,14 @@ for code in ("GL_COA", "PURCH_ORDER", "INV_LOT_TRACE"):
     mw.open_screen(code); app.processEvents()
 vis = [sw for sw in mw.mdi_area.subWindowList() if sw.isVisible()]
 check(all(not sw.isMaximized() and sw.geometry() == mw.mdi_area.viewport().rect() for sw in vis),
-      "همهٔ فرم‌ها یکسان کلِ ناحیه را پر می‌کنند (حتی با حالتِ maximizeِ ذخیره‌شدهٔ قدیمی)")
+      "همهٔ فرم‌ها یکسان کل ناحیه را پر می‌کنند (حتی با حالت maximize ذخیره‌شدهٔ قدیمی)")
 vis[0].showMaximized(); app.processEvents(); app.processEvents()
-check(not vis[0].isMaximized() and vis[0].geometry() == mw.mdi_area.viewport().rect(), "maximizeِ بومی به همان چیدمانِ یکسان برمی‌گردد")
+check(not vis[0].isMaximized() and vis[0].geometry() == mw.mdi_area.viewport().rect(), "maximize بومی به همان چیدمان یکسان برمی‌گردد")
 vis[0].widget().title_bar._toggle_maximize(); app.processEvents()
 check(not mw._sidebar_scroll.isVisibleTo(mw) and all(sw.geometry() == mw.mdi_area.viewport().rect() for sw in vis),
-      "دکمهٔ بزرگ‌کردن = حالتِ تمرکز (ساید‌بار پنهان، همهٔ فرم‌ها هنوز تمام‌ناحیه)")
+      "دکمهٔ بزرگ‌کردن = حالت تمرکز (ساید‌بار پنهان، همهٔ فرم‌ها هنوز تمام‌ناحیه)")
 vis[0].widget().title_bar._toggle_maximize(); app.processEvents()
-check(mw._sidebar_scroll.isVisibleTo(mw), "خروج از حالتِ تمرکز")
+check(mw._sidebar_scroll.isVisibleTo(mw), "خروج از حالت تمرکز")
 
 # ===== ۲: رسیدِ انبار با بچ/انقضا =====
 def receipt(item_id, qty, warehouse_id=wh, counterparty=supplier):
@@ -154,11 +154,11 @@ def receipt(item_id, qty, warehouse_id=wh, counterparty=supplier):
 
 r1, r1_line = receipt(med, 30)
 check(raises(lambda: inv_documents_service.post_stock_document(r1, company_id, user.user_id)),
-      "رسیدِ کالایِ بچ‌دار بدونِ اطلاعاتِ بچ/انقضا ثبت نمی‌شود")
+      "رسید کالای بچ‌دار بدون اطلاعات بچ/انقضا ثبت نمی‌شود")
 check(raises(lambda: lt.set_line_tracking(company_id, [TE(D(30), batch_no="B1")], stock_line_id=r1_line)),
-      "تاریخِ انقضا برایِ کالایِ دارایِ انقضا الزامی است")
+      "تاریخ انقضا برای کالای دارای انقضا الزامی است")
 check(raises(lambda: lt.set_line_tracking(company_id, [TE(D(31), batch_no="B1", expiry_date=today)], stock_line_id=r1_line)),
-      "جمعِ ردیابی بیشتر از مقدارِ ردیف رد می‌شود")
+      "جمع ردیابی بیشتر از مقدار ردیف رد می‌شود")
 lt.set_line_tracking(company_id, [
     TE(D(10), batch_no="B-LATE", expiry_date=today + datetime.timedelta(days=300)),
     TE(D(20), batch_no="B-EARLY", manufacture_date=today - datetime.timedelta(days=30), expiry_date=today + datetime.timedelta(days=60)),
@@ -166,8 +166,8 @@ lt.set_line_tracking(company_id, [
 inv_documents_service.post_stock_document(r1, company_id, user.user_id)
 b = {r.batch_no: r for r in bal(med)}
 check(b["B-LATE"].quantity == 10 and b["B-EARLY"].quantity == 20 and b["B-EARLY"].supplier_name == "تامین‌کنندهٔ یک",
-      "موجودیِ هر بچ با تامین‌کننده ثبت شد")
-check(len(bal(med, expiring_before=today + datetime.timedelta(days=90))) == 1, "فیلترِ «انقضا تا ۹۰ روز» فقط بچِ زودانقضا را نشان می‌دهد")
+      "موجودی هر بچ با تامین‌کننده ثبت شد")
+check(len(bal(med, expiring_before=today + datetime.timedelta(days=90))) == 1, "فیلتر «انقضا تا ۹۰ روز» فقط بچ زودانقضا را نشان می‌دهد")
 
 # ===== ۳: حواله/فروش بدونِ انتخابِ بچ -> FEFO =====
 iss = inv_documents_service.create_stock_document(company_id, user.user_id, "ISSUE", today,
@@ -185,7 +185,7 @@ tr = inv_documents_service.create_stock_document(company_id, user.user_id, "TRAN
 inv_documents_service.add_line(tr, company_id, inv_documents_service.LineFields(item_id=med, uom_id=pcs, quantity=D(3), quantity_base=D(3)))
 inv_documents_service.confirm_stock_document(tr, company_id)
 inv_documents_service.post_stock_document(tr, company_id, user.user_id)
-check([(r.batch_no, r.quantity) for r in bal(med, wh2)] == [("B-LATE", 3)], "انتقال همان بچ را به انبارِ مقصد برد")
+check([(r.batch_no, r.quantity) for r in bal(med, wh2)] == [("B-LATE", 3)], "انتقال همان بچ را به انبار مقصد برد")
 
 # ===== ۵: سریال در تاییدِ رسیدِ سفارشِ خرید تا فروش =====
 csettings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
@@ -196,15 +196,15 @@ po = documents_service.create_document(company_id, user.user_id, "PURCHASE_ORDER
     documents_service.DocumentHeaderFields(counterparty_detail_account_id=supplier, currency_id=company.base_currency_id, warehouse_id=wh))
 po_line = documents_service.add_line(po, company_id, phone, pcs, D(3), D(3), unit_price=D(5000000))
 documents_service.confirm_document(po, company_id, user.user_id)
-check(raises(lambda: documents_service.approve_warehouse(po, company_id, user.user_id)), "تاییدِ رسید بدونِ سریال‌ها رد می‌شود")
+check(raises(lambda: documents_service.approve_warehouse(po, company_id, user.user_id)), "تایید رسید بدون سریال‌ها رد می‌شود")
 check(raises(lambda: lt.set_line_tracking(company_id, [TE(D(1), serial_no="SN1"), TE(D(1), serial_no="SN1")], commercial_line_id=po_line)),
-      "سریالِ تکراری رد می‌شود")
+      "سریال تکراری رد می‌شود")
 lt.set_line_tracking(company_id, [TE(D(1), serial_no=s) for s in ("SN1", "SN2", "SN3")], commercial_line_id=po_line)
 documents_service.approve_warehouse(po, company_id, user.user_id)
 check(True, "رسید با سریال‌ها تایید شد")
 inv = documents_service.convert_to_invoice(po, company_id, user.user_id, today)
 _, inv_lines = documents_service.get_document(inv, company_id)
-check(len(lt.get_effective_commercial_tracking(inv_lines[0].line_id)) == 3, "فاکتور سریال‌هایِ رسید را از سفارش به ارث برد")
+check(len(lt.get_effective_commercial_tracking(inv_lines[0].line_id)) == 3, "فاکتور سریال‌های رسید را از سفارش به ارث برد")
 documents_service.confirm_document(inv, company_id, user.user_id)
 settlements_service.auto_approve_settlement_plan(inv, company_id, user.user_id, [])
 documents_service.post_document(inv, company_id, user.user_id)
@@ -217,13 +217,13 @@ lt.set_line_tracking(company_id, [TE(D(1), serial_no="SN2")], commercial_line_id
 documents_service.confirm_document(sale, company_id, user.user_id)
 settlements_service.auto_approve_settlement_plan(sale, company_id, user.user_id, [])
 documents_service.post_document(sale, company_id, user.user_id)
-check(sorted(r.serial_no for r in bal(phone)) == ["SN1", "SN3"], "فروشِ سریالِ انتخاب‌شده (SN2)")
+check(sorted(r.serial_no for r in bal(phone)) == ["SN1", "SN3"], "فروش سریال انتخاب‌شده (SN2)")
 trace = lt.trace(company_id, serial_no="SN2")
 check(len(trace) == 2 and trace[0].quantity == 1 and trace[1].quantity == -1 and "فاکتور" not in trace[0].document_label,
-      f"تاریخچهٔ کاملِ سریال: ورود و خروج (got {[(t.document_label, t.quantity) for t in trace]})")
+      f"تاریخچهٔ کامل سریال: ورود و خروج (got {[(t.document_label, t.quantity) for t in trace]})")
 r_dup, r_dup_line = receipt(phone, 1)
 lt.set_line_tracking(company_id, [TE(D(1), serial_no="SN1")], stock_line_id=r_dup_line)
-check(raises(lambda: inv_documents_service.post_stock_document(r_dup, company_id, user.user_id)), "ورودِ سریالی که در انبار هست رد می‌شود")
+check(raises(lambda: inv_documents_service.post_stock_document(r_dup, company_id, user.user_id)), "ورود سریالی که در انبار هست رد می‌شود")
 
 # ===== ۶: امانیِ ورودی بر اساسِ تامین‌کننده =====
 def consignment_in(counterparty, qty):
@@ -236,10 +236,10 @@ def consignment_in(counterparty, qty):
 c1, c1_line = consignment_in(supplier, 10)
 c2, c2_line = consignment_in(supplier2, 6)
 cons = {r.supplier_name: r.quantity for r in bal(plain, consignment_only=True)}
-check(cons == {"تامین‌کنندهٔ یک": 10, "تامین‌کنندهٔ دو": 6}, f"کالایِ امانی به تفکیکِ تامین‌کننده (got {cons})")
+check(cons == {"تامین‌کنندهٔ یک": 10, "تامین‌کنندهٔ دو": 6}, f"کالای امانی به تفکیک تامین‌کننده (got {cons})")
 consignment_service.return_unused_consignment_in(c2, company_id, user.user_id, {c2_line: D(2)}, today)
 cons = {r.supplier_name: r.quantity for r in bal(plain, consignment_only=True)}
-check(cons.get("تامین‌کنندهٔ دو") == 4 and cons.get("تامین‌کنندهٔ یک") == 10, f"بازگشت از امانیِ همان تامین‌کننده کم شد (got {cons})")
+check(cons.get("تامین‌کنندهٔ دو") == 4 and cons.get("تامین‌کنندهٔ یک") == 10, f"بازگشت از امانی همان تامین‌کننده کم شد (got {cons})")
 settle = documents_service.convert_to_invoice(c1, company_id, user.user_id, today, {c1_line: D(4)})
 documents_service.confirm_document(settle, company_id, user.user_id)
 settlements_service.auto_approve_settlement_plan(settle, company_id, user.user_id, [])
@@ -257,19 +257,19 @@ r3, r3_line = receipt(med, 5)
 dlg = LotTrackingDialog(None, company_id, med, "دارو", D(5), stock_line_id=r3_line)
 dlg.table.cellWidget(0, 0).setText("B-UI")
 dlg.table.cellWidget(0, 2).setDate(today + datetime.timedelta(days=100))
-check(dlg.table.rowHeight(0) >= 42, f"ردیف‌هایِ فرمِ ردیابی ارتفاعِ کافی دارند (got {dlg.table.rowHeight(0)})")
+check(dlg.table.rowHeight(0) >= 42, f"ردیف‌های فرم ردیابی ارتفاع کافی دارند (got {dlg.table.rowHeight(0)})")
 dlg._save()
-check([e.batch_no for e in lt.get_line_tracking(stock_line_id=r3_line)] == ["B-UI"], "دیالوگِ ردیابی بچ/انقضا را ذخیره کرد")
+check([e.batch_no for e in lt.get_line_tracking(stock_line_id=r3_line)] == ["B-UI"], "دیالوگ ردیابی بچ/انقضا را ذخیره کرد")
 from peecha.ui.screens.inventory_document import InventoryDocumentScreen
 inv_screen = InventoryDocumentScreen("RECEIPT", None)
 inv_screen.edit_document(r3)
 btn = inv_screen.lines_table.cellWidget(0, inv_screen.lines_table.columnCount() - 1)
-check(btn is not None and "ردیابی" in btn.text(), "دکمهٔ «ردیابی» رویِ ردیفِ رسیدِ انبار")
+check(btn is not None and "ردیابی" in btn.text(), "دکمهٔ «ردیابی» روی ردیف رسید انبار")
 trace_screen = mw._screens["lot_trace"]
 trace_screen.refresh()
-check(trace_screen.balance_table.rowCount() >= 4, f"صفحهٔ ردیابی موجودیِ بچ/سریال/امانی را نشان می‌دهد (got {trace_screen.balance_table.rowCount()})")
+check(trace_screen.balance_table.rowCount() >= 4, f"صفحهٔ ردیابی موجودی بچ/سریال/امانی را نشان می‌دهد (got {trace_screen.balance_table.rowCount()})")
 trace_screen.serial_field.setText("SN2"); trace_screen._load_trace()
-check(trace_screen.trace_table.rowCount() == 2, "جستجویِ سریال در صفحهٔ ردیابی")
+check(trace_screen.trace_table.rowCount() == 2, "جستجوی سریال در صفحهٔ ردیابی")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

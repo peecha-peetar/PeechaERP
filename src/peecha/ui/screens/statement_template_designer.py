@@ -1,10 +1,10 @@
-"""طراحِ الگویِ گزارشِ سفارشی (فازِ ۲) — «محیطِ ساختن»یِ درخواست‌شده برایِ
-اینکه صورتِ سود-زیان/ترازنامه/هرگزارشِ دیگر از رویِ اقلامِ ترکیبی (چند
-حسابِ دلخواه در هر سطحی: گروه/کل/معین، یا جمعِ چند ردیفِ دیگر) ساخته
-شود — مثلاً «موجودیِ اولِ دوره + خریدِ طیِ دوره» به‌عنوانِ یک قلم.
+"""طراح الگوی گزارش سفارشی (فاز ۲) — «محیط ساختن»ی درخواست‌شده برای
+اینکه صورت سود-زیان/ترازنامه/هرگزارش دیگر از روی اقلام ترکیبی (چند
+حساب دلخواه در هر سطحی: گروه/کل/معین، یا جمع چند ردیف دیگر) ساخته
+شود — مثلاً «موجودی اول دوره + خرید طی دوره» به‌عنوان یک قلم.
 
-چیدمانِ master-detail هم‌الگو با dimension_group_config.py: پنلِ چپ
-فهرستِ الگوها، پنلِ راست جدولِ ردیف‌هایِ الگویِ انتخاب‌شده."""
+چیدمان master-detail هم‌الگو با dimension_group_config.py: پنل چپ
+فهرست الگوها، پنل راست جدول ردیف‌های الگوی انتخاب‌شده."""
 
 from __future__ import annotations
 
@@ -39,23 +39,23 @@ _STATEMENT_TYPE_OPTIONS = [
     ("CUSTOM", "سفارشی"),
     ("INCOME_STATEMENT", "سود و زیان"),
     ("BALANCE_SHEET", "ترازنامه"),
-    ("CASH_FLOW", "گردشِ وجوهِ نقد"),
+    ("CASH_FLOW", "گردش وجوه نقد"),
 ]
 _STATEMENT_TYPE_LABELS = dict(_STATEMENT_TYPE_OPTIONS)
 
 _ROW_TYPE_OPTIONS = [
-    ("HEADER", "سرتیتر (بدونِ مبلغ)"),
-    ("ACCOUNTS", "اقلامِ حساب (جمعِ چند حساب)"),
-    ("FORMULA", "فرمول (جمعِ چند ردیفِ دیگر)"),
+    ("HEADER", "سرتیتر (بدون مبلغ)"),
+    ("ACCOUNTS", "اقلام حساب (جمع چند حساب)"),
+    ("FORMULA", "فرمول (جمع چند ردیف دیگر)"),
 ]
 _ROW_TYPE_LABELS = dict(_ROW_TYPE_OPTIONS)
 
 _ROW_COLUMNS = ["نوع", "برچسب", "تورفتگی", "بولد", ""]
 
 _ACCOUNT_SELECTOR_OPTIONS = [
-    ("ACCOUNT", "حسابِ مشخص"),
-    ("RANGE", "بازه‌یِ کد"),
-    ("CATEGORY", "طبقه‌یِ حساب"),
+    ("ACCOUNT", "حساب مشخص"),
+    ("RANGE", "بازهٔ کد"),
+    ("CATEGORY", "طبقهٔ حساب"),
 ]
 _ACCOUNT_LEVEL_OPTIONS = [(1, "گروه"), (2, "کل"), (3, "معین"), (4, "تفصیلی")]
 _ACCOUNT_LEVEL_LABELS = dict(_ACCOUNT_LEVEL_OPTIONS)
@@ -64,17 +64,17 @@ _CATEGORY_OPTIONS = [
     ("LIABILITY", "بدهی"),
     ("EQUITY", "حقوق صاحبان سهام"),
     ("REVENUE", "درآمد"),
-    ("COGS", "بهایِ تمام‌شده"),
+    ("COGS", "بهای تمام‌شده"),
     ("EXPENSE", "هزینه"),
-    ("STATISTICAL", "حساب‌هایِ آماری"),
+    ("STATISTICAL", "حساب‌های آماری"),
 ]
 _CATEGORY_LABELS = dict(_CATEGORY_OPTIONS)
 
 
 class _RefListWidget(QWidget):
-    """لیستِ اقلامِ انتخاب‌شده (حساب یا ردیفِ ارجاعی) با علامتِ +/− و حذف —
-    برایِ هردو حالتِ ACCOUNTS و FORMULA در دیالوگِ ویرایشِ ردیف استفاده
-    می‌شود (فقط گزینه‌هایِ combo فرق می‌کنند، منطق یکی است)."""
+    """لیست اقلام انتخاب‌شده (حساب یا ردیف ارجاعی) با علامت +/− و حذف —
+    برای هردو حالت ACCOUNTS و FORMULA در دیالوگ ویرایش ردیف استفاده
+    می‌شود (فقط گزینه‌های combo فرق می‌کنند، منطق یکی است)."""
 
     def __init__(self, options: list[tuple[int, str]]) -> None:
         super().__init__()
@@ -116,7 +116,7 @@ class _RefListWidget(QWidget):
         remove_button = QPushButton("🗑️")
         remove_button.setObjectName("dangerIconButton")
         remove_button.setFixedWidth(44)
-        remove_button.setToolTip("حذفِ موردِ انتخاب‌شده")
+        remove_button.setToolTip("حذف مورد انتخاب‌شده")
         remove_button.clicked.connect(self._on_remove_selected)
         layout.addWidget(remove_button)
 
@@ -152,9 +152,9 @@ class _RefListWidget(QWidget):
 
 
 class _AccountRefListWidget(QWidget):
-    """لیستِ اجزایِ حسابیِ یک ردیفِ ACCOUNTS — گزارش‌سازِ پیشرفته: هر جزء
-    یا یک حسابِ مشخص، یا یک بازه‌یِ کد در یک سطح، یا کلِ یک طبقه (دارایی/
-    بدهی/...) در یک سطح است؛ کنترل‌هایِ ورودی بسته به نوعِ انتخابی
+    """لیست اجزای حسابی یک ردیف ACCOUNTS — گزارش‌ساز پیشرفته: هر جزء
+    یا یک حساب مشخص، یا یک بازهٔ کد در یک سطح، یا کل یک طبقه (دارایی/
+    بدهی/...) در یک سطح است؛ کنترل‌های ورودی بسته به نوع انتخابی
     نمایش/مخفی می‌شوند."""
 
     def __init__(self, account_options: list[tuple[int, str]]) -> None:
@@ -190,10 +190,10 @@ class _AccountRefListWidget(QWidget):
             self.level_combo.addItem(label, level)
         range_row.addWidget(self.level_combo)
         self.code_from_field = QLineEdit()
-        self.code_from_field.setPlaceholderText("از کدِ...")
+        self.code_from_field.setPlaceholderText("از کد...")
         range_row.addWidget(self.code_from_field)
         self.code_to_field = QLineEdit()
-        self.code_to_field.setPlaceholderText("تا کدِ...")
+        self.code_to_field.setPlaceholderText("تا کد...")
         range_row.addWidget(self.code_to_field)
         layout.addLayout(range_row)
 
@@ -222,7 +222,7 @@ class _AccountRefListWidget(QWidget):
         remove_button = QPushButton("🗑️")
         remove_button.setObjectName("dangerIconButton")
         remove_button.setFixedWidth(44)
-        remove_button.setToolTip("حذفِ موردِ انتخاب‌شده")
+        remove_button.setToolTip("حذف مورد انتخاب‌شده")
         remove_button.clicked.connect(self._on_remove_selected)
         layout.addWidget(remove_button)
 
@@ -310,13 +310,13 @@ class _RowEditorDialog(QDialog):
         existing: statement_templates_service.StatementRowInfo | None = None,
     ) -> None:
         super().__init__()
-        self.setWindowTitle("ویرایشِ ردیف" if existing else "افزودنِ ردیفِ تازه")
+        self.setWindowTitle("ویرایش ردیف" if existing else "افزودن ردیف تازه")
         self.resize(560, 620)
 
         layout = QVBoxLayout(self)
 
         type_row = QHBoxLayout()
-        type_row.addWidget(QLabel("نوعِ ردیف:"))
+        type_row.addWidget(QLabel("نوع ردیف:"))
         self.row_type_combo = QComboBox()
         for code, label in _ROW_TYPE_OPTIONS:
             self.row_type_combo.addItem(label, code)
@@ -333,19 +333,19 @@ class _RowEditorDialog(QDialog):
         self.indent_spin = QSpinBox()
         self.indent_spin.setRange(0, 4)
         options_row.addWidget(self.indent_spin)
-        self.bold_checkbox = QCheckBox("نمایشِ بولد (زیرکل/جمعِ کل)")
+        self.bold_checkbox = QCheckBox("نمایش بولد (زیرکل/جمع کل)")
         options_row.addWidget(self.bold_checkbox)
         options_row.addStretch(1)
         layout.addLayout(options_row)
 
         self.accounts_label = QLabel(
-            "اجزایِ حساب: حسابِ مشخص، بازه‌یِ کد یا کلِ یک طبقه (دارایی/بدهی/...) در یک سطح:"
+            "اجزای حساب: حساب مشخص، بازهٔ کد یا کل یک طبقه (دارایی/بدهی/...) در یک سطح:"
         )
         layout.addWidget(self.accounts_label)
         self.accounts_widget = _AccountRefListWidget(account_options)
         layout.addWidget(self.accounts_widget)
 
-        self.formula_label = QLabel("اجزایِ فرمول (جمعِ ردیف‌هایِ دیگرِ همین الگو):")
+        self.formula_label = QLabel("اجزای فرمول (جمع ردیف‌های دیگر همین الگو):")
         layout.addWidget(self.formula_label)
         self.formula_widget = _RefListWidget(other_row_options)
         layout.addWidget(self.formula_widget)
@@ -397,14 +397,14 @@ class _RowEditorDialog(QDialog):
         # بسته می‌شد و هیچ ردیفی هم ساخته نمی‌شد (جدولِ اصلی خالی می‌ماند)،
         # بدونِ هیچ پیامی — حالا پیش از بستنِ دیالوگ اعتبارسنجی می‌شود.
         if not self.label_field.text().strip():
-            theme.set_status_label(self.error_label, "برچسبِ ردیف را وارد کنید.", ok=False)
+            theme.set_status_label(self.error_label, "برچسب ردیف را وارد کنید.", ok=False)
             return
         row_type = self.row_type_combo.currentData()
         if row_type == "ACCOUNTS" and not self.accounts_widget.refs():
-            theme.set_status_label(self.error_label, "دستِ‌کم یک حساب اضافه کنید.", ok=False)
+            theme.set_status_label(self.error_label, "دست‌کم یک حساب اضافه کنید.", ok=False)
             return
         if row_type == "FORMULA" and not self.formula_widget.refs():
-            theme.set_status_label(self.error_label, "دستِ‌کم یک ردیفِ دیگر برایِ فرمول اضافه کنید.", ok=False)
+            theme.set_status_label(self.error_label, "دست‌کم یک ردیف دیگر برای فرمول اضافه کنید.", ok=False)
             return
         self.accept()
 
@@ -433,19 +433,19 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.new_name_field,
-                "نامِ الگویِ تازه‌ای که می‌خواهید بسازید، مثلاً «صورتِ سود و زیانِ خلاصه».",
+                "نام الگوی تازه‌ای که می‌خواهید بسازید، مثلاً «صورت سود و زیان خلاصه».",
             ),
             (
                 self.new_type_combo,
-                "این الگو برایِ کدام نوع گزارش است. «سفارشی» یعنی هیچ‌کدام از گزارش‌هایِ استاندارد نیست.",
+                "این الگو برای کدام نوع گزارش است. «سفارشی» یعنی هیچ‌کدام از گزارش‌های استاندارد نیست.",
             ),
             (
                 self.templates_list,
-                "فهرستِ الگوهایِ ساخته‌شده. رویِ هرکدام کلیک کنید تا ردیف‌هایش را در سمتِ راست ببینید و ویرایش کنید.",
+                "فهرست الگوهای ساخته‌شده. روی هرکدام کلیک کنید تا ردیف‌هایش را در سمت راست ببینید و ویرایش کنید.",
             ),
             (
                 self.rename_field,
-                "نامِ تازه برایِ الگویِ انتخاب‌شده. برایِ اعمال، دکمه‌ی «تغییرِ نام» را بزنید.",
+                "نام تازه برای الگوی انتخاب‌شده. برای اعمال، دکمهٔ «تغییر نام» را بزنید.",
             ),
         ])
 
@@ -454,12 +454,12 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         panel.setMaximumWidth(300)
         layout = QVBoxLayout(panel)
 
-        title = QLabel("طراحیِ الگویِ گزارش")
+        title = QLabel("طراحی الگوی گزارش")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         self.new_name_field = QLineEdit()
-        self.new_name_field.setPlaceholderText("نامِ الگویِ تازه...")
+        self.new_name_field.setPlaceholderText("نام الگوی تازه...")
         layout.addWidget(self.new_name_field)
 
         self.new_type_combo = QComboBox()
@@ -469,7 +469,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
 
         add_template_button = QPushButton("➕")
         add_template_button.setObjectName("primaryButton")
-        add_template_button.setToolTip("افزودنِ الگو")
+        add_template_button.setToolTip("افزودن الگو")
         add_template_button.clicked.connect(self._on_add_template)
         layout.addWidget(add_template_button)
 
@@ -483,7 +483,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         rename_button = QPushButton("✏️")
         rename_button.setObjectName("iconButton")
         rename_button.setFixedWidth(44)
-        rename_button.setToolTip("تغییرِ نام")
+        rename_button.setToolTip("تغییر نام")
         rename_button.clicked.connect(self._on_rename_template)
         rename_row.addWidget(rename_button)
         layout.addLayout(rename_row)
@@ -491,7 +491,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         delete_template_button = QPushButton("🗑️")
         delete_template_button.setObjectName("dangerIconButton")
         delete_template_button.setFixedWidth(44)
-        delete_template_button.setToolTip("حذفِ الگو")
+        delete_template_button.setToolTip("حذف الگو")
         delete_template_button.clicked.connect(self._on_delete_template)
         layout.addWidget(delete_template_button)
 
@@ -505,7 +505,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
-        self.rows_title = QLabel("ردیف‌هایِ الگو")
+        self.rows_title = QLabel("ردیف‌های الگو")
         self.rows_title.setObjectName("sectionHint")
         layout.addWidget(self.rows_title)
 
@@ -525,7 +525,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
 
         add_row_button = QPushButton("➕")
         add_row_button.setObjectName("primaryButton")
-        add_row_button.setToolTip("افزودنِ ردیف")
+        add_row_button.setToolTip("افزودن ردیف")
         add_row_button.clicked.connect(self._on_add_row)
         layout.addWidget(add_row_button)
 

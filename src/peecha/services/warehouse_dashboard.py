@@ -1,8 +1,8 @@
-"""داشبوردِ انبار -- R246.
+"""داشبورد انبار — R246.
 
-مثلِ داشبوردِ خرید، هر شاخص و نمودار از خروجیِ همان گزارش‌هایِ services/warehouse_reports
-(و دو گزارشِ موجودِ خرید/فروش) ساخته می‌شود و کدِ گزارشِ مبدا را برایِ Drill-down دارد؛
-پس عددِ داشبورد همیشه با گزارشِ مربوط یکی است و منطقِ محاسبهٔ جدیدی ندارد.
+مثل داشبورد خرید، هر شاخص و نمودار از خروجی همان گزارش‌های services/warehouse_reports
+(و دو گزارش موجود خرید/فروش) ساخته می‌شود و کد گزارش مبدا را برای ریزنمایی دارد؛
+پس عدد داشبورد همیشه با گزارش مربوط یکی است و منطق محاسبهٔ جدیدی ندارد.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ SIDE = "INVENTORY"
 
 
 def run(company_id: int, code: str, date_from: datetime.date, date_to: datetime.date, **options) -> reports.ReportResult:
-    """همان قاعدهٔ صفحهٔ گزارش برایِ تاریخ (as_of = تا تاریخ، none = تا امروز)."""
+    """همان قاعدهٔ صفحهٔ گزارش برای تاریخ (as_of = تا تاریخ، none = تا امروز)."""
     mode = reports.report_def(code, SIDE).date_mode
     if mode == "none":
         date_from, date_to = _EPOCH, datetime.date.today()
@@ -36,8 +36,8 @@ def _sum(result: reports.ReportResult, header: str) -> decimal.Decimal:
 
 
 def _value_of(result: reports.ReportResult, qty_header: str) -> decimal.Decimal:
-    """ارزشِ بخشی از موجودی = ارزشِ ردیف × (مقدارِ آن بخش ÷ موجودیِ ردیف)."""
-    qi, ti, vi = column(result, qty_header), column(result, "موجودی"), column(result, "ارزشِ موجودی")
+    """ارزش بخشی از موجودی = ارزش ردیف × (مقدار آن بخش ÷ موجودی ردیف)."""
+    qi, ti, vi = column(result, qty_header), column(result, "موجودی"), column(result, "ارزش موجودی")
     return sum(((decimal.Decimal(r[vi]) * decimal.Decimal(r[qi]) / decimal.Decimal(r[ti])).quantize(decimal.Decimal("0.01"))
                 for r in result.rows if r[qi] and r[ti]), _ZERO)
 
@@ -64,65 +64,65 @@ def kpis(company_id: int, date_from: datetime.date, date_to: datetime.date, cach
             if i.is_stock_tracked and i.item_kind_code != "SERVICE"]
     fast = c("ABC", basis="FREQ")
     out = [
-        Kpi("VALUE", "ارزشِ کلِ موجودی", _sum(c("VALUATION", by="WAREHOUSE"), "ارزش"), "MONEY", "VALUATION", "Σ ارزشِ ماندهٔ کالاها"),
-        Kpi("SKU", "تعدادِ SKU", len(skus), "INT", "MD_TRACKED", "کالاهایِ انبارداریِ قابلِ معامله", {"kind": "ANY"}),
-        Kpi("IN_STOCK", "کالاهایِ موجود", len(positive_items), "INT", "STOCK_ON_HAND", "کالاهایِ با موجودیِ مثبت", {"state": "POSITIVE"}),
-        Kpi("ZERO", "کالاهایِ بدونِ موجودی", len(c("ZERO_STOCK").rows), "INT", "ZERO_STOCK", "موجودیِ کل = صفر"),
-        Kpi("NEGATIVE", "موجودیِ منفی", len(c("NEGATIVE_STOCK").rows), "INT", "NEGATIVE_STOCK", "ردیف‌هایِ کالا×انبارِ منفی"),
-        Kpi("RESERVED", "ارزشِ موجودیِ رزرو", _value_of(on_hand, "رزرو"), "MONEY", "RESERVED_STOCK", "ارزش × سهمِ رزرو از موجودی"),
-        Kpi("FREE", "ارزشِ موجودیِ آزاد", _value_of(on_hand, "آزاد"), "MONEY", "FREE_STOCK", "ارزش × سهمِ آزاد از موجودی"),
-        Kpi("QUARANTINE", "ارزشِ موجودیِ قرنطینه", _value_of(on_hand, "قرنطینه"), "MONEY", "QUARANTINE_STOCK", "موجودیِ انبارهایِ قرنطینه"),
-        Kpi("BLOCKED", "ارزشِ موجودیِ مسدود", _value_of(on_hand, "مسدود"), "MONEY", "QUARANTINE_STOCK", "انبارهایِ ضایعات/غیرفعال"),
-        Kpi("CONSIGNMENT", "اقلامِ امانی", len(c("CONSIGNMENT_STOCK").rows), "INT", "CONSIGNMENT_STOCK", "ردیف‌هایِ امانیِ تسویه‌نشده"),
-        Kpi("LOW", "کالاهایِ کم‌موجودی", sum(1 for r in c("REORDER", view="ALL").rows
+        Kpi("VALUE", "ارزش کل موجودی", _sum(c("VALUATION", by="WAREHOUSE"), "ارزش"), "MONEY", "VALUATION", "Σ ارزش ماندهٔ کالاها"),
+        Kpi("SKU", "تعداد کد کالا", len(skus), "INT", "MD_TRACKED", "کالاهای انبارداری قابل معامله", {"kind": "ANY"}),
+        Kpi("IN_STOCK", "کالاهای موجود", len(positive_items), "INT", "STOCK_ON_HAND", "کالاهای با موجودی مثبت", {"state": "POSITIVE"}),
+        Kpi("ZERO", "کالاهای بدون موجودی", len(c("ZERO_STOCK").rows), "INT", "ZERO_STOCK", "موجودی کل = صفر"),
+        Kpi("NEGATIVE", "موجودی منفی", len(c("NEGATIVE_STOCK").rows), "INT", "NEGATIVE_STOCK", "ردیف‌های کالا×انبار منفی"),
+        Kpi("RESERVED", "ارزش موجودی رزرو", _value_of(on_hand, "رزرو"), "MONEY", "RESERVED_STOCK", "ارزش × سهم رزرو از موجودی"),
+        Kpi("FREE", "ارزش موجودی آزاد", _value_of(on_hand, "آزاد"), "MONEY", "FREE_STOCK", "ارزش × سهم آزاد از موجودی"),
+        Kpi("QUARANTINE", "ارزش موجودی قرنطینه", _value_of(on_hand, "قرنطینه"), "MONEY", "QUARANTINE_STOCK", "موجودی انبارهای قرنطینه"),
+        Kpi("BLOCKED", "ارزش موجودی مسدود", _value_of(on_hand, "مسدود"), "MONEY", "QUARANTINE_STOCK", "انبارهای ضایعات/غیرفعال"),
+        Kpi("CONSIGNMENT", "اقلام امانی", len(c("CONSIGNMENT_STOCK").rows), "INT", "CONSIGNMENT_STOCK", "ردیف‌های امانی تسویه‌نشده"),
+        Kpi("LOW", "کالاهای کم‌موجودی", sum(1 for r in c("REORDER", view="ALL").rows
                                               if r[6] is not None and r[4] < r[6]), "INT", "REORDER", "آزاد < حداقل (ذخیرهٔ اطمینان)",
             {"view": "ALL"}),
-        Kpi("ROP", "زیرِ نقطهٔ سفارش", len(c("REORDER").rows), "INT", "REORDER", "آزاد ≤ نقطهٔ سفارش"),
-        Kpi("OVER", "کالاهایِ مازاد", len(c("OVERSTOCK").rows), "INT", "OVERSTOCK", "بیش از حداکثر/تقاضا"),
-        Kpi("DEAD", "کالاهایِ راکد", len(c("DEAD_STOCK").rows), "INT", "DEAD_STOCK", "بدونِ خروج در بازه"),
-        Kpi("SLOW", "کالاهایِ کندگردش", len(c("SLOW_MOVING").rows), "INT", "SLOW_MOVING", "خروجِ کم در ۹۰ روز"),
-        Kpi("FAST", "کالاهایِ تندگردش", sum(1 for r in fast.rows if r[-1] == "A"), "INT", "ABC", "کلاسِ A بر مبنایِ دفعاتِ گردش",
+        Kpi("ROP", "زیر نقطهٔ سفارش", len(c("REORDER").rows), "INT", "REORDER", "آزاد ≤ نقطهٔ سفارش"),
+        Kpi("OVER", "کالاهای مازاد", len(c("OVERSTOCK").rows), "INT", "OVERSTOCK", "بیش از حداکثر/تقاضا"),
+        Kpi("DEAD", "کالاهای راکد", len(c("DEAD_STOCK").rows), "INT", "DEAD_STOCK", "بدون خروج در بازه"),
+        Kpi("SLOW", "کالاهای کندگردش", len(c("SLOW_MOVING").rows), "INT", "SLOW_MOVING", "خروج کم در ۹۰ روز"),
+        Kpi("FAST", "کالاهای تندگردش", sum(1 for r in fast.rows if r[-1] == "A"), "INT", "ABC", "کلاس A بر مبنای دفعات گردش",
             {"basis": "FREQ"}),
-        Kpi("NEAR_EXPIRY", "نزدیکِ انقضا (۳۰ روز)", len(c("EXPIRY", window="30").rows), "INT", "EXPIRY", "انقضا ≤ ۳۰ روز",
+        Kpi("NEAR_EXPIRY", "نزدیک انقضا (۳۰ روز)", len(c("EXPIRY", window="30").rows), "INT", "EXPIRY", "انقضا ≤ ۳۰ روز",
             {"window": "30"}),
-        Kpi("EXPIRED", "منقضی‌شده", len(c("EXPIRY", window="EXPIRED").rows), "INT", "EXPIRY", "تاریخِ انقضا گذشته",
+        Kpi("EXPIRED", "منقضی‌شده", len(c("EXPIRY", window="EXPIRED").rows), "INT", "EXPIRY", "تاریخ انقضا گذشته",
             {"window": "EXPIRED"}),
-        Kpi("OPEN_RECEIPTS", "رسیدهایِ باز", len(c("RECEIVING", view="OPEN").rows), "INT", "RECEIVING", "ثبت‌نشده یا منتظرِ تاییدِ انبار",
+        Kpi("OPEN_RECEIPTS", "رسیدهای باز", len(c("RECEIVING", view="OPEN").rows), "INT", "RECEIVING", "ثبت‌نشده یا منتظر تایید انبار",
             {"view": "OPEN"}),
-        Kpi("OPEN_ISSUES", "حواله‌هایِ باز", len(c("ISSUES", view="OPEN").rows), "INT", "ISSUES", "ثبت‌نشده یا منتظرِ حواله",
+        Kpi("OPEN_ISSUES", "حواله‌های باز", len(c("ISSUES", view="OPEN").rows), "INT", "ISSUES", "ثبت‌نشده یا منتظر حواله",
             {"view": "OPEN"}),
-        Kpi("TRANSFERS", "انتقال‌هایِ در انتظار", len(c("TRANSFERS", view="PENDING").rows), "INT", "TRANSFERS", "انتقالِ ثبت‌نشده",
+        Kpi("TRANSFERS", "انتقال‌های در انتظار", len(c("TRANSFERS", view="PENDING").rows), "INT", "TRANSFERS", "انتقال ثبت‌نشده",
             {"view": "PENDING"}),
-        Kpi("COUNTS", "شمارش‌هایِ باز", len(c("STOCK_COUNTS", view="OPEN").rows) + len(c("STOCK_COUNTS", view="UNAPPROVED").rows),
+        Kpi("COUNTS", "شمارش‌های باز", len(c("STOCK_COUNTS", view="OPEN").rows) + len(c("STOCK_COUNTS", view="UNAPPROVED").rows),
             "INT", "STOCK_COUNTS", "باز + شمارش‌شدهٔ تاییدنشده"),
-        Kpi("VARIANCE", "مغایرت‌هایِ موجودی", len(c("VARIANCE").rows), "INT", "VARIANCE", "ردیف‌هایِ شمارشِ دارایِ اختلاف در بازه"),
+        Kpi("VARIANCE", "مغایرت‌های موجودی", len(c("VARIANCE").rows), "INT", "VARIANCE", "ردیف‌های شمارش دارای اختلاف در بازه"),
         # R247
-        Kpi("PUTAWAY", "جانمایی‌هایِ در انتظار", len(c("UNLOCATED_STOCK").rows), "INT", "UNLOCATED_STOCK",
-            "کالاهایِ ماندهٔ محلِ دریافت یا با وظیفهٔ جانماییِ باز"),
-        Kpi("PICKS", "برداشت‌هایِ باز", sum(1 for r in c("PICKING").rows if r[8] in ("باز", "در حالِ انجام")), "INT", "PICKING",
-            "وظایفِ برداشتِ باز یا در حالِ انجام در بازه"),
-        Kpi("COUNT_DUE", "شمارش‌هایِ سررسیدشده", len(c("CYCLE_COUNT_DUE").rows), "INT", "CYCLE_COUNT_DUE",
-            "اقلامِ برنامهٔ شمارشِ دوره‌ای که موعدشان رسیده"),
+        Kpi("PUTAWAY", "جانمایی‌های در انتظار", len(c("UNLOCATED_STOCK").rows), "INT", "UNLOCATED_STOCK",
+            "کالاهای ماندهٔ محل دریافت یا با وظیفهٔ جانمایی باز"),
+        Kpi("PICKS", "برداشت‌های باز", sum(1 for r in c("PICKING").rows if r[8] in ("باز", "در حال انجام")), "INT", "PICKING",
+            "وظایف برداشت باز یا در حال انجام در بازه"),
+        Kpi("COUNT_DUE", "شمارش‌های سررسیدشده", len(c("CYCLE_COUNT_DUE").rows), "INT", "CYCLE_COUNT_DUE",
+            "اقلام برنامهٔ شمارش دوره‌ای که موعدشان رسیده"),
     ]
     return out
 
 
 CHART_TITLES = (
-    ("value_trend", "ارزشِ موجودی در طولِ زمان", "VALUE_TREND", {}),
-    ("in_out", "ورود و خروجِ کالا (ماهانه)", "ITEM_MOVEMENT", {}),
-    ("by_warehouse", "تعدادِ کالا به تفکیکِ انبار", "STOCK_BY_WAREHOUSE", {}),
-    ("by_category", "موجودی به تفکیکِ گروهِ کالا", "VALUATION", {"by": "CATEGORY"}),
-    ("abc", "ABC موجودی (ارزشِ مصرف)", "ABC", {}),
-    ("aging", "سنِ موجودی (ارزش)", "STOCK_AGING", {}),
-    ("slow", "کالاهایِ کم‌گردش (ارزش)", "SLOW_MOVING", {}),
-    ("dead", "کالاهایِ راکد (ارزش)", "DEAD_STOCK", {}),
-    ("utilization", "استفاده از ظرفیتِ انبار", "CAPACITY", {}),
-    ("variance", "مغایرتِ موجودی (ارزشِ ماهانه)", "ACCURACY", {"by": "MONTH"}),
-    ("fast20", "۲۰ کالایِ تندگردش", "ABC", {"basis": "FREQ"}),
-    ("slow20", "۲۰ کالایِ کندگردش", "SLOW_MOVING", {}),
-    ("near_rop", "کالاهایِ نزدیک به نقطهٔ سفارش", "REORDER", {"view": "ALL"}),
-    ("qty_trend", "روندِ ماهانهٔ مقدارِ موجودی", "VALUE_TREND", {}),
-    ("value_by_wh", "ارزشِ موجودی به تفکیکِ انبار", "VALUATION", {"by": "WAREHOUSE"}),
+    ("value_trend", "ارزش موجودی در طول زمان", "VALUE_TREND", {}),
+    ("in_out", "ورود و خروج کالا (ماهانه)", "ITEM_MOVEMENT", {}),
+    ("by_warehouse", "تعداد کالا به تفکیک انبار", "STOCK_BY_WAREHOUSE", {}),
+    ("by_category", "موجودی به تفکیک گروه کالا", "VALUATION", {"by": "CATEGORY"}),
+    ("abc", "ABC موجودی (ارزش مصرف)", "ABC", {}),
+    ("aging", "سن موجودی (ارزش)", "STOCK_AGING", {}),
+    ("slow", "کالاهای کم‌گردش (ارزش)", "SLOW_MOVING", {}),
+    ("dead", "کالاهای راکد (ارزش)", "DEAD_STOCK", {}),
+    ("utilization", "استفاده از ظرفیت انبار", "CAPACITY", {}),
+    ("variance", "مغایرت موجودی (ارزش ماهانه)", "ACCURACY", {"by": "MONTH"}),
+    ("fast20", "۲۰ کالای تندگردش", "ABC", {"basis": "FREQ"}),
+    ("slow20", "۲۰ کالای کندگردش", "SLOW_MOVING", {}),
+    ("near_rop", "کالاهای نزدیک به نقطهٔ سفارش", "REORDER", {"view": "ALL"}),
+    ("qty_trend", "روند ماهانهٔ مقدار موجودی", "VALUE_TREND", {}),
+    ("value_by_wh", "ارزش موجودی به تفکیک انبار", "VALUATION", {"by": "WAREHOUSE"}),
 )
 
 

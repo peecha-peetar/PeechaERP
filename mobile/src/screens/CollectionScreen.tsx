@@ -115,10 +115,10 @@ export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: 
           ],
         },
       });
-      toast.show("وصول ثبت شد و در صفِ همگام‌سازی قرار گرفت.", "success");
+      toast.show("وصول ثبت شد و در صف همگام‌سازی قرار گرفت.", "success");
       onDone();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "ثبتِ وصول ناموفق بود.");
+      setError(e instanceof ApiError ? e.message : "ثبت وصول ناموفق بود.");
     } finally {
       setBusy(false);
     }
@@ -126,7 +126,7 @@ export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: 
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.lg }}>
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>ثبتِ وصول</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>ثبت وصول</Text>
       <Text style={[typography.body, { color: colors.textSecondary }]}>{customer.name}</Text>
 
       <View style={{ flexDirection: "row", gap: spacing.sm }}>
@@ -145,7 +145,7 @@ export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: 
 
       {requiresDetail && detailOptions.length > 0 ? (
         <View>
-          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>صندوق/حسابِ مقصد</Text>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>صندوق/حساب مقصد</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
             {detailOptions.map((o) => (
               <Chip key={o.detail_account_id} label={o.name} selected={detailAccountId === o.detail_account_id} onPress={() => setDetailAccountId(o.detail_account_id)} />
@@ -156,7 +156,7 @@ export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: 
 
       {method === "CHECK" ? (
         <>
-          <Input label="شماره‌یِ چک *" value={checkNo} onChangeText={setCheckNo} />
+          <Input label="شمارهٔ چک *" value={checkNo} onChangeText={setCheckNo} />
           <View>
             <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>بانک</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
@@ -164,10 +164,10 @@ export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: 
                 <Chip key={b.bank_id} label={b.name} selected={bankId === b.bank_id} onPress={() => setBankId(bankId === b.bank_id ? null : b.bank_id)} />
               ))}
             </View>
-            {bankId === null ? <Input label="نامِ بانک (اگر در فهرست نیست)" value={checkBankName} onChangeText={setCheckBankName} /> : null}
+            {bankId === null ? <Input label="نام بانک (اگر در فهرست نیست)" value={checkBankName} onChangeText={setCheckBankName} /> : null}
           </View>
           <Input label="سررسید (۱۴۰۵/۰۸/۱۵)" value={checkDueDate} onChangeText={setCheckDueDate} numeric />
-          <Input label="نامِ صاحبِ چک" value={checkPartyName} onChangeText={setCheckPartyName} />
+          <Input label="نام صاحب چک" value={checkPartyName} onChangeText={setCheckPartyName} />
         </>
       ) : null}
 
@@ -179,7 +179,7 @@ export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: 
         </Card>
       ) : null}
 
-      <Button label="ثبتِ وصول" onPress={submit} loading={busy} disabled={!canSubmit} />
+      <Button label="ثبت وصول" onPress={submit} loading={busy} disabled={!canSubmit} />
     </View>
   );
 }

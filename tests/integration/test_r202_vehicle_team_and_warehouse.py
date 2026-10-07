@@ -53,16 +53,16 @@ from peecha.services import vehicle_team as vehicle_team_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
-k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
@@ -73,15 +73,15 @@ csettings_service.set_account_mapping(company_id, "SALES_REVENUE", revenue_gl.ac
 # کاربر («هیچ کنترلی از موجودیِ خودرو وجود ندارد»): باید نشان دهیم
 # /auth/me انبارِ خودروی همان ویزیتور را برمی‌گرداند، نه انبارِ مرکزی.
 central_warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-MAIN", "انبارِ مرکزی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
+    company_id, "WH-MAIN", "انبار مرکزی", locations_service.WarehouseFields(allow_negative_stock=True, is_default=True),
 )
 vehicle_warehouse_id = locations_service.create_warehouse(
-    company_id, "VEH-1", "خودرویِ ۱", locations_service.WarehouseFields(warehouse_type_code="VEHICLE", allow_negative_stock=True),
+    company_id, "VEH-1", "خودروی ۱", locations_service.WarehouseFields(warehouse_type_code="VEHICLE", allow_negative_stock=True),
 )
-van_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرمِ آزمایشی", "VAN_SALES")
-customer = partners_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی", fast_track=True)
+van_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخش گرم آزمایشی", "VAN_SALES")
+customer = partners_service.create_customer(company_id, "C-1", "مشتری آزمایشی", fast_track=True)
 
-visitor = users_service.create_user("visitor_van", "ویزیتورِ پخشِ گرم", "secret123", None, lang_id, False, [company_id], company_id)
+visitor = users_service.create_user("visitor_van", "ویزیتور پخش گرم", "secret123", None, lang_id, False, [company_id], company_id)
 driver = users_service.create_user("driver_van", "راننده", "secret123", None, lang_id, False, [company_id], company_id)
 users_service.set_mobile_channel_type(visitor.user_id, company_id, "VAN_SALES")
 
@@ -106,7 +106,7 @@ visitor_token = login("visitor_van")
 resp = client.get("/auth/me", headers=auth(visitor_token))
 check(
     resp.status_code == 200 and resp.json()["assigned_vehicle_warehouse_id"] is None,
-    f"قبلِ تخصیص، assigned_vehicle_warehouse_id=None است (body={resp.text})",
+    f"قبل تخصیص، assigned_vehicle_warehouse_id=None است (body={resp.text})",
 )
 
 # ۲. تخصیصِ سه نقش -- طبقِ درخواستِ صریحِ کاربر («ممکنه هر سه نقش را
@@ -125,15 +125,15 @@ check(team.distributor_user_id == visitor.user_id, f"موزع (همان ویزی
 resp = client.get("/auth/me", headers=auth(visitor_token))
 check(
     resp.status_code == 200 and resp.json()["assigned_vehicle_warehouse_id"] == vehicle_warehouse_id,
-    f"بعدِ تخصیص، انبارِ خودرو برگشت (body={resp.text})",
+    f"بعد تخصیص، انبار خودرو برگشت (body={resp.text})",
 )
-check(resp.json()["assigned_vehicle_warehouse_id"] != central_warehouse_id, "انبارِ خودرو با انبارِ مرکزی اشتباه گرفته نشده")
+check(resp.json()["assigned_vehicle_warehouse_id"] != central_warehouse_id, "انبار خودرو با انبار مرکزی اشتباه گرفته نشده")
 
 # ۴. سفارش با warehouse_id=انبارِ خودرو باید موفق شود (هم‌الگو با
 # جریانِ واقعیِ موبایل بعدِ این رفع).
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی",
+    company_id, "9101", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 order = {
@@ -150,7 +150,7 @@ order = {
 # warehouse_id=انبارِ خودرو خودش مشکلی ایجاد نمی‌کند.
 admin_token = login("admin")
 resp = client.post("/orders", headers=auth(admin_token), json=order)
-check(resp.status_code == 200, f"سفارش با انبارِ خودرو موفق بود (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"سفارش با انبار خودرو موفق بود (status={resp.status_code}, body={resp.text})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

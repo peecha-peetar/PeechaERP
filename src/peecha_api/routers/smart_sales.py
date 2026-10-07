@@ -1,6 +1,6 @@
-"""نقطهٔ اتصالِ موبایل به زیرساختِ Smart Sales (Phase 9) -- رویِ همان
-services/smart_sales.py؛ همیشه enabled=false برمی‌گرداند تا مدلِ واقعی
-وصل شود (طبقِ درخواستِ صریح: پیاده‌سازیِ واقعیِ AI در این فاز نیست)."""
+"""نقطهٔ اتصال موبایل به زیرساخت Smart Sales (Phase 9) — روی همان
+services/smart_sales.py؛ همیشه enabled=false برمی‌گرداند تا مدل واقعی
+وصل شود (طبق درخواست صریح: پیاده‌سازی واقعی AI در این فاز نیست)."""
 
 from __future__ import annotations
 

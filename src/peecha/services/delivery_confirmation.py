@@ -1,10 +1,10 @@
-"""پخشِ سرد/گرم -- R129، بخشِ تاییدِ تحویل (Proof of Delivery). طبقِ
-سندِ کاربر: امضا/عکس/GPS/ساعت/مقدارِ واقعیِ تحویلی رویِ یک فاکتورِ
-فروشِ ثبت‌شده -- بدونِ اینکه چیزی از خودِ سندِ بازرگانی/مالی تغییر کند؛
-این فقط یک لایهٔ اثباتِ جداگانه رویِ همان سندِ موجود است. کسری/مغایرت
-(delivered_quantity < مقدارِ فاکتورشده) این‌جا فقط ثبت می‌شود، نه
-اصلاحِ خودکارِ فاکتور -- اصلاحِ واقعی از طریقِ همان مکانیزمِ برگشت‌ازفروش/
-اصلاحِ فاکتورِ موجود انجام می‌شود."""
+"""پخش سرد/گرم — R129، بخش تایید تحویل (Proof of Delivery). طبق
+سند کاربر: امضا/عکس/GPS/ساعت/مقدار واقعی تحویلی روی یک فاکتور
+فروش ثبت‌شده — بدون اینکه چیزی از خود سند بازرگانی/مالی تغییر کند؛
+این فقط یک لایهٔ اثبات جداگانه روی همان سند موجود است. کسری/مغایرت
+(delivered_quantity < مقدار فاکتورشده) این‌جا فقط ثبت می‌شود، نه
+اصلاح خودکار فاکتور — اصلاح واقعی از طریق همان مکانیزم برگشت‌ازفروش/
+اصلاح فاکتور موجود انجام می‌شود."""
 
 from __future__ import annotations
 
@@ -60,16 +60,16 @@ def create_delivery_confirmation(
     doc, doc_lines = documents_service.get_document(document_id, company_id)
     valid_line_ids = {line.line_id for line in doc_lines}
     if not lines:
-        raise ValueError("حداقل یک ردیفِ تحویل لازم است.")
+        raise ValueError("حداقل یک ردیف تحویل لازم است.")
     for line_fields in lines:
         if line_fields.document_line_id not in valid_line_ids:
-            raise ValueError("ردیفِ سند نامعتبر است.")
+            raise ValueError("ردیف سند نامعتبر است.")
         if line_fields.delivered_quantity < 0:
-            raise ValueError("مقدارِ تحویلی نمی‌تواند منفی باشد.")
+            raise ValueError("مقدار تحویلی نمی‌تواند منفی باشد.")
     with new_session() as session:
         existing = session.scalar(select(DeliveryConfirmation).where(DeliveryConfirmation.document_id == document_id))
         if existing is not None:
-            raise ValueError("این سند قبلاً تاییدِ تحویل دارد.")
+            raise ValueError("این سند قبلاً تایید تحویل دارد.")
         confirmation = DeliveryConfirmation(
             company_id=company_id, document_id=document_id, customer_visit_id=customer_visit_id,
             confirmed_by_user_id=confirmed_by_user_id, received_by_name=received_by_name or None,

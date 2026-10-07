@@ -1,13 +1,13 @@
-"""طبقِ بازخوردِ کاربر رویِ R220 («ثبتِ مختصات باید رویِ نقشه باشد، نه
-تایپِ عدد»): دیالوگِ انتخابِ موقعیتِ مکانی با کلیک/درگ رویِ نقشه.
+"""طبق بازخورد کاربر روی R220 («ثبت مختصات باید روی نقشه باشد، نه
+تایپ عدد»): دیالوگ انتخاب موقعیت مکانی با کلیک/درگ روی نقشه.
 
-تصمیمِ سرویسِ نقشه (طبقِ پاسخِ صریحِ کاربر): OpenStreetMap با کتابخانه‌یِ
-Leaflet -- رایگان و بدونِ نیاز به ثبت‌نام/کلیدِ API. کتابخانه (JS/CSS/
-آیکن‌ها) به‌صورتِ محلی وندور شده (src/peecha/ui/vendor/leaflet/) تا فقط
-خودِ کاشی‌هایِ نقشه (تصاویرِ نقشه) نیازمندِ اینترنت باشند، نه کتابخانه.
-کاربر توجه داده که این مسیر (دسترسیِ tile.openstreetmap.org از داخلِ
-ایران) باید عملاً تست شود -- در صورتِ فیلترینگ، جایگزینیِ آدرسِ کاشی با
-یک ارائه‌دهنده‌یِ دیگر (Neshan/Map.ir) در همین یک تابع کافی است."""
+تصمیم سرویس نقشه (طبق پاسخ صریح کاربر): OpenStreetMap با کتابخانهٔ
+Leaflet — رایگان و بدون نیاز به ثبت‌نام/کلید API. کتابخانه (JS/CSS/
+آیکن‌ها) به‌صورت محلی وندور شده (src/peecha/ui/vendor/leaflet/) تا فقط
+خود کاشی‌های نقشه (تصاویر نقشه) نیازمند اینترنت باشند، نه کتابخانه.
+کاربر توجه داده که این مسیر (دسترسی tile.openstreetmap.org از داخل
+ایران) باید عملاً تست شود — در صورت فیلترینگ، جایگزینی آدرس کاشی با
+یک ارائه‌دهندهٔ دیگر (Neshan/Map.ir) در همین یک تابع کافی است."""
 
 from __future__ import annotations
 
@@ -36,9 +36,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <div id="map"></div>
 <script src="leaflet.js"></script>
 <script>
-  // طبقِ رفتارِ شناخته‌شده‌یِ Leaflet (تشخیصِ خودکارِ مسیرِ آیکن‌ها از
-  // رویِ src اسکریپت، که در HTMLِ محلی همیشه درست کار نمی‌کند): مسیر
-  // را صریحاً تنظیم می‌کنیم تا نشانگرِ پیش‌فرض قطعاً نمایش داده شود.
+  // طبق رفتار شناخته‌شدهٔ Leaflet (تشخیص خودکار مسیر آیکن‌ها از
+  // روی src اسکریپت، که در HTML محلی همیشه درست کار نمی‌کند): مسیر
+  // را صریحاً تنظیم می‌کنیم تا نشانگر پیش‌فرض قطعاً نمایش داده شود.
   L.Icon.Default.mergeOptions({{ imagePath: 'images/' }});
   var map = L.map('map').setView([{lat}, {lon}], {zoom});
   L.tileLayer('https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
@@ -60,12 +60,12 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 class MapPickerDialog(QDialog):
-    """دیالوگِ مودالِ انتخابِ مختصات؛ بعدِ exec()، نتیجه در
-    result_lat/result_lon است (اگر کاربر لغو کند، همان مقادیرِ اولیه)."""
+    """دیالوگ مودال انتخاب مختصات؛ بعد exec()، نتیجه در
+    result_lat/result_lon است (اگر کاربر لغو کند، همان مقادیر اولیه)."""
 
     def __init__(self, parent=None, initial_lat: float | None = None, initial_lon: float | None = None):
         super().__init__(parent)
-        self.setWindowTitle("انتخابِ موقعیتِ مکانی رویِ نقشه")
+        self.setWindowTitle("انتخاب موقعیت مکانی روی نقشه")
         self.resize(760, 580)
         self.result_lat = initial_lat
         self.result_lon = initial_lon
@@ -80,7 +80,7 @@ class MapPickerDialog(QDialog):
         self.view.setHtml(html, QUrl.fromLocalFile(str(_VENDOR_DIR) + "/"))
         layout.addWidget(self.view, stretch=1)
 
-        self.hint_label = QLabel("رویِ نقشه کلیک کنید یا نشانگر را جابه‌جا کنید، سپس «تایید» را بزنید.")
+        self.hint_label = QLabel("روی نقشه کلیک کنید یا نشانگر را جابه‌جا کنید، سپس «تایید» را بزنید.")
         layout.addWidget(self.hint_label)
 
         buttons = QHBoxLayout()

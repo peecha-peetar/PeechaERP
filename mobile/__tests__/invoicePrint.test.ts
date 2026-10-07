@@ -14,12 +14,12 @@ const serverInvoice: InvoicePrintData = {
   document_no: 1007,
   document_date: "2026-01-15",
   status_code: "POSTED",
-  company: { name: "شرکتِ آزمایشی", economic_code: "12345", national_id: "6789" },
+  company: { name: "شرکت آزمایشی", economic_code: "12345", national_id: "6789" },
   seller_name: "علی رضایی",
-  customer: { detail_account_id: 5, code: "C-1", name: "فروشگاهِ نمونه", phone: "09120000000", address: "تهران" },
+  customer: { detail_account_id: 5, code: "C-1", name: "فروشگاهٔ نمونه", phone: "09120000000", address: "تهران" },
   lines: [
     {
-      line_no: 1, item_code: "9101", item_name: "کالایِ عادی", uom_code: "PCS",
+      line_no: 1, item_code: "9101", item_name: "کالای عادی", uom_code: "PCS",
       quantity: "3", unit_price: "10000", discount_amount: "0", tax_amount: "0", line_total: "30000",
     },
   ],
@@ -32,7 +32,7 @@ const serverInvoice: InvoicePrintData = {
     { method_code: "CHECK", label: "چک", amount: "13000", note: null },
   ],
   checks: [
-    { check_no: "111", bank_name: "بانکِ ملی", due_date: "2026-02-01", amount: "13000" },
+    { check_no: "111", bank_name: "بانک ملی", due_date: "2026-02-01", amount: "13000" },
   ],
   settled_amount: "23000",
   remaining_amount: "7000",
@@ -44,12 +44,12 @@ const localPreview: InvoicePrintData = {
   document_no: null,
   document_date: "2026-01-15",
   status_code: "PENDING_SYNC",
-  company: { name: "شرکتِ آزمایشی", economic_code: null, national_id: null },
+  company: { name: "شرکت آزمایشی", economic_code: null, national_id: null },
   seller_name: "علی رضایی",
-  customer: { detail_account_id: 5, code: "C-1", name: "فروشگاهِ نمونه", phone: null, address: null },
+  customer: { detail_account_id: 5, code: "C-1", name: "فروشگاهٔ نمونه", phone: null, address: null },
   lines: [
     {
-      line_no: 1, item_code: "9101", item_name: "کالایِ عادی", uom_code: "PCS",
+      line_no: 1, item_code: "9101", item_name: "کالای عادی", uom_code: "PCS",
       quantity: "3", unit_price: "10000", discount_amount: "0", tax_amount: "0", line_total: "30000",
     },
   ],
@@ -73,9 +73,9 @@ const preSalesOrder: InvoicePrintData = {
 describe("buildInvoiceHtml", () => {
   it("renders a server-synced invoice with checks/settlements without throwing", () => {
     const html = buildInvoiceHtml(serverInvoice);
-    expect(html).toContain("فاکتورِ فروش");
-    expect(html).toContain("فروشگاهِ نمونه");
-    expect(html).toContain("بانکِ ملی");
+    expect(html).toContain("فاکتور فروش");
+    expect(html).toContain("فروشگاهٔ نمونه");
+    expect(html).toContain("بانک ملی");
   });
 
   it("renders a locally-built pre-sync preview without throwing", () => {
@@ -85,7 +85,7 @@ describe("buildInvoiceHtml", () => {
 
   it("renders a SALES_ORDER (pre-sales, no settlement table) without throwing", () => {
     const html = buildInvoiceHtml(preSalesOrder);
-    expect(html).toContain("سفارشِ فروش");
+    expect(html).toContain("سفارش فروش");
   });
 
   it("does not crash when checks/settlement_lines are empty arrays", () => {

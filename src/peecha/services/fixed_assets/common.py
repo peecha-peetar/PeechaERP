@@ -1,7 +1,7 @@
-"""هستهٔ مشترکِ دارایی‌هایِ ثابت -- R262: تنظیمات، دفتر، گروه/طبقه/محل، ثبتِ حسابداری و دفترِ دارایی.
+"""هستهٔ مشترک دارایی‌های ثابت — R262: تنظیمات، دفتر، گروه/طبقه/محل، ثبت حسابداری و دفتر دارایی.
 
-قاعده: هیچ ثبتِ مالی بیرون از موتورِ سندِ حسابداریِ موجود (journal_entries.create_journal_entry) ساخته نمی‌شود؛
-سند و دفترِ دارایی در یک تراکنش (session) ثبت می‌شوند تا یا هر دو بنشینند یا هیچ‌کدام (Phase 35).
+قاعده: هیچ ثبت مالی بیرون از موتور سند حسابداری موجود (journal_entries.create_journal_entry) ساخته نمی‌شود؛
+سند و دفتر دارایی در یک تراکنش (session) ثبت می‌شوند تا یا هر دو بنشینند یا هیچ‌کدام (Phase 35).
 """
 
 from __future__ import annotations
@@ -24,18 +24,18 @@ _Q2 = decimal.Decimal("0.01")
 ENTRY_TYPE = "FIXED_ASSET"
 
 STATUS_LABELS = {
-    "DRAFT": "پیش‌نویس", "UNDER_CONSTRUCTION": "در جریانِ تکمیل", "ACQUIRED": "تحصیل‌شده", "CAPITALIZED": "سرمایه‌ای‌شده",
-    "IN_SERVICE": "در حالِ بهره‌برداری", "UNDER_MAINTENANCE": "در تعمیر", "TRANSFERRED": "منتقل‌شده", "SUSPENDED": "متوقف",
-    "IMPAIRED": "کاهشِ ارزش‌یافته", "FULLY_DEPRECIATED": "کاملاً مستهلک", "DISPOSED": "واگذارشده", "SOLD": "فروخته‌شده",
+    "DRAFT": "پیش‌نویس", "UNDER_CONSTRUCTION": "در جریان تکمیل", "ACQUIRED": "تحصیل‌شده", "CAPITALIZED": "سرمایه‌ای‌شده",
+    "IN_SERVICE": "در حال بهره‌برداری", "UNDER_MAINTENANCE": "در تعمیر", "TRANSFERRED": "منتقل‌شده", "SUSPENDED": "متوقف",
+    "IMPAIRED": "کاهش ارزش‌یافته", "FULLY_DEPRECIATED": "کاملاً مستهلک", "DISPOSED": "واگذارشده", "SOLD": "فروخته‌شده",
     "SCRAPPED": "اسقاط‌شده", "MERGED": "ادغام‌شده", "SPLIT": "تقسیم‌شده",
 }
-METHOD_LABELS = {"STRAIGHT_LINE": "خطِ مستقیم", "DECLINING_BALANCE": "نزولی", "UNITS_OF_PRODUCTION": "بر اساسِ تولید/کارکرد",
-                 "NONE": "بدونِ استهلاک"}
+METHOD_LABELS = {"STRAIGHT_LINE": "خط مستقیم", "DECLINING_BALANCE": "نزولی", "UNITS_OF_PRODUCTION": "بر اساس تولید/کارکرد",
+                 "NONE": "بدون استهلاک"}
 TYPE_LABELS = {"LAND": "زمین", "BUILDING": "ساختمان", "MACHINE": "ماشین‌آلات", "EQUIPMENT": "تجهیزات", "VEHICLE": "وسیلهٔ نقلیه",
-               "IT": "تجهیزاتِ رایانه‌ای", "FURNITURE": "اثاثیه", "TOOL": "ابزارآلات", "INSTALLATION": "تأسیسات",
+               "IT": "تجهیزات رایانه‌ای", "FURNITURE": "اثاثیه", "TOOL": "ابزارآلات", "INSTALLATION": "تأسیسات",
                "INTANGIBLE": "نامشهود", "OTHER": "سایر"}
-TXN_LABELS = {"ACQUISITION": "تحصیل", "CAPITALIZATION": "سرمایه‌ای‌شدن", "DEPRECIATION": "استهلاک", "IMPROVEMENT": "افزایشِ سرمایه‌ای",
-              "IMPAIRMENT": "کاهشِ ارزش", "REVALUATION": "تجدیدِ ارزیابی", "TRANSFER": "انتقال", "RECLASS": "تغییرِ طبقه",
+TXN_LABELS = {"ACQUISITION": "تحصیل", "CAPITALIZATION": "سرمایه‌ای‌شدن", "DEPRECIATION": "استهلاک", "IMPROVEMENT": "افزایش سرمایه‌ای",
+              "IMPAIRMENT": "کاهش ارزش", "REVALUATION": "تجدید ارزیابی", "TRANSFER": "انتقال", "RECLASS": "تغییر طبقه",
               "SPLIT_OUT": "تقسیم (خروج)", "SPLIT_IN": "تقسیم (ورود)", "MERGE_OUT": "ادغام (خروج)", "MERGE_IN": "ادغام (ورود)",
               "DISPOSAL": "واگذاری", "SALE": "فروش", "SCRAP": "اسقاط", "REVERSAL": "برگشت", "ADJUSTMENT": "اصلاح", "OPENING": "افتتاحیه"}
 # وضعیت‌هایی که دیگر هیچ عملیاتِ مالی نمی‌پذیرند
@@ -45,16 +45,16 @@ DEPRECIABLE_STATUSES = {"CAPITALIZED", "IN_SERVICE", "UNDER_MAINTENANCE", "TRANS
 
 DEFAULT_CATEGORIES = (
     ("LAND", "زمین", "NONE", None), ("BUILDING", "ساختمان", "STRAIGHT_LINE", 300), ("MACHINERY", "ماشین‌آلات", "STRAIGHT_LINE", 120),
-    ("PRODUCTION", "تجهیزاتِ تولید", "STRAIGHT_LINE", 120), ("VEHICLE", "وسایطِ نقلیه", "DECLINING_BALANCE", 72),
-    ("OFFICE", "تجهیزاتِ اداری", "STRAIGHT_LINE", 60), ("IT", "تجهیزاتِ IT", "STRAIGHT_LINE", 36),
+    ("PRODUCTION", "تجهیزات تولید", "STRAIGHT_LINE", 120), ("VEHICLE", "وسایط نقلیه", "DECLINING_BALANCE", 72),
+    ("OFFICE", "تجهیزات اداری", "STRAIGHT_LINE", 60), ("IT", "تجهیزات IT", "STRAIGHT_LINE", 36),
     ("TOOLS", "ابزارآلات", "STRAIGHT_LINE", 48), ("FURNITURE", "اثاثیه و منصوبات", "STRAIGHT_LINE", 120),
     ("INSTALLATIONS", "تأسیسات", "STRAIGHT_LINE", 180), ("OTHER", "سایر دارایی‌ها", "STRAIGHT_LINE", 60),
 )
 ACCOUNT_FIELDS = {
-    "asset_account_id": "حسابِ دارایی", "accumulated_depreciation_account_id": "استهلاکِ انباشته",
-    "depreciation_expense_account_id": "هزینهٔ استهلاک", "disposal_gain_account_id": "سودِ واگذاری",
-    "disposal_loss_account_id": "زیانِ واگذاری", "impairment_account_id": "زیانِ کاهشِ ارزش",
-    "revaluation_account_id": "مازادِ تجدیدِ ارزیابی", "cip_account_id": "دارایی در جریانِ تکمیل",
+    "asset_account_id": "حساب دارایی", "accumulated_depreciation_account_id": "استهلاک انباشته",
+    "depreciation_expense_account_id": "هزینهٔ استهلاک", "disposal_gain_account_id": "سود واگذاری",
+    "disposal_loss_account_id": "زیان واگذاری", "impairment_account_id": "زیان کاهش ارزش",
+    "revaluation_account_id": "مازاد تجدید ارزیابی", "cip_account_id": "دارایی در جریان تکمیل",
     "maintenance_expense_account_id": "هزینهٔ تعمیر و نگهداری",
 }
 
@@ -65,7 +65,7 @@ def money(value) -> decimal.Decimal:
 
 # --- دوره‌هایِ شمسی ------------------------------------------------------------------
 def period_of(date: datetime.date) -> tuple[str, datetime.date, datetime.date]:
-    """(کدِ دوره «۱۴۰۵/۰۲»، اولِ ماه، آخرِ ماه) -- تقویمِ شمسیِ ERP."""
+    """(کد دوره «۱۴۰۵/۰۲»، اول ماه، آخر ماه) — تقویم شمسی ERP."""
     j = jdatetime.date.fromgregorian(date=date)
     start = j.replace(day=1)
     nxt = (start + jdatetime.timedelta(days=32)).replace(day=1)
@@ -78,7 +78,7 @@ def period_from_code(code: str) -> tuple[str, datetime.date, datetime.date]:
 
 
 def months_between(start: datetime.date, end: datetime.date) -> int:
-    """تعدادِ ماه‌هایِ شمسیِ کاملِ [start, end] (هر دو ماه شمرده می‌شوند)."""
+    """تعداد ماه‌های شمسی کامل [start, end] (هر دو ماه شمرده می‌شوند)."""
     a, b = jdatetime.date.fromgregorian(date=start), jdatetime.date.fromgregorian(date=end)
     return (b.year - a.year) * 12 + (b.month - a.month) + 1
 
@@ -119,7 +119,7 @@ def update_settings(company_id: int, user_id: int | None = None, **fields) -> No
         changes = {}
         for key, value in fields.items():
             if key not in allowed:
-                raise ValueError(f"تنظیمِ نامعتبر: {key}")
+                raise ValueError(f"تنظیم نامعتبر: {key}")
             if getattr(row, key) != value:
                 changes[key] = [str(getattr(row, key)), str(value)]
                 setattr(row, key, value)
@@ -133,7 +133,7 @@ def update_settings(company_id: int, user_id: int | None = None, **fields) -> No
 def primary_book(session, company_id: int) -> AssetBook:
     book = session.scalar(select(AssetBook).where(AssetBook.company_id == company_id, AssetBook.is_primary.is_(True)))
     if book is None:
-        book = AssetBook(company_id=company_id, code="ACC", name="دفترِ حسابداری", is_primary=True, posts_to_gl=True,
+        book = AssetBook(company_id=company_id, code="ACC", name="دفتر حسابداری", is_primary=True, posts_to_gl=True,
                          is_active=True)
         session.add(book)
         session.flush()
@@ -169,14 +169,14 @@ def save_category(company_id: int, fields: CategoryFields, category_id: int | No
     from peecha.services import audit as audit_service
 
     if not fields.code.strip() or not fields.name.strip():
-        raise ValueError("کد و نامِ طبقهٔ دارایی الزامی است.")
+        raise ValueError("کد و نام طبقهٔ دارایی الزامی است.")
     if fields.default_method not in METHOD_LABELS:
-        raise ValueError("روشِ استهلاکِ نامعتبر.")
+        raise ValueError("روش استهلاک نامعتبر.")
     with new_session() as session:
         dup = session.scalar(select(AssetCategory.category_id).where(
             AssetCategory.company_id == company_id, AssetCategory.code == fields.code.strip()))
         if dup is not None and dup != category_id:
-            raise ValueError("این کدِ طبقه قبلاً تعریف شده است.")
+            raise ValueError("این کد طبقه قبلاً تعریف شده است.")
         row = session.get(AssetCategory, category_id) if category_id else AssetCategory(company_id=company_id)
         if row is None or row.company_id != company_id:
             raise ValueError("طبقهٔ دارایی نامعتبر است.")
@@ -190,7 +190,7 @@ def save_category(company_id: int, fields: CategoryFields, category_id: int | No
         row.is_active = fields.is_active
         for key, value in (fields.accounts or {}).items():
             if key not in ACCOUNT_FIELDS:
-                raise ValueError(f"حسابِ نامعتبر: {key}")
+                raise ValueError(f"حساب نامعتبر: {key}")
             setattr(row, key, value)
         if category_id is None:
             session.add(row)
@@ -204,7 +204,7 @@ def save_category(company_id: int, fields: CategoryFields, category_id: int | No
 
 
 def ensure_default_categories(company_id: int) -> None:
-    """طبقه‌هایِ پیش‌فرض (زمین، ساختمان، ماشین‌آلات، ...) بدونِ حساب -- حساب‌ها را کاربر در تنظیمات تعیین می‌کند."""
+    """طبقه‌های پیش‌فرض (زمین، ساختمان، ماشین‌آلات، ...) بدون حساب — حساب‌ها را کاربر در تنظیمات تعیین می‌کند."""
     backfill_asset_details(company_id)
     with new_session() as session:
         existing = set(session.scalars(select(AssetCategory.code).where(AssetCategory.company_id == company_id)))
@@ -237,14 +237,14 @@ def missing_accounts(category: AssetCategory, needed: tuple[str, ...]) -> list[s
 def require_accounts(category: AssetCategory, needed: tuple[str, ...]) -> None:
     missing = missing_accounts(category, needed)
     if missing:
-        raise ValueError(f"نگاشتِ حسابِ طبقهٔ «{category.name}» ناقص است: {'، '.join(missing)}")
+        raise ValueError(f"نگاشت حساب طبقهٔ «{category.name}» ناقص است: {'، '.join(missing)}")
 
 
 def save_group(company_id: int, code: str, name: str, group_id: int | None = None) -> int:
     with new_session() as session:
         dup = session.scalar(select(AssetGroup.group_id).where(AssetGroup.company_id == company_id, AssetGroup.code == code.strip()))
         if dup is not None and dup != group_id:
-            raise ValueError("این کدِ گروه قبلاً تعریف شده است.")
+            raise ValueError("این کد گروه قبلاً تعریف شده است.")
         row = session.get(AssetGroup, group_id) if group_id else AssetGroup(company_id=company_id, is_active=True)
         row.code, row.name = code.strip(), name.strip()
         if group_id is None:
@@ -267,7 +267,7 @@ def save_location(company_id: int, code: str, name: str, location_type: str = "R
         dup = session.scalar(select(AssetLocation.location_id).where(
             AssetLocation.company_id == company_id, AssetLocation.code == code.strip()))
         if dup is not None and dup != location_id:
-            raise ValueError("این کدِ محل قبلاً تعریف شده است.")
+            raise ValueError("این کد محل قبلاً تعریف شده است.")
         if parent_location_id is not None and location_id is not None:
             node = parent_location_id
             while node is not None:  # جلوگیری از حلقه
@@ -315,13 +315,13 @@ class JLine:
 
 def post_journal(session, company_id: int, user_id: int | None, date: datetime.date, description: str,
                  lines: list[JLine]) -> int | None:
-    """سندِ حسابداری در همان تراکنش؛ ردیف‌هایِ صفر حذف و ردیف‌هایِ هم‌حساب/هم‌تفصیلی تجمیع می‌شوند."""
+    """سند حسابداری در همان تراکنش؛ ردیف‌های صفر حذف و ردیف‌های هم‌حساب/هم‌تفصیلی تجمیع می‌شوند."""
     from peecha.services import journal_entries as je_service
 
     merged: dict[tuple, list] = {}
     for ln in lines:
         if ln.account_id is None:
-            raise ValueError("نگاشتِ حسابِ دارایی ناقص است (حسابِ یکی از ردیف‌هایِ سند تعیین نشده).")
+            raise ValueError("نگاشت حساب دارایی ناقص است (حساب یکی از ردیف‌های سند تعیین نشده).")
         details = tuple(sorted(d for d in ln.detail_ids if d))
         key = (ln.account_id, details, ln.description)
         acc = merged.setdefault(key, [ZERO, ZERO])
@@ -343,7 +343,7 @@ def post_journal(session, company_id: int, user_id: int | None, date: datetime.d
     if not inputs:
         return None
     if user_id is None:
-        raise ValueError("کاربرِ ثبت‌کننده مشخص نیست.")
+        raise ValueError("کاربر ثبت‌کننده مشخص نیست.")
     return je_service.create_journal_entry(company_id, user_id, date, description, inputs, entry_type_code=ENTRY_TYPE,
                                            session=session).journal_entry_id
 
@@ -351,7 +351,7 @@ def post_journal(session, company_id: int, user_id: int | None, date: datetime.d
 def record_txn(session, asset: Asset, book_id: int, txn_type: str, date: datetime.date, *, cost=ZERO, depreciation=ZERO,
                impairment=ZERO, revaluation=ZERO, units=None, description=None, reference=None, journal_entry_id=None,
                source_type=None, source_id=None, user_id=None, reversed_txn_id=None, primary: bool = True) -> AssetTransaction:
-    """ردیفِ دفترِ دارایی + به‌روزرسانیِ ارقامِ کش‌شدهٔ دارایی (در همان تراکنش)."""
+    """ردیف دفتر دارایی + به‌روزرسانی ارقام کش‌شدهٔ دارایی (در همان تراکنش)."""
     txn = AssetTransaction(
         company_id=asset.company_id, asset_id=asset.asset_id, book_id=book_id, txn_type=txn_type, txn_date=date,
         cost_delta=money(cost), depreciation_delta=money(depreciation), impairment_delta=money(impairment),
@@ -387,7 +387,7 @@ def _asset_dimension_type_id(session, company_id: int) -> int:
 
 
 def _free_detail_code(session, company_id: int, dim_type_id: int, preferred: str) -> str:
-    """کدِ دارایی اگر با قواعدِ طول/بازهٔ تفصیلی سازگار و آزاد باشد؛ وگرنه کدِ عددیِ بعدیِ همین گروه."""
+    """کد دارایی اگر با قواعد طول/بازهٔ تفصیلی سازگار و آزاد باشد؛ وگرنه کد عددی بعدی همین گروه."""
     from peecha.db.models.accounting import DetailGroupLevel, DetailLevelDigitConfig
     from peecha.services import detail_dimensions as dims
 
@@ -411,7 +411,7 @@ def _free_detail_code(session, company_id: int, dim_type_id: int, preferred: str
 
 
 def ensure_asset_detail(session, asset: Asset) -> int:
-    """تفصیلیِ دارایی را (در همان تراکنش) می‌سازد یا نامش را هم‌گام می‌کند. تفصیلیِ موجودِ هم‌کد (تعریفِ دستیِ قبلی) استفاده می‌شود."""
+    """تفصیلی دارایی را (در همان تراکنش) می‌سازد یا نامش را هم‌گام می‌کند. تفصیلی موجود هم‌کد (تعریف دستی قبلی) استفاده می‌شود."""
     if asset.detail_account_id is not None:
         detail = session.get(DetailAccount, asset.detail_account_id)
         if detail is not None and detail.name != asset.name:
@@ -441,7 +441,7 @@ def asset_detail_id(asset: Asset) -> int:
 
 
 def backfill_asset_details(company_id: int) -> int:
-    """یک‌بار برایِ دارایی‌هایِ قبل از R273؛ اسنادِ قبلی دست نمی‌خورند."""
+    """یک‌بار برای دارایی‌های قبل از R273؛ اسناد قبلی دست نمی‌خورند."""
     with new_session() as session:
         rows = list(session.scalars(select(Asset).where(Asset.company_id == company_id, Asset.detail_account_id.is_(None))
                                     .order_by(Asset.asset_id)))
@@ -453,7 +453,7 @@ def backfill_asset_details(company_id: int) -> int:
 
 def ensure_open(asset: Asset) -> None:
     if asset.status_code in CLOSED_STATUSES:
-        raise ValueError(f"دارایی «{asset.asset_code}» در وضعیتِ «{STATUS_LABELS[asset.status_code]}» است و عملیاتِ مالی نمی‌پذیرد.")
+        raise ValueError(f"دارایی «{asset.asset_code}» در وضعیت «{STATUS_LABELS[asset.status_code]}» است و عملیات مالی نمی‌پذیرد.")
 
 
 def ledger_totals(session, asset_id: int, book_id: int | None = None) -> dict[str, decimal.Decimal]:
@@ -469,7 +469,7 @@ def ledger_totals(session, asset_id: int, book_id: int | None = None) -> dict[st
 
 def audit(session, company_id: int, user_id: int | None, asset_id: int, operation: str, changes: dict,
           entity_type: str = "FixedAsset") -> None:
-    """Audit با همان سرویسِ موجود؛ نامِ عملیاتِ دارایی (انتقال، فروش، ...) در changes.operation می‌ماند."""
+    """Audit با همان سرویس موجود؛ نام عملیات دارایی (انتقال، فروش، ...) در changes.operation می‌ماند."""
     from peecha.services import audit as audit_service
 
     action = operation if operation in ("CREATE", "DELETE") else "UPDATE"

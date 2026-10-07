@@ -43,7 +43,7 @@ export function BarcodeScannerModal({ visible, onClose, onScanned }: Props) {
         ) : (
           <View style={{ flex: 1, justifyContent: "center", padding: spacing.xl, gap: spacing.lg }}>
             <Text style={[typography.body, { color: colors.textPrimary, textAlign: "center" }]}>
-              برایِ اسکنِ بارکد، دسترسیِ دوربین لازم است.
+              برای اسکن بارکد، دسترسی دوربین لازم است.
             </Text>
             <Button label="اجازهٔ دسترسی به دوربین" onPress={requestPermission} />
           </View>
@@ -51,10 +51,10 @@ export function BarcodeScannerModal({ visible, onClose, onScanned }: Props) {
         <View style={{ position: "absolute", bottom: spacing.xl, left: spacing.lg, right: spacing.lg, gap: spacing.sm }}>
           {permission?.granted ? (
             <Text style={[typography.bodyBold, { color: "#fff", textAlign: "center", backgroundColor: "rgba(0,0,0,0.55)", padding: spacing.sm, borderRadius: 8 }]}>
-              بارکدِ کالا را جلویِ دوربین بگیرید
+              بارکد کالا را جلوی دوربین بگیرید
             </Text>
           ) : null}
-          <Button label="پایانِ اسکن" variant="secondary" onPress={onClose} />
+          <Button label="پایان اسکن" variant="secondary" onPress={onClose} />
         </View>
       </View>
     </Modal>

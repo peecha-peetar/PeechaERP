@@ -1,7 +1,7 @@
-"""کوپن/کدِ تخفیفِ فروشگاهی -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ
-حیاتیِ PeechaSync -- کوپن/کدِ تخفیفِ فروشگاهی»): کوپن در ERP تعریف
-می‌شود و با دکمه‌یِ سینک به فروشگاهِ ووکامرس پوش می‌شود (V1، طبقِ
-محدودیتِ همین دور فقط ووکامرس -- پرستاشاپ endpointِ ساده‌ای برایِ
+"""کوپن/کد تخفیف فروشگاهی — طبق بازخورد صریح کاربر («امکانات
+حیاتی PeechaSync — کوپن/کد تخفیف فروشگاهی»): کوپن در ERP تعریف
+می‌شود و با دکمهٔ همگام‌سازی به فروشگاه ووکامرس پوش می‌شود (V1، طبق
+محدودیت همین دور فقط ووکامرس — پرستاشاپ endpoint ساده‌ای برای
 کوپن ندارد)."""
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin
 
-_DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "FIXED_CART": "مبلغِ ثابت (کل سبد)", "FIXED_PRODUCT": "مبلغِ ثابت (هر کالا)"}
-_SYNC_STATUS_LABELS = {"PENDING": "سینک‌نشده", "SYNCED": "سینک‌شده", "FAILED": "ناموفق"}
+_DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "FIXED_CART": "مبلغ ثابت (کل سبد)", "FIXED_PRODUCT": "مبلغ ثابت (هر کالا)"}
+_SYNC_STATUS_LABELS = {"PENDING": "همگام‌نشده", "SYNCED": "همگام‌شده", "FAILED": "ناموفق"}
 
 
 class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -42,22 +42,22 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("کوپن/کدِ تخفیفِ فروشگاهی")
+        title = QLabel("کوپن/کد تخفیف فروشگاهی")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["اتصال", "کد", "نوعِ تخفیف", "مقدار", "معتبر تا", "وضعیتِ سینک"])
+        self.table.setHorizontalHeaderLabels(["اتصال", "کد", "نوع تخفیف", "مقدار", "معتبر تا", "وضعیت همگام‌سازی"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
 
         row_buttons = QHBoxLayout()
-        sync_button = QPushButton("🔄 سینکِ کوپنِ انتخاب‌شده به فروشگاه")
+        sync_button = QPushButton("🔄 همگام‌سازی کوپن انتخاب‌شده به فروشگاه")
         sync_button.clicked.connect(self._sync_selected)
         row_buttons.addWidget(sync_button)
-        delete_button = QPushButton("🗑 حذفِ کوپنِ انتخاب‌شده")
+        delete_button = QPushButton("🗑 حذف کوپن انتخاب‌شده")
         delete_button.clicked.connect(self._delete_selected)
         row_buttons.addWidget(delete_button)
         row_buttons.addStretch(1)
@@ -67,7 +67,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.connection_combo = QComboBox()
         form.addWidget(self.connection_combo)
         self.code_field = QLineEdit()
-        self.code_field.setPlaceholderText("کدِ کوپن (مثلاً SUMMER20)")
+        self.code_field.setPlaceholderText("کد کوپن (مثلاً SUMMER20)")
         form.addWidget(self.code_field, stretch=1)
         self.discount_type_combo = QComboBox()
         for code, label in _DISCOUNT_TYPE_LABELS.items():
@@ -78,7 +78,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         form.addWidget(self.amount_field)
         self.valid_until_field = JalaliDateEdit()
         form.addWidget(self.valid_until_field)
-        self.no_expiry_checkbox = QCheckBox("بدونِ تاریخِ انقضا")
+        self.no_expiry_checkbox = QCheckBox("بدون تاریخ انقضا")
         self.no_expiry_checkbox.setChecked(True)
         self.no_expiry_checkbox.toggled.connect(self.valid_until_field.setDisabled)
         self.valid_until_field.setDisabled(True)
@@ -86,7 +86,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(44)
-        add_button.setToolTip("افزودنِ کوپن")
+        add_button.setToolTip("افزودن کوپن")
         add_button.clicked.connect(self._add_coupon)
         form.addWidget(add_button)
         outer.addLayout(form)
@@ -96,11 +96,11 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.set_field_help([
-            (self.connection_combo, "اتصالِ ووکامرسی که این کوپن رویش سینک می‌شود."),
-            (self.code_field, "کدی که مشتری هنگامِ خرید وارد می‌کند."),
-            (self.discount_type_combo, "نحوهٔ اعمالِ تخفیف -- درصدی، مبلغِ ثابت رویِ کلِ سبد، یا مبلغِ ثابت رویِ هر کالا."),
-            (self.amount_field, "مقدارِ تخفیف -- طبقِ نوعِ انتخاب‌شده، درصد یا مبلغ."),
-            (self.valid_until_field, "تاریخِ پایانِ اعتبارِ کوپن."),
+            (self.connection_combo, "اتصال ووکامرسی که این کوپن رویش همگام‌سازی می‌شود."),
+            (self.code_field, "کدی که مشتری هنگام خرید وارد می‌کند."),
+            (self.discount_type_combo, "نحوهٔ اعمال تخفیف — درصدی، مبلغ ثابت روی کل سبد، یا مبلغ ثابت روی هر کالا."),
+            (self.amount_field, "مقدار تخفیف — طبق نوع انتخاب‌شده، درصد یا مبلغ."),
+            (self.valid_until_field, "تاریخ پایان اعتبار کوپن."),
             (self.no_expiry_checkbox, "این کوپن هیچ‌وقت منقضی نمی‌شود."),
         ])
 
@@ -149,7 +149,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         connection_id = self.connection_combo.currentData()
         if company_id is None or connection_id is None:
-            self.status_label.setText("ابتدا یک اتصالِ فعالِ ووکامرس لازم است.")
+            self.status_label.setText("ابتدا یک اتصال فعال ووکامرس لازم است.")
             return
         try:
             amount = decimal.Decimal(self.amount_field.text() or "0")
@@ -181,7 +181,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.status_label.setText(str(exc))
             self.refresh()
             return
-        theme.set_status_label(self.status_label, "کوپن با فروشگاه سینک شد.", ok=True)
+        theme.set_status_label(self.status_label, "کوپن با فروشگاه همگام‌سازی شد.", ok=True)
         self.refresh()
 
     def _delete_selected(self) -> None:

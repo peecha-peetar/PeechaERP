@@ -103,7 +103,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
       if (quantity > maxForUnit) {
         const allowed = unit.allow_decimal ? maxForUnit : Math.floor(maxForUnit);
         toast.show(
-          `موجودیِ خودرو برایِ «${item.name}» فقط ${formatAmount(String(stock))} ${item.base_uom_code} است` +
+          `موجودی خودرو برای «${item.name}» فقط ${formatAmount(String(stock))} ${item.base_uom_code} است` +
             (factor !== 1 ? ` (حداکثر ${formatAmount(String(allowed))} ${unit.name}).` : "."),
           "warning",
         );
@@ -118,7 +118,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
   const onScanned = (code: string) => {
     const match = resolveScannedCode(catalog.items, code);
     if (!match) {
-      toast.show(`کالایی با بارکدِ ${code.trim()} پیدا نشد.`, "danger");
+      toast.show(`کالایی با بارکد ${code.trim()} پیدا نشد.`, "danger");
       return;
     }
     const { item, unit } = match;
@@ -148,7 +148,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
           <View style={{ flex: 1 }}>
             <SearchBar value={search} onChangeText={setSearch} placeholder="جستجو: نام، کد، بارکد..." />
           </View>
-          <Button label="اسکنِ بارکد" variant="secondary" fullWidth={false} onPress={() => setScannerOpen(true)} />
+          <Button label="اسکن بارکد" variant="secondary" fullWidth={false} onPress={() => setScannerOpen(true)} />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
           <Chip label={onlyInStock ? "فقط موجود" : "همه (حتی ناموجود)"} selected={onlyInStock} onPress={() => setOnlyInStock((v) => !v)} />
@@ -223,18 +223,18 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
             />
           );
         }}
-        ListEmptyComponent={<EmptyState title="کالایی پیدا نشد" description="فیلتر یا عبارتِ جستجو را تغییر دهید." />}
+        ListEmptyComponent={<EmptyState title="کالایی پیدا نشد" description="فیلتر یا عبارت جستجو را تغییر دهید." />}
       />
 
       <View style={{ padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface, gap: spacing.sm }}>
         <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>
-          سبد: {lines.length} قلم -- جمع: {formatAmount(String(total))}
+          سبد: {lines.length} قلم — جمع: {formatAmount(String(total))}
         </Text>
         {discount > 0 || tax > 0 ? (
           <Text style={[typography.caption, { color: colors.textSecondary }]}>
             {discount > 0 ? `تخفیف: ${formatAmount(String(discount))}` : ""}
             {discount > 0 && tax > 0 ? " -- " : ""}
-            {tax > 0 ? `مالياتِ ارزش‌افزوده: ${formatAmount(String(tax))}` : ""}
+            {tax > 0 ? `مالیات ارزش‌افزوده: ${formatAmount(String(tax))}` : ""}
           </Text>
         ) : null}
         <Button label="ادامه: تسویه" onPress={onNext} disabled={lines.length === 0} />
@@ -250,12 +250,12 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
           autoFocus
         />
         <Input
-          label="قیمتِ واحد"
+          label="قیمت واحد"
           value={editingPrice}
           onChangeText={setEditingPrice}
           keyboardType="numeric"
           numeric
-          placeholder={editing && lineOf(editing, unitOf(editing))?.unitPrice === null ? "در حالِ دریافتِ قیمت..." : undefined}
+          placeholder={editing && lineOf(editing, unitOf(editing))?.unitPrice === null ? "در حال دریافت قیمت..." : undefined}
         />
         <Button
           label="تایید"

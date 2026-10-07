@@ -6,10 +6,10 @@ export type SyncStatus = "IDLE" | "SYNCING" | "SYNCED" | "OFFLINE" | "ERROR";
 
 const SYNC_LABEL: Record<SyncStatus, string> = {
   IDLE: "آماده",
-  SYNCING: "درحالِ Sync",
+  SYNCING: "درحال Sync",
   SYNCED: "به‌روز",
   OFFLINE: "آفلاین",
-  ERROR: "خطایِ Sync",
+  ERROR: "خطای Sync",
 };
 
 interface AppBarProps {

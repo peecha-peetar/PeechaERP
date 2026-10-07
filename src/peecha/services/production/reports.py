@@ -1,6 +1,6 @@
-"""گزارش‌هایِ تولید -- R270 (همان موتور و صفحهٔ عمومیِ گزارش؛ فقط خواندنی از دستورها/تراکنش‌هایِ تولید).
+"""گزارش‌های تولید — R270 (همان موتور و صفحهٔ عمومی گزارش؛ فقط خواندنی از دستورها/تراکنش‌های تولید).
 
-دابل‌کلیک: (شناسهٔ دستور، «PRD_ORDER») صفحهٔ مرکزیِ همان دستور.
+دابل‌کلیک: (شناسهٔ دستور، «PRD_ORDER») صفحهٔ مرکزی همان دستور.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from peecha.services.purchase_reports import DATE, INT, MONEY, PERCENT, QTY, TEX
 
 ZERO = c.ZERO
 _HUNDRED = decimal.Decimal(100)
-_G_PROD, _G_MAT, _G_COST, _G_INV, _G_MGMT = "تولید", "مواد", "بهایِ تمام‌شده", "موجودیِ تولید", "مدیریتی"
+_G_PROD, _G_MAT, _G_COST, _G_INV, _G_MGMT = "تولید", "مواد", "بهای تمام‌شده", "موجودی تولید", "مدیریتی"
 _ITEM = ("item",)
 _ITEM_WH = ("item", "warehouse")
 _STATUS_OPT = (("status", "وضعیت", (("ALL", "همه"), ("OPEN", "باز"), ("COMPLETED", "تکمیل/بسته"))),)
@@ -89,7 +89,7 @@ def orders_report(company_id: int, f) -> ReportResult:
 
 
 def _production_rows(session, company_id, f):
-    """رسیدهایِ محصولِ اصلی در بازه (خالص از برگشت‌ها) همراهِ دستور."""
+    """رسیدهای محصول اصلی در بازه (خالص از برگشت‌ها) همراه دستور."""
     out = []
     orders = {o.order_id: o for o in session.scalars(select(ProductionOrder).where(ProductionOrder.company_id == company_id))}
     for t in _txns(session, company_id, f, ("RECEIPT", "REVERSAL")):
@@ -104,7 +104,7 @@ def _production_rows(session, company_id, f):
 
 
 def _by(dimension: str):
-    titles = {"PRODUCT": "محصول", "WAREHOUSE": "انبارِ محصول", "BRANCH": "شعبه", "PERIOD": "دوره", "WORK_CENTER": "مرکزِ کاری"}
+    titles = {"PRODUCT": "محصول", "WAREHOUSE": "انبار محصول", "BRANCH": "شعبه", "PERIOD": "دوره", "WORK_CENTER": "مرکز کاری"}
 
     def report(company_id: int, f) -> ReportResult:
         from peecha.services.fixed_assets.common import period_of
@@ -121,13 +121,13 @@ def _by(dimension: str):
             for o, t, q, amount in rows:
                 key = {"PRODUCT": lambda: labels.get(o.item_id, ""), "WAREHOUSE": lambda: whs.get(o.fg_warehouse_id, ""),
                        "BRANCH": lambda: branches.get(o.branch_id, ""), "PERIOD": lambda: period_of(t.txn_date)[0],
-                       "WORK_CENTER": lambda: wcs.get(o.work_center_id, "")}[dimension]() or f"بدونِ {titles[dimension]}"
+                       "WORK_CENTER": lambda: wcs.get(o.work_center_id, "")}[dimension]() or f"بدون {titles[dimension]}"
                 g = agg[key]
                 g[0].add(o.order_id)
                 g[1] += q
                 g[2] += amount
-        r = ReportResult([(titles[dimension], TEXT), ("تعدادِ دستور", INT), ("مقدارِ تولید", QTY), ("بهایِ تولید", MONEY),
-                          ("بهایِ واحد", MONEY)], no_total={4}, note="رسیدهایِ محصولِ اصلی در بازه (خالص از برگشتِ تولید).")
+        r = ReportResult([(titles[dimension], TEXT), ("تعداد دستور", INT), ("مقدار تولید", QTY), ("بهای تولید", MONEY),
+                          ("بهای واحد", MONEY)], no_total={4}, note="رسیدهای محصول اصلی در بازه (خالص از برگشت تولید).")
         order = sorted(agg.items()) if dimension == "PERIOD" else sorted(agg.items(), key=lambda kv: -kv[1][2])
         for key, (ids, q, amount) in order:
             r.add([key, len(ids), q, amount, c.money(amount / q) if q else None])
@@ -140,7 +140,7 @@ def _by(dimension: str):
 # =====================================================================================
 def material_consumption(company_id: int, f) -> ReportResult:
     r = ReportResult([("تاریخ", DATE), ("دستور", TEXT), ("ماده", TEXT), ("نوع", TEXT), ("مقدار", QTY), ("مبلغ", MONEY)],
-                     note="حواله (+) و برگشتِ مواد (−) به دستورهایِ تولید.")
+                     note="حواله (+) و برگشت مواد (−) به دستورهای تولید.")
     with new_session() as session:
         txns = [t for t in _txns(session, company_id, f, ("ISSUE", "RETURN")) if not f.item_id or t.item_id == f.item_id]
         codes = dict(session.execute(select(ProductionOrder.order_id, ProductionOrder.order_code)
@@ -166,9 +166,9 @@ def _material_rows(session, company_id, f):
 
 
 def material_variance(company_id: int, f) -> ReportResult:
-    r = ReportResult([("دستور", TEXT), ("ماده", TEXT), ("استاندارد برایِ تولید", QTY), ("مصرفِ واقعی", QTY), ("اختلاف", QTY),
-                      ("اختلاف٪", PERCENT), ("انحرافِ مقداری (ریال)", MONEY), ("انحرافِ نرخ (ریال)", MONEY)], no_total={2, 3, 5},
-                     note="استاندارد = BOM × تولیدِ سالم (با ضایعاتِ مجاز). مثال: ۱۰۰ کیلو استاندارد، ۱۰۶ واقعی ← +۶.")
+    r = ReportResult([("دستور", TEXT), ("ماده", TEXT), ("استاندارد برای تولید", QTY), ("مصرف واقعی", QTY), ("اختلاف", QTY),
+                      ("اختلاف٪", PERCENT), ("انحراف مقداری (ریال)", MONEY), ("انحراف نرخ (ریال)", MONEY)], no_total={2, 3, 5},
+                     note="استاندارد = فهرست مواد × تولید سالم (با ضایعات مجاز). مثال: ۱۰۰ کیلو استاندارد، ۱۰۶ واقعی ← +۶.")
     with new_session() as session:
         rows = list(_material_rows(session, company_id, f))
         labels = c.item_labels(session, [m.item_id for _o, m, _s in rows])
@@ -184,7 +184,7 @@ def material_variance(company_id: int, f) -> ReportResult:
 
 def material_waste(company_id: int, f) -> ReportResult:
     r = ReportResult([("دستور", TEXT), ("ماده", TEXT), ("نوع", TEXT), ("مقدار", QTY), ("ارزش", MONEY), ("علت", TEXT)],
-                     note="ضایعاتِ ثبت‌شدهٔ ماده + مصرفِ بیش از استاندارد (هدررفت).")
+                     note="ضایعات ثبت‌شدهٔ ماده + مصرف بیش از استاندارد (هدررفت).")
     with new_session() as session:
         codes = dict(session.execute(select(ProductionOrder.order_id, ProductionOrder.order_code)
                                      .where(ProductionOrder.company_id == company_id)).all())
@@ -194,12 +194,12 @@ def material_waste(company_id: int, f) -> ReportResult:
         for t in scraps:
             m = session.get(OrderMaterial, t.material_id)
             unit = c.qty(m.consumed_amount / m.consumed_qty) if m and m.consumed_qty else ZERO
-            r.add([codes.get(t.order_id, ""), labels.get(t.item_id, ""), "ضایعاتِ ثبت‌شده", t.quantity, c.money(t.quantity * unit),
+            r.add([codes.get(t.order_id, ""), labels.get(t.item_id, ""), "ضایعات ثبت‌شده", t.quantity, c.money(t.quantity * unit),
                    t.reason or ""], _ref(t.order_id))
         for o, m, std in rows:
             over = m.consumed_qty - std
             if over > 0 and o.produced_qty:
-                r.add([o.order_code, labels.get(m.item_id, ""), "مصرفِ مازاد", over, c.money(over * decimal.Decimal(m.standard_unit_cost or 0)),
+                r.add([o.order_code, labels.get(m.item_id, ""), "مصرف مازاد", over, c.money(over * decimal.Decimal(m.standard_unit_cost or 0)),
                        ""], _ref(o.order_id))
     return r
 
@@ -208,7 +208,7 @@ def material_requirement(company_id: int, f) -> ReportResult:
     from peecha.services.production.orders import AVAILABILITY_LABELS, availability
 
     r = ReportResult([("دستور", TEXT), ("ماده", TEXT), ("نیاز", QTY), ("مصرف‌شده", QTY), ("مانده", QTY), ("موجود", QTY),
-                      ("رزرو", QTY), ("کمبود", QTY), ("وضعیت", TEXT)], note="نیازِ موادِ دستورهایِ باز در برابرِ موجودیِ انبار.")
+                      ("رزرو", QTY), ("کمبود", QTY), ("وضعیت", TEXT)], note="نیاز مواد دستورهای باز در برابر موجودی انبار.")
     with new_session() as session:
         orders = [o for o in _orders(session, company_id, f, by_activity=False)
                   if o.status_code in ("DRAFT", "PLANNED", "RELEASED", "IN_PROGRESS", "ON_HOLD")]
@@ -235,8 +235,8 @@ def _costed(session, company_id, f):
 
 def production_cost(company_id: int, f) -> ReportResult:
     r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("مواد", MONEY), ("دستمزد", MONEY), ("ماشین", MONEY), ("سربار", MONEY),
-                      ("جانبی/بازیافت", MONEY), ("بهایِ کل", MONEY), ("تولید", QTY), ("بهایِ واحد", MONEY)], no_total={9},
-                     note="بهایِ کل = مواد + دستمزد + ماشین + سربار − ارزشِ جانبی − بازیافتِ ضایعات.")
+                      ("جانبی/بازیافت", MONEY), ("بهای کل", MONEY), ("تولید", QTY), ("بهای واحد", MONEY)], no_total={9},
+                     note="بهای کل = مواد + دستمزد + ماشین + سربار − ارزش جانبی − بازیافت ضایعات.")
     with new_session() as session:
         rows = list(_costed(session, company_id, f))
         labels = c.item_labels(session, [o.item_id for o, _ in rows])
@@ -248,8 +248,8 @@ def production_cost(company_id: int, f) -> ReportResult:
 
 
 def unit_cost(company_id: int, f) -> ReportResult:
-    r = ReportResult([("محصول", TEXT), ("تعدادِ دستور", INT), ("تولید", QTY), ("بهایِ کل", MONEY), ("بهایِ واحدِ واقعی", MONEY),
-                      ("بهایِ استانداردِ واحد", MONEY), ("حداقل", MONEY), ("حداکثر", MONEY)], no_total={4, 5, 6, 7})
+    r = ReportResult([("محصول", TEXT), ("تعداد دستور", INT), ("تولید", QTY), ("بهای کل", MONEY), ("بهای واحد واقعی", MONEY),
+                      ("بهای استاندارد واحد", MONEY), ("حداقل", MONEY), ("حداکثر", MONEY)], no_total={4, 5, 6, 7})
     agg = defaultdict(lambda: [0, ZERO, ZERO, ZERO, [], ZERO])
     with new_session() as session:
         rows = list(_costed(session, company_id, f))
@@ -269,9 +269,9 @@ def unit_cost(company_id: int, f) -> ReportResult:
 
 
 def std_vs_actual(company_id: int, f) -> ReportResult:
-    r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("تولید", QTY), ("بهایِ استاندارد", MONEY), ("بهایِ واقعی", MONEY),
-                      ("انحراف", MONEY), ("انحراف٪", PERCENT), ("استانداردِ واحد", MONEY), ("واقعیِ واحد", MONEY)],
-                     no_total={6, 7, 8}, note="مثال: استاندارد ۱٬۰۰۰٬۰۰۰ و واقعی ۱٬۰۷۵٬۰۰۰ ← انحرافِ +۷۵٬۰۰۰ (نامساعد).")
+    r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("تولید", QTY), ("بهای استاندارد", MONEY), ("بهای واقعی", MONEY),
+                      ("انحراف", MONEY), ("انحراف٪", PERCENT), ("استاندارد واحد", MONEY), ("واقعی واحد", MONEY)],
+                     no_total={6, 7, 8}, note="مثال: استاندارد ۱٬۰۰۰٬۰۰۰ و واقعی ۱٬۰۷۵٬۰۰۰ ← انحراف +۷۵٬۰۰۰ (نامساعد).")
     with new_session() as session:
         rows = list(_costed(session, company_id, f))
         labels = c.item_labels(session, [o.item_id for o, _ in rows])
@@ -300,8 +300,8 @@ def cost_variance(company_id: int, f) -> ReportResult:
 
 
 def overhead_allocation(company_id: int, f) -> ReportResult:
-    r = ReportResult([("تاریخ", DATE), ("دستور", TEXT), ("منبع", TEXT), ("مبنا", TEXT), ("مقدارِ مبنا", QTY), ("مبلغ", MONEY)],
-                     no_total={4}, note="سربارِ جذب‌شده: نرخِ از پیش تعیین‌شده رویِ ساعت + سرشکنِ استخرهایِ هزینه.")
+    r = ReportResult([("تاریخ", DATE), ("دستور", TEXT), ("منبع", TEXT), ("مبنا", TEXT), ("مقدار مبنا", QTY), ("مبلغ", MONEY)],
+                     no_total={4}, note="سربار جذب‌شده: نرخ از پیش تعیین‌شده روی ساعت + سرشکن مخزن‌های هزینه.")
     with new_session() as session:
         codes = dict(session.execute(select(ProductionOrder.order_id, ProductionOrder.order_code)
                                      .where(ProductionOrder.company_id == company_id)).all())
@@ -311,7 +311,7 @@ def overhead_allocation(company_id: int, f) -> ReportResult:
         for t in _txns(session, company_id, f, ("OVERHEAD",)):
             d = t.details or {}
             pool = pools.get(d.get("pool_id"))
-            source = f"استخرِ {pool.code} -- {pool.name}" if pool else "نرخِ مرکزِ کاری/عملیات"
+            source = f"مخزن {pool.code} -- {pool.name}" if pool else "نرخ مرکز کاری/عملیات"
             basis = c.OVERHEAD_BASES.get(d.get("basis", ""), d.get("basis", ""))
             r.add([t.txn_date, codes.get(t.order_id, ""), source, basis, bases.get(t.txn_id, t.quantity), t.amount], _ref(t.order_id))
     return r
@@ -358,8 +358,8 @@ def machine_cost(company_id: int, f) -> ReportResult:
 # =====================================================================================
 def wip_report(company_id: int, f) -> ReportResult:
     r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("وضعیت", TEXT), ("مواد", MONEY), ("تبدیل (دستمزد/ماشین/سربار)", MONEY),
-                      ("انتقال به محصول", MONEY), ("ماندهٔ WIP", MONEY), ("تولیدشده", QTY), ("مانده", QTY)],
-                     note="ماندهٔ کالایِ در جریانِ ساخت در پایانِ بازه = Σ ورودی − Σ انتقال (همخوان با حسابِ WIP).")
+                      ("انتقال به محصول", MONEY), ("ماندهٔ کالای در جریان ساخت", MONEY), ("تولیدشده", QTY), ("مانده", QTY)],
+                     note="ماندهٔ کالای در جریان ساخت در پایان بازه = Σ ورودی − Σ انتقال (همخوان با حساب WIP).")
     with new_session() as session:
         rows = session.execute(select(OrderTransaction.order_id, OrderTransaction.txn_type, func.sum(OrderTransaction.wip_delta))
                                .where(OrderTransaction.company_id == company_id, OrderTransaction.txn_date <= f.date_to)
@@ -387,7 +387,7 @@ def wip_report(company_id: int, f) -> ReportResult:
 
 def _stock_by_kind(kinds: tuple, note: str):
     def report(company_id: int, f) -> ReportResult:
-        r = ReportResult([("کالا", TEXT), ("انبار", TEXT), ("موجودی", QTY), ("بهایِ میانگین", MONEY), ("ارزش", MONEY)], no_total={3},
+        r = ReportResult([("کالا", TEXT), ("انبار", TEXT), ("موجودی", QTY), ("بهای میانگین", MONEY), ("ارزش", MONEY)], no_total={3},
                          note=note)
         with new_session() as session:
             q = (select(StockBalance.item_id, StockBalance.warehouse_id, func.sum(StockBalance.quantity_on_hand),
@@ -410,8 +410,8 @@ def _stock_by_kind(kinds: tuple, note: str):
 
 
 def scrap_report(company_id: int, f) -> ReportResult:
-    r = ReportResult([("تاریخ", DATE), ("دستور", TEXT), ("کالا", TEXT), ("نوع", TEXT), ("مقدار", QTY), ("ارزشِ بازیافت", MONEY),
-                      ("زیانِ غیرعادی", MONEY), ("علت", TEXT)])
+    r = ReportResult([("تاریخ", DATE), ("دستور", TEXT), ("کالا", TEXT), ("نوع", TEXT), ("مقدار", QTY), ("ارزش بازیافت", MONEY),
+                      ("زیان غیرعادی", MONEY), ("علت", TEXT)])
     with new_session() as session:
         codes = dict(session.execute(select(ProductionOrder.order_id, ProductionOrder.order_code)
                                      .where(ProductionOrder.company_id == company_id)).all())
@@ -421,7 +421,7 @@ def scrap_report(company_id: int, f) -> ReportResult:
             kind = (t.details or {}).get("kind")
             if t.txn_type == "VARIANCE" and kind != "ABNORMAL_SCRAP":
                 continue
-            label = {"PRODUCT": "ضایعاتِ محصول", "MATERIAL": "ضایعاتِ ماده", "ABNORMAL_SCRAP": "ضایعاتِ غیرعادی"}.get(kind, "")
+            label = {"PRODUCT": "ضایعات محصول", "MATERIAL": "ضایعات ماده", "ABNORMAL_SCRAP": "ضایعات غیرعادی"}.get(kind, "")
             r.add([t.txn_date, codes.get(t.order_id, ""), labels.get(t.item_id, ""), label, t.quantity,
                    t.amount if t.txn_type == "SCRAP" else ZERO, t.amount if t.txn_type == "VARIANCE" else ZERO, t.reason or ""],
                   _ref(t.order_id))
@@ -430,7 +430,7 @@ def scrap_report(company_id: int, f) -> ReportResult:
 
 def byproducts(company_id: int, f) -> ReportResult:
     r = ReportResult([("تاریخ", DATE), ("دستور", TEXT), ("کالا", TEXT), ("نوع", TEXT), ("مقدار", QTY), ("ارزش", MONEY)],
-                     note="محصولِ جانبی با ارزشِ بازیافت از بهایِ محصولِ اصلی کسر شده؛ محصولِ مشترک با روشِ تخصیص.")
+                     note="محصول جانبی با ارزش بازیافت از بهای محصول اصلی کسر شده؛ محصول مشترک با روش تخصیص.")
     with new_session() as session:
         codes = dict(session.execute(select(ProductionOrder.order_id, ProductionOrder.order_code)
                                      .where(ProductionOrder.company_id == company_id)).all())
@@ -448,9 +448,9 @@ def byproducts(company_id: int, f) -> ReportResult:
 def profitability(company_id: int, f) -> ReportResult:
     from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
 
-    r = ReportResult([("محصول", TEXT), ("فیِ فروش", MONEY), ("بهایِ واقعیِ تولید", MONEY), ("حاشیهٔ ناخالص", MONEY),
-                      ("حاشیه٪", PERCENT), ("بهایِ استاندارد", MONEY), ("بهایِ میانگینِ موجودی", MONEY), ("فروش (مقدار)", QTY)],
-                     no_total={1, 2, 3, 4, 5, 6}, note="فیِ فروش = میانگینِ فاکتورهایِ فروشِ بازه؛ بهایِ تولید = میانگینِ رسیدهایِ تولیدِ بازه.")
+    r = ReportResult([("محصول", TEXT), ("فی فروش", MONEY), ("بهای واقعی تولید", MONEY), ("حاشیهٔ ناخالص", MONEY),
+                      ("حاشیه٪", PERCENT), ("بهای استاندارد", MONEY), ("بهای میانگین موجودی", MONEY), ("فروش (مقدار)", QTY)],
+                     no_total={1, 2, 3, 4, 5, 6}, note="فی فروش = میانگین فاکتورهای فروش بازه؛ بهای تولید = میانگین رسیدهای تولید بازه.")
     with new_session() as session:
         made = defaultdict(lambda: [ZERO, ZERO])
         for o, _t, q, amount in _production_rows(session, company_id, f):
@@ -485,7 +485,7 @@ def profitability(company_id: int, f) -> ReportResult:
 def cost_trend(company_id: int, f) -> ReportResult:
     from peecha.services.fixed_assets.common import period_of
 
-    r = ReportResult([("دوره", TEXT), ("محصول", TEXT), ("تولید", QTY), ("بهایِ کل", MONEY), ("بهایِ واحد", MONEY), ("تغییر٪", PERCENT)],
+    r = ReportResult([("دوره", TEXT), ("محصول", TEXT), ("تولید", QTY), ("بهای کل", MONEY), ("بهای واحد", MONEY), ("تغییر٪", PERCENT)],
                      no_total={4, 5})
     agg = defaultdict(lambda: [ZERO, ZERO])
     with new_session() as session:
@@ -504,8 +504,8 @@ def cost_trend(company_id: int, f) -> ReportResult:
 
 
 def efficiency(company_id: int, f) -> ReportResult:
-    r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("تحققِ برنامه٪", PERCENT), ("کاراییِ مواد٪", PERCENT),
-                      ("کاراییِ دستمزد٪", PERCENT), ("کاراییِ ماشین٪", PERCENT), ("ضایعات٪", PERCENT), ("تأخیر (روز)", INT)],
+    r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("تحقق برنامه٪", PERCENT), ("کارایی مواد٪", PERCENT),
+                      ("کارایی دستمزد٪", PERCENT), ("کارایی ماشین٪", PERCENT), ("ضایعات٪", PERCENT), ("تأخیر (روز)", INT)],
                      no_total={2, 3, 4, 5, 6}, note="کارایی = استاندارد ÷ واقعی × ۱۰۰ (بالاتر از ۱۰۰ = بهتر از استاندارد).")
     with new_session() as session:
         from peecha.services.production import master as pm
@@ -538,8 +538,8 @@ def efficiency(company_id: int, f) -> ReportResult:
 def capacity(company_id: int, f) -> ReportResult:
     from peecha.services.production.planning import capacity_load
 
-    r = ReportResult([("مرکزِ کاری", TEXT), ("ظرفیت (ساعت)", QTY), ("بار (ساعت)", QTY), ("آزاد (ساعت)", QTY), ("بهره‌برداری٪", PERCENT),
-                      ("وضعیت", TEXT), ("دستورها", TEXT)], no_total={4}, note="ظرفیت = روزهایِ کاری × شیفت × ساعت × راندمان.")
+    r = ReportResult([("مرکز کاری", TEXT), ("ظرفیت (ساعت)", QTY), ("بار (ساعت)", QTY), ("آزاد (ساعت)", QTY), ("بهره‌برداری٪", PERCENT),
+                      ("وضعیت", TEXT), ("دستورها", TEXT)], no_total={4}, note="ظرفیت = روزهای کاری × شیفت × ساعت × راندمان.")
     for x in capacity_load(company_id, f.date_from, f.date_to):
         r.add([f"{x.code} -- {x.name}", x.capacity_hours, x.load_hours, x.free_hours, x.utilization,
                "اضافه‌بار" if x.overloaded else "عادی", "، ".join(x.orders[:8])])
@@ -549,8 +549,8 @@ def capacity(company_id: int, f) -> ReportResult:
 def scrap_analysis(company_id: int, f) -> ReportResult:
     from peecha.services.production.orders import normal_scrap_percent
 
-    r = ReportResult([("محصول", TEXT), ("تولیدِ سالم", QTY), ("ضایعات", QTY), ("ضایعات٪", PERCENT), ("حدِ عادی٪", PERCENT),
-                      ("ارزشِ بازیافت", MONEY), ("زیانِ غیرعادی", MONEY), ("وضعیت", TEXT)], no_total={3, 4})
+    r = ReportResult([("محصول", TEXT), ("تولید سالم", QTY), ("ضایعات", QTY), ("ضایعات٪", PERCENT), ("حد عادی٪", PERCENT),
+                      ("ارزش بازیافت", MONEY), ("زیان غیرعادی", MONEY), ("وضعیت", TEXT)], no_total={3, 4})
     agg = defaultdict(lambda: [ZERO, ZERO, ZERO, ZERO, ZERO])
     with new_session() as session:
         for o in _orders(session, company_id, f):
@@ -574,13 +574,13 @@ def scrap_analysis(company_id: int, f) -> ReportResult:
 
 
 def trace(company_id: int, f) -> ReportResult:
-    """ردیابی: محصول ← دستور ← BOM ← مصرفِ مواد ← بچ/لات ← تامین‌کننده (و برعکس با فیلترِ کالا رویِ ماده)."""
+    """ردیابی: محصول ← دستور ← فهرست مواد ← مصرف مواد ← بچ/لات ← تامین‌کننده (و برعکس با فیلتر کالا روی ماده)."""
     from peecha.db.models.inventory import Batch, LotMovement, StockDocumentLine
     from peecha.services import detail_dimensions as dims
 
     direction = str(f.options.get("direction") or "DOWN")
-    r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("بچِ محصول", TEXT), ("ماده", TEXT), ("بچِ ماده", TEXT), ("مقدارِ مصرف", QTY),
-                      ("تامین‌کننده", TEXT), ("BOM", TEXT)], note="بالا به پایین: از محصول؛ پایین به بالا: کالایِ فیلتر = ماده.")
+    r = ReportResult([("دستور", TEXT), ("محصول", TEXT), ("بچ محصول", TEXT), ("ماده", TEXT), ("بچ ماده", TEXT), ("مقدار مصرف", QTY),
+                      ("تامین‌کننده", TEXT), ("فهرست مواد", TEXT)], note="بالا به پایین: از محصول؛ پایین به بالا: کالای فیلتر = ماده.")
     with new_session() as session:
         q = select(ProductionOrder).where(ProductionOrder.company_id == company_id, ProductionOrder.status_code != "CANCELLED")
         if f.item_id and direction == "DOWN":
@@ -617,39 +617,39 @@ def trace(company_id: int, f) -> ReportResult:
 
 _NONE = ()
 PRODUCTION_REPORTS: list[ReportDef] = [
-    ReportDef("PRD_ORDERS", "دستورهایِ تولید", orders_report, ("item", "warehouse", "branch"), "وضعیت، برنامه، تولید، پیشرفت و تأخیر.",
+    ReportDef("PRD_ORDERS", "دستورهای تولید", orders_report, ("item", "warehouse", "branch"), "وضعیت، برنامه، تولید، پیشرفت و تأخیر.",
               "range", _G_PROD, options=_STATUS_OPT),
-    ReportDef("PRD_BY_PRODUCT", "تولید به تفکیکِ محصول", _by("PRODUCT"), _ITEM, "مقدار و بهایِ تولید هر محصول.", "range", _G_PROD),
-    ReportDef("PRD_BY_WAREHOUSE", "تولید به تفکیکِ انبار", _by("WAREHOUSE"), _ITEM, "انبارِ محصولِ دستورها.", "range", _G_PROD),
-    ReportDef("PRD_BY_BRANCH", "تولید به تفکیکِ شعبه", _by("BRANCH"), ("item", "branch"), "شعبهٔ دستورها.", "range", _G_PROD),
-    ReportDef("PRD_BY_PERIOD", "تولید به تفکیکِ دوره", _by("PERIOD"), _ITEM, "ماه‌هایِ شمسی.", "range", _G_PROD),
-    ReportDef("PRD_BY_WORK_CENTER", "تولید به تفکیکِ مرکزِ کاری", _by("WORK_CENTER"), _ITEM, "خط/مرکزِ اصلیِ دستور.", "range", _G_PROD),
-    ReportDef("PRD_MATERIAL_CONSUMPTION", "مصرفِ مواد", material_consumption, _ITEM, "حواله و برگشتِ موادِ تولید.", "range", _G_MAT),
-    ReportDef("PRD_MATERIAL_VARIANCE", "انحرافِ مواد", material_variance, _ITEM, "استاندارد در برابرِ مصرفِ واقعی.", "range", _G_MAT),
-    ReportDef("PRD_MATERIAL_WASTE", "ضایعات و هدررفتِ مواد", material_waste, _ITEM, "ضایعاتِ ثبت‌شده و مصرفِ مازاد.", "range", _G_MAT),
-    ReportDef("PRD_MATERIAL_REQUIREMENT", "نیازِ مواد", material_requirement, _ITEM, "نیاز، موجودی، رزرو و کمبودِ دستورهایِ باز.",
+    ReportDef("PRD_BY_PRODUCT", "تولید به تفکیک محصول", _by("PRODUCT"), _ITEM, "مقدار و بهای تولید هر محصول.", "range", _G_PROD),
+    ReportDef("PRD_BY_WAREHOUSE", "تولید به تفکیک انبار", _by("WAREHOUSE"), _ITEM, "انبار محصول دستورها.", "range", _G_PROD),
+    ReportDef("PRD_BY_BRANCH", "تولید به تفکیک شعبه", _by("BRANCH"), ("item", "branch"), "شعبهٔ دستورها.", "range", _G_PROD),
+    ReportDef("PRD_BY_PERIOD", "تولید به تفکیک دوره", _by("PERIOD"), _ITEM, "ماه‌های شمسی.", "range", _G_PROD),
+    ReportDef("PRD_BY_WORK_CENTER", "تولید به تفکیک مرکز کاری", _by("WORK_CENTER"), _ITEM, "خط/مرکز اصلی دستور.", "range", _G_PROD),
+    ReportDef("PRD_MATERIAL_CONSUMPTION", "مصرف مواد", material_consumption, _ITEM, "حواله و برگشت مواد تولید.", "range", _G_MAT),
+    ReportDef("PRD_MATERIAL_VARIANCE", "انحراف مواد", material_variance, _ITEM, "استاندارد در برابر مصرف واقعی.", "range", _G_MAT),
+    ReportDef("PRD_MATERIAL_WASTE", "ضایعات و هدررفت مواد", material_waste, _ITEM, "ضایعات ثبت‌شده و مصرف مازاد.", "range", _G_MAT),
+    ReportDef("PRD_MATERIAL_REQUIREMENT", "نیاز مواد", material_requirement, _ITEM, "نیاز، موجودی، رزرو و کمبود دستورهای باز.",
               "range", _G_MAT),
-    ReportDef("PRD_COST", "بهایِ تمام‌شدهٔ تولید", production_cost, ("item", "branch"), "عناصرِ بهایِ هر دستور.", "range", _G_COST),
-    ReportDef("PRD_UNIT_COST", "بهایِ واحدِ محصول", unit_cost, _ITEM, "بهایِ واحدِ واقعی/استاندارد هر محصول.", "range", _G_COST),
-    ReportDef("PRD_STD_VS_ACTUAL", "استاندارد در برابرِ واقعی", std_vs_actual, _ITEM, "انحرافِ کلِ هر دستور.", "range", _G_COST),
-    ReportDef("PRD_COST_VARIANCE", "تحلیلِ انحرافِ بها", cost_variance, _ITEM, "نرخ/مصرفِ مواد، نرخ/کاراییِ دستمزد و ماشین، سربار، "
+    ReportDef("PRD_COST", "بهای تمام‌شدهٔ تولید", production_cost, ("item", "branch"), "عناصر بهای هر دستور.", "range", _G_COST),
+    ReportDef("PRD_UNIT_COST", "بهای واحد محصول", unit_cost, _ITEM, "بهای واحد واقعی/استاندارد هر محصول.", "range", _G_COST),
+    ReportDef("PRD_STD_VS_ACTUAL", "استاندارد در برابر واقعی", std_vs_actual, _ITEM, "انحراف کل هر دستور.", "range", _G_COST),
+    ReportDef("PRD_COST_VARIANCE", "تحلیل انحراف بها", cost_variance, _ITEM, "نرخ/مصرف مواد، نرخ/کارایی دستمزد و ماشین، سربار، "
               "مقدار، ضایعات.", "range", _G_COST),
-    ReportDef("PRD_OVERHEAD", "تخصیصِ سربار", overhead_allocation, _NONE, "سربارِ جذب‌شده به تفکیکِ منبع و مبنا.", "range", _G_COST),
-    ReportDef("PRD_LABOR", "هزینهٔ دستمزد", labor_cost, _NONE, "ساعت × نرخِ هر کارمند/عملیات.", "range", _G_COST),
-    ReportDef("PRD_MACHINE", "هزینهٔ ماشین", machine_cost, _NONE, "ساعت × نرخِ هر ماشین.", "range", _G_COST),
-    ReportDef("PRD_WIP", "کالایِ در جریانِ ساخت (WIP)", wip_report, _ITEM, "ماندهٔ WIP هر دستور.", "as_of", _G_INV),
-    ReportDef("PRD_SEMI_STOCK", "موجودیِ نیمه‌ساخته", _stock_by_kind(("SEMI_FINISHED",), "کالاهایِ نوعِ نیمه‌ساخته."), _ITEM_WH,
-              "موجودی و ارزشِ نیمه‌ساخته‌ها.", "none", _G_INV),
-    ReportDef("PRD_FG_STOCK", "موجودیِ محصولِ نهایی", _stock_by_kind(("FINISHED_GOOD",), "کالاهایِ نوعِ محصولِ نهایی."), _ITEM_WH,
-              "موجودی و ارزشِ محصولات.", "none", _G_INV),
-    ReportDef("PRD_SCRAP", "ضایعات", scrap_report, _NONE, "ضایعاتِ محصول/ماده، بازیافت و زیانِ غیرعادی.", "range", _G_INV),
-    ReportDef("PRD_BYPRODUCTS", "محصولاتِ جانبی و مشترک", byproducts, _NONE, "رسیدهایِ جانبی و مشترک.", "range", _G_INV),
-    ReportDef("PRD_PROFITABILITY", "سودآوریِ تولید", profitability, _ITEM, "فیِ فروش، بهایِ تولید و حاشیهٔ ناخالص.", "range", _G_MGMT),
-    ReportDef("PRD_COST_TREND", "روندِ بهایِ تمام‌شده", cost_trend, _ITEM, "بهایِ واحدِ ماهانه و درصدِ تغییر.", "range", _G_MGMT),
-    ReportDef("PRD_EFFICIENCY", "کاراییِ تولید", efficiency, _ITEM, "تحققِ برنامه، کاراییِ مواد/دستمزد/ماشین و تأخیر.", "range",
+    ReportDef("PRD_OVERHEAD", "تخصیص سربار", overhead_allocation, _NONE, "سربار جذب‌شده به تفکیک منبع و مبنا.", "range", _G_COST),
+    ReportDef("PRD_LABOR", "هزینهٔ دستمزد", labor_cost, _NONE, "ساعت × نرخ هر کارمند/عملیات.", "range", _G_COST),
+    ReportDef("PRD_MACHINE", "هزینهٔ ماشین", machine_cost, _NONE, "ساعت × نرخ هر ماشین.", "range", _G_COST),
+    ReportDef("PRD_WIP", "کالای در جریان ساخت (WIP)", wip_report, _ITEM, "ماندهٔ کالای در جریان ساخت هر دستور.", "as_of", _G_INV),
+    ReportDef("PRD_SEMI_STOCK", "موجودی نیمه‌ساخته", _stock_by_kind(("SEMI_FINISHED",), "کالاهای نوع نیمه‌ساخته."), _ITEM_WH,
+              "موجودی و ارزش نیمه‌ساخته‌ها.", "none", _G_INV),
+    ReportDef("PRD_FG_STOCK", "موجودی محصول نهایی", _stock_by_kind(("FINISHED_GOOD",), "کالاهای نوع محصول نهایی."), _ITEM_WH,
+              "موجودی و ارزش محصولات.", "none", _G_INV),
+    ReportDef("PRD_SCRAP", "ضایعات", scrap_report, _NONE, "ضایعات محصول/ماده، بازیافت و زیان غیرعادی.", "range", _G_INV),
+    ReportDef("PRD_BYPRODUCTS", "محصولات جانبی و مشترک", byproducts, _NONE, "رسیدهای جانبی و مشترک.", "range", _G_INV),
+    ReportDef("PRD_PROFITABILITY", "سودآوری تولید", profitability, _ITEM, "فی فروش، بهای تولید و حاشیهٔ ناخالص.", "range", _G_MGMT),
+    ReportDef("PRD_COST_TREND", "روند بهای تمام‌شده", cost_trend, _ITEM, "بهای واحد ماهانه و درصد تغییر.", "range", _G_MGMT),
+    ReportDef("PRD_EFFICIENCY", "کارایی تولید", efficiency, _ITEM, "تحقق برنامه، کارایی مواد/دستمزد/ماشین و تأخیر.", "range",
               _G_MGMT),
-    ReportDef("PRD_CAPACITY", "بهره‌برداری از ظرفیت", capacity, _NONE, "بار در برابرِ ظرفیتِ هر مرکزِ کاری.", "range", _G_MGMT),
-    ReportDef("PRD_SCRAP_ANALYSIS", "تحلیلِ ضایعات", scrap_analysis, _ITEM, "درصدِ ضایعات در برابرِ حدِ عادی.", "range", _G_MGMT),
-    ReportDef("PRD_TRACE", "ردیابیِ تولید (Traceability)", trace, _ITEM, "محصول ← دستور ← مواد ← بچ ← تامین‌کننده و برعکس.", "range",
+    ReportDef("PRD_CAPACITY", "بهره‌برداری از ظرفیت", capacity, _NONE, "بار در برابر ظرفیت هر مرکز کاری.", "range", _G_MGMT),
+    ReportDef("PRD_SCRAP_ANALYSIS", "تحلیل ضایعات", scrap_analysis, _ITEM, "درصد ضایعات در برابر حد عادی.", "range", _G_MGMT),
+    ReportDef("PRD_TRACE", "ردیابی تولید (Traceability)", trace, _ITEM, "محصول ← دستور ← مواد ← بچ ← تامین‌کننده و برعکس.", "range",
               _G_MGMT, options=(("direction", "جهت", (("DOWN", "از محصول به مواد"), ("UP", "از ماده به محصولات"))),)),
 ]

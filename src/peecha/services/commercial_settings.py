@@ -1,5 +1,5 @@
-"""تنظیماتِ دامنهٔ مدیریتِ بازرگانی: نگاشتِ حساب‌ها، Feature Toggle، شماره‌گذاریِ
-اسناد (طبقِ مرحلهٔ ۱۱). کلیدهایِ CUSTOMER_RECEIVABLE/SUPPLIER_PAYABLE عمداً
+"""تنظیمات دامنهٔ مدیریت بازرگانی: نگاشت حساب‌ها، Feature Toggle، شماره‌گذاری
+اسناد (طبق مرحلهٔ ۱۱). کلیدهای CUSTOMER_RECEIVABLE/SUPPLIER_PAYABLE عمداً
 این‌جا نیستند — از inv.account_mappings مصرف می‌شوند (inventory_engine.
 get_account_mapping)، نه تکرار."""
 
@@ -21,19 +21,19 @@ from peecha.db.models.commercial import (
 )
 
 MAPPING_LABELS: dict[str, str] = {
-    "SALES_REVENUE": "درآمدِ فروش",
-    "SALES_TAX_PAYABLE": "مالیاتِ فروشِ پرداختنی",
-    "SALES_DISCOUNT": "تخفیفِ فروش",
-    "PURCHASE_TAX_RECEIVABLE": "مالیاتِ خریدِ دریافتنی",
-    "PURCHASE_DISCOUNT": "تخفیفِ خرید",
-    "SHIPPING_REVENUE": "درآمدِ حمل",
+    "SALES_REVENUE": "درآمد فروش",
+    "SALES_TAX_PAYABLE": "مالیات فروش پرداختنی",
+    "SALES_DISCOUNT": "تخفیف فروش",
+    "PURCHASE_TAX_RECEIVABLE": "مالیات خرید دریافتنی",
+    "PURCHASE_DISCOUNT": "تخفیف خرید",
+    "SHIPPING_REVENUE": "درآمد حمل",
     "SHIPPING_EXPENSE": "هزینهٔ حمل",
     "COMMISSION_EXPENSE": "هزینهٔ کمیسیون",
-    "GIFT_CARD_LIABILITY": "بدهیِ کارتِ‌هدیه",
-    "LOYALTY_LIABILITY": "بدهیِ باشگاهِ مشتریان",
-    "ROUNDING": "مابه‌التفاوتِ گرد‌کردن",
-    "LANDED_COST_CLEARING": "تسویهٔ بهایِ تمام‌شدهٔ وارداتی",
-    "VENDOR_REBATE_RECEIVABLE": "ریبیتِ دریافتنیِ تامین‌کننده",
+    "GIFT_CARD_LIABILITY": "بدهی کارت‌هدیه",
+    "LOYALTY_LIABILITY": "بدهی باشگاه مشتریان",
+    "ROUNDING": "مابه‌التفاوت گرد‌کردن",
+    "LANDED_COST_CLEARING": "تسویهٔ بهای تمام‌شدهٔ وارداتی",
+    "VENDOR_REBATE_RECEIVABLE": "تخفیف حجمی دریافتنی تامین‌کننده",
     "WARRANTY_EXPENSE": "هزینهٔ گارانتی",
 }
 
@@ -54,9 +54,9 @@ def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
 
 
 def get_fixed_detail_for_mapping(company_id: int, mapping_key: str) -> tuple[int, int] | None:
-    """(dimension_type_id, detail_account_id) تفصیلیِ ثابتِ این نقش، اگر
-    تنظیم شده باشد -- طبقِ درخواستِ صریح («برایِ فاکتورِ فروش هم تفصیلیِ
-    ثابت برایِ مالیات، مثلِ فاکتورِ خرید»)."""
+    """(dimension_type_id, detail_account_id) تفصیلی ثابت این نقش، اگر
+    تنظیم شده باشد — طبق درخواست صریح («برای فاکتور فروش هم تفصیلی
+    ثابت برای مالیات، مثل فاکتور خرید»)."""
     with new_session() as session:
         row = session.get(CommercialAccountMapping, (company_id, mapping_key))
         if row is None or row.detail_account_id is None:
@@ -69,7 +69,7 @@ def get_fixed_detail_for_mapping(company_id: int, mapping_key: str) -> tuple[int
 
 def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلیدِ نگاشتِ نامعتبر است.")
+        raise ValueError("کلید نگاشت نامعتبر است.")
     with new_session() as session:
         row = session.get(CommercialAccountMapping, (company_id, mapping_key))
         if row is None:
@@ -108,7 +108,7 @@ def list_account_mappings(company_id: int) -> list[AccountMappingRow]:
 def resolve_role_account(session, company_id: int, mapping_key: str) -> int:
     row = session.get(CommercialAccountMapping, (company_id, mapping_key))
     if row is None:
-        raise ValueError(f"حسابِ «{MAPPING_LABELS.get(mapping_key, mapping_key)}» هنوز در تنظیماتِ بازرگانی مشخص نشده است.")
+        raise ValueError(f"حساب «{MAPPING_LABELS.get(mapping_key, mapping_key)}» هنوز در تنظیمات بازرگانی مشخص نشده است.")
     return row.account_id
 
 
@@ -145,12 +145,12 @@ def set_feature_enabled(company_id: int, feature_code: str, is_enabled: bool) ->
     with new_session() as session:
         definition = session.get(CommercialFeatureDefinition, feature_code)
         if definition is None:
-            raise ValueError("ویژگیِ نامعتبر است.")
+            raise ValueError("ویژگی نامعتبر است.")
         if is_enabled and definition.requires_feature_code is not None:
             dep_row = session.get(CommercialCompanyFeature, (company_id, definition.requires_feature_code))
             if dep_row is None or not dep_row.is_enabled:
                 dep = session.get(CommercialFeatureDefinition, definition.requires_feature_code)
-                raise ValueError(f"ابتدا باید ویژگیِ «{dep.name}» فعال شود.")
+                raise ValueError(f"ابتدا باید ویژگی «{dep.name}» فعال شود.")
         row = session.get(CommercialCompanyFeature, (company_id, feature_code))
         if row is None:
             session.add(CommercialCompanyFeature(company_id=company_id, feature_code=feature_code, is_enabled=is_enabled))
@@ -171,8 +171,8 @@ def list_industry_profiles() -> list[IndustryProfile]:
 
 
 def apply_industry_profile(company_id: int, profile_code: str) -> None:
-    """فقط Toggleهایِ هنوز تنظیم‌نشده را پر می‌کند — هیچ Toggleِ
-    ازقبل‌دستی‌تغییریافته را بازنویسی نمی‌کند (مرحلهٔ ۱۱، بخشِ ۵)."""
+    """فقط Toggleهای هنوز تنظیم‌نشده را پر می‌کند — هیچ Toggle
+    ازقبل‌دستی‌تغییریافته را بازنویسی نمی‌کند (مرحلهٔ ۱۱، بخش ۵)."""
     with new_session() as session:
         profile = session.get(IndustryProfile, profile_code)
         if profile is None:
@@ -201,7 +201,7 @@ def get_numbering_sequence(company_id: int, document_type_code: str) -> Document
 
 def set_numbering_sequence(company_id: int, document_type_code: str, prefix: str, reset_policy_code: str) -> None:
     if reset_policy_code not in ("YEARLY", "NEVER"):
-        raise ValueError("سیاستِ بازنشانیِ نامعتبر است.")
+        raise ValueError("سیاست بازنشانی نامعتبر است.")
     with new_session() as session:
         row = session.get(DocumentNumberingSequence, (company_id, document_type_code))
         if row is None:

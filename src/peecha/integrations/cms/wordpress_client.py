@@ -1,6 +1,6 @@
-"""لایه‌یِ ارتباطِ خامِ HTTP با WP REST APIِ وردپرس (Application Password
-+ Basic Auth) -- طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»). دقیقاً
-هم‌الگو با wc_client.py/telegram_client.py: فقط پارامتر می‌گیرد و پاسخِ
+"""لایهٔ ارتباط خام HTTP با WP REST API وردپرس (Application Password
++ Basic Auth) — طبق ادامهٔ اولویت بخش محتوا («همگام‌سازی CMS»). دقیقاً
+هم‌الگو با wc_client.py/telegram_client.py: فقط پارامتر می‌گیرد و پاسخ
 خام برمی‌گرداند."""
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ _DEFAULT_TIMEOUT = 30
 
 
 class CmsAPIError(RuntimeError):
-    """خطایِ ارتباط با وردپرس -- پیامِ HTTP/شبکه به فارسی ترجمه می‌شود."""
+    """خطای ارتباط با وردپرس — پیام HTTP/شبکه به فارسی ترجمه می‌شود."""
 
 
 def _api_base(site_url: str) -> str:
@@ -27,7 +27,7 @@ def _raise_for_status(resp, label: str) -> dict:
         data = None
     if resp.status_code >= 400:
         message = (data or {}).get("message") if isinstance(data, dict) else None
-        raise CmsAPIError(f"{label} -- خطایِ وردپرس (HTTP {resp.status_code}): {message or resp.text[:300]}")
+        raise CmsAPIError(f"{label} -- خطای وردپرس (HTTP {resp.status_code}): {message or resp.text[:300]}")
     return data if isinstance(data, dict) else {}
 
 
@@ -40,7 +40,7 @@ def check_connection(site_url: str, username: str, app_password: str) -> tuple[b
     except Exception as exc:  # noqa: BLE001 -- خطاهایِ requests/شبکه متنوع‌اند
         return False, f"اتصال به وردپرس برقرار نشد: {exc}"
     if resp.status_code >= 400:
-        return False, f"وردپرس با خطایِ HTTP {resp.status_code} پاسخ داد -- آدرسِ سایت/نامِ‌کاربری/رمزِ‌کاره را بررسی کنید."
+        return False, f"وردپرس با خطای HTTP {resp.status_code} پاسخ داد — آدرس سایت/نام‌کاربری/رمز‌کاره را بررسی کنید."
     return True, "اتصال به وردپرس برقرار است."
 
 
@@ -50,7 +50,7 @@ def create_post(site_url: str, username: str, app_password: str, title: str, con
         auth=(username, app_password), json={"title": title, "content": content, "status": status},
         timeout=_DEFAULT_TIMEOUT,
     )
-    return _raise_for_status(resp, "ایجادِ مقاله")
+    return _raise_for_status(resp, "ایجاد مقاله")
 
 
 def update_post(site_url: str, username: str, app_password: str, post_id: str, title: str, content: str, status: str = "publish") -> dict:
@@ -59,4 +59,4 @@ def update_post(site_url: str, username: str, app_password: str, post_id: str, t
         auth=(username, app_password), json={"title": title, "content": content, "status": status},
         timeout=_DEFAULT_TIMEOUT,
     )
-    return _raise_for_status(resp, "به‌روزرسانیِ مقاله")
+    return _raise_for_status(resp, "به‌روزرسانی مقاله")

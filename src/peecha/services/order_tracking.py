@@ -1,14 +1,14 @@
-"""مدیریتِ سفارشات — طبقِ درخواستِ صریح: هر سفارش دقیقاً یک تفصیلیِ یک
-گروهِ تفصیلیِ ازپیش‌تعیین‌شده («سفارشاتِ در راه») است. پرداخت‌هایِ خودِ
-سفارش این‌جا دوباره ذخیره نمی‌شوند -- همان فرمِ دریافت/پرداختِ
+"""مدیریت سفارشات — طبق درخواست صریح: هر سفارش دقیقاً یک تفصیلی یک
+گروه تفصیلی ازپیش‌تعیین‌شده («سفارشات در راه») است. پرداخت‌های خود
+سفارش این‌جا دوباره ذخیره نمی‌شوند — همان فرم دریافت/پرداخت
 خزانه‌داری (با هر روش/ارزی که دارد) استفاده می‌شود و تاریخچه با
-پرس‌وجویِ مستقیمِ سندهایِ حسابداریِ همان تفصیلی به‌دست می‌آید؛ سندِ
-حسابداریِ هر پرداخت هم دقیقاً همان‌جا (نه این‌جا) صادر می‌شود.
+پرس‌وجوی مستقیم سندهای حسابداری همان تفصیلی به‌دست می‌آید؛ سند
+حسابداری هر پرداخت هم دقیقاً همان‌جا (نه این‌جا) صادر می‌شود.
 
-پیش‌نیازِ خارج از این ماژول: برایِ اینکه دکمهٔ «افزودنِ پرداخت» بتواند
-تفصیلیِ سفارش را در فرمِ دریافت/پرداخت پیشنهاد بدهد، باید یک نگاشتِ
-طرفِ‌حساب (treasury_counterparty_settings) برایِ همان گروهِ تفصیلی از
-پیش تنظیم شده باشد -- این ماژول آن نگاشت را نمی‌سازد، فقط بودنش را
+پیش‌نیاز خارج از این ماژول: برای اینکه دکمهٔ «افزودن پرداخت» بتواند
+تفصیلی سفارش را در فرم دریافت/پرداخت پیشنهاد بدهد، باید یک نگاشت
+طرف‌حساب (treasury_counterparty_settings) برای همان گروه تفصیلی از
+پیش تنظیم شده باشد — این ماژول آن نگاشت را نمی‌سازد، فقط بودنش را
 بررسی می‌کند."""
 
 from __future__ import annotations
@@ -62,18 +62,18 @@ def get_attachments_dir_setting(company_id: int) -> str | None:
 
 
 def set_attachments_dir_setting(company_id: int, path: str | None) -> None:
-    """طبقِ درخواستِ صریح («امکانِ دیدنِ عکس برایِ همه‌یِ کاربرانِ شبکه»):
-    یک مسیرِ اشتراکیِ شبکه‌ای (مثلاً \\\\SERVER\\Share\\PeechaAttachments یا
-    یک درایوِ نگاشته‌شده که رویِ همهٔ کامپیوترها به یک پوشه اشاره کند) --
-    چون همین یک ردیف در دیتابیس ذخیره می‌شود، همهٔ کاربرانِ متصل به همان
-    شرکت همین یک مسیر را می‌بینند. اگر خالی بماند، رفتارِ قبلی (پوشهٔ
-    محلیِ تنظیماتِ همان کامپیوتر -- فقط رویِ همان یک دستگاه قابلِ‌دیدن)
+    """طبق درخواست صریح («امکان دیدن عکس برای همهٔ کاربران شبکه»):
+    یک مسیر اشتراکی شبکه‌ای (مثلاً \\\\SERVER\\Share\\PeechaAttachments یا
+    یک درایو نگاشته‌شده که روی همهٔ کامپیوترها به یک پوشه اشاره کند) --
+    چون همین یک ردیف در دیتابیس ذخیره می‌شود، همهٔ کاربران متصل به همان
+    شرکت همین یک مسیر را می‌بینند. اگر خالی بماند، رفتار قبلی (پوشهٔ
+    محلی تنظیمات همان کامپیوتر — فقط روی همان یک دستگاه قابل‌دیدن)
     ادامه می‌یابد."""
     path = (path or "").strip() or None
     with new_session() as session:
         row = session.get(OrderTrackingSetting, company_id)
         if row is None:
-            raise ValueError("ابتدا باید گروهِ تفصیلیِ «سفارشاتِ در راه» را تنظیم کنید.")
+            raise ValueError("ابتدا باید گروه تفصیلی «سفارشات در راه» را تنظیم کنید.")
         row.attachments_dir = path
         session.commit()
 
@@ -99,10 +99,10 @@ class OrderRow:
 
 
 def list_available_detail_accounts(company_id: int) -> list[dimensions_service.DetailAccountRow]:
-    """طبقِ گزارشِ صریح («یک گروهِ تفصیلی انتخاب می‌کنم، تفصیلی‌هایِ سطحِ
-    آخرش را باید نمایش بدهد»): تفصیلی‌هایِ سطحِ آخرِ همان گروهِ تنظیم‌شده
-    («سفارشاتِ در راه») که هنوز به‌عنوانِ یک سفارش پیگیری نمی‌شوند -- یعنی
-    آماده‌یِ انتخاب برایِ شروعِ یک سفارشِ تازه‌اند."""
+    """طبق گزارش صریح («یک گروه تفصیلی انتخاب می‌کنم، تفصیلی‌های سطح
+    آخرش را باید نمایش بدهد»): تفصیلی‌های سطح آخر همان گروه تنظیم‌شده
+    («سفارشات در راه») که هنوز به‌عنوان یک سفارش پیگیری نمی‌شوند — یعنی
+    آمادهٔ انتخاب برای شروع یک سفارش تازه‌اند."""
     dimension_type_id = get_dimension_type_id(company_id)
     if dimension_type_id is None:
         return []
@@ -121,7 +121,7 @@ def list_available_detail_accounts(company_id: int) -> list[dimensions_service.D
 def create_order(company_id: int, user_id: int, detail_account_id: int, description: str | None = None) -> int:
     dimension_type_id = get_dimension_type_id(company_id)
     if dimension_type_id is None:
-        raise ValueError("ابتدا باید گروهِ تفصیلیِ «سفارشاتِ در راه» را در همین صفحه تنظیم کنید.")
+        raise ValueError("ابتدا باید گروه تفصیلی «سفارشات در راه» را در همین صفحه تنظیم کنید.")
     with new_session() as session:
         detail_account = session.get(DetailAccount, detail_account_id)
         if (
@@ -129,10 +129,10 @@ def create_order(company_id: int, user_id: int, detail_account_id: int, descript
             or detail_account.company_id != company_id
             or detail_account.dimension_type_id != dimension_type_id
         ):
-            raise ValueError("تفصیلیِ انتخاب‌شده متعلق به گروهِ «سفارشاتِ در راه» نیست.")
+            raise ValueError("تفصیلی انتخاب‌شده متعلق به گروه «سفارشات در راه» نیست.")
         existing = session.scalar(select(OrderTracking).where(OrderTracking.detail_account_id == detail_account_id))
         if existing is not None:
-            raise ValueError("این تفصیلی قبلاً به‌عنوانِ یک سفارش پیگیری می‌شود.")
+            raise ValueError("این تفصیلی قبلاً به‌عنوان یک سفارش پیگیری می‌شود.")
         row = OrderTracking(
             company_id=company_id, detail_account_id=detail_account_id, description=description,
             status_code="OPEN", opened_by_user_id=user_id,
@@ -224,7 +224,7 @@ def list_payment_titles(company_id: int) -> list[PaymentTitleRow]:
 def create_payment_title(company_id: int, label: str) -> int:
     label = label.strip()
     if not label:
-        raise ValueError("عنوانِ پرداخت نمی‌تواند خالی باشد.")
+        raise ValueError("عنوان پرداخت نمی‌تواند خالی باشد.")
     with new_session() as session:
         existing = session.scalar(
             select(OrderPaymentTitle).where(OrderPaymentTitle.company_id == company_id, OrderPaymentTitle.label == label)
@@ -238,13 +238,13 @@ def create_payment_title(company_id: int, label: str) -> int:
 
 
 def update_payment_title(company_id: int, payment_title_id: int, new_label: str) -> None:
-    """طبقِ گزارشِ صریح («عنوانِ پرداخت وقتی وارد می‌شود نمی‌شود ویرایش
-    کرد»): عنوان‌هایِ ثبت‌شده صرفاً یک برچسبِ ساده‌اند -- ویرایش/حذفشان
-    هیچ سندِ حسابداریِ قبلی را تغییر نمی‌دهد (شرحِ همان پرداخت‌ها، طبقِ
-    طراحی، یک متنِ ثابتِ کپی‌شده است، نه ارجاعِ زنده به این جدول)."""
+    """طبق گزارش صریح («عنوان پرداخت وقتی وارد می‌شود نمی‌شود ویرایش
+    کرد»): عنوان‌های ثبت‌شده صرفاً یک برچسب ساده‌اند — ویرایش/حذفشان
+    هیچ سند حسابداری قبلی را تغییر نمی‌دهد (شرح همان پرداخت‌ها، طبق
+    طراحی، یک متن ثابت کپی‌شده است، نه ارجاع زنده به این جدول)."""
     new_label = new_label.strip()
     if not new_label:
-        raise ValueError("عنوانِ پرداخت نمی‌تواند خالی باشد.")
+        raise ValueError("عنوان پرداخت نمی‌تواند خالی باشد.")
     with new_session() as session:
         row = session.get(OrderPaymentTitle, payment_title_id)
         if row is None or row.company_id != company_id:
@@ -326,27 +326,27 @@ _FORM_CODE = "order_tracking"
 
 
 def _get_form_id(session, company_id: int) -> int:
-    """طبقِ باگِ کشف‌شده (گزارشِ صریح: «هیچ عکسی نمی‌شود الصاق کنم» --
-    که در واقع علتِ ریشه‌ایِ «فقط پرداختِ اول نمایش داده می‌شود» هم بود):
+    """طبق باگ کشف‌شده (گزارش صریح: «هیچ عکسی نمی‌شود الصاق کنم» --
+    که در واقع علت ریشه‌ای «فقط پرداخت اول نمایش داده می‌شود» هم بود):
     sec.forms فقط با ensure_catalog() پر می‌شود، که تا پیش از این فقط از
-    صفحه‌ی «نقش‌ها» یا کارتیبل صدا زده می‌شد -- اگر کاربر هیچ‌کدام را باز
-    نکرده باشد، ردیفِ این فرم اصلاً وجود ندارد. این‌جا idempotent صدا
-    زده می‌شود تا این پیش‌نیاز همیشه، بدونِ وابستگی به بازکردنِ صفحه‌ی
+    صفحهٔ «نقش‌ها» یا کارتیبل صدا زده می‌شد — اگر کاربر هیچ‌کدام را باز
+    نکرده باشد، ردیف این فرم اصلاً وجود ندارد. این‌جا idempotent صدا
+    زده می‌شود تا این پیش‌نیاز همیشه، بدون وابستگی به بازکردن صفحه‌ی
     دیگری، برقرار باشد."""
     roles_service.ensure_catalog()
     form = session.scalar(select(Form).where(Form.code == _FORM_CODE))
     if form is None:
-        raise ValueError("فرمِ «مدیریتِ سفارشات» هنوز در فهرستِ فرم‌ها ثبت نشده است.")
+        raise ValueError("فرم «مدیریت سفارشات» هنوز در فهرست فرم‌ها ثبت نشده است.")
     return form.form_id
 
 
 def attach_file(company_id: int, journal_entry_id: int, user_id: int, file_path: str) -> int:
-    """طبقِ درخواستِ صریح («عکس در دیتابیس ذخیره نشود، فقط مسیر، چون
-    دیتابیس حجیم می‌شود»): فقط storage_key (مسیرِ فایل) در دیتابیس
-    می‌رود؛ خودِ فایل در _attachments_dir(company_id) کپی می‌شود -- که
-    اگر مدیر یک مسیرِ شبکه‌ایِ اشتراکی تنظیم کرده باشد، همان پوشه است
-    (پس همهٔ کاربران به همان فایل دسترسی دارند)، وگرنه پوشهٔ محلیِ
-    تنظیماتِ همین کامپیوتر (رفتارِ پیش‌فرض/قدیمی)."""
+    """طبق درخواست صریح («عکس در دیتابیس ذخیره نشود، فقط مسیر، چون
+    دیتابیس حجیم می‌شود»): فقط storage_key (مسیر فایل) در دیتابیس
+    می‌رود؛ خود فایل در _attachments_dir(company_id) کپی می‌شود — که
+    اگر مدیر یک مسیر شبکه‌ای اشتراکی تنظیم کرده باشد، همان پوشه است
+    (پس همهٔ کاربران به همان فایل دسترسی دارند)، وگرنه پوشهٔ محلی
+    تنظیمات همین کامپیوتر (رفتار پیش‌فرض/قدیمی)."""
     source = Path(file_path)
     if not source.is_file():
         raise ValueError("فایل یافت نشد.")

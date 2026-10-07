@@ -1,8 +1,8 @@
-"""تسعیر/اصلاحِ ماندهٔ ریالیِ موجودیِ صفر -- R230.
+"""تسعیر/اصلاح ماندهٔ ریالی موجودی صفر — R230.
 
-کالاهایی که موجودیِ تعدادیشان صفر است ولی حسابِ موجودی (به تفکیکِ تفصیلیِ
-کالا) هنوز مانده دارد فهرست می‌شوند؛ با انتخاب، یک سندِ اصلاحی به حسابِ
-«تسعیر/اصلاحِ ماندهٔ ریالی» (تنظیماتِ انبار ‹ نگاشتِ حساب‌ها) صادر می‌شود.
+کالاهایی که موجودی تعدادیشان صفر است ولی حساب موجودی (به تفکیک تفصیلی
+کالا) هنوز مانده دارد فهرست می‌شوند؛ با انتخاب، یک سند اصلاحی به حساب
+«تسعیر/اصلاح ماندهٔ ریالی» (تنظیمات انبار ‹ نگاشت حساب‌ها) صادر می‌شود.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_residual as residual_service
 from peecha.ui.widgets import persist_column_widths
 
-_COLUMNS = ["کالا", "موجودیِ تعدادی", "ارزشِ موجودی (انبار)", "ماندهٔ دفترِ کل", "انحراف"]
+_COLUMNS = ["کالا", "موجودی تعدادی", "ارزش موجودی (انبار)", "ماندهٔ دفتر کل", "انحراف"]
 
 
 class InventoryResidualScreen(QWidget):
@@ -28,12 +28,12 @@ class InventoryResidualScreen(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
-        title = QLabel("تسعیر/اصلاحِ ماندهٔ ریالیِ موجودیِ صفر")
+        title = QLabel("تسعیر/اصلاح ماندهٔ ریالی موجودی صفر")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "کالاهایی که تعدادشان صفر است ولی حسابِ موجودی در دفترِ کل هنوز مانده دارد. "
-            "انحراف با سندِ اصلاحی به حسابِ «تسعیر/اصلاحِ ماندهٔ ریالی» بسته می‌شود."
+            "کالاهایی که تعدادشان صفر است ولی حساب موجودی در دفتر کل هنوز مانده دارد. "
+            "انحراف با سند اصلاحی به حساب «تسعیر/اصلاح ماندهٔ ریالی» بسته می‌شود."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -57,10 +57,10 @@ class InventoryResidualScreen(QWidget):
         layout.addWidget(self.table, stretch=1)
 
         buttons = QHBoxLayout()
-        self.post_button = QPushButton("صدورِ سندِ اصلاحی برایِ ردیف‌هایِ انتخاب‌شده")
+        self.post_button = QPushButton("صدور سند اصلاحی برای ردیف‌های انتخاب‌شده")
         self.post_button.setObjectName("primaryButton")
         self.post_button.clicked.connect(self._post_selected)
-        select_all = QPushButton("انتخابِ همه")
+        select_all = QPushButton("انتخاب همه")
         select_all.clicked.connect(self.table.selectAll)
         reload_button = QPushButton("بازخوانی")
         reload_button.clicked.connect(self.refresh)
@@ -79,13 +79,13 @@ class InventoryResidualScreen(QWidget):
             return
         counter_id, key = residual_service.counter_account_id(company_id)
         if counter_id is None:
-            self.account_label.setText("⚠ حسابِ مقابل تعریف نشده -- تنظیماتِ انبار ‹ نگاشتِ حساب‌ها ‹ «تسعیر/اصلاحِ ماندهٔ ریالیِ موجودیِ صفر».")
+            self.account_label.setText("⚠ حساب مقابل تعریف نشده — تنظیمات انبار ‹ نگاشت حساب‌ها ‹ «تسعیر/اصلاح ماندهٔ ریالی موجودی صفر».")
         else:
-            self.account_label.setText(f"حسابِ مقابل: {engine_service.MAPPING_LABELS.get(key, key)}")
+            self.account_label.setText(f"حساب مقابل: {engine_service.MAPPING_LABELS.get(key, key)}")
         if not residual_service.inventory_account_tracks_items(company_id):
             self.account_label.setText(
-                self.account_label.text() + "\n⚠ تفصیلیِ «کالا» رویِ معینِ موجودیِ کالا الزامی نیست؛ "
-                "ماندهٔ ریالی به تفکیکِ کالا قابلِ‌تشخیص نیست (ساختارِ حساب‌ها ‹ معینِ موجودی ‹ تفصیلی‌ها)."
+                self.account_label.text() + "\n⚠ تفصیلی «کالا» روی معین موجودی کالا الزامی نیست؛ "
+                "ماندهٔ ریالی به تفکیک کالا قابل‌تشخیص نیست (ساختار حساب‌ها ‹ معین موجودی ‹ تفصیلی‌ها)."
             )
         self._build_dimension_pickers(company_id)
         self._rows = residual_service.list_residuals(company_id)
@@ -132,7 +132,7 @@ class InventoryResidualScreen(QWidget):
             return
         missing = [i for i, c in self._dim_combos.items() if c.currentData() is None]
         if missing:
-            QMessageBox.warning(self, "تسعیر", "تفصیلی‌هایِ الزامیِ بالایِ جدول (مثلاً مرکزِ هزینه/پروژه) را انتخاب کنید.")
+            QMessageBox.warning(self, "تسعیر", "تفصیلی‌های الزامی بالای جدول (مثلاً مرکز هزینه/پروژه) را انتخاب کنید.")
             return
         try:
             je_id = residual_service.post_residual_adjustment(
@@ -142,5 +142,5 @@ class InventoryResidualScreen(QWidget):
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
-        QMessageBox.information(self, "تسعیر", f"سندِ اصلاحی صادر شد (شناسهٔ سند {numerals.to_persian_digits(str(je_id))}).")
+        QMessageBox.information(self, "تسعیر", f"سند اصلاحی صادر شد (شناسهٔ سند {numerals.to_persian_digits(str(je_id))}).")
         self.refresh()

@@ -93,10 +93,10 @@ export function VanSalesOrderScreen(props: Props) {
         if (cancelled) return;
         if (cached) {
           setCatalog(cached);
-          setCatalogNote("اتصال به سرور برقرار نشد -- کاتالوگ و موجودیِ ذخیره‌شدهٔ آخرین همگام‌سازی نمایش داده می‌شود.");
+          setCatalogNote("اتصال به سرور برقرار نشد — کاتالوگ و موجودی ذخیره‌شدهٔ آخرین همگام‌سازی نمایش داده می‌شود.");
         } else {
           setCatalog(catalogFromPull(items));
-          setCatalogNote("کاتالوگِ کامل هنوز دریافت نشده -- فیلترِ دسته/برند و موجودیِ خودرو پس از اتصال نمایش داده می‌شود.");
+          setCatalogNote("کاتالوگ کامل هنوز دریافت نشده — فیلتر دسته/برند و موجودی خودرو پس از اتصال نمایش داده می‌شود.");
         }
       }
       try {
@@ -278,7 +278,7 @@ export function VanSalesOrderScreen(props: Props) {
       setCart({});
       setStep("RECEIPT");
     } catch {
-      toast.show("ثبتِ فاکتور انجام نشد -- دوباره تلاش کنید.", "danger");
+      toast.show("ثبت فاکتور انجام نشد — دوباره تلاش کنید.", "danger");
     } finally {
       setSubmitting(false);
     }
@@ -287,7 +287,7 @@ export function VanSalesOrderScreen(props: Props) {
   if (catalog === null) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        <InlineSpinner label="در حالِ بارگذاریِ کاتالوگ..." />
+        <InlineSpinner label="در حال بارگذاری کاتالوگ..." />
       </View>
     );
   }

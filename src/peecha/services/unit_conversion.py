@@ -1,11 +1,11 @@
-"""سرویسِ مرکزیِ واحدِ اندازه‌گیری، واحدهایِ کالا، تبدیلِ واحد و بارکدِ هر
-واحد (R225). همه‌یِ لایه‌ها (دسکتاپ، API موبایل، فروشِ حضوری، اسنادِ
+"""سرویس مرکزی واحد اندازه‌گیری، واحدهای کالا، تبدیل واحد و بارکد هر
+واحد (R225). همهٔ لایه‌ها (دسکتاپ، API موبایل، فروش حضوری، اسناد
 تجاری/انبار) فقط از همین‌جا تبدیل و بارکد را می‌خوانند تا منطق تکرار نشود.
 
 اصل‌ها:
-- موجودی همیشه به واحدِ پایهٔ کالا نگه‌داری می‌شود (inventory_engine دست‌نخورده)؛
-  ردیفِ سند واحد/مقدارِ انتخابیِ کاربر + ضریبِ همان لحظه (snapshot) را نگه می‌دارد.
-- واحدهایِ هر کالا در inv.item_uom_conversions‌اند (ردیفِ پایه با is_base_unit).
+- موجودی همیشه به واحد پایهٔ کالا نگه‌داری می‌شود (inventory_engine دست‌نخورده)؛
+  ردیف سند واحد/مقدار انتخابی کاربر + ضریب همان لحظه (snapshot) را نگه می‌دارد.
+- واحدهای هر کالا در inv.item_uom_conversions‌اند (ردیف پایه با is_base_unit).
 - محاسبات با Decimal.
 """
 
@@ -68,8 +68,8 @@ class ItemUnit:
 # واحدهایِ کالا
 # ---------------------------------------------------------------------
 def ensure_base_unit(session, item: Item) -> ItemUomConversion:
-    """ردیفِ واحدِ پایه را (اگر هنوز نیست، مثلاً کالایِ تازه) می‌سازد و با
-    base_uom_idِ فعلیِ کالا همگام می‌کند."""
+    """ردیف واحد پایه را (اگر هنوز نیست، مثلاً کالای تازه) می‌سازد و با
+    base_uom_id فعلی کالا همگام می‌کند."""
     rows = session.scalars(select(ItemUomConversion).where(ItemUomConversion.item_id == item.item_id)).all()
     base_row = next((r for r in rows if r.is_base_unit), None)
     if base_row is not None and base_row.uom_id == item.base_uom_id:
@@ -111,8 +111,8 @@ def _to_item_unit(row: ItemUomConversion, uom: Uom, barcodes: list[str]) -> Item
 
 
 def get_item_units(item_id: int, purpose: str | None = None, active_only: bool = True) -> list[ItemUnit]:
-    """واحدهایِ کالا، اول واحدِ پایه. purpose=PURCHASE/SALES/INVENTORY فقط
-    واحدهایِ مجاز برایِ همان نوعِ سند را برمی‌گرداند (واحدِ پایه همیشه مجاز است)."""
+    """واحدهای کالا، اول واحد پایه. purpose=PURCHASE/SALES/INVENTORY فقط
+    واحدهای مجاز برای همان نوع سند را برمی‌گرداند (واحد پایه همیشه مجاز است)."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None:
@@ -173,7 +173,7 @@ def purpose_for_document_type(document_type_code: str | None) -> str | None:
 
 
 def get_factor(item_id: int, uom_id: int, require_active: bool = False) -> decimal.Decimal:
-    """ضریبِ تبدیلِ یک واحد به واحدِ پایهٔ کالا (پایه = ۱)."""
+    """ضریب تبدیل یک واحد به واحد پایهٔ کالا (پایه = ۱)."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None:
@@ -184,14 +184,14 @@ def get_factor(item_id: int, uom_id: int, require_active: bool = False) -> decim
             select(ItemUomConversion).where(ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id)
         )
         if row is None:
-            raise ValueError("برایِ این واحد، تبدیل به واحدِ پایه‌یِ کالا در فرمِ کالا تعریف نشده است.")
+            raise ValueError("برای این واحد، تبدیل به واحد پایهٔ کالا در فرم کالا تعریف نشده است.")
         if require_active and not row.is_active:
-            raise ValueError("این واحد برایِ این کالا غیرفعال است و در سندِ تازه قابلِ‌استفاده نیست.")
+            raise ValueError("این واحد برای این کالا غیرفعال است و در سند تازه قابل‌استفاده نیست.")
         return row.conversion_factor
 
 
 def convert_to_base(item_id: int, quantity: decimal.Decimal, uom_id: int) -> tuple[decimal.Decimal, decimal.Decimal]:
-    """(مقدارِ پایه، ضریب) -- مثلاً ۳ کارتنِ ۲۴تایی -> (۷۲، ۲۴)."""
+    """(مقدار پایه، ضریب) — مثلاً ۳ کارتن ۲۴تایی -> (۷۲، ۲۴)."""
     factor = get_factor(item_id, uom_id)
     return decimal.Decimal(quantity) * factor, factor
 
@@ -204,30 +204,30 @@ def validate_quantity(
     item_id: int, uom_id: int, quantity: decimal.Decimal, purpose: str | None = None, check_min_max: bool = True,
     require_active: bool = True,
 ) -> ItemUnit:
-    """اعتبارسنجیِ مقدار بر اساسِ واحد: فعال‌بودن، مجاز برایِ نوعِ سند،
-    تعدادِ اعشار، حداقل/حداکثرِ هر واحد. واحدِ تعریف‌شده را برمی‌گرداند."""
+    """اعتبارسنجی مقدار بر اساس واحد: فعال‌بودن، مجاز برای نوع سند،
+    تعداد اعشار، حداقل/حداکثر هر واحد. واحد تعریف‌شده را برمی‌گرداند."""
     unit = get_item_unit(item_id, uom_id)
     if unit is None:
-        raise ValueError("این واحد برایِ این کالا تعریف نشده است -- واحد را از «واحدها و بسته‌بندیِ» فرمِ کالا اضافه کنید.")
+        raise ValueError("این واحد برای این کالا تعریف نشده است — واحد را از «واحدها و بسته‌بندی» فرم کالا اضافه کنید.")
     if require_active and not unit.is_active and not unit.is_base:
-        raise ValueError(f"واحدِ «{unit.label}» برایِ این کالا غیرفعال است و در سندِ تازه قابلِ‌استفاده نیست.")
+        raise ValueError(f"واحد «{unit.label}» برای این کالا غیرفعال است و در سند تازه قابل‌استفاده نیست.")
     if purpose == "PURCHASE" and not (unit.is_purchase_unit or unit.is_base):
-        raise ValueError(f"واحدِ «{unit.label}» برایِ خرید مجاز نیست.")
+        raise ValueError(f"واحد «{unit.label}» برای خرید مجاز نیست.")
     if purpose == "SALES" and not (unit.is_sales_unit or unit.is_base):
-        raise ValueError(f"واحدِ «{unit.label}» برایِ فروش مجاز نیست.")
+        raise ValueError(f"واحد «{unit.label}» برای فروش مجاز نیست.")
     quantity = decimal.Decimal(quantity)
     if quantity <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
     exponent = -quantity.normalize().as_tuple().exponent
     if exponent > 0 and (not unit.allow_decimal or exponent > unit.decimal_places):
         if not unit.allow_decimal:
-            raise ValueError(f"واحدِ «{unit.label}» اعشار نمی‌پذیرد -- مقدار باید عددِ صحیح باشد.")
-        raise ValueError(f"واحدِ «{unit.label}» حداکثر {unit.decimal_places} رقمِ اعشار می‌پذیرد.")
+            raise ValueError(f"واحد «{unit.label}» اعشار نمی‌پذیرد — مقدار باید عدد صحیح باشد.")
+        raise ValueError(f"واحد «{unit.label}» حداکثر {unit.decimal_places} رقم اعشار می‌پذیرد.")
     if check_min_max:
         if unit.min_quantity is not None and quantity < unit.min_quantity:
-            raise ValueError(f"حداقلِ مقدار برایِ واحدِ «{unit.label}» {unit.min_quantity.normalize()} است.")
+            raise ValueError(f"حداقل مقدار برای واحد «{unit.label}» {unit.min_quantity.normalize()} است.")
         if unit.max_quantity is not None and quantity > unit.max_quantity:
-            raise ValueError(f"حداکثرِ مقدار برایِ واحدِ «{unit.label}» {unit.max_quantity.normalize()} است.")
+            raise ValueError(f"حداکثر مقدار برای واحد «{unit.label}» {unit.max_quantity.normalize()} است.")
     return unit
 
 
@@ -239,15 +239,15 @@ def set_item_unit(
     max_quantity: decimal.Decimal | None = None, weight_kg: decimal.Decimal | None = None,
     volume_m3: decimal.Decimal | None = None, is_active: bool = True, sort_order: int | None = None,
 ) -> int:
-    """تعریف/ویرایشِ یک واحدِ کالا. تغییرِ ضریب فقط رویِ اسنادِ *تازه* اثر
-    دارد -- ردیف‌هایِ ثبت‌شده ضریبِ لحظه‌یِ ثبتِ خودشان را دارند."""
+    """تعریف/ویرایش یک واحد کالا. تغییر ضریب فقط روی اسناد *تازه* اثر
+    دارد — ردیف‌های ثبت‌شده ضریب لحظهٔ ثبت خودشان را دارند."""
     conversion_factor = decimal.Decimal(conversion_factor)
     if conversion_factor <= 0:
-        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("ضریب تبدیل باید بزرگ‌تر از صفر باشد.")
     if min_quantity is not None and max_quantity is not None and min_quantity > max_quantity:
-        raise ValueError("حداقلِ مقدار نمی‌تواند از حداکثر بیشتر باشد.")
+        raise ValueError("حداقل مقدار نمی‌تواند از حداکثر بیشتر باشد.")
     if decimal_places is not None and not (0 <= decimal_places <= 6):
-        raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
+        raise ValueError("تعداد اعشار باید بین ۰ تا ۶ باشد.")
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None:
@@ -261,9 +261,9 @@ def set_item_unit(
         )
         is_base = uom_id == item.base_uom_id
         if is_base and conversion_factor != _ONE:
-            raise ValueError("ضریبِ واحدِ پایه همیشه ۱ است.")
+            raise ValueError("ضریب واحد پایه همیشه ۱ است.")
         if is_base and not is_active:
-            raise ValueError("واحدِ پایهٔ کالا قابلِ‌غیرفعال‌شدن نیست.")
+            raise ValueError("واحد پایهٔ کالا قابل‌غیرفعال‌شدن نیست.")
         if row is None:
             row = ItemUomConversion(item_id=item_id, uom_id=uom_id, conversion_factor=conversion_factor)
             session.add(row)
@@ -318,14 +318,14 @@ def _unit_is_used(session, item_id: int, uom_id: int) -> bool:
 
 
 def remove_item_unit(item_unit_id: int, item_id: int) -> str:
-    """واحدِ استفاده‌شده در اسناد/قیمت‌ها فقط غیرفعال می‌شود (حذفِ سخت نه)؛
-    واحدِ هرگز-استفاده‌نشده حذف می‌شود. خروجی: DEACTIVATED یا DELETED."""
+    """واحد استفاده‌شده در اسناد/قیمت‌ها فقط غیرفعال می‌شود (حذف سخت نه)؛
+    واحد هرگز-استفاده‌نشده حذف می‌شود. خروجی: DEACTIVATED یا DELETED."""
     with new_session() as session:
         row = session.get(ItemUomConversion, item_unit_id)
         if row is None or row.item_id != item_id:
-            raise ValueError("واحدِ کالا نامعتبر است.")
+            raise ValueError("واحد کالا نامعتبر است.")
         if row.is_base_unit:
-            raise ValueError("واحدِ پایهٔ کالا قابلِ‌حذف نیست.")
+            raise ValueError("واحد پایهٔ کالا قابل‌حذف نیست.")
         has_barcodes = session.scalar(
             select(func.count()).select_from(ItemUnitBarcode).where(ItemUnitBarcode.item_unit_id == item_unit_id)
         )
@@ -369,8 +369,8 @@ def get_price_for_unit(
     company_id: int, item_id: int, uom_id: int, price_list_id: int | None = None,
     quantity: decimal.Decimal = _ONE,
 ) -> decimal.Decimal | None:
-    """قیمتِ مستقلِ همان واحد در فهرستِ قیمت اولویت دارد؛ وگرنه قیمتِ واحدِ
-    پایه × ضریب. بدونِ price_list_id، اولین فهرستِ قیمتِ فروشِ شرکت."""
+    """قیمت مستقل همان واحد در فهرست قیمت اولویت دارد؛ وگرنه قیمت واحد
+    پایه × ضریب. بدون price_list_id، اولین فهرست قیمت فروش شرکت."""
     from peecha.db.models.commercial import PriceList
     from peecha.services import commercial_pricing as pricing_service
 
@@ -405,7 +405,7 @@ _PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "012
 
 
 def normalize_barcode(barcode: str | None) -> str:
-    """Trim + حذفِ فاصله/کاراکترهایِ کنترلی + تبدیلِ ارقامِ فارسی/عربی + حروفِ بزرگ."""
+    """Trim + حذف فاصله/کاراکترهای کنترلی + تبدیل ارقام فارسی/عربی + حروف بزرگ."""
     text = (barcode or "").translate(_PERSIAN_DIGITS)
     text = re.sub(r"[\s‌‏‎]+", "", text)
     return text.upper()
@@ -433,18 +433,18 @@ def validate_barcode_format(barcode: str, barcode_type: str) -> None:
     if len(barcode) > 100:
         raise ValueError("بارکد بیش از حد طولانی است.")
     if barcode_type not in BARCODE_TYPE_LABELS:
-        raise ValueError("نوعِ بارکد نامعتبر است.")
+        raise ValueError("نوع بارکد نامعتبر است.")
     fixed = {"EAN13": 13, "EAN8": 8, "UPCA": 12}
     if barcode_type in fixed:
         n = fixed[barcode_type]
         if not re.fullmatch(rf"\d{{{n}}}", barcode):
-            raise ValueError(f"بارکدِ {BARCODE_TYPE_LABELS[barcode_type]} باید دقیقاً {n} رقم باشد.")
+            raise ValueError(f"بارکد {BARCODE_TYPE_LABELS[barcode_type]} باید دقیقاً {n} رقم باشد.")
         if not _gtin_checksum_ok(barcode):
-            raise ValueError(f"رقمِ کنترلیِ بارکدِ {BARCODE_TYPE_LABELS[barcode_type]} نادرست است.")
+            raise ValueError(f"رقم کنترلی بارکد {BARCODE_TYPE_LABELS[barcode_type]} نادرست است.")
     elif barcode_type == "CODE39" and not re.fullmatch(r"[0-9A-Z\-. $/+%]+", barcode):
-        raise ValueError("بارکدِ Code39 فقط ارقام، حروفِ بزرگِ لاتین و - . $ / + % را می‌پذیرد.")
+        raise ValueError("بارکد Code39 فقط ارقام، حروف بزرگ لاتین و - . $ / + % را می‌پذیرد.")
     elif barcode_type == "GS1" and not re.fullmatch(r"[0-9A-Z()\-./]+", barcode):
-        raise ValueError("بارکدِ GS1 کاراکترِ نامعتبر دارد.")
+        raise ValueError("بارکد GS1 کاراکتر نامعتبر دارد.")
 
 
 @dataclass
@@ -489,21 +489,21 @@ def _duplicate_message(session, existing: ItemUnitBarcode) -> str:
     code, name = labels.get(existing.item_id, ("", ""))
     unit_row = session.get(ItemUomConversion, existing.item_unit_id)
     uom = session.get(Uom, unit_row.uom_id) if unit_row else None
-    return f"این بارکد قبلاً برایِ کالایِ «{code} — {name}» با واحدِ «{uom.name if uom else ''}» ثبت شده است."
+    return f"این بارکد قبلاً برای کالای «{code} — {name}» با واحد «{uom.name if uom else ''}» ثبت شده است."
 
 
 def _check_legacy_duplicate(session, company_id: int, barcode: str, item_id: int) -> None:
-    """بارکدهایِ قدیمیِ inv.items.barcode که (به‌علتِ تکرار) به جدولِ تازه منتقل نشده‌اند هم چک می‌شوند."""
+    """بارکدهای قدیمی inv.items.barcode که (به‌علت تکرار) به جدول تازه منتقل نشده‌اند هم چک می‌شوند."""
     other = session.scalar(
         select(Item).where(Item.company_id == company_id, func.btrim(Item.barcode) == barcode, Item.item_id != item_id)
     )
     if other is not None:
         code, name = _item_labels(session, [other.item_id]).get(other.item_id, ("", ""))
-        raise ValueError(f"این بارکد قبلاً برایِ کالایِ «{code} — {name}» ثبت شده است.")
+        raise ValueError(f"این بارکد قبلاً برای کالای «{code} — {name}» ثبت شده است.")
 
 
 def _sync_item_barcode(session, item_id: int) -> None:
-    """سازگاری: inv.items.barcode همیشه = بارکدِ اصلیِ واحدِ پایه (اگر باشد)."""
+    """سازگاری: inv.items.barcode همیشه = بارکد اصلی واحد پایه (اگر باشد)."""
     item = session.get(Item, item_id)
     base_row = ensure_base_unit(session, item)
     primary = session.scalar(
@@ -538,13 +538,13 @@ def add_barcode(
             select(ItemUomConversion).where(ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id)
         )
         if unit_row is None:
-            raise ValueError("این واحد برایِ این کالا تعریف نشده است.")
+            raise ValueError("این واحد برای این کالا تعریف نشده است.")
         if not unit_row.is_active:
-            raise ValueError("برایِ واحدِ غیرفعال نمی‌توان بارکدِ فعال ثبت کرد.")
+            raise ValueError("برای واحد غیرفعال نمی‌توان بارکد فعال ثبت کرد.")
         existing = _find_active_barcode(session, company_id, barcode)
         if existing is not None:
             if existing.item_id == item_id and existing.item_unit_id == unit_row.conversion_id:
-                raise ValueError("این بارکد قبلاً برایِ همین کالا و واحد ثبت شده است.")
+                raise ValueError("این بارکد قبلاً برای همین کالا و واحد ثبت شده است.")
             raise ValueError(_duplicate_message(session, existing))
         _check_legacy_duplicate(session, company_id, barcode, item_id)
         has_primary = session.scalar(
@@ -602,7 +602,7 @@ def set_primary_barcode(barcode_id: int, company_id: int) -> None:
     with new_session() as session:
         row = session.get(ItemUnitBarcode, barcode_id)
         if row is None or row.company_id != company_id or not row.is_active:
-            raise ValueError("فقط بارکدِ فعال می‌تواند اصلی باشد.")
+            raise ValueError("فقط بارکد فعال می‌تواند اصلی باشد.")
         for b in session.scalars(select(ItemUnitBarcode).where(ItemUnitBarcode.item_unit_id == row.item_unit_id)):
             b.is_primary = b.barcode_id == barcode_id
         session.flush()
@@ -611,7 +611,7 @@ def set_primary_barcode(barcode_id: int, company_id: int) -> None:
 
 
 def deactivate_barcode(barcode_id: int, company_id: int) -> None:
-    """بارکد هرگز حذفِ سخت نمی‌شود (ممکن است رویِ برچسب‌هایِ چاپ‌شده/سوابق باشد)."""
+    """بارکد هرگز حذف سخت نمی‌شود (ممکن است روی برچسب‌های چاپ‌شده/سوابق باشد)."""
     with new_session() as session:
         row = session.get(ItemUnitBarcode, barcode_id)
         if row is None or row.company_id != company_id:
@@ -633,7 +633,7 @@ def deactivate_barcode(barcode_id: int, company_id: int) -> None:
 
 
 def set_item_base_barcode(company_id: int, item_id: int, barcode: str | None) -> None:
-    """سازگاری با فیلدِ قدیمیِ «بارکد» در فرمِ کالا: بارکدِ اصلیِ واحدِ پایه را تنظیم می‌کند."""
+    """سازگاری با فیلد قدیمی «بارکد» در فرم کالا: بارکد اصلی واحد پایه را تنظیم می‌کند."""
     barcode = normalize_barcode(barcode)
     with new_session() as session:
         item = session.get(Item, item_id)
@@ -691,7 +691,7 @@ def list_barcodes(
 
 
 def find_duplicate_barcodes(company_id: int) -> list[tuple[str, list[int]]]:
-    """Barcode Manager: بارکدهایِ تکرارشده بینِ کالاها (شاملِ بارکدهایِ قدیمیِ inv.items)."""
+    """Barcode Manager: بارکدهای تکرارشده بین کالاها (شامل بارکدهای قدیمی inv.items)."""
     with new_session() as session:
         seen: dict[str, set[int]] = {}
         for b in session.scalars(
@@ -721,8 +721,8 @@ class BarcodeMatch:
 def resolve_barcode(
     company_id: int, barcode: str, price_list_id: int | None = None, with_price: bool = True,
 ) -> BarcodeMatch | None:
-    """بارکد -> کالا + واحد + ضریب (+ قیمتِ پیش‌فرضِ همان واحد).
-    اولویت: بارکدِ فعالِ واحد؛ سپس بارکدِ قدیمیِ inv.items.barcode (واحدِ پایه)."""
+    """بارکد -> کالا + واحد + ضریب (+ قیمت پیش‌فرض همان واحد).
+    اولویت: بارکد فعال واحد؛ سپس بارکد قدیمی inv.items.barcode (واحد پایه)."""
     code = normalize_barcode(barcode)
     if not code:
         return None
@@ -750,7 +750,7 @@ def resolve_barcode(
 
 
 def assert_barcode_available(company_id: int, barcode: str | None, item_id: int | None = None) -> None:
-    """پیش از ساخت/ویرایشِ کالا: بارکدِ تکراری (فعال، متعلق به کالایِ دیگر) رد می‌شود."""
+    """پیش از ساخت/ویرایش کالا: بارکد تکراری (فعال، متعلق به کالای دیگر) رد می‌شود."""
     code = normalize_barcode(barcode)
     if not code:
         return
@@ -764,14 +764,14 @@ def assert_barcode_available(company_id: int, barcode: str | None, item_id: int 
         )
         if other is not None:
             item_code, name = _item_labels(session, [other.item_id]).get(other.item_id, ("", ""))
-            raise ValueError(f"این بارکد قبلاً برایِ کالایِ «{item_code} — {name}» ثبت شده است.")
+            raise ValueError(f"این بارکد قبلاً برای کالای «{item_code} — {name}» ثبت شده است.")
 
 
 def get_units_for_items(
     company_id: int, item_ids: list[int], purpose: str | None = "SALES", price_list_id: int | None = None,
 ) -> dict[int, list[dict]]:
-    """نسخهٔ گروهیِ get_item_units برایِ کاتالوگِ موبایل/POS (بدونِ یک کوئری به‌ازایِ هر کالا):
-    واحدهایِ فعالِ مجاز + بارکدها + قیمتِ هر واحد (قیمتِ مستقلِ واحد، وگرنه پایه × ضریب)."""
+    """نسخهٔ گروهی get_item_units برای کاتالوگ موبایل/POS (بدون یک کوئری به‌ازای هر کالا):
+    واحدهای فعال مجاز + بارکدها + قیمت هر واحد (قیمت مستقل واحد، وگرنه پایه × ضریب)."""
     from peecha.db.models.commercial import PriceList, PriceListItem
 
     if not item_ids:

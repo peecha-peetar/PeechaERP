@@ -1,4 +1,4 @@
-"""نقش‌ها و دسترسی‌ها — معادلِ Qt برایِ roles.py/.kv در Kivy."""
+"""نقش‌ها و دسترسی‌ها — معادل Qt برای roles.py/.kv در Kivy."""
 
 from __future__ import annotations
 
@@ -44,28 +44,28 @@ class RolesScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_detail_panel(), stretch=3)
 
         self.set_field_help([
-            (self.role_list, "فهرستِ نقش‌هایِ این شرکت. برایِ دیدن و تغییرِ دسترسی‌هایِ هر نقش، رویِ آن کلیک کنید."),
-            (self.new_role_code_field, "کدِ نقشِ تازه، مثلاً «حسابدار» یا «انباردار»."),
+            (self.role_list, "فهرست نقش‌های این شرکت. برای دیدن و تغییر دسترسی‌های هر نقش، روی آن کلیک کنید."),
+            (self.new_role_code_field, "کد نقش تازه، مثلاً «حسابدار» یا «انباردار»."),
             (
                 self.parent_role_combo,
-                "نقشِ والد فقط برایِ سازمان‌دهی و نمایشِ سلسله‌مراتب است. "
-                "دسترسی‌هایِ هر نقش را باید جداگانه مشخص کنید — از والد به‌طورِ خودکار ارث نمی‌رسد.",
+                "نقش والد فقط برای سازمان‌دهی و نمایش سلسله‌مراتب است. "
+                "دسترسی‌های هر نقش را باید جداگانه مشخص کنید — از والد به‌طور خودکار ارث نمی‌رسد.",
             ),
-            (self.edit_code_field, "کدِ همین نقش — قابلِ‌تغییر است."),
-            (self.edit_parent_combo, "والدِ همین نقش — قابلِ‌تغییر است."),
+            (self.edit_code_field, "کد همین نقش — قابل‌تغییر است."),
+            (self.edit_parent_combo, "والد همین نقش — قابل‌تغییر است."),
             (
                 self.is_active_checkbox,
-                "نقشِ غیرِفعال دیگر قابلِ‌تخصیص به کاربرانِ تازه نیست. کاربرانی که از قبل این نقش را دارند تحتِ‌تأثیر قرار نمی‌گیرند.",
+                "نقش غیرفعال دیگر قابل‌تخصیص به کاربران تازه نیست. کاربرانی که از قبل این نقش را دارند تحت‌تأثیر قرار نمی‌گیرند.",
             ),
             (
                 self.permission_table,
-                "برایِ هر فرمِ برنامه مشخص کنید این نقش اجازه‌یِ دیدن، ساختن، ویرایش یا حذف را دارد یا نه. "
-                "هر کاربرِ دارایِ این نقش، فقط همین دسترسی‌ها را می‌گیرد. ردیفِ «انتخابِ همه» در بالا، همه‌یِ فرم‌ها را "
-                "یک‌جا برایِ آن ستون تیک می‌زند یا برمی‌دارد.",
+                "برای هر فرم برنامه مشخص کنید این نقش اجازهٔ دیدن، ساختن، ویرایش یا حذف را دارد یا نه. "
+                "هر کاربر دارای این نقش، فقط همین دسترسی‌ها را می‌گیرد. ردیف «انتخاب همه» در بالا، همهٔ فرم‌ها را "
+                "یک‌جا برای آن ستون تیک می‌زند یا برمی‌دارد.",
             ),
             (
                 self.users_list,
-                "کاربرانی که این نقش را دارند تیک‌خورده‌اند. با تیک‌زدن یا برداشتنِ تیک، نقش را به کاربر می‌دهید یا از او می‌گیرید.",
+                "کاربرانی که این نقش را دارند تیک‌خورده‌اند. با تیک‌زدن یا برداشتن تیک، نقش را به کاربر می‌دهید یا از او می‌گیرید.",
             ),
         ])
 
@@ -83,7 +83,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.role_list.itemClicked.connect(self._on_role_selected)
         layout.addWidget(self.role_list)
 
-        layout.addWidget(QLabel("کدِ نقشِ جدید"))
+        layout.addWidget(QLabel("کد نقش جدید"))
         self.new_role_code_field = QLineEdit()
         layout.addWidget(self.new_role_code_field)
 
@@ -99,17 +99,17 @@ class RolesScreen(FieldHelpMixin, QWidget):
         create_button = QPushButton("➕")
         create_button.setObjectName("primaryIconButton")
         create_button.setFixedWidth(48)
-        create_button.setToolTip("افزودنِ نقش")
+        create_button.setToolTip("افزودن نقش")
         create_button.clicked.connect(self._create_role)
         layout.addWidget(create_button)
 
         # طبقِ گزارشِ صریح («نقش را می‌شود ساخت ولی نمی‌شود ویرایش یا حذف
         # کرد»): بخشِ جداگانه برایِ ویرایش/حذفِ نقشِ انتخاب‌شده در فهرست.
-        divider = QLabel("ویرایشِ نقشِ انتخاب‌شده")
+        divider = QLabel("ویرایش نقش انتخاب‌شده")
         divider.setObjectName("sectionLabel")
         layout.addWidget(divider)
 
-        layout.addWidget(QLabel("کدِ نقش"))
+        layout.addWidget(QLabel("کد نقش"))
         self.edit_code_field = QLineEdit()
         layout.addWidget(self.edit_code_field)
 
@@ -125,14 +125,14 @@ class RolesScreen(FieldHelpMixin, QWidget):
         save_edit_button = QPushButton("💾")
         save_edit_button.setObjectName("primaryIconButton")
         save_edit_button.setFixedWidth(48)
-        save_edit_button.setToolTip("ذخیره‌یِ تغییراتِ نقش")
+        save_edit_button.setToolTip("ذخیرهٔ تغییرات نقش")
         save_edit_button.clicked.connect(self._save_role_edit)
         edit_buttons.addWidget(save_edit_button)
 
         delete_button = QPushButton("🗑")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(48)
-        delete_button.setToolTip("حذفِ این نقش")
+        delete_button.setToolTip("حذف این نقش")
         delete_button.clicked.connect(self._delete_role)
         edit_buttons.addWidget(delete_button)
         edit_buttons.addStretch(1)
@@ -160,10 +160,10 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.permission_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.permission_table.verticalHeader().setVisible(False)
         self.permission_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        tabs.addTab(self.permission_table, "دسترسیِ فرم‌ها")
+        tabs.addTab(self.permission_table, "دسترسی فرم‌ها")
 
         self.users_list = QListWidget()
-        tabs.addTab(self.users_list, "کاربرانِ این نقش")
+        tabs.addTab(self.users_list, "کاربران این نقش")
 
         return panel
 
@@ -182,9 +182,9 @@ class RolesScreen(FieldHelpMixin, QWidget):
             self.role_list.addItem(item)
 
         self.parent_role_combo.clear()
-        self.parent_role_combo.addItem("— بدونِ والد —", None)
+        self.parent_role_combo.addItem("— بدون والد —", None)
         self.edit_parent_combo.clear()
-        self.edit_parent_combo.addItem("— بدونِ والد —", None)
+        self.edit_parent_combo.addItem("— بدون والد —", None)
         for role in self._roles:
             self.parent_role_combo.addItem(role.code, role.role_id)
             self.edit_parent_combo.addItem(role.code, role.role_id)
@@ -219,7 +219,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح («وقتی می‌خواهیم فرم‌ها را به کاربر/نقش
         # تخصیص بدهیم، انتخابِ همه هم امکان‌پذیر باشد»): ردیفِ اولِ جدول
         # یک ردیفِ ویژه‌یِ «انتخابِ همه» است، نه فرمِ واقعی.
-        select_all_label = QTableWidgetItem("انتخابِ همه")
+        select_all_label = QTableWidgetItem("انتخاب همه")
         select_all_label.setFlags(select_all_label.flags() & ~Qt.ItemIsEditable)
         self.permission_table.setItem(0, 0, select_all_label)
         self._select_all_checkboxes = {}
@@ -303,7 +303,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
             return
         code = self.edit_code_field.text().strip()
         if not code:
-            self.status_label.setText("کدِ نقش را وارد کنید.")
+            self.status_label.setText("کد نقش را وارد کنید.")
             return
         try:
             roles_service.update_role(
@@ -347,7 +347,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
             return
         code = self.new_role_code_field.text().strip()
         if not code:
-            self.status_label.setText("کدِ نقش را وارد کنید.")
+            self.status_label.setText("کد نقش را وارد کنید.")
             return
         try:
             roles_service.create_role(company_id, code, self.parent_role_combo.currentData())

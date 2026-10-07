@@ -25,8 +25,8 @@ function rangeFor(preset: RangePreset): { dateFrom: string; dateTo: string } {
 
 const PRESETS: { code: RangePreset; label: string }[] = [
   { code: "TODAY", label: "امروز" },
-  { code: "WEEK", label: "۷ روزِ اخیر" },
-  { code: "MONTH", label: "۳۰ روزِ اخیر" },
+  { code: "WEEK", label: "۷ روز اخیر" },
+  { code: "MONTH", label: "۳۰ روز اخیر" },
 ];
 
 /** طبقِ Phase 7 (Manager Dashboard + KPI) -- فقط برایِ کاربرِ مدیر
@@ -63,7 +63,7 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
       if (e instanceof ApiError && e.status === 403) {
         setForbidden(true);
       } else {
-        setError(e instanceof ApiError ? e.message : "دریافتِ داشبوردِ مدیریتی ناموفق بود.");
+        setError(e instanceof ApiError ? e.message : "دریافت داشبورد مدیریتی ناموفق بود.");
       }
     } finally {
       setLoading(false);
@@ -77,7 +77,7 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, backgroundColor: colors.background }}>
       <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
-      <Text style={[typography.h2, { color: colors.textPrimary }]}>داشبوردِ مدیریت</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>داشبورد مدیریت</Text>
 
       <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
         {PRESETS.map((p) => (
@@ -92,7 +92,7 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
 
       {routes.length > 0 ? (
         <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
-          <Button label="همه‌یِ مسیرها" variant={routeId === null ? "primary" : "secondary"} fullWidth={false} onPress={() => setRouteId(null)} />
+          <Button label="همهٔ مسیرها" variant={routeId === null ? "primary" : "secondary"} fullWidth={false} onPress={() => setRouteId(null)} />
           {routes.map((r) => (
             <Button
               key={r.detail_account_id}
@@ -106,7 +106,7 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
       ) : null}
 
       {forbidden ? (
-        <ErrorState title="دسترسی ندارید" description="این گزارش فقط برایِ مدیر در دسترس است." />
+        <ErrorState title="دسترسی ندارید" description="این گزارش فقط برای مدیر در دسترس است." />
       ) : loading ? (
         <SkeletonList count={4} />
       ) : error ? (
@@ -116,18 +116,18 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
             <Kpi label="فروش" value={formatAmount(data.sales_amount)} tone="success" />
             <Kpi label="سفارش" value={String(data.order_count)} />
-            <Kpi label="میانگینِ سفارش" value={formatAmount(data.average_order_value)} />
+            <Kpi label="میانگین سفارش" value={formatAmount(data.average_order_value)} />
             <Kpi label="وصول" value={formatAmount(data.collection_amount)} tone="info" />
-            <Kpi label="نرخِ وصول" value={`${(Number(data.collection_rate) * 100).toFixed(0)}%`} />
+            <Kpi label="نرخ وصول" value={`${(Number(data.collection_rate) * 100).toFixed(0)}%`} />
             <Kpi label="ویزیت" value={`${data.visit_completed_count}/${data.visit_count}`} />
-            <Kpi label="تبدیلِ ویزیت به سفارش" value={`${(Number(data.visit_to_order_conversion) * 100).toFixed(0)}%`} />
-            <Kpi label="مشتریِ جدید" value={String(data.new_customer_count)} />
-            <Kpi label="مشتریِ بدونِ‌خرید" value={String(data.customers_without_purchase_count)} tone="danger" />
+            <Kpi label="تبدیل ویزیت به سفارش" value={`${(Number(data.visit_to_order_conversion) * 100).toFixed(0)}%`} />
+            <Kpi label="مشتری جدید" value={String(data.new_customer_count)} />
+            <Kpi label="مشتری بدون‌خرید" value={String(data.customers_without_purchase_count)} tone="danger" />
           </View>
 
           {data.by_visitor.length > 0 ? (
             <View>
-              <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>عملکردِ ویزیتورها</Text>
+              <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>عملکرد ویزیتورها</Text>
               <Card>
                 {data.by_visitor.map((v, index) => (
                   <View

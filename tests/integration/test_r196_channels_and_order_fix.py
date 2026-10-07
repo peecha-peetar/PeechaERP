@@ -54,16 +54,16 @@ from peecha.services import roles as roles_service
 
 lang_id = company.default_language_id
 g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
-k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
-k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
-inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌های دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌های دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
 g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
-k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
-revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+k4 = coa_service.create_account(company_id, "41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمد فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
 g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
-k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
-cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+k5 = coa_service.create_account(company_id, "51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
 
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
@@ -72,18 +72,18 @@ csettings_service.set_account_mapping(company_id, "SALES_REVENUE", revenue_gl.ac
 
 uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
 item_id = catalog_service.create_item(
-    company_id, "9101", "کالایِ عادی",
+    company_id, "9101", "کالای عادی",
     catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
 )
 warehouse_id = locations_service.create_warehouse(
-    company_id, "WH-1", "انبارِ آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
+    company_id, "WH-1", "انبار آزمایشی", locations_service.WarehouseFields(allow_negative_stock=True),
 )
 # طبقِ باگِ واقعیِ R196: کانالِ واقعی، نه رشته‌یِ نوعِ کانال («VAN_SALES»)
-real_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرمِ آزمایشی", "VAN_SALES")
+real_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخش گرم آزمایشی", "VAN_SALES")
 # یک کانالِ نوعِ دیگر هم می‌سازیم تا فیلترِ channel_type_code تست شود
-pricing_service.create_channel(company_id, "PS-1", "پیش‌فروشِ آزمایشی", "PRE_SALES")
+pricing_service.create_channel(company_id, "PS-1", "پیش‌فروش آزمایشی", "PRE_SALES")
 
-customer = partners_service.create_customer(company_id, "C-1", "مشتریِ آزمایشی", fast_track=True)
+customer = partners_service.create_customer(company_id, "C-1", "مشتری آزمایشی", fast_track=True)
 
 from fastapi.testclient import TestClient
 from peecha_api.main import app
@@ -100,13 +100,13 @@ def auth(t):
 resp = client.get("/pricing/channels", headers=auth(admin_token))
 check(resp.status_code == 200, f"GET /pricing/channels موفق بود (status={resp.status_code}, body={resp.text})")
 all_codes = {c["channel_code"] for c in resp.json()}
-check(all_codes == {"VAN-1", "PS-1"}, f"هر دو کانال بدونِ فیلتر برمی‌گردند (got {all_codes})")
+check(all_codes == {"VAN-1", "PS-1"}, f"هر دو کانال بدون فیلتر برمی‌گردند (got {all_codes})")
 
 resp = client.get("/pricing/channels", headers=auth(admin_token), params={"channel_type_code": "VAN_SALES"})
 van_channels = resp.json()
 check(
     len(van_channels) == 1 and van_channels[0]["channel_code"] == "VAN-1",
-    f"فیلترِ channel_type_code=VAN_SALES فقط VAN-1 را برمی‌گرداند (got {van_channels})",
+    f"فیلتر channel_type_code=VAN_SALES فقط VAN-1 را برمی‌گرداند (got {van_channels})",
 )
 
 # طبقِ باگِ واقعیِ کشف‌شده رویِ گوشیِ فیزیکیِ کاربر: قبلاً موبایل مستقیم
@@ -126,7 +126,7 @@ resp = client.post(
         "lines": [{"item_id": item_id, "uom_id": uom_id, "quantity": "2", "unit_price": "50000"}],
     },
 )
-check(resp.status_code == 200, f"ثبتِ سفارش با channel_codeِ واقعی موفق بود (status={resp.status_code}, body={resp.text})")
+check(resp.status_code == 200, f"ثبت سفارش با channel_code واقعی موفق بود (status={resp.status_code}, body={resp.text})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

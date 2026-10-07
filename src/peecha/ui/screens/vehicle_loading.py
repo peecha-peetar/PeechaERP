@@ -1,7 +1,7 @@
-"""پخشِ سرد/گرم -- R130: بارگیریِ خودرو (Pick List) از دسکتاپ. طبقِ
-سندِ کاربر («سیستم پیشنهاد بدهد چقدر کارتن نیاز داری، چقدر موجودیِ
-خودرو داری، چقدر کسری داری»): هنگامِ ساختِ بارگیری، موجودیِ لحظه‌ای/
-کسریِ هر ردیف محاسبه می‌شود؛ تاییدِ راننده سندِ TRANSFERِ واقعی می‌سازد
+"""پخش سرد/گرم — R130: بارگیری خودرو (Pick List) از دسکتاپ. طبق
+سند کاربر («سیستم پیشنهاد بدهد چقدر کارتن نیاز داری، چقدر موجودی
+خودرو داری، چقدر کسری داری»): هنگام ساخت بارگیری، موجودی لحظه‌ای/
+کسری هر ردیف محاسبه می‌شود؛ تایید راننده سند TRANSFER واقعی می‌سازد
 (services/vehicle_loading.py، R129)."""
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ from peecha.services import inventory_locations as locations_service
 from peecha.services import vehicle_loading as vehicle_loading_service
 from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
-_LIST_COLUMNS = ["تاریخ", "خودرو", "انبارِ مبدا", "وضعیت"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ برنامه‌ریزی‌شده", "موجودیِ لحظهٔ برنامه‌ریزی", "کسری"]
+_LIST_COLUMNS = ["تاریخ", "خودرو", "انبار مبدا", "وضعیت"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدار برنامه‌ریزی‌شده", "موجودی لحظهٔ برنامه‌ریزی", "کسری"]
 _STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده"}
 
 
@@ -57,7 +57,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         form_panel = self._build_form_panel()
         outer.addWidget(form_panel, stretch=3)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="بارگیریِ جدید")
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="بارگیری جدید")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -65,7 +65,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("بارگیریِ خودرو")
+        title = QLabel("بارگیری خودرو")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -86,7 +86,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("بارگیریِ جدید")
+        self.form_title = QLabel("بارگیری جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -94,7 +94,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         header_row.addWidget(QLabel("خودرو"))
         self.vehicle_combo = QComboBox()
         header_row.addWidget(self.vehicle_combo, stretch=1)
-        header_row.addWidget(QLabel("انبارِ مبدا"))
+        header_row.addWidget(QLabel("انبار مبدا"))
         self.source_warehouse_combo = QComboBox()
         header_row.addWidget(self.source_warehouse_combo, stretch=1)
         header_row.addWidget(QLabel("تاریخ"))
@@ -112,7 +112,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         self.add_line_button = QPushButton("➕")
         self.add_line_button.setObjectName("iconButton")
         self.add_line_button.setFixedWidth(44)
-        self.add_line_button.setToolTip("افزودنِ ردیف")
+        self.add_line_button.setToolTip("افزودن ردیف")
         self.add_line_button.clicked.connect(self._add_pending_line)
         add_line_row.addWidget(self.add_line_button)
         layout.addLayout(add_line_row)
@@ -136,10 +136,10 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         self.create_button = QPushButton("💾")
         self.create_button.setObjectName("primaryIconButton")
         self.create_button.setFixedWidth(48)
-        self.create_button.setToolTip("ثبتِ بارگیری")
+        self.create_button.setToolTip("ثبت بارگیری")
         self.create_button.clicked.connect(self._create)
 
-        self.confirm_button = QPushButton("🚚 تاییدِ راننده")
+        self.confirm_button = QPushButton("🚚 تایید راننده")
         self.confirm_button.setObjectName("primaryIconButton")
         self.confirm_button.clicked.connect(self._confirm)
         self.confirm_button.setVisible(False)
@@ -153,11 +153,11 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         layout.addWidget(build_action_footer([self.create_button, self.confirm_button, cancel_button]))
 
         self.set_field_help([
-            (self.vehicle_combo, "خودرویی که این بارگیری برایش انجام می‌شود -- بعدِ ثبت قابلِ‌تغییر نیست."),
-            (self.source_warehouse_combo, "انباری که کالا از آن برایِ بارگیری برداشته می‌شود."),
-            (self.date_field, "تاریخِ بارگیری."),
+            (self.vehicle_combo, "خودرویی که این بارگیری برایش انجام می‌شود — بعد ثبت قابل‌تغییر نیست."),
+            (self.source_warehouse_combo, "انباری که کالا از آن برای بارگیری برداشته می‌شود."),
+            (self.date_field, "تاریخ بارگیری."),
             (self.item_combo, "کالایی که به این بارگیری اضافه می‌شود."),
-            (self.quantity_field, "مقدارِ برنامه‌ریزی‌شده برایِ همین کالا."),
+            (self.quantity_field, "مقدار برنامه‌ریزی‌شده برای همین کالا."),
         ])
         return wrap_scrollable(panel)
 
@@ -217,7 +217,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
 
     def _load_into_form(self, loading: vehicle_loading_service.VehicleLoadingRow) -> None:
         self._editing_id = loading.vehicle_loading_id
-        self.form_title.setText(f"بارگیریِ {format_jalali_date(loading.loading_date)}")
+        self.form_title.setText(f"بارگیری {format_jalali_date(loading.loading_date)}")
         self.status_label.setText("")
         index = self.vehicle_combo.findData(loading.vehicle_warehouse_id)
         self.vehicle_combo.setCurrentIndex(max(0, index))
@@ -243,18 +243,18 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
                 self.lines_table.setItem(row_index, col_index, QTableWidgetItem(value))
 
         if loading.status_code == "DRAFT":
-            self.info_label.setText("این بارگیری هنوز تایید نشده -- موجودیِ خودرو پسِ تاییدِ راننده به‌روز می‌شود.")
+            self.info_label.setText("این بارگیری هنوز تایید نشده — موجودی خودرو پس تایید راننده به‌روز می‌شود.")
             self.confirm_button.setVisible(True)
             self.create_button.setVisible(False)
         else:
-            self.info_label.setText(f"تاییدشده -- سندِ انتقالِ شمارهٔ {loading.stock_document_id}")
+            self.info_label.setText(f"تاییدشده — سند انتقال شمارهٔ {loading.stock_document_id}")
             self.confirm_button.setVisible(False)
             self.create_button.setVisible(False)
 
     def _reset_form(self) -> None:
         self._editing_id = None
         self._pending_lines = []
-        self.form_title.setText("بارگیریِ جدید")
+        self.form_title.setText("بارگیری جدید")
         self.status_label.setText("")
         self.info_label.setText("")
         self.vehicle_combo.setEnabled(True)
@@ -297,7 +297,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         vehicle_id = self.vehicle_combo.currentData()
         source_id = self.source_warehouse_combo.currentData()
         if company_id is None or vehicle_id is None or source_id is None:
-            self.status_label.setText("خودرو و انبارِ مبدا را انتخاب کنید.")
+            self.status_label.setText("خودرو و انبار مبدا را انتخاب کنید.")
             return
         if not self._pending_lines:
             self.status_label.setText("حداقل یک ردیف اضافه کنید.")
@@ -319,7 +319,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "تاییدِ بارگیری", "بعدِ تایید، موجودیِ خودرو واقعاً به‌روز می‌شود. ادامه می‌دهید؟", QMessageBox.Yes | QMessageBox.No,
+            self, "تایید بارگیری", "بعد تایید، موجودی خودرو واقعاً به‌روز می‌شود. ادامه می‌دهید؟", QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
             return

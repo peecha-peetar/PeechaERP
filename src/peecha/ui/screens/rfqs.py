@@ -1,4 +1,4 @@
-"""فرمِ استعلامِ قیمت -- R242: ردیف‌ها، دعوت از تامین‌کنندگان، ثبتِ پیشنهاد، مقایسه، انتخابِ برنده و سفارش."""
+"""فرم استعلام قیمت — R242: ردیف‌ها، دعوت از تامین‌کنندگان، ثبت پیشنهاد، مقایسه، انتخاب برنده و سفارش."""
 
 from __future__ import annotations
 
@@ -45,17 +45,17 @@ def _money(value) -> str:
 
 
 class QuoteDialog(QDialog):
-    """ثبتِ پیشنهادِ یک تامین‌کننده برایِ همهٔ ردیف‌ها (ردیفِ بدونِ فی ثبت نمی‌شود)."""
+    """ثبت پیشنهاد یک تامین‌کننده برای همهٔ ردیف‌ها (ردیف بدون فی ثبت نمی‌شود)."""
 
     def __init__(self, parent, supplier_label: str, lines, quotes_by_line: dict, item_labels: dict) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"پیشنهادِ {supplier_label}")
+        self.setWindowTitle(f"پیشنهاد {supplier_label}")
         self.setLayoutDirection(Qt.RightToLeft)
         self.resize(820, 420)
         self.lines = lines
         layout = QVBoxLayout(self)
         self.table = QTableWidget(len(lines), 6)
-        self.table.setHorizontalHeaderLabels(["کالا", "مقدار", "فی", "تخفیف٪", "زمانِ تحویل (روز)", "اعتبار تا"])
+        self.table.setHorizontalHeaderLabels(["کالا", "مقدار", "فی", "تخفیف٪", "زمان تحویل (روز)", "اعتبار تا"])
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.fields = []
@@ -101,11 +101,11 @@ class RfqScreen(QWidget):
         self._supplier_labels: dict[int, str] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
-        self.page_title = QLabel("استعلامِ قیمت")
+        self.page_title = QLabel("استعلام قیمت")
         self.page_title.setObjectName("pageTitle")
         layout.addWidget(self.page_title)
         splitter = QSplitter(Qt.Vertical)
-        self.list_table = _table(["شماره", "تاریخ", "مهلتِ پاسخ", "وضعیت", "ردیف", "دعوت", "پاسخ", "شرح"], 7)
+        self.list_table = _table(["شماره", "تاریخ", "مهلت پاسخ", "وضعیت", "ردیف", "دعوت", "پاسخ", "شرح"], 7)
         self.list_table.cellDoubleClicked.connect(lambda row, _c: self.edit_document(self._rfqs[row].rfq_id))
         splitter.addWidget(self.list_table)
 
@@ -114,10 +114,10 @@ class RfqScreen(QWidget):
         header = QGridLayout()
         self.date_field, self.due_field, self.description_field = JalaliDateEdit(), JalaliDateEdit(), QLineEdit()
         self.request_combo = QComboBox()
-        from_request = QPushButton("استعلام از درخواستِ خرید")
+        from_request = QPushButton("استعلام از درخواست خرید")
         from_request.clicked.connect(self.create_from_request)
-        for col, (text, widget) in enumerate((("تاریخ", self.date_field), ("مهلتِ پاسخ", self.due_field),
-                                              ("شرح", self.description_field), ("درخواستِ خریدِ تصویب‌شده", self.request_combo))):
+        for col, (text, widget) in enumerate((("تاریخ", self.date_field), ("مهلت پاسخ", self.due_field),
+                                              ("شرح", self.description_field), ("درخواست خرید تصویب‌شده", self.request_combo))):
             _labeled(header, col, text, widget)
         header.addWidget(from_request, 1, 4)
         ed.addLayout(header)
@@ -133,16 +133,16 @@ class RfqScreen(QWidget):
         self.qty_field.setMaximumWidth(90)
         self.line_date_field = JalaliDateEdit()
         for text, widget in (("کالا:", self.item_combo), ("واحد:", self.uom_combo), ("مقدار:", self.qty_field),
-                             ("تاریخِ نیاز:", self.line_date_field)):
+                             ("تاریخ نیاز:", self.line_date_field)):
             row.addWidget(QLabel(text))
             row.addWidget(widget)
-        self.add_line_button, self.delete_line_button = QPushButton("افزودنِ ردیف"), QPushButton("حذفِ ردیف")
+        self.add_line_button, self.delete_line_button = QPushButton("افزودن ردیف"), QPushButton("حذف ردیف")
         self.add_line_button.clicked.connect(self.add_line)
         self.delete_line_button.clicked.connect(self.delete_line)
         row.addWidget(self.add_line_button)
         row.addWidget(self.delete_line_button)
         lt.addLayout(row)
-        self.lines_table = _table(["کالا", "واحد", "مقدار", "تاریخِ نیاز", "از درخواست"])
+        self.lines_table = _table(["کالا", "واحد", "مقدار", "تاریخ نیاز", "از درخواست"])
         lt.addWidget(self.lines_table)
         self.tabs.addTab(lines_tab, "ردیف‌ها")
         # تامین‌کنندگان و پیشنهادها
@@ -154,27 +154,27 @@ class RfqScreen(QWidget):
         row.addWidget(QLabel("تامین‌کننده:"))
         row.addWidget(self.supplier_combo)
         self.buttons: dict[str, QPushButton] = {}
-        for key, text, slot in (("invite", "دعوت", self.add_supplier), ("uninvite", "حذفِ دعوت", self.remove_supplier),
-                                ("quote", "ثبتِ پیشنهاد", self.enter_quote), ("decline", "ثبتِ انصراف", self.decline)):
+        for key, text, slot in (("invite", "دعوت", self.add_supplier), ("uninvite", "حذف دعوت", self.remove_supplier),
+                                ("quote", "ثبت پیشنهاد", self.enter_quote), ("decline", "ثبت انصراف", self.decline)):
             button = QPushButton(text)
             button.clicked.connect(lambda _c=False, s=slot: s())
             row.addWidget(button)
             self.buttons[key] = button
         row.addStretch(1)
         st.addLayout(row)
-        self.suppliers_table = _table(["تامین‌کننده", "وضعیت", "زمانِ پاسخ", "ردیف‌هایِ پیشنهادشده", "جمعِ پیشنهاد (خالص)"])
+        self.suppliers_table = _table(["تامین‌کننده", "وضعیت", "زمان پاسخ", "ردیف‌های پیشنهادشده", "جمع پیشنهاد (خالص)"])
         st.addWidget(self.suppliers_table)
         self.tabs.addTab(sup_tab, "تامین‌کنندگان و پیشنهادها")
         # مقایسه
         cmp_tab = QWidget()
         ct = QVBoxLayout(cmp_tab)
-        self.comparison_table = _table(["کالا", "تامین‌کننده", "فی", "تخفیف٪", "فیِ خالص", "جمع", "زمانِ تحویل", "اعتبار تا", "رتبه", "وضعیت"])
+        self.comparison_table = _table(["کالا", "تامین‌کننده", "فی", "تخفیف٪", "فی خالص", "جمع", "زمان تحویل", "اعتبار تا", "رتبه", "وضعیت"])
         self.comparison_table.setSelectionMode(QAbstractItemView.MultiSelection)
         ct.addWidget(self.comparison_table)
         row = QHBoxLayout()
-        for key, text, slot in (("award_best", "انتخابِ بهترین پیشنهادِ هر ردیف", lambda: self.award(None)),
-                                ("award_selected", "انتخابِ ردیف‌هایِ علامت‌خورده", self.award_selected),
-                                ("order", "ساختِ سفارشِ خرید برایِ برنده‌ها", self.create_orders)):
+        for key, text, slot in (("award_best", "انتخاب بهترین پیشنهاد هر ردیف", lambda: self.award(None)),
+                                ("award_selected", "انتخاب ردیف‌های علامت‌خورده", self.award_selected),
+                                ("order", "ساخت سفارش خرید برای برنده‌ها", self.create_orders)):
             button = QPushButton(text)
             if key == "order":
                 button.setObjectName("primaryButton")
@@ -218,7 +218,7 @@ class RfqScreen(QWidget):
         _searchable(self.item_combo, [(label, item_id) for item_id, label in self._items.items()])
         self._supplier_labels = {s["detail_account_id"]: f"{s['code']} — {s['name'] or ''}" for s in dimensions_service.list_suppliers(company_id)}
         _searchable(self.supplier_combo, [(label, sid) for sid, label in self._supplier_labels.items()])
-        _searchable(self.request_combo, [(f"درخواستِ {r.request_no}", r.request_id)
+        _searchable(self.request_combo, [(f"درخواست {r.request_no}", r.request_id)
                                          for r in pr_service.list_requests(company_id, statuses=("APPROVED",))], "—")
         self._reload_units()
         self._reload_list()
@@ -251,7 +251,7 @@ class RfqScreen(QWidget):
     def new_rfq(self) -> None:
         self._rfq_id, self._status = None, "DRAFT"
         self._lines, self._suppliers, self._quotes, self._comparison = [], [], [], []
-        self.page_title.setText("استعلامِ قیمتِ جدید")
+        self.page_title.setText("استعلام قیمت جدید")
         self.date_field.setDate(datetime.date.today())
         self.due_field.setDate(datetime.date.today() + datetime.timedelta(days=5))
         self.line_date_field.setDate(datetime.date.today() + datetime.timedelta(days=14))
@@ -266,7 +266,7 @@ class RfqScreen(QWidget):
         row, self._lines, self._suppliers, self._quotes = rfq_service.get_rfq(rfq_id, company_id)
         self._rfq_id, self._status = rfq_id, row.status_code
         self._comparison = rfq_service.compare(rfq_id, company_id)
-        self.page_title.setText(numerals.to_persian_digits(f"استعلامِ قیمتِ شمارهٔ {row.rfq_no} -- {rfq_service.STATUS_LABELS[row.status_code]}"))
+        self.page_title.setText(numerals.to_persian_digits(f"استعلام قیمت شمارهٔ {row.rfq_no} -- {rfq_service.STATUS_LABELS[row.status_code]}"))
         self.date_field.setDate(row.rfq_date)
         self.due_field.setDate(row.response_due_date or row.rfq_date)
         self.description_field.setText(row.description or "")
@@ -321,7 +321,7 @@ class RfqScreen(QWidget):
             action()
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "استعلامِ قیمت", str(exc))
+            QMessageBox.warning(self, "استعلام قیمت", str(exc))
             return False
         theme.set_status_label(self.status_label, success, ok=True)
         if reload and self._rfq_id is not None:
@@ -353,7 +353,7 @@ class RfqScreen(QWidget):
         def action():
             self._rfq_id = rfq_service.create_from_request(request_id, company_id, self._user_id(), self.due_field.date())
 
-        self._run(action, "استعلام از درخواستِ خرید ساخته شد.")
+        self._run(action, "استعلام از درخواست خرید ساخته شد.")
 
     def add_line(self) -> None:
         company_id = self._company_id()
@@ -408,7 +408,7 @@ class RfqScreen(QWidget):
     def decline(self) -> None:
         sp = self._selected_supplier()
         if sp is not None:
-            self._run(lambda: rfq_service.decline(sp.rfq_supplier_id, self._company_id()), "انصرافِ تامین‌کننده ثبت شد.")
+            self._run(lambda: rfq_service.decline(sp.rfq_supplier_id, self._company_id()), "انصراف تامین‌کننده ثبت شد.")
 
     def send(self) -> None:
         if self._rfq_id is not None:
@@ -428,7 +428,7 @@ class RfqScreen(QWidget):
         if self._rfq_id is None:
             return created
         if self._run(lambda: created.extend(rfq_service.create_orders(self._rfq_id, self._company_id(), self._user_id())),
-                     "سفارشِ خرید ساخته شد.") and self._main_window is not None and len(created) == 1:
+                     "سفارش خرید ساخته شد.") and self._main_window is not None and len(created) == 1:
             order_id = created[0]
             self._main_window.open_screen("PURCH_ORDER", then=lambda screen: screen.edit_document(order_id))
         return created
@@ -436,6 +436,6 @@ class RfqScreen(QWidget):
     def cancel(self, confirm: bool = True) -> None:
         if self._rfq_id is None:
             return
-        if confirm and QMessageBox.question(self, "لغوِ استعلام", "این استعلام لغو شود؟") != QMessageBox.Yes:
+        if confirm and QMessageBox.question(self, "لغو استعلام", "این استعلام لغو شود؟") != QMessageBox.Yes:
             return
         self._run(lambda: rfq_service.cancel_rfq(self._rfq_id, self._company_id()), "استعلام لغو شد.")

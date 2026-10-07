@@ -1,8 +1,8 @@
-"""پخشِ سرد/گرم -- R129، بخشِ موتورِ پروموشن. طبقِ طرحِ تاییدشده، در این
-فاز فقط دیتامدل+محاسبهٔ مستقل ساخته می‌شود (قابلِ‌فراخوانی/تست بدونِ
-وابستگی به فرمِ فاکتور)؛ اتصالِ آن به محاسبهٔ زندهٔ قیمتِ فاکتور
-(commercial_documents.py) یک گامِ جداگانه و حساس است که در فازِ بعدی
-به‌طورِ مستقل بررسی/تست می‌شود -- تا منطقِ تخفیف/مالياتِ فعلاً
+"""پخش سرد/گرم — R129، بخش موتور پروموشن. طبق طرح تاییدشده، در این
+فاز فقط دیتامدل+محاسبهٔ مستقل ساخته می‌شود (قابل‌فراخوانی/تست بدون
+وابستگی به فرم فاکتور)؛ اتصال آن به محاسبهٔ زندهٔ قیمت فاکتور
+(commercial_documents.py) یک گام جداگانه و حساس است که در فاز بعدی
+به‌طور مستقل بررسی/تست می‌شود — تا منطق تخفیف/مالیات فعلاً
 تست‌شدهٔ فاکتور دوباره در جایی دیگر بازنویسی/دست‌کاری نشود."""
 
 from __future__ import annotations
@@ -44,19 +44,19 @@ class PromotionRuleRow:
 
 def _validate_fields(fields: PromotionRuleFields) -> None:
     if fields.promotion_type_code not in PROMOTION_TYPE_CODES:
-        raise ValueError("نوعِ پروموشن نامعتبر است.")
+        raise ValueError("نوع پروموشن نامعتبر است.")
     if fields.promotion_type_code == "BUY_X_GET_Y":
         if not fields.applies_to_item_id or not fields.buy_quantity or not fields.get_quantity:
-            raise ValueError("برایِ «بخر و ببر»، کالا، تعدادِ خرید و تعدادِ هدیه الزامی است.")
+            raise ValueError("برای «بخر و ببر»، کالا، تعداد خرید و تعداد هدیه الزامی است.")
         if fields.buy_quantity <= 0 or fields.get_quantity <= 0:
             raise ValueError("تعدادها باید بزرگ‌تر از صفر باشند.")
     if fields.promotion_type_code == "THRESHOLD_DISCOUNT":
         if not fields.threshold_amount or not fields.discount_percent:
-            raise ValueError("برایِ تخفیفِ پلکانی، سقفِ مبلغ و درصدِ تخفیف الزامی است.")
+            raise ValueError("برای تخفیف پلکانی، سقف مبلغ و درصد تخفیف الزامی است.")
         if fields.threshold_amount <= 0 or not (0 < fields.discount_percent <= 100):
-            raise ValueError("سقفِ مبلغ باید مثبت و درصدِ تخفیف بینِ ۰ تا ۱۰۰ باشد.")
+            raise ValueError("سقف مبلغ باید مثبت و درصد تخفیف بین ۰ تا ۱۰۰ باشد.")
     if fields.valid_from and fields.valid_to and fields.valid_from > fields.valid_to:
-        raise ValueError("تاریخِ شروع نمی‌تواند بعد از تاریخِ پایان باشد.")
+        raise ValueError("تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.")
 
 
 def create_promotion_rule(company_id: int, code: str, name: str, fields: PromotionRuleFields) -> int:
@@ -64,7 +64,7 @@ def create_promotion_rule(company_id: int, code: str, name: str, fields: Promoti
     with new_session() as session:
         existing = session.scalar(select(PromotionRule).where(PromotionRule.company_id == company_id, PromotionRule.code == code))
         if existing is not None:
-            raise ValueError("کدِ پروموشن تکراری است.")
+            raise ValueError("کد پروموشن تکراری است.")
         rule = PromotionRule(
             company_id=company_id, code=code.strip(), name=name.strip(), promotion_type_code=fields.promotion_type_code,
             channel_type_code=fields.channel_type_code, applies_to_item_id=fields.applies_to_item_id,
@@ -140,9 +140,9 @@ def compute_applicable_promotions(
     company_id: int, channel_type_code: str | None, as_of_date: datetime.date,
     item_quantities: dict[int, decimal.Decimal], order_net_amount: decimal.Decimal,
 ) -> list[PromotionEffect]:
-    """طبقِ درخواستِ صریح: مستقل از فرمِ فاکتور قابلِ‌فراخوانی/تست است --
-    ورودی همان دو چیزی که هر فاکتوری دارد (مقدارِ هر کالا + جمعِ خالصِ
-    سند)، خروجی فهرستِ اثرهایِ قابلِ‌اعمال (هدیه/تخفیف)."""
+    """طبق درخواست صریح: مستقل از فرم فاکتور قابل‌فراخوانی/تست است --
+    ورودی همان دو چیزی که هر فاکتوری دارد (مقدار هر کالا + جمع خالص
+    سند)، خروجی فهرست اثرهای قابل‌اعمال (هدیه/تخفیف)."""
     effects: list[PromotionEffect] = []
     for rule in list_promotion_rules(company_id, active_only=True):
         f = rule.fields

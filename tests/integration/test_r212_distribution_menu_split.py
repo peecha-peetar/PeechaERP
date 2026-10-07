@@ -60,32 +60,32 @@ hub = CommercialDistributionHubScreen(mw)
 hub.refresh()
 warm_tabs = [hub.tabs.tabText(i) for i in range(hub.tabs.count())]
 check(
-    warm_tabs == ["اسناد", "بارگیریِ خودرو", "تیمِ خودرو", "تسویهٔ خودرو"],
-    f"منویِ پخشِ گرم فقط چهار تبِ مخصوصِ خودرو دارد (got {warm_tabs})",
+    warm_tabs == ["اسناد", "بارگیری خودرو", "تیم خودرو", "تسویهٔ خودرو"],
+    f"منوی پخش گرم فقط چهار تب مخصوص خودرو دارد (got {warm_tabs})",
 )
 
 planning = SalesPlanningHubScreen()
 planning.refresh()
 planning_tabs = [planning.tabs.tabText(i) for i in range(planning.tabs.count())]
 check(
-    planning_tabs == ["برنامهٔ مراجعه", "ویزیت‌ها", "پروموشن‌ها", "داشبوردِ سرپرست", "بازاریابی"],
-    f"منویِ «برنامه‌ریزیِ فروش» پنج تبِ مشترک/نامرتبط را گرفت (got {planning_tabs})",
+    planning_tabs == ["برنامهٔ مراجعه", "ویزیت‌ها", "پروموشن‌ها", "داشبورد سرپرست", "بازاریابی"],
+    f"منوی «برنامه‌ریزی فروش» پنج تب مشترک/نامرتبط را گرفت (got {planning_tabs})",
 )
 
 tele = TelesalesScreen(mw)
-check(type(tele).__name__ == "TelesalesScreen", "فروشِ تلفنی آیتمِ ناوبریِ مستقلِ خودش را دارد")
+check(type(tele).__name__ == "TelesalesScreen", "فروش تلفنی آیتم ناوبری مستقل خودش را دارد")
 
 cold = ColdDistributionScreen(mw)
 cold.refresh()
 cold_tabs = [cold.tabs.tabText(i) for i in range(cold.tabs.count())]
-check("۱ - سفارش‌ها" in cold_tabs, f"پخشِ سرد دست‌نخورده ماند (got {cold_tabs})")
+check("۱ - سفارش‌ها" in cold_tabs, f"پخش سرد دست‌نخورده ماند (got {cold_tabs})")
 
 from peecha.services import roles as roles_service
 roles_service.ensure_catalog()
 with new_session() as s:
     form_codes = {f.code for f in s.scalars(select(Form)).all()}
 for code in ("commercial_distribution_hub", "commercial_telesales", "sales_planning_hub", "cold_distribution"):
-    check(code in form_codes, f"فرمِ «{code}» در فهرستِ RBAC ثبت شد (برایِ سطحِ‌دسترسیِ جدا)")
+    check(code in form_codes, f"فرم «{code}» در فهرست RBAC ثبت شد (برای سطح‌دسترسی جدا)")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

@@ -1,9 +1,9 @@
-"""سرویسِ کاتالوگِ انبار — واحد/برند/تولیدکننده و «کالا».
+"""سرویس کاتالوگ انبار — واحد/برند/تولیدکننده و «کالا».
 
-طبقِ سندِ معماری: کالا موجودیتِ تازه‌ای نیست، تفصیلیِ سطحِ‌آخرِ گروهِ سیستمیِ
-INVENTORY_ITEM است (acc.detail_accounts)؛ inv.items یک جدولِ اقماریِ
-یک‌به‌یک است — دقیقاً هم‌الگو با hr.employees نسبت به تفصیلیِ گروهِ
-PERSONNEL. منطقِ پل‌زدن این‌جاست (نه در detail_dimensions.py که عمداً
+طبق سند معماری: کالا موجودیت تازه‌ای نیست، تفصیلی سطح‌آخر گروه سیستمی
+INVENTORY_ITEM است (acc.detail_accounts)؛ inv.items یک جدول اقماری
+یک‌به‌یک است — دقیقاً هم‌الگو با hr.employees نسبت به تفصیلی گروه
+PERSONNEL. منطق پل‌زدن این‌جاست (نه در detail_dimensions.py که عمداً
 بی‌اطلاع از inv.* می‌ماند)."""
 
 from __future__ import annotations
@@ -117,19 +117,19 @@ def _validate_uom_master(
     conversion_factor: decimal.Decimal, self_uom_id: int | None = None,
 ) -> None:
     if uom_type_code not in UOM_TYPE_CODES:
-        raise ValueError("نوعِ واحد نامعتبر است.")
+        raise ValueError("نوع واحد نامعتبر است.")
     if not (0 <= decimal_places <= 6):
-        raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
+        raise ValueError("تعداد اعشار باید بین ۰ تا ۶ باشد.")
     if conversion_factor is None or decimal.Decimal(conversion_factor) <= 0:
-        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("ضریب تبدیل باید بزرگ‌تر از صفر باشد.")
     if base_uom_id is not None:
         if base_uom_id == self_uom_id:
-            raise ValueError("واحد نمی‌تواند واحدِ پایهٔ خودش باشد.")
+            raise ValueError("واحد نمی‌تواند واحد پایهٔ خودش باشد.")
         base = session.get(Uom, base_uom_id)
         if base is None or (base.company_id is not None and base.company_id != company_id):
-            raise ValueError("واحدِ پایه نامعتبر است.")
+            raise ValueError("واحد پایه نامعتبر است.")
         if base.uom_type_code != uom_type_code and uom_type_code != "PACKAGING":
-            raise ValueError("واحدِ پایه باید هم‌نوع با همین واحد باشد (مثلاً کیلوگرم ← گرم).")
+            raise ValueError("واحد پایه باید هم‌نوع با همین واحد باشد (مثلاً کیلوگرم ← گرم).")
 
 
 def create_uom(
@@ -140,7 +140,7 @@ def create_uom(
     if decimal_places is None:
         decimal_places = _DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE.get(uom_type_code, 2)
     if not code.strip() or not name.strip():
-        raise ValueError("کد و نامِ واحد الزامی است.")
+        raise ValueError("کد و نام واحد الزامی است.")
     with new_session() as session:
         _validate_uom_master(session, company_id, uom_type_code, decimal_places, base_uom_id, conversion_factor)
         if allow_decimal is None:
@@ -164,7 +164,7 @@ def update_uom(
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
-            raise ValueError("واحدِ اندازه‌گیری نامعتبر است (فقط واحدهایِ اختصاصیِ همین شرکت قابلِ‌ویرایش‌اند).")
+            raise ValueError("واحد اندازه‌گیری نامعتبر است (فقط واحدهای اختصاصی همین شرکت قابل‌ویرایش‌اند).")
         factor = decimal.Decimal(conversion_factor) if conversion_factor is not None else uom.conversion_factor
         _validate_uom_master(session, company_id, uom_type_code, decimal_places, base_uom_id, factor, uom_id)
         if allow_decimal is None:
@@ -196,13 +196,13 @@ def _uom_in_use(session, uom_id: int) -> bool:
 
 
 def delete_uom(uom_id: int, company_id: int) -> str:
-    """طبقِ سیستمِ واحد (R225): واحدِ استفاده‌شده هرگز حذفِ سخت نمی‌شود --
-    فقط غیرفعال (برایِ سندِ تازه قابلِ‌انتخاب نیست؛ اسنادِ قبلی دست‌نخورده).
+    """طبق سیستم واحد (R225): واحد استفاده‌شده هرگز حذف سخت نمی‌شود --
+    فقط غیرفعال (برای سند تازه قابل‌انتخاب نیست؛ اسناد قبلی دست‌نخورده).
     خروجی: DELETED یا DEACTIVATED."""
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
-            raise ValueError("واحدِ اندازه‌گیری نامعتبر است.")
+            raise ValueError("واحد اندازه‌گیری نامعتبر است.")
         if _uom_in_use(session, uom_id):
             uom.is_active = False
             session.commit()
@@ -255,7 +255,7 @@ def delete_brand(brand_id: int, company_id: int) -> None:
         if brand is None or brand.company_id != company_id:
             raise ValueError("برند نامعتبر است.")
         if session.scalar(select(func.count()).select_from(Item).where(Item.brand_id == brand_id)):
-            raise ValueError("این برند به کالایی وصل است و قابلِ‌حذف نیست.")
+            raise ValueError("این برند به کالایی وصل است و قابل‌حذف نیست.")
         session.delete(brand)
         session.commit()
 
@@ -306,7 +306,7 @@ def delete_manufacturer(manufacturer_id: int, company_id: int) -> None:
         if manufacturer is None or manufacturer.company_id != company_id:
             raise ValueError("تولیدکننده نامعتبر است.")
         if session.scalar(select(func.count()).select_from(Item).where(Item.manufacturer_id == manufacturer_id)):
-            raise ValueError("این تولیدکننده به کالایی وصل است و قابلِ‌حذف نیست.")
+            raise ValueError("این تولیدکننده به کالایی وصل است و قابل‌حذف نیست.")
         session.delete(manufacturer)
         session.commit()
 
@@ -401,14 +401,14 @@ def _item_dimension_type_id(company_id: int) -> int:
 
 
 def list_items(company_id: int, active_only: bool = False, transactable_only: bool = False) -> list[ItemRow]:
-    """طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
-    مرحله انتخاب و مقدار بگیره»): پارامترِ transactable_only را برایِ
-    هر جایی که کاربر می‌خواهد یک کالا را رویِ یک سند/تراکنش انتخاب کند
-    (فروش، خرید، بارگیریِ خودرو، سندِ انبار، POS، همگام‌سازیِ موبایل...)
-    True بدهید -- کالاهایِ اصلی/الگو (has_variants=True) حذف می‌شوند،
-    چون خودِ آن‌ها موجودی/فروش ندارند و فقط متغیرهایشان معنا دارند.
-    برایِ صفحاتِ مدیریتِ کاتالوگ (فهرستِ کالاها/متغیرها) این پارامتر
-    نباید ست شود -- کالای اصلی هم باید در آن‌جا قابلِ‌دیدن/ویرایش باشد."""
+    """طبق رفع باگ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
+    مرحله انتخاب و مقدار بگیره»): پارامتر transactable_only را برای
+    هر جایی که کاربر می‌خواهد یک کالا را روی یک سند/تراکنش انتخاب کند
+    (فروش، خرید، بارگیری خودرو، سند انبار، POS، همگام‌سازی موبایل...)
+    True بدهید — کالاهای اصلی/الگو (has_variants=True) حذف می‌شوند،
+    چون خود آن‌ها موجودی/فروش ندارند و فقط متغیرهایشان معنا دارند.
+    برای صفحات مدیریت کاتالوگ (فهرست کالاها/متغیرها) این پارامتر
+    نباید ست شود — کالای اصلی هم باید در آن‌جا قابل‌دیدن/ویرایش باشد."""
     dimension_type_id = _item_dimension_type_id(company_id)
     detail_rows = {
         r.detail_account_id: r for r in dimensions_service.list_detail_accounts(company_id, dimension_type_id)
@@ -480,20 +480,20 @@ def get_item_by_detail_account_id(item_detail_account_id: int) -> Item | None:
 
 
 def get_item_row_by_detail_account_id(company_id: int, item_detail_account_id: int) -> ItemRow | None:
-    """برایِ پلِ ادغام با detail_dimensions.py: از رویِ تفصیلیِ سطحِ‌آخرِ
-    گروهِ INVENTORY_ITEM، ردیفِ کاملِ کالا (اگر موجود باشد) را برمی‌گرداند —
-    گره‌هایِ میانیِ گروه‌بندی (که ردیفِ inv.items ندارند) None می‌گیرند."""
+    """برای پل ادغام با detail_dimensions.py: از روی تفصیلی سطح‌آخر
+    گروه INVENTORY_ITEM، ردیف کامل کالا (اگر موجود باشد) را برمی‌گرداند —
+    گره‌های میانی گروه‌بندی (که ردیف inv.items ندارند) None می‌گیرند."""
     return next(
         (r for r in list_items(company_id) if r.item_detail_account_id == item_detail_account_id), None
     )
 
 
 def resolve_default_tax_percent(company_id: int, item_id: int, warehouse_id: int | None = None) -> decimal.Decimal:
-    """طبقِ درخواستِ صریحِ کاربر («سیاستِ محاسبهٔ مالیات: اگر رویِ تنظیماتِ
-    شرکت بود برایِ همه لحاظ کند، اگر شرکت تنظیم نداشت رویِ انبار، و اگر
-    انبار نداشت رویِ کالا نگاه کند»): اولویت -- اول تنظیماتِ کلیِ شرکت
+    """طبق درخواست صریح کاربر («سیاست محاسبهٔ مالیات: اگر روی تنظیمات
+    شرکت بود برای همه لحاظ کند، اگر شرکت تنظیم نداشت روی انبار، و اگر
+    انبار نداشت روی کالا نگاه کند»): اولویت — اول تنظیمات کلی شرکت
     (Company.default_tax_percent)، اگر خالی بود انبار (Warehouse.
-    default_tax_percent)، اگر آن هم خالی بود خودِ کالا (Item.
+    default_tax_percent)، اگر آن هم خالی بود خود کالا (Item.
     default_tax_percent)، در نهایت صفر."""
     with new_session() as session:
         company = session.get(Company, company_id)
@@ -568,24 +568,24 @@ class ItemFields:
 
 def _validate_item_fields(fields: ItemFields) -> None:
     if fields.item_kind_code not in _ITEM_KIND_CODES:
-        raise ValueError("نوعِ کالا نامعتبر است.")
+        raise ValueError("نوع کالا نامعتبر است.")
     if fields.item_kind_code == "SERVICE" and fields.is_stock_tracked:
         raise ValueError("خدمت نمی‌تواند موجودی‌محور باشد.")
     if fields.track_expiry and not fields.track_batch:
-        raise ValueError("ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است.")
+        raise ValueError("ردیابی انقضا نیازمند فعال‌بودن ردیابی بچ است.")
     if fields.ecommerce_stock_mode not in ("DATABASE", "ALWAYS_IN_STOCK", "OUT_OF_STOCK"):
-        raise ValueError("حالتِ موجودیِ فروشِ اینترنتی نامعتبر است.")
+        raise ValueError("حالت موجودی فروش اینترنتی نامعتبر است.")
 
 
 def create_item(
     company_id: int, code: str, name: str, fields: ItemFields, parent_detail_account_id: int | None = None
 ) -> int:
-    """ساختِ کالا: اول تفصیلیِ سطحِ‌آخرِ گروهِ INVENTORY_ITEM ساخته می‌شود،
-    سپس ردیفِ اقماریِ inv.items با همان item_detail_account_id — دقیقاً
+    """ساخت کالا: اول تفصیلی سطح‌آخر گروه INVENTORY_ITEM ساخته می‌شود،
+    سپس ردیف اقماری inv.items با همان item_detail_account_id — دقیقاً
     هم‌الگو با hr.create_personnel_detail_account نسبت به hr.employees.
 
-    این تابع فقط برایِ رکوردهایِ واقعاً سطحِ‌آخر صدا زده می‌شود؛ گره‌هایِ
-    میانیِ گروه‌بندیِ کالا (سطوحِ ۱ تا max_level-1) مستقیماً با
+    این تابع فقط برای رکوردهای واقعاً سطح‌آخر صدا زده می‌شود؛ گره‌های
+    میانی گروه‌بندی کالا (سطوح ۱ تا max_level-1) مستقیماً با
     dimensions_service.create_detail_account در detail_dimensions.py
     ساخته می‌شوند و به این تابع نیازی ندارند."""
     _validate_item_fields(fields)
@@ -630,11 +630,11 @@ def create_item(
 
 
 def bulk_set_brand_category(company_id: int, item_ids: list[int], *, set_brand: bool = False, brand_id: int | None = None, set_category: bool = False, category_id: int | None = None) -> int:
-    """طبقِ درخواستِ صریح (پورتِ «Category & Brand Studio»ِ PeechaSync): تخصیصِ
-    گروهیِ دسته/برند به چند کالا در یک اقدام -- به‌جایِ بازکردنِ تک‌تکِ
-    فرمِ کالا. set_brand/set_category جدا از خودِ برند/دسته است تا کاربر
-    بتواند فقط یکی از این دو را تغییر دهد و «بدونِ برند»/«بدونِ دسته»
-    (یعنی None) هم یک انتخابِ معتبر باشد."""
+    """طبق درخواست صریح (پورت «Category & Brand Studio» PeechaSync): تخصیص
+    گروهی دسته/برند به چند کالا در یک اقدام — به‌جای بازکردن تک‌تک
+    فرم کالا. set_brand/set_category جدا از خود برند/دسته است تا کاربر
+    بتواند فقط یکی از این دو را تغییر دهد و «بدون برند»/«بدون دسته»
+    (یعنی None) هم یک انتخاب معتبر باشد."""
     if not set_brand and not set_category:
         return 0
     with new_session() as session:
@@ -655,7 +655,7 @@ def update_item(
 ) -> None:
     _validate_item_fields(fields)
     if lifecycle_status_code not in ("DRAFT", "ACTIVE", "DISCONTINUED"):
-        raise ValueError("وضعیتِ چرخهٔ‌عمر نامعتبر است.")
+        raise ValueError("وضعیت چرخهٔ‌عمر نامعتبر است.")
 
     from peecha.services import inventory_engine as engine_service
     from peecha.services import unit_conversion as uc
@@ -669,8 +669,8 @@ def update_item(
         # مجاز نیست -- مقدارِ پایهٔ همهٔ اسنادِ قبلی بی‌معنا می‌شد.
         if item.base_uom_id != fields.base_uom_id and uc.item_has_history(item_id):
             raise ValueError(
-                "این کالا سابقهٔ سند/تراکنش دارد؛ تغییرِ واحدِ پایه فقط از طریقِ مهاجرتِ تخصصیِ داده ممکن است -- "
-                "به‌جایش واحدِ تازه را در «واحدها و بسته‌بندی» با ضریبِ تبدیل اضافه کنید."
+                "این کالا سابقهٔ سند/تراکنش دارد؛ تغییر واحد پایه فقط از طریق مهاجرت تخصصی داده ممکن است -- "
+                "به‌جایش واحد تازه را در «واحدها و بسته‌بندی» با ضریب تبدیل اضافه کنید."
             )
 
         # طبقِ مرحلهٔ ۸ (۱۰۸): واحدِ پایه/روشِ قیمت‌گذاری فقط با موجودیِ صفر
@@ -680,9 +680,9 @@ def update_item(
             and engine_service.get_item_total_on_hand(item_id) != 0
         )
         if has_open_balance and item.base_uom_id != fields.base_uom_id:
-            raise ValueError("این کالا در انباری موجودی دارد؛ واحدِ پایه فقط با موجودیِ صفر قابلِ‌تغییر است.")
+            raise ValueError("این کالا در انباری موجودی دارد؛ واحد پایه فقط با موجودی صفر قابل‌تغییر است.")
         if has_open_balance and item.costing_method_code != fields.costing_method_code:
-            raise ValueError("این کالا در انباری موجودی دارد؛ روشِ قیمت‌گذاری فقط با موجودیِ صفر قابلِ‌تغییر است.")
+            raise ValueError("این کالا در انباری موجودی دارد؛ روش قیمت‌گذاری فقط با موجودی صفر قابل‌تغییر است.")
 
         # طبقِ رفعِ باگِ واقعیِ کشف‌شده («ویرایشِ متغیرها کرش می‌کند» +
         # «متغیرها ویژگیِ کالایِ اصلی را نمی‌گیرند»): variant_parent_item_id
@@ -760,40 +760,40 @@ def _item_has_stock_movements(session, item_id: int) -> bool:
 
 
 def delete_item(item_id: int, company_id: int) -> None:
-    """طبقِ رفعِ باگِ کشف‌شده: پیش‌تر این تابع فقط سابقهٔ حرکتِ انبار را چک
-    می‌کرد و مستقیماً ردیفِ inv.items را حذف می‌کرد — اگر کالا زیرجدول‌هایِ
-    تعریفیِ خودش را داشت (asset_details/bom_headers/item_suppliers/...)،
-    حذف با نقضِ کلیدِ خارجی شکست می‌خورد. حالا:
-    ۱) اگر کالا در جایی که واقعاً «استفاده» محسوب می‌شود (جزءِ فهرستِ
-       موادِ اولیهٔ کالایِ دیگر، والدِ تنوعِ کالاهایِ دیگر، رزرو/بچ/سریال/
-       لایهٔ‌بها/انبارگردانیِ فعال) نقش داشته باشد، حذف رد می‌شود.
-    ۲) در غیرِ این صورت، زیرجدول‌هایِ تعریفیِ خودِ همین کالا (که فقط با
-       همین کالا معنا دارند، نه سابقهٔ عملیاتیِ مستقل) پیش از حذفِ خودِ
+    """طبق رفع باگ کشف‌شده: پیش‌تر این تابع فقط سابقهٔ حرکت انبار را چک
+    می‌کرد و مستقیماً ردیف inv.items را حذف می‌کرد — اگر کالا زیرجدول‌های
+    تعریفی خودش را داشت (asset_details/bom_headers/item_suppliers/...)،
+    حذف با نقض کلید خارجی شکست می‌خورد. حالا:
+    ۱) اگر کالا در جایی که واقعاً «استفاده» محسوب می‌شود (جزء فهرست
+       مواد اولیهٔ کالای دیگر، والد تنوع کالاهای دیگر، رزرو/بچ/سریال/
+       لایهٔ‌بها/انبارگردانی فعال) نقش داشته باشد، حذف رد می‌شود.
+    ۲) در غیر این صورت، زیرجدول‌های تعریفی خود همین کالا (که فقط با
+       همین کالا معنا دارند، نه سابقهٔ عملیاتی مستقل) پیش از حذف خود
        کالا پاک می‌شوند."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
             raise ValueError("کالا نامعتبر است.")
         if _item_has_stock_movements(session, item_id):
-            raise ValueError("این کالا سابقهٔ حرکتِ انبار دارد و قابلِ‌حذف نیست — به‌جایِ حذف، وضعیتِ آن را «متوقف‌شده» کنید.")
+            raise ValueError("این کالا سابقهٔ حرکت انبار دارد و قابل‌حذف نیست — به‌جای حذف، وضعیت آن را «متوقف‌شده» کنید.")
         if session.scalar(
             select(func.count()).select_from(StockDocumentLine).where(StockDocumentLine.item_id == item_id)
         ):
-            raise ValueError("این کالا در سندی استفاده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا در سندی استفاده شده و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(BomLine).where(BomLine.component_item_id == item_id)):
-            raise ValueError("این کالا به‌عنوانِ جزءِ فهرستِ موادِ اولیهٔ کالایِ دیگری استفاده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا به‌عنوان جزء فهرست مواد اولیهٔ کالای دیگری استفاده شده و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(Item).where(Item.variant_parent_item_id == item_id)):
-            raise ValueError("این کالا والدِ یک یا چند تنوعِ کالاست و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا والد یک یا چند تنوع کالاست و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(StockReservation).where(StockReservation.item_id == item_id)):
-            raise ValueError("این کالا رزروِ موجودی دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا رزرو موجودی دارد و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(Batch).where(Batch.item_id == item_id)):
-            raise ValueError("این کالا سابقهٔ بچ دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا سابقهٔ بچ دارد و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(SerialNumber).where(SerialNumber.item_id == item_id)):
-            raise ValueError("این کالا سابقهٔ سریال دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا سابقهٔ سریال دارد و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(CostLayer).where(CostLayer.item_id == item_id)):
-            raise ValueError("این کالا سابقهٔ لایهٔ بهایِ تمام‌شده دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا سابقهٔ لایهٔ بهای تمام‌شده دارد و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(CycleCountLine).where(CycleCountLine.item_id == item_id)):
-            raise ValueError("این کالا در انبارگردانی استفاده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این کالا در انبارگردانی استفاده شده و قابل‌حذف نیست.")
 
         bom_ids = session.scalars(select(BomHeader.bom_id).where(BomHeader.finished_item_id == item_id)).all()
         if bom_ids:
@@ -847,7 +847,7 @@ class UomConversionRow:
 
 # سازگاری با کدِ پیش از R225 -- همه به services/unit_conversion.py واگذار می‌شوند.
 def list_item_uom_conversions(item_id: int) -> list[UomConversionRow]:
-    """فقط واحدهایِ غیرِپایهٔ فعال (همان معنایِ قبلی)."""
+    """فقط واحدهای غیرپایهٔ فعال (همان معنای قبلی)."""
     from peecha.services import unit_conversion as uc
 
     return [
@@ -886,7 +886,7 @@ class ItemUomOption:
 
 
 def list_item_uom_options(item_id: int, purpose: str | None = None) -> list[ItemUomOption]:
-    """واحدهایِ قابلِ‌انتخاب در سندِ تازه (فعال، مجاز برایِ purpose)، اول واحدِ پایه."""
+    """واحدهای قابل‌انتخاب در سند تازه (فعال، مجاز برای purpose)، اول واحد پایه."""
     from peecha.services import unit_conversion as uc
 
     return [
@@ -896,7 +896,7 @@ def list_item_uom_options(item_id: int, purpose: str | None = None) -> list[Item
 
 
 def get_uom_factor(item_id: int, uom_id: int) -> decimal.Decimal:
-    """ضریبِ تبدیلِ یک واحد به واحدِ پایه‌یِ کالا (پایه = ۱)."""
+    """ضریب تبدیل یک واحد به واحد پایهٔ کالا (پایه = ۱)."""
     from peecha.services import unit_conversion as uc
 
     return uc.get_factor(item_id, uom_id)
@@ -913,9 +913,9 @@ def list_related_items(item_id: int) -> list[tuple[int, str]]:
 
 def add_related_item(item_id: int, related_item_id: int, relation_type_code: str) -> None:
     if relation_type_code not in ("SUBSTITUTE", "COMPLEMENTARY"):
-        raise ValueError("نوعِ ارتباط نامعتبر است.")
+        raise ValueError("نوع ارتباط نامعتبر است.")
     if item_id == related_item_id:
-        raise ValueError("یک کالا نمی‌تواند جایگزین/مکملِ خودش باشد.")
+        raise ValueError("یک کالا نمی‌تواند جایگزین/مکمل خودش باشد.")
     with new_session() as session:
         session.add(RelatedItem(item_id=item_id, related_item_id=related_item_id, relation_type_code=relation_type_code))
         session.commit()
@@ -959,7 +959,7 @@ def create_category(company_id: int, code: str, name: str, parent_category_id: i
                 ItemCategory.company_id == company_id, ItemCategory.code == code.strip()
             )
         ):
-            raise ValueError("این کد قبلاً برایِ دسته‌بندیِ دیگری استفاده شده است.")
+            raise ValueError("این کد قبلاً برای دسته‌بندی دیگری استفاده شده است.")
         category = ItemCategory(
             company_id=company_id, parent_category_id=parent_category_id, code=code.strip(), name=name.strip()
         )
@@ -986,8 +986,8 @@ def delete_category(category_id: int, company_id: int) -> None:
         if session.scalar(
             select(func.count()).select_from(ItemCategory).where(ItemCategory.parent_category_id == category_id)
         ):
-            raise ValueError("این دسته زیرگروه دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این دسته زیرگروه دارد و قابل‌حذف نیست.")
         if session.scalar(select(func.count()).select_from(Item).where(Item.category_id == category_id)):
-            raise ValueError("این دسته به کالایی وصل است و قابلِ‌حذف نیست.")
+            raise ValueError("این دسته به کالایی وصل است و قابل‌حذف نیست.")
         session.delete(category)
         session.commit()

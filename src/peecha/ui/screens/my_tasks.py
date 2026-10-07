@@ -1,9 +1,9 @@
-"""کارتابلِ من — صفِ تاییدِ سراسری، مستقل از ماژول. طبقِ درخواستِ صریح
-(«سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها») این صفحه هیچ منطقِ
-خاصِ‌ماژولی ندارد؛ فقط services/cartable.py را صدا می‌زند که رویِ
-handlerهایِ ثبت‌شده (فعلاً فقط سندِ حسابداری، در journal_entries.py)
-کار می‌کند. افزودنِ کارتابل به یک ماژولِ تازه یعنی همان‌جا یک
-register_handler + یک ورودی در _OPEN_HANDLERS این‌جا، نه صفحه‌ی تازه."""
+"""کارتابل من — صف تایید سراسری، مستقل از ماژول. طبق درخواست صریح
+(«سیستم کارتابل قابل‌گسترش برای همهٔ ماژول‌ها») این صفحه هیچ منطق
+خاص‌ماژولی ندارد؛ فقط services/cartable.py را صدا می‌زند که روی
+handlerهای ثبت‌شده (فعلاً فقط سند حسابداری، در journal_entries.py)
+کار می‌کند. افزودن کارتابل به یک ماژول تازه یعنی همان‌جا یک
+register_handler + یک ورودی در _OPEN_HANDLERS این‌جا، نه صفحهٔ تازه."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class _CommentDialog(QDialog):
 
     def _on_accept(self) -> None:
         if self._required and not self.text_edit.toPlainText().strip():
-            QMessageBox.warning(self, "خطا", "نوشتنِ دلیل الزامی است.")
+            QMessageBox.warning(self, "خطا", "نوشتن دلیل الزامی است.")
             return
         self.accept()
 
@@ -69,8 +69,8 @@ class _CommentDialog(QDialog):
         return self.text_edit.toPlainText().strip()
 
 
-_COLUMNS = ["ماژول/فرم", "شرح", "نوعِ درخواست", "مرحله", "صادرکننده", "تاریخِ ارسال"]
-_OP_COLUMNS = ["کارِ لازم", "سند", "طرفِ حساب", "تاریخ"]
+_COLUMNS = ["ماژول/فرم", "شرح", "نوع درخواست", "مرحله", "صادرکننده", "تاریخ ارسال"]
+_OP_COLUMNS = ["کار لازم", "سند", "طرف حساب", "تاریخ"]
 
 # R226: نوعِ سند -> کدِ منو برایِ بازکردنِ خودِ سند
 _TYPE_TO_NAV_CODE = {
@@ -95,12 +95,12 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(16)
 
-        title = QLabel("کارتابلِ من")
+        title = QLabel("کارتابل من")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "همه‌ی اسناد/درخواست‌هایِ در انتظارِ تاییدِ شما، از همه‌یِ ماژول‌هایِ برنامه، این‌جا با هم دیده می‌شوند."
+            "همهٔ اسناد/درخواست‌های در انتظار تایید شما، از همهٔ ماژول‌های برنامه، این‌جا با هم دیده می‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -116,7 +116,7 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         # R226: مراحلِ اسنادِ بازرگانی که منتظرِ همین کاربرند (تصویب، رسیدِ کالا، تسویه، تبدیل)
-        op_title = QLabel("کارهایِ در انتظارِ اسناد (خرید/فروش/انبار)")
+        op_title = QLabel("کارهای در انتظار اسناد (خرید/فروش/انبار)")
         op_title.setObjectName("sectionTitle")
         layout.addWidget(op_title)
         self.op_table = QTableWidget(0, len(_OP_COLUMNS))
@@ -128,7 +128,7 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         self.op_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.op_table.cellDoubleClicked.connect(lambda row, _col: self._open_op_task(row))
         layout.addWidget(self.op_table, stretch=1)
-        self.op_empty_label = QLabel("کارِ در انتظاری نیست.")
+        self.op_empty_label = QLabel("کار در انتظاری نیست.")
         self.op_empty_label.setObjectName("sectionHint")
         layout.addWidget(self.op_empty_label)
 
@@ -147,13 +147,13 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         open_op_button = QPushButton("📂")
         open_op_button.setObjectName("iconButton")
         open_op_button.setFixedWidth(44)
-        open_op_button.setToolTip("انجامِ کارِ انتخاب‌شده (بازکردنِ سند/صفحهٔ مربوط)")
+        open_op_button.setToolTip("انجام کار انتخاب‌شده (بازکردن سند/صفحهٔ مربوط)")
         open_op_button.clicked.connect(lambda: self._open_op_task(self.op_table.currentRow()))
 
         outer.addWidget(wrap_scrollable_with_footer(panel, [approve_button, reject_button, open_op_button]))
 
         self.set_field_help([
-            (self.table, "برایِ بازکردنِ خودِ سند، رویِ ردیفش دابل‌کلیک کنید."),
+            (self.table, "برای بازکردن خود سند، روی ردیفش دابل‌کلیک کنید."),
         ])
 
     def _selected_task(self) -> cartable_service.CartableTaskRow | None:
@@ -228,7 +228,7 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         task = self._selected_task()
         if task is None or session.current_user is None:
             return
-        dialog = _CommentDialog(self, "تاییدِ کارتابل", "توضیحِ اختیاری برایِ تایید:", required=False)
+        dialog = _CommentDialog(self, "تایید کارتابل", "توضیح اختیاری برای تایید:", required=False)
         if dialog.exec() != QDialog.Accepted:
             return
         try:
@@ -242,7 +242,7 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         task = self._selected_task()
         if task is None or session.current_user is None:
             return
-        dialog = _CommentDialog(self, "ردِ کارتابل", "دلیلِ رد را بنویسید:", required=True)
+        dialog = _CommentDialog(self, "رد کارتابل", "دلیل رد را بنویسید:", required=True)
         if dialog.exec() != QDialog.Accepted:
             return
         try:

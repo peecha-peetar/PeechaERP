@@ -58,24 +58,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -105,8 +105,8 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
-reval_gl = A("598", "تسعیرِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+reval_gl = A("598", "تسعیر موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 item_dim = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
@@ -204,22 +204,22 @@ with new_session() as s_:
     cols = s_.execute(text("SELECT table_name, column_name, is_nullable FROM information_schema.columns WHERE column_name IN "
                            "('branch_id','org_unit_id') AND table_schema IN ('comm','inv')")).all()
 new_cols = [c for c in cols if c[0] != "branches" and not (c[0] == "warehouses" and c[1] == "org_unit_id")]
-check(len(new_cols) == 7 and all(c[2] == "YES" for c in new_cols), f"ستون‌هایِ تازهٔ شعبه/دپارتمان nullable (got {new_cols})")
-check(doc_of(po1).branch_id is None, "اسنادِ قبلی بدونِ شعبه")
+check(len(new_cols) == 7 and all(c[2] == "YES" for c in new_cols), f"ستون‌های تازهٔ شعبه/دپارتمان nullable (got {new_cols})")
+check(doc_of(po1).branch_id is None, "اسناد قبلی بدون شعبه")
 
 # --- ۱) شعبه و دپارتمان
 b_t = masters.save_branch(company_id, "thr", "شعبهٔ تهران")
 b_s = masters.save_branch(company_id, "SHZ", "شعبهٔ شیراز")
-check(raises(lambda: masters.save_branch(company_id, "THR", "تکراری")), "کدِ تکراریِ شعبه رد شد")
+check(raises(lambda: masters.save_branch(company_id, "THR", "تکراری")), "کد تکراری شعبه رد شد")
 masters.set_warehouse_branch(company_id, wh, b_t)
 dep = hr_service.create_org_unit(company_id, "PRD", "تولید", None, None)
-check([d.org_unit_id for d in masters.list_departments(company_id)] == [dep], "دپارتمان از واحدهایِ سازمانی")
+check([d.org_unit_id for d in masters.list_departments(company_id)] == [dep], "دپارتمان از واحدهای سازمانی")
 po_a, _ = dated("PURCHASE_ORDER", bolt, 4, s1, 100, today)
-check(doc_of(po_a).branch_id == b_t, "سندِ بدونِ شعبه، شعبهٔ انبار را گرفت")
+check(doc_of(po_a).branch_id == b_t, "سند بدون شعبه، شعبهٔ انبار را گرفت")
 hf = dataclasses.replace(HF(s2), branch_id=b_s, org_unit_id=dep)
 po_b = documents_service.create_document(company_id, uid, "PURCHASE_ORDER", today, hf)
 documents_service.add_line(po_b, company_id, bolt, pcs, D(3), D(3), unit_price=D(90))
-check(doc_of(po_b).branch_id == b_s and doc_of(po_b).org_unit_id == dep, "شعبه و دپارتمانِ صریح")
+check(doc_of(po_b).branch_id == b_s and doc_of(po_b).org_unit_id == dep, "شعبه و دپارتمان صریح")
 documents_service.confirm_document(po_b, company_id, uid)
 documents_service.post_document(po_b, company_id, uid)
 documents_service.approve_warehouse(po_b, company_id, uid, warehouse_id=wh)
@@ -232,80 +232,80 @@ req = prs.create_request(company_id, uid, prs.RequestFields(request_date=today, 
 prs.add_line(req, company_id, bolt, pcs, D(2), None, s1, D(100))
 prs.submit_request(req, company_id); prs.approve_request(req, company_id, uid)
 po_r = prs.convert_to_orders(req, company_id, uid)[0]
-check(doc_of(po_r).branch_id == b_s and doc_of(po_r).org_unit_id == dep, "شعبه/دپارتمانِ درخواست به سفارش")
+check(doc_of(po_r).branch_id == b_s and doc_of(po_r).org_unit_id == dep, "شعبه/دپارتمان درخواست به سفارش")
 
 # --- ۲) بودجه به تفکیکِ شعبه/دپارتمان
 bud = budgets.save_budget(company_id, budgets.BudgetFields("SHZ", "بودجهٔ شیراز", today - dt.timedelta(days=5), today + dt.timedelta(days=30),
                                                            D(1000), branch_id=b_s))
 u = budgets.usages(company_id)[0]
-check(u.actual == 270 and u.commitment == 0 and u.pipeline == 200, f"بودجهٔ شعبه: فقط اسنادِ شیراز؛ سفارشِ پیش‌نویس هنوز «در جریان» (got {u.actual}, {u.commitment}, {u.pipeline})")
+check(u.actual == 270 and u.commitment == 0 and u.pipeline == 200, f"بودجهٔ شعبه: فقط اسناد شیراز؛ سفارش پیش‌نویس هنوز «در جریان» (got {u.actual}, {u.commitment}, {u.pipeline})")
 documents_service.confirm_document(po_r, company_id, uid)
 u = budgets.usages(company_id)[0]
-check(u.commitment == 200 and u.pipeline == 0, "پس از تاییدِ سفارش: تعهد")
+check(u.commitment == 200 and u.pipeline == 0, "پس از تایید سفارش: تعهد")
 bd = budgets.save_budget(company_id, budgets.BudgetFields("PRD", "بودجهٔ تولید", today - dt.timedelta(days=5), today + dt.timedelta(days=30),
                                                           D(100), org_unit_id=dep))
-check(any("تولید" in w for w in budgets.warnings_for_document(po_r, company_id)), "هشدارِ بودجهٔ دپارتمان")
+check(any("تولید" in w for w in budgets.warnings_for_document(po_r, company_id)), "هشدار بودجهٔ دپارتمان")
 r = {x[0]: x for x in rows("BUDGET_BY_DIMENSION", options={"dimension": "BRANCH"})}
-check(r["SHZ — شعبهٔ شیراز"][2] == 1000, f"بودجه به تفکیکِ شعبه (got {r})")
-check(any("شیراز" in x[1] for x in rows("BUDGET_VS_ACTUAL")), "دامنهٔ بودجه شاملِ شعبه")
+check(r["SHZ — شعبهٔ شیراز"][2] == 1000, f"بودجه به تفکیک شعبه (got {r})")
+check(any("شیراز" in x[1] for x in rows("BUDGET_VS_ACTUAL")), "دامنهٔ بودجه شامل شعبه")
 
 # --- ۳) گزارش‌ها
 r = {x[0]: x for x in rows("BY_DIMENSION", options={"dimension": "BRANCH"})}
-check(r["SHZ — شعبهٔ شیراز"][3] == 270 and "— بدونِ شعبه —" in r, f"خرید به تفکیکِ شعبه (got {list(r)})")
+check(r["SHZ — شعبهٔ شیراز"][3] == 270 and "— بدون شعبه —" in r, f"خرید به تفکیک شعبه (got {list(r)})")
 r = {x[0]: x for x in rows("BY_DIMENSION", options={"dimension": "DEPARTMENT"})}
-check(r["PRD — تولید"][3] == 270, "خرید به تفکیکِ دپارتمان")
+check(r["PRD — تولید"][3] == 270, "خرید به تفکیک دپارتمان")
 r = rows("PR_BY_REQUESTER", options={"group": "DEPARTMENT"})
-check(r[0][0] == "PRD — تولید" and r[0][1] == 1, f"درخواست‌ها به تفکیکِ دپارتمان (got {r})")
+check(r[0][0] == "PRD — تولید" and r[0][1] == 1, f"درخواست‌ها به تفکیک دپارتمان (got {r})")
 
 # --- ۴) نماهایِ مشترک
-other = users_service.create_user("buyer2", "خریدارِ دوم", "secret123", None, None, False, [company_id], company_id)
-vid = views.save_view(company_id, "PURCHASE/OPEN_PO", uid, "نمایِ عمومی", {"group": 2}, is_shared=True)
-views.save_view(company_id, "PURCHASE/OPEN_PO", uid, "نمایِ شخصی", {"group": None})
+other = users_service.create_user("buyer2", "خریدار دوم", "secret123", None, None, False, [company_id], company_id)
+vid = views.save_view(company_id, "PURCHASE/OPEN_PO", uid, "نمای عمومی", {"group": 2}, is_shared=True)
+views.save_view(company_id, "PURCHASE/OPEN_PO", uid, "نمای شخصی", {"group": None})
 seen = {v.name: v for v in views.list_views(company_id, "PURCHASE/OPEN_PO", other.user_id)}
-check(set(seen) == {"نمایِ عمومی"} and not seen["نمایِ عمومی"].is_mine, "کاربرِ دیگر فقط نمایِ اشتراکی را می‌بیند")
-check(raises(lambda: views.delete_view(company_id, vid, other.user_id)), "حذفِ نمایِ دیگران رد شد")
-views.save_view(company_id, "PURCHASE/OPEN_PO", uid, "نمایِ عمومی", {"group": 3}, is_shared=True)
+check(set(seen) == {"نمای عمومی"} and not seen["نمای عمومی"].is_mine, "کاربر دیگر فقط نمای اشتراکی را می‌بیند")
+check(raises(lambda: views.delete_view(company_id, vid, other.user_id)), "حذف نمای دیگران رد شد")
+views.save_view(company_id, "PURCHASE/OPEN_PO", uid, "نمای عمومی", {"group": 3}, is_shared=True)
 check(len(views.list_views(company_id, "PURCHASE/OPEN_PO", uid)) == 2, "ذخیرهٔ دوباره، نما را به‌روز می‌کند")
 
 # --- ۵) UI
 from peecha import nav_catalog
 menu_codes = [e[0] for _g, _l, entries in nav_catalog.PURCHASE_REPORT_MENU for e in entries if not isinstance(e, dict)]
-check(sorted(menu_codes) == sorted(x.code for x in pr.REPORTS), "منویِ گزارش‌ها هم‌خوان")
+check(sorted(menu_codes) == sorted(x.code for x in pr.REPORTS), "منوی گزارش‌ها هم‌خوان")
 from peecha.ui.shell_window import MainWindow
 mw = MainWindow(); mw.resize(1400, 900); mw.show(); app.processEvents()
 mw.open_screen("PURCH_MASTERS"); app.processEvents()
 bt = mw._screens["procurement_masters"].branches_tab
-check(bt.table.rowCount() == 2 and "مرکزی" in bt.table.item(0, 3).text() + bt.table.item(1, 3).text(), "تبِ شعبه‌ها با انبارهایِ هر شعبه")
+check(bt.table.rowCount() == 2 and "مرکزی" in bt.table.item(0, 3).text() + bt.table.item(1, 3).text(), "تب شعبه‌ها با انبارهای هر شعبه")
 bt.warehouse_combo.setCurrentIndex(bt.warehouse_combo.findData(wh)); bt.assign_branch_combo.setCurrentIndex(bt.assign_branch_combo.findData(b_s))
 bt.assign_warehouse()
 with new_session() as s_:
     from peecha.db.models.inventory import Warehouse
-    check(s_.get(Warehouse, wh).branch_id == b_s, "اختصاصِ انبار به شعبه از فرم")
+    check(s_.get(Warehouse, wh).branch_id == b_s, "اختصاص انبار به شعبه از فرم")
 mw.open_screen("PURCH_ORDER", then=lambda s_: s_.edit_document(po_b)); app.processEvents()
 form = mw._screens["commercial_document_purchase_order"]
 check(form.org_box.isVisibleTo(form) and form.branch_combo.currentData() == b_s and form.department_combo.currentData() == dep,
-      "شعبه/دپارتمان در فرمِ سفارش")
+      "شعبه/دپارتمان در فرم سفارش")
 mw.open_screen("SALES_INVOICE"); app.processEvents()
 si = mw._screens["commercial_document_sales_invoice"]
-check(not si.org_box.isVisibleTo(si), "شعبه/دپارتمان در فرمِ فروش نیست")
+check(not si.org_box.isVisibleTo(si), "شعبه/دپارتمان در فرم فروش نیست")
 mw.open_screen("PURCH_REQUESTS", then=lambda s_: s_.edit_document(req)); app.processEvents()
 pf = mw._screens["purchase_requests"]
-check(pf.branch_combo.currentData() == b_s and pf.department_combo.currentData() == dep, "شعبه/دپارتمان در فرمِ درخواست")
+check(pf.branch_combo.currentData() == b_s and pf.department_combo.currentData() == dep, "شعبه/دپارتمان در فرم درخواست")
 mw.open_screen("PURCH_RPT_OPEN_PO"); app.processEvents()
 op = mw._screens["purchase_report_open_po"]
-check(op.view_combo.findData("نمایِ عمومی") > 0, "نماهایِ پایگاه‌داده در صفحهٔ گزارش")
+check(op.view_combo.findData("نمای عمومی") > 0, "نماهای پایگاه‌داده در صفحهٔ گزارش")
 op.shared_check.setChecked(False); op.save_view("از صفحه")
 check(any(v.name == "از صفحه" and not v.is_shared for v in views.list_views(company_id, "PURCHASE/OPEN_PO", uid)), "ذخیرهٔ نما از صفحه")
 sess.current_user = other
 op._reload_views()
 labels = [op.view_combo.itemData(i) for i in range(op.view_combo.count())]
-check(any(l and l.startswith("نمایِ عمومی (اشتراکی") for l in labels) and "از صفحه" not in labels, f"نمایِ اشتراکی برایِ کاربرِ دیگر (got {labels})")
-shared_label = next(l for l in labels if l and l.startswith("نمایِ عمومی"))
+check(any(l and l.startswith("نمای عمومی (اشتراکی") for l in labels) and "از صفحه" not in labels, f"نمای اشتراکی برای کاربر دیگر (got {labels})")
+shared_label = next(l for l in labels if l and l.startswith("نمای عمومی"))
 op.delete_view(shared_label)
-check(any(v.name == "نمایِ عمومی" for v in views.list_views(company_id, "PURCHASE/OPEN_PO", uid)), "کاربرِ دیگر نتوانست نمایِ اشتراکی را حذف کند")
+check(any(v.name == "نمای عمومی" for v in views.list_views(company_id, "PURCHASE/OPEN_PO", uid)), "کاربر دیگر نتوانست نمای اشتراکی را حذف کند")
 sess.current_user = user
 op._reload_views(); op.delete_view("از صفحه")
-check(op.view_combo.findData("از صفحه") < 0, "حذفِ نمایِ خود")
+check(op.view_combo.findData("از صفحه") < 0, "حذف نمای خود")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

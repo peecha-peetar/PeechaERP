@@ -40,16 +40,16 @@ check(cap == D("96.00"), f"weekly capacity 6 days x 16h = 96 ({cap})")
 from peecha.services.fixed_assets import assets as fa_assets, common as fa_common
 fa_common.ensure_default_categories(company_id)
 cat = [x for x in fa_common.list_categories(company_id) if x.code == "MACHINERY"][0]
-m1 = fa_assets.create_asset(company_id, uid, fa_assets.AssetFields(asset_code="M-01", name="دستگاهِ برش", category_id=cat.category_id,
+m1 = fa_assets.create_asset(company_id, uid, fa_assets.AssetFields(asset_code="M-01", name="دستگاه برش", category_id=cat.category_id,
                                                                    is_production_machine=True, work_center_code="CUT"))
 m2 = fa_assets.create_asset(company_id, uid, fa_assets.AssetFields(asset_code="M-02", name="میز", category_id=cat.category_id))
-check(raises(lambda: pm.link_machine(company_id, wc_asm, m2), "ماشینِ تولیدی"), "non-machine asset cannot be linked")
+check(raises(lambda: pm.link_machine(company_id, wc_asm, m2), "ماشین تولیدی"), "non-machine asset cannot be linked")
 pm.link_machine(company_id, wc_asm, m1, uid)
 check({m.asset_id for m in pm.work_center_machines(company_id, wc_cut)} == {m1}, "machine found by FA work_center_code")
 check([m.linked for m in pm.work_center_machines(company_id, wc_asm)] == [True], "explicitly linked machine")
 
 # دستمزد
-emp_rate = pm.save_labor_rate(company_id, "L1", "اپراتورِ ارشد", D(600000), user_id=uid)
+emp_rate = pm.save_labor_rate(company_id, "L1", "اپراتور ارشد", D(600000), user_id=uid)
 check(len(pm.list_labor_rates(company_id)) == 1, "labor rate saved")
 with new_session() as s:
     check(pm.labor_rate_for(s, company_id, None, wc_cut)[0] == D(500000), "labor rate falls back to work center")
@@ -69,7 +69,7 @@ pm.save_item_profile(company_id, r1, uid, make_or_buy="BUY", lead_time_days=7)
 
 # --- مسیرِ تولید -------------------------------------------------------------------
 RO = pm.RoutingOpFields
-rt = pm.create_routing(company_id, fg, "مسیرِ استاندارد", [
+rt = pm.create_routing(company_id, fg, "مسیر استاندارد", [
     RO(10, "برش", wc_cut, operation_id=op_cut, setup_minutes=D(30), run_minutes=D(2), asset_id=m1),
     RO(20, "مونتاژ", wc_asm, run_minutes=D(3)),
     RO(30, "بسته‌بندی", wc_pack, run_minutes=D(1)),
@@ -93,7 +93,7 @@ BF, BL = pm.BomFields, pm.BomLineFields
 bom_semi = pm.create_bom_version(company_id, semi, BF(batch_size_qty=D(1)), user_id=uid)
 pm.add_bom_component(company_id, bom_semi, BL(r3, D(2)), uid)
 # محصول: دستهٔ ۱۰۰تایی -> ۲۰۰ کیلو RM-1 (۳٪ ضایعات)، ۱۰۰ کیلو RM-2، ۱۰۰ عدد نیمه‌ساخته، ۱۰۰ کارتن، ۵ کیلو مصرفیِ ثابت
-bom_v1 = pm.create_bom_version(company_id, fg, BF(batch_size_qty=D(100), name="فرمولِ اصلی", routing_id=rt), user_id=uid)
+bom_v1 = pm.create_bom_version(company_id, fg, BF(batch_size_qty=D(100), name="فرمول اصلی", routing_id=rt), user_id=uid)
 l1 = pm.add_bom_component(company_id, bom_v1, BL(r1, D(200), uom_id=kg, scrap_percent=D(3), operation_seq=10), uid)
 pm.add_bom_component(company_id, bom_v1, BL(r2, D(100), uom_id=kg), uid)
 pm.add_bom_component(company_id, bom_v1, BL(semi, D(100), component_type="SEMI_FINISHED", operation_seq=20), uid)
@@ -129,11 +129,11 @@ check(len(pm.bom_components(company_id, bom_v2)) == 5 and len(pm.bom_outputs(com
 check([v.version_no for v in pm.list_bom_versions(company_id, fg) if v.is_default] == [1], "v1 stays default")
 with new_session() as s:
     check(pm.effective_bom_id(s, fg) == bom_v1, "effective BOM = default")
-pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمولِ اصلی", routing_id=rt,
-                                    valid_to=today - datetime.timedelta(days=1)), uid, reason="پایانِ اعتبار")
+pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمول اصلی", routing_id=rt,
+                                    valid_to=today - datetime.timedelta(days=1)), uid, reason="پایان اعتبار")
 with new_session() as s:
     check(pm.effective_bom_id(s, fg) == bom_v2, "expired default -> latest valid version")
-pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمولِ اصلی", routing_id=rt), uid)
+pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمول اصلی", routing_id=rt), uid)
 
 # قفل: نسخهٔ استفاده‌شده تغییر نمی‌کند (نه از سرویسِ جدید نه از تبِ قدیمیِ فرمِ کالا)
 with new_session() as s:
@@ -144,7 +144,7 @@ check(raises(lambda: pm.remove_bom_component(company_id, l1), "قفل"), "locked
 check(raises(lambda: ext.add_bom_line(bom_v1, r3, D(1)), "قفل"), "legacy item-panel add blocked on locked BOM")
 check(raises(lambda: ext.remove_bom_line(l1, bom_v1), "قفل"), "legacy item-panel remove blocked on locked BOM")
 check(raises(lambda: pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(50), routing_id=rt)), "قفل"), "locked header qty")
-pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمولِ اصلی", routing_id=rt, notes="یادداشت"), uid)
+pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمول اصلی", routing_id=rt, notes="یادداشت"), uid)
 check(True, "locked BOM accepts notes change")
 # BOMِ قدیمیِ فرمِ کالا هنوز کار می‌کند
 legacy = ext.create_bom(r1 if False else semi)

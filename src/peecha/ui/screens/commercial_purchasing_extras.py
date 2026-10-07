@@ -1,8 +1,8 @@
-"""ریبیتِ تامین‌کننده — قراردادها/پله‌ها/تعهداتِ ریبیتِ تامین‌کننده
-(مرحلهٔ ۴). طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ خودِ فاکتورِ
-خرید»)، هزینه‌هایِ جانبیِ خرید دیگر این‌جا مدیریت نمی‌شوند — از دکمهٔ
-«🧮 هزینه‌هایِ جانبی» رویِ خودِ فرمِ فاکتورِ خرید (commercial_document.py)
-قابلِ‌دسترسی است."""
+"""تخفیف حجمی تامین‌کننده — قراردادها/پله‌ها/تعهدات تخفیف حجمی تامین‌کننده
+(مرحلهٔ ۴). طبق درخواست صریح («فرم تسهیم هزینه روی خود فاکتور
+خرید»)، هزینه‌های جانبی خرید دیگر این‌جا مدیریت نمی‌شوند — از دکمهٔ
+«🧮 هزینه‌های جانبی» روی خود فرم فاکتور خرید (commercial_document.py)
+قابل‌دسترسی است."""
 
 from __future__ import annotations
 
@@ -36,8 +36,8 @@ from peecha.ui.widgets import (
     FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable,
 )
 
-_REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "پلکانیِ حجمی"}
-_ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
+_REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصد ثابت", "VOLUME_TIER": "پلکانی حجمی"}
+_ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحال تجمیع", "SETTLED": "تسویه‌شده"}
 
 
 class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -52,24 +52,24 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("ریبیتِ تامین‌کننده")
+        title = QLabel("تخفیف حجمی تامین‌کننده")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         outer.addWidget(self._build_rebate_tab(), stretch=1)
 
         self.set_field_help([
-            (self.rebate_supplier_combo, "تامین‌کننده‌ای که این قراردادِ ریبیت با اوست."),
-            (self.rebate_item_combo, "این قرارداد فقط رویِ یک کالایِ خاص اعمال شود -- خالی یعنی رویِ همه‌یِ خریدها از این تامین‌کننده."),
-            (self.rebate_basis_combo, "نحوهٔ محاسبهٔ ریبیت -- درصدِ ثابت، یا پلکانیِ بر اساسِ حجمِ خرید."),
-            (self.rebate_valid_from_field, "تاریخِ شروعِ اعتبارِ این قرارداد."),
-            (self.tier_min_field, "حداقلِ مبلغِ خریدِ دوره که این پله از آن به بعد اعمال می‌شود."),
-            (self.tier_percent_field, "درصدِ ریبیتِ همین پله."),
-            (self.rebate_invoice_combo, "فاکتورِ خریدِ ثبتِ‌نهایی‌شده‌ای که تعهدِ ریبیتش محاسبه می‌شود."),
-            (self.rebate_period_from_field, "ابتدایِ دورهٔ محاسبهٔ ریبیت."),
-            (self.rebate_period_to_field, "انتهایِ دورهٔ محاسبهٔ ریبیت."),
-            (self.rebate_receivable_combo, "حسابِ طلبِ ریبیت که در سندِ تسویه بدهکار می‌شود."),
-            (self.purchase_discount_combo, "حسابِ تخفیفِ خرید که در سندِ تسویه بستانکار می‌شود."),
+            (self.rebate_supplier_combo, "تامین‌کننده‌ای که این قرارداد تخفیف حجمی با اوست."),
+            (self.rebate_item_combo, "این قرارداد فقط روی یک کالای خاص اعمال شود — خالی یعنی روی همهٔ خریدها از این تامین‌کننده."),
+            (self.rebate_basis_combo, "نحوهٔ محاسبهٔ تخفیف حجمی — درصد ثابت، یا پلکانی بر اساس حجم خرید."),
+            (self.rebate_valid_from_field, "تاریخ شروع اعتبار این قرارداد."),
+            (self.tier_min_field, "حداقل مبلغ خرید دوره که این پله از آن به بعد اعمال می‌شود."),
+            (self.tier_percent_field, "درصد تخفیف حجمی همین پله."),
+            (self.rebate_invoice_combo, "فاکتور خرید ثبت‌نهایی‌شده‌ای که تعهد تخفیف حجمیش محاسبه می‌شود."),
+            (self.rebate_period_from_field, "ابتدای دورهٔ محاسبهٔ تخفیف حجمی."),
+            (self.rebate_period_to_field, "انتهای دورهٔ محاسبهٔ تخفیف حجمی."),
+            (self.rebate_receivable_combo, "حساب طلب تخفیف حجمی که در سند تسویه بدهکار می‌شود."),
+            (self.purchase_discount_combo, "حساب تخفیف خرید که در سند تسویه بستانکار می‌شود."),
         ])
 
     def _company_id(self) -> int | None:
@@ -81,7 +81,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         outer = QHBoxLayout(page)
 
         left = QVBoxLayout()
-        left.addWidget(QLabel("قراردادهایِ ریبیت"))
+        left.addWidget(QLabel("قراردادهای تخفیف حجمی"))
         self.agreement_table = QTableWidget(0, 4)
         self.agreement_table.setHorizontalHeaderLabels(["تامین‌کننده", "مبنا", "ازتاریخ", "تاتاریخ"])
         self.agreement_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -111,7 +111,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         add_agreement_button = QPushButton("➕")
         add_agreement_button.setObjectName("primaryIconButton")
         add_agreement_button.setFixedWidth(48)
-        add_agreement_button.setToolTip("قراردادِ تازه")
+        add_agreement_button.setToolTip("قرارداد تازه")
         add_agreement_button.clicked.connect(self._add_agreement)
         # R276: ویرایش/حذفِ قراردادِ انتخاب‌شده
         agreement_buttons = QHBoxLayout()
@@ -119,19 +119,19 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         save_agreement_button = QPushButton("💾")
         save_agreement_button.setObjectName("iconButton")
         save_agreement_button.setFixedWidth(44)
-        save_agreement_button.setToolTip("ذخیرهٔ تغییراتِ قراردادِ انتخاب‌شده")
+        save_agreement_button.setToolTip("ذخیرهٔ تغییرات قرارداد انتخاب‌شده")
         save_agreement_button.clicked.connect(self._update_agreement)
         agreement_buttons.addWidget(save_agreement_button)
-        delete_agreement_button = delete_button("حذفِ قراردادِ انتخاب‌شده (با پله‌هایش)")
+        delete_agreement_button = delete_button("حذف قرارداد انتخاب‌شده (با پله‌هایش)")
         delete_agreement_button.clicked.connect(self._delete_agreement)
         agreement_buttons.addWidget(delete_agreement_button)
         agreement_buttons.addStretch(1)
         agreement_form.addLayout(agreement_buttons)
         left.addLayout(agreement_form)
 
-        left.addWidget(QLabel("پله‌هایِ قراردادِ انتخاب‌شده"))
+        left.addWidget(QLabel("پله‌های قرارداد انتخاب‌شده"))
         self.tier_table = QTableWidget(0, 2)
-        self.tier_table.setHorizontalHeaderLabels(["حداقلِ خرید", "درصدِ ریبیت"])
+        self.tier_table.setHorizontalHeaderLabels(["حداقل خرید", "درصد تخفیف حجمی"])
         self.tier_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tier_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tier_table.verticalHeader().setVisible(False)
@@ -139,10 +139,10 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         left.addWidget(self.tier_table)
         tier_form = QHBoxLayout()
         self.tier_min_field = QLineEdit()
-        self.tier_min_field.setPlaceholderText("حداقلِ مبلغِ خرید")
+        self.tier_min_field.setPlaceholderText("حداقل مبلغ خرید")
         tier_form.addWidget(self.tier_min_field)
         self.tier_percent_field = QLineEdit()
-        self.tier_percent_field.setPlaceholderText("درصدِ ریبیت")
+        self.tier_percent_field.setPlaceholderText("درصد تخفیف حجمی")
         tier_form.addWidget(self.tier_percent_field)
         add_tier_button = QPushButton("➕")
         add_tier_button.setObjectName("iconButton")
@@ -150,14 +150,14 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         add_tier_button.setToolTip("پله")
         add_tier_button.clicked.connect(self._add_tier)
         tier_form.addWidget(add_tier_button)
-        delete_tier_button = delete_button("حذفِ پلهٔ انتخاب‌شده")
+        delete_tier_button = delete_button("حذف پلهٔ انتخاب‌شده")
         delete_tier_button.clicked.connect(self._delete_tier)
         tier_form.addWidget(delete_tier_button)
         left.addLayout(tier_form)
         outer.addLayout(left, stretch=3)
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("محاسبهٔ ریبیت برایِ فاکتورِ Postشده"))
+        right.addWidget(QLabel("محاسبهٔ تخفیف حجمی برای فاکتور Postشده"))
         self.rebate_invoice_combo = QComboBox()
         right.addWidget(self.rebate_invoice_combo)
         period_row = QHBoxLayout()
@@ -171,13 +171,13 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         accrue_button = QPushButton("🧮")
         accrue_button.setObjectName("iconButton")
         accrue_button.setFixedWidth(44)
-        accrue_button.setToolTip("محاسبهٔ تعهدِ ریبیت")
+        accrue_button.setToolTip("محاسبهٔ تعهد تخفیف حجمی")
         accrue_button.clicked.connect(self._accrue_rebate)
         right.addWidget(accrue_button)
 
-        right.addWidget(QLabel("تعهداتِ ریبیتِ درحالِ‌تجمیع/تسویه‌شده"))
+        right.addWidget(QLabel("تعهدات تخفیف حجمی درحال‌تجمیع/تسویه‌شده"))
         self.accrual_table = QTableWidget(0, 3)
-        self.accrual_table.setHorizontalHeaderLabels(["دوره", "مبلغِ تعهد", "وضعیت"])
+        self.accrual_table.setHorizontalHeaderLabels(["دوره", "مبلغ تعهد", "وضعیت"])
         self.accrual_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.accrual_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.accrual_table.verticalHeader().setVisible(False)
@@ -185,7 +185,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         self.accrual_table.cellClicked.connect(self._on_accrual_selected)
         right.addWidget(self.accrual_table, stretch=1)
 
-        right.addWidget(QLabel("تسویهٔ تعهدِ انتخاب‌شده"))
+        right.addWidget(QLabel("تسویهٔ تعهد انتخاب‌شده"))
         self.rebate_receivable_combo = QComboBox()
         right.addWidget(self.rebate_receivable_combo)
         self.purchase_discount_combo = QComboBox()
@@ -193,7 +193,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         settle_button = QPushButton("💳")
         settle_button.setObjectName("primaryIconButton")
         settle_button.setFixedWidth(48)
-        settle_button.setToolTip("تسویه (صدورِ سندِ حسابداری)")
+        settle_button.setToolTip("تسویه (صدور سند حسابداری)")
         settle_button.clicked.connect(self._settle_accrual)
         right.addWidget(settle_button)
 
@@ -246,7 +246,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         self.refresh()
 
     def _delete_agreement(self) -> None:
-        if confirm_and_delete(self, "قراردادِ ریبیت", "قراردادِ انتخاب‌شده", VendorRebateAgreement, self._selected_agreement_id,
+        if confirm_and_delete(self, "قرارداد تخفیف حجمی", "قرارداد انتخاب‌شده", VendorRebateAgreement, self._selected_agreement_id,
                               None, children=((VendorRebateTier, "agreement_id"),)):
             self._selected_agreement_id = None
             self.refresh()
@@ -255,7 +255,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
     def _delete_tier(self) -> None:
         row = self.tier_table.currentRow()
         tier_id = self.tier_table.item(row, 0).data(Qt.UserRole) if row >= 0 and self.tier_table.item(row, 0) else None
-        confirm_and_delete(self, "پلهٔ ریبیت", "پلهٔ انتخاب‌شده", VendorRebateTier, tier_id, None, self._refresh_tiers)
+        confirm_and_delete(self, "پلهٔ تخفیف حجمی", "پلهٔ انتخاب‌شده", VendorRebateTier, tier_id, None, self._refresh_tiers)
 
     def _refresh_tiers(self) -> None:
         self.tier_table.setRowCount(0)
@@ -280,7 +280,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
             self.rebate_status_label.setText("مقادیر نامعتبرند.")
             return
         if percent <= 0:
-            self.rebate_status_label.setText("درصدِ ریبیت باید بزرگ‌تر از صفر باشد.")
+            self.rebate_status_label.setText("درصد تخفیف حجمی باید بزرگ‌تر از صفر باشد.")
             return
         purchasing_service.add_rebate_tier(self._selected_agreement_id, min_amount, percent)
         self.tier_min_field.clear()
@@ -308,7 +308,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         company_id = self._company_id()
         document_id = self.rebate_invoice_combo.currentData()
         if company_id is None or document_id is None:
-            self.rebate_status_label.setText("یک فاکتورِ Postشده را انتخاب کنید.")
+            self.rebate_status_label.setText("یک فاکتور Postشده را انتخاب کنید.")
             return
         period_from = self.rebate_period_from_field.date()
         period_to = self.rebate_period_to_field.date()
@@ -328,7 +328,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
             self.rebate_status_label.setText("ابتدا یک تعهد را از فهرست انتخاب کنید.")
             return
         if company_id is None or receivable_id is None or discount_id is None:
-            self.rebate_status_label.setText("حساب‌هایِ طرفینِ سند را انتخاب کنید.")
+            self.rebate_status_label.setText("حساب‌های طرفین سند را انتخاب کنید.")
             return
         try:
             purchasing_service.settle_rebate_accrual(
@@ -350,7 +350,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
 
         self.rebate_invoice_combo.clear()
         for d in documents_service.list_documents(company_id, document_type_code="PURCHASE_INVOICE", status_code="POSTED"):
-            self.rebate_invoice_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
+            self.rebate_invoice_combo.addItem(f"فاکتور شمارهٔ {d.document_no}", d.document_id)
 
         self.rebate_supplier_combo.clear()
         for s in self._suppliers:

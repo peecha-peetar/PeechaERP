@@ -1,8 +1,8 @@
-"""صندوقِ تاییدِ موبایل -- تجمیعِ دو موتورِ تاییدِ ازپیش‌موجود، بدونِ ساختِ
-موتورِ سومی: (۱) services/cartable.py (تاییدِ چندمرحله‌ایِ عمومیِ اسناد،
-اگر برایِ فرمی در تنظیمات فعال شده باشد) و (۲) پذیرشِ مشتری
-(commercial_partners، PENDING_APPROVAL). فقط GL_DIM/EDIT مشتریانِ
-درانتظار را می‌بیند؛ کارتابل خودش طبقِ current_approver_user_id/role
+"""صندوق تایید موبایل — تجمیع دو موتور تایید ازپیش‌موجود، بدون ساخت
+موتور سومی: (۱) services/cartable.py (تایید چندمرحله‌ای عمومی اسناد،
+اگر برای فرمی در تنظیمات فعال شده باشد) و (۲) پذیرش مشتری
+(commercial_partners، PENDING_APPROVAL). فقط GL_DIM/EDIT مشتریان
+درانتظار را می‌بیند؛ کارتابل خودش طبق current_approver_user_id/role
 فیلتر می‌شود (list_my_tasks)."""
 
 from __future__ import annotations

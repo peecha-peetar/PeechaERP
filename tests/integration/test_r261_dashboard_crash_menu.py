@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -93,7 +93,7 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 
@@ -171,25 +171,25 @@ for _ in range(400):
     app.processEvents(); time.sleep(0.03)
     if not report_screens.ReportWorker._live:
         break
-check(not report_screens.ReportWorker._live, "همهٔ کارهایِ پس‌زمینه تمام شدند (بدونِ پاک‌شدنِ رشتهٔ در حالِ اجرا)")
-check(bool(dash._kpis), "داشبوردِ انبار مقادیر را بارگذاری کرد")
+check(not report_screens.ReportWorker._live, "همهٔ کارهای پس‌زمینه تمام شدند (بدون پاک‌شدن رشتهٔ در حال اجرا)")
+check(bool(dash._kpis), "داشبورد انبار مقادیر را بارگذاری کرد")
 errors = []
 from PySide6.QtWidgets import QMessageBox as _MB
 _MB.warning = staticmethod(lambda *a, **k: errors.append(a[2]))
 dash._generation = 99
-dash._on_worker_done(99, None, RuntimeError("خطایِ آزمایشی"))
-check(errors and "خطایِ آزمایشی" in errors[0], "خطایِ پس‌زمینه پیام می‌دهد، برنامه را نمی‌بندد")
+dash._on_worker_done(99, None, RuntimeError("خطای آزمایشی"))
+check(errors and "خطای آزمایشی" in errors[0], "خطای پس‌زمینه پیام می‌دهد، برنامه را نمی‌بندد")
 report_screens.BACKGROUND_REPORTS = False
 
 # --- ۲) بهایِ تمام‌شده ماژولِ منویِ اصلی -------------------------------------------------------
 from peecha import nav_catalog
 codes = [i["code"] for i in nav_catalog.NAV_ITEMS]
-check("COSTING" in codes and codes.index("COSTING") == codes.index("INV") + 1, "«بهایِ تمام‌شده» کنارِ انبار در منویِ اصلی")
+check("COSTING" in codes and codes.index("COSTING") == codes.index("INV") + 1, "«بهای تمام‌شده» کنار انبار در منوی اصلی")
 inv = next(i for i in nav_catalog.NAV_ITEMS if i["code"] == "INV")
-check(not any(c.get("code") == "INV_COSTING" for c in inv["children"]), "دیگر زیرمنویِ انبار نیست")
+check(not any(c.get("code") == "INV_COSTING" for c in inv["children"]), "دیگر زیرمنوی انبار نیست")
 catalog = {f: m for f, m, _l in nav_catalog.build_form_catalog()}
 check(all(catalog[f] == "COSTING" for f in ("costing_dashboard", "costing_settings", "costing_replacement", "costing_recalculation")),
-      "فرم‌هایِ بهایِ تمام‌شده در ماژولِ COSTING (دسترسی‌ها)")
+      "فرم‌های بهای تمام‌شده در ماژول COSTING (دسترسی‌ها)")
 from peecha.db.models.security import Form, Module
 roles_service.ensure_catalog()
 with new_session() as s:
@@ -200,19 +200,19 @@ with new_session() as s:
 roles_service.ensure_catalog()
 with new_session() as s:
     mod = s.scalar(select(Module.code).join(Form, Form.module_id == Module.module_id).where(Form.code == "costing_dashboard"))
-check(mod == "COSTING", "فرمِ موجود هنگامِ ارتقا به ماژولِ جدید منتقل شد (همان فرم و دسترسی‌ها)")
+check(mod == "COSTING", "فرم موجود هنگام ارتقا به ماژول جدید منتقل شد (همان فرم و دسترسی‌ها)")
 
 # --- ۳) منو: بدنهٔ ماژول و زیرگروه زمینه/خطِ جدا دارند ------------------------------------------------
 from peecha.ui.shell_window import MainWindow
 from peecha.ui import theme
-check("QWidget#sidebarGroupBody" in theme.GLOBAL_QSS and "QWidget#sidebarSubGroupBody" in theme.GLOBAL_QSS, "استایلِ سطوحِ منو")
+check("QWidget#sidebarGroupBody" in theme.GLOBAL_QSS and "QWidget#sidebarSubGroupBody" in theme.GLOBAL_QSS, "استایل سطوح منو")
 mw = MainWindow()
 g = mw._sidebar_groups["COSTING"]
 check(g.body.objectName() == "sidebarGroupBody" and g.body.testAttribute(theme.Qt.WA_StyledBackground), "بدنهٔ ماژول زمینهٔ خودش را می‌کشد")
 sub = mw._sidebar_groups["INV"]._subgroups
-check(all(sg.body.objectName() == "sidebarSubGroupBody" for sg in sub), "زیرگروه‌ها خطِ راهنما دارند")
+check(all(sg.body.objectName() == "sidebarSubGroupBody" for sg in sub), "زیرگروه‌ها خط راهنما دارند")
 mw.open_screen("COST_DASHBOARD")
-check(mw._current_screen_code == "COST_DASHBOARD", "بازشدنِ داشبوردِ بهایِ تمام‌شده از منویِ جدید")
+check(mw._current_screen_code == "COST_DASHBOARD", "بازشدن داشبورد بهای تمام‌شده از منوی جدید")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

@@ -1,8 +1,8 @@
-"""سرویسِ اسنادِ عملیاتیِ انبار — رسید/حواله/انتقال/برگشت/اصلاح.
+"""سرویس اسناد عملیاتی انبار — رسید/حواله/انتقال/برگشت/اصلاح.
 
-گردشِ کار: DRAFT → CONFIRMED → POSTED (یا CANCELLED از DRAFT/CONFIRMED).
+گردش کار: DRAFT → CONFIRMED → POSTED (یا CANCELLED از DRAFT/CONFIRMED).
 Post هرگز مستقیماً این‌جا انجام نمی‌شود — همیشه inventory_engine.
-post_stock_document() صدا زده می‌شود (تنها نقطهٔ نوشتنِ Ledger/Balance)."""
+post_stock_document() صدا زده می‌شود (تنها نقطهٔ نوشتن Ledger/Balance)."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ _HEADER_DIMENSION_ROLE_KEYS: dict[str, tuple[str, ...]] = {
 
 
 def get_header_dimension_requirement(company_id: int, document_type_code: str, dimension_code: str) -> tuple[bool, list]:
-    """(آیا الزامی است, فهرستِ حساب‌هایِ تفصیلیِ سطحِ آخرِ آن گروه) —
+    """(آیا الزامی است, فهرست حساب‌های تفصیلی سطح آخر آن گروه) —
     هم‌الگو با commercial_documents.get_header_dimension_requirement."""
     dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimension_code)
     options = dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
@@ -109,9 +109,9 @@ def delete_reason_code(reason_code_id: int, company_id: int) -> None:
     with new_session() as session:
         row = session.get(DocumentReasonCode, reason_code_id)
         if row is None or row.company_id != company_id:
-            raise ValueError("دلیل نامعتبر است (فقط دلیل‌هایِ اختصاصیِ همین شرکت قابلِ‌حذف‌اند).")
+            raise ValueError("دلیل نامعتبر است (فقط دلیل‌های اختصاصی همین شرکت قابل‌حذف‌اند).")
         if session.scalar(select(func.count()).select_from(StockDocumentLine).where(StockDocumentLine.reason_code_id == reason_code_id)):
-            raise ValueError("این دلیل در سندی استفاده شده و قابلِ‌حذف نیست.")
+            raise ValueError("این دلیل در سندی استفاده شده و قابل‌حذف نیست.")
         session.delete(row)
         session.commit()
 
@@ -163,8 +163,8 @@ class StockDocumentLineRow:
 
 
 _COMMERCIAL_ORIGIN_TITLES = {
-    "SALES_INVOICE": "فاکتورِ فروش", "PURCHASE_INVOICE": "فاکتورِ خرید", "SALES_RETURN": "برگشت از فروش",
-    "PURCHASE_RETURN": "برگشت به تامین‌کننده", "CONSIGNMENT_OUT": "امانیِ خروجی", "CONSIGNMENT_IN": "امانیِ ورودی",
+    "SALES_INVOICE": "فاکتور فروش", "PURCHASE_INVOICE": "فاکتور خرید", "SALES_RETURN": "برگشت از فروش",
+    "PURCHASE_RETURN": "برگشت به تامین‌کننده", "CONSIGNMENT_OUT": "امانی خروجی", "CONSIGNMENT_IN": "امانی ورودی",
 }
 
 
@@ -191,8 +191,8 @@ def _assert_not_commercial_origin(session, stock_document_id: int) -> None:
     origin = _commercial_origins(session, [stock_document_id]).get(stock_document_id)
     if origin is not None:
         raise ValueError(
-            f"این سندِ انبار از «{origin}» صادر شده و مستقیماً حذف/ویرایش نمی‌شود -- "
-            "تغییر فقط از خودِ همان سند (اصلاح/برگشت) انجام می‌شود."
+            f"این سند انبار از «{origin}» صادر شده و مستقیماً حذف/ویرایش نمی‌شود -- "
+            "تغییر فقط از خود همان سند (اصلاح/برگشت) انجام می‌شود."
         )
 
 
@@ -256,9 +256,9 @@ def _resolve_fiscal_year_id(session, company_id: int, document_date: datetime.da
         )
     )
     if fiscal_year is None:
-        raise ValueError("سالِ مالیِ دربرگیرندهٔ این تاریخ تعریف نشده است.")
+        raise ValueError("سال مالی دربرگیرندهٔ این تاریخ تعریف نشده است.")
     if fiscal_year.is_closed:
-        raise ValueError("سالِ مالیِ این تاریخ بسته است.")
+        raise ValueError("سال مالی این تاریخ بسته است.")
     return fiscal_year.fiscal_year_id
 
 
@@ -276,17 +276,17 @@ class DocumentHeaderFields:
 def _validate_header_warehouses(document_type_code: str, fields: DocumentHeaderFields) -> None:
     if document_type_code == "ADJUSTMENT":
         if fields.source_warehouse_id is None and fields.destination_warehouse_id is None:
-            raise ValueError("برایِ سندِ اصلاح، حداقل یکی از انبارِ مبدا/مقصد باید مشخص شود.")
+            raise ValueError("برای سند اصلاح، حداقل یکی از انبار مبدا/مقصد باید مشخص شود.")
         return
     req = WAREHOUSE_REQUIREMENTS[document_type_code]
     if req["destination"] and fields.destination_warehouse_id is None:
-        raise ValueError("انبارِ مقصد الزامی است.")
+        raise ValueError("انبار مقصد الزامی است.")
     if not req["destination"] and fields.destination_warehouse_id is not None:
-        raise ValueError("این نوعِ سند انبارِ مقصد نمی‌پذیرد.")
+        raise ValueError("این نوع سند انبار مقصد نمی‌پذیرد.")
     if req["source"] and fields.source_warehouse_id is None:
-        raise ValueError("انبارِ مبدا الزامی است.")
+        raise ValueError("انبار مبدا الزامی است.")
     if not req["source"] and fields.source_warehouse_id is not None:
-        raise ValueError("این نوعِ سند انبارِ مبدا نمی‌پذیرد.")
+        raise ValueError("این نوع سند انبار مبدا نمی‌پذیرد.")
     if document_type_code == "TRANSFER" and fields.source_warehouse_id == fields.destination_warehouse_id:
         # مجاز است (انتقالِ فقط‌مکانی)؛ تمایزِ واقعی رویِ ردیف‌ها بررسی می‌شود.
         pass
@@ -297,7 +297,7 @@ def create_stock_document(
     fields: DocumentHeaderFields | None = None,
 ) -> int:
     if document_type_code not in DOCUMENT_TYPE_CODES:
-        raise ValueError("نوعِ سند نامعتبر است.")
+        raise ValueError("نوع سند نامعتبر است.")
     fields = fields or DocumentHeaderFields()
     _validate_header_warehouses(document_type_code, fields)
     with new_session() as session:
@@ -331,7 +331,7 @@ def _get_draft_document(session, stock_document_id: int, company_id: int) -> Sto
     if doc is None or doc.company_id != company_id:
         raise ValueError("سند نامعتبر است.")
     if doc.status_code != "DRAFT":
-        raise ValueError("فقط سندِ پیش‌نویس قابلِ‌ویرایش است.")
+        raise ValueError("فقط سند پیش‌نویس قابل‌ویرایش است.")
     return doc
 
 
@@ -352,18 +352,18 @@ def update_stock_document_header(stock_document_id: int, company_id: int, docume
 
 
 def delete_stock_document(stock_document_id: int, company_id: int) -> None:
-    """حذفِ مستقیم فقط برایِ سندی مجاز است که هنوز هرگز ثبتِ‌نهایی نشده —
+    """حذف مستقیم فقط برای سندی مجاز است که هنوز هرگز ثبت‌نهایی نشده —
     یعنی DRAFT/CONFIRMED/CANCELLED با posted_at خالی — چون چنین سندی هیچ
-    ردیفی در inv.stock_ledger ندارد. سندِ ثبتِ‌نهایی‌شده باید از مسیرِ
-    reverse_and_cancel_stock_document برود (نه اینجا)، چون هم دفترِ انبار
-    را ناهم‌خوان می‌کند و هم فنی به‌خاطرِ ارجاعِ stock_ledger به همین
+    ردیفی در inv.stock_ledger ندارد. سند ثبت‌نهایی‌شده باید از مسیر
+    reverse_and_cancel_stock_document برود (نه اینجا)، چون هم دفتر انبار
+    را ناهم‌خوان می‌کند و هم فنی به‌خاطر ارجاع stock_ledger به همین
     ردیف‌ها امکان‌پذیر نیست."""
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.posted_at is not None:
-            raise ValueError("سندِ ثبتِ‌نهایی‌شده را نمی‌توان مستقیماً حذف کرد — باید ابتدا اثرش خنثی شود.")
+            raise ValueError("سند ثبت‌نهایی‌شده را نمی‌توان مستقیماً حذف کرد — باید ابتدا اثرش خنثی شود.")
         _assert_not_commercial_origin(session, stock_document_id)
         session.query(StockDocumentLine).filter(StockDocumentLine.stock_document_id == stock_document_id).delete()
         session.delete(doc)
@@ -393,20 +393,20 @@ def _ensure_auto_reversal_reason_code(company_id: int, applies_to: str) -> int:
     for row in list_reason_codes(company_id, applies_to, active_only=False):
         if row.code == _AUTO_REVERSAL_REASON_CODE:
             return row.reason_code_id
-    return create_reason_code(company_id, applies_to, _AUTO_REVERSAL_REASON_CODE, "برگشتِ خودکار (حذفِ سندِ ثبت‌شده)")
+    return create_reason_code(company_id, applies_to, _AUTO_REVERSAL_REASON_CODE, "برگشت خودکار (حذف سند ثبت‌شده)")
 
 
 def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, user_id: int) -> int:
-    """معادلِ «حذفِ» یک سندِ POSTED: سندِ برگشتیِ خودکار می‌سازد (نوعِ
-    معکوس — مثلاً رسید با حواله خنثی می‌شود، انتقال با انتقالِ معکوس، اصلاح
-    با جهتِ معکوس) با همان ردیف‌ها، آن را تاییدوثبت می‌کند، و در پایان
-    وضعیتِ سندِ اصلی را CANCELLED می‌کند. شناسهٔ سندِ برگشتی را برمی‌گرداند."""
+    """معادل «حذف» یک سند POSTED: سند برگشتی خودکار می‌سازد (نوع
+    معکوس — مثلاً رسید با حواله خنثی می‌شود، انتقال با انتقال معکوس، اصلاح
+    با جهت معکوس) با همان ردیف‌ها، آن را تاییدوثبت می‌کند، و در پایان
+    وضعیت سند اصلی را CANCELLED می‌کند. شناسهٔ سند برگشتی را برمی‌گرداند."""
     with new_session() as session:
         original = session.get(StockDocument, stock_document_id)
         if original is None or original.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if original.status_code != "POSTED":
-            raise ValueError("این عملیات فقط برایِ سندِ ثبتِ‌نهایی‌شده معنا دارد.")
+            raise ValueError("این عملیات فقط برای سند ثبت‌نهایی‌شده معنا دارد.")
         _assert_not_commercial_origin(session, stock_document_id)
         original_no = original.document_no
         original_type = original.document_type_code
@@ -416,8 +416,8 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             counterparty_detail_account_id=original.counterparty_detail_account_id,
             cost_center_detail_account_id=original.cost_center_detail_account_id,
             project_detail_account_id=original.project_detail_account_id,
-            reference_no=f"برگشتِ سندِ #{original_no}",
-            description=f"سندِ برگشتیِ خودکار برایِ خنثی‌کردنِ اثرِ سندِ #{original_no} پیش از حذفِ آن.",
+            reference_no=f"برگشت سند #{original_no}",
+            description=f"سند برگشتی خودکار برای خنثی‌کردن اثر سند #{original_no} پیش از حذف آن.",
         )
         lines_snapshot = [
             (
@@ -441,7 +441,7 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             add_line(reversal_doc_id, company_id, LineFields(
                 item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base, conversion_factor=factor,
                 bin_location_id=bin_location_id, destination_bin_location_id=destination_bin_location_id,
-                reason_code_id=reason_code_id, description=f"برگشتِ ردیفِ #{line_no} از سندِ #{original_no}",
+                reason_code_id=reason_code_id, description=f"برگشت ردیف #{line_no} از سند #{original_no}",
             ))
         from peecha.services import lot_tracking
 
@@ -495,9 +495,9 @@ class LineFields:
 
 
 def _resolve_unit_quantities(fields: LineFields) -> tuple[decimal.Decimal, decimal.Decimal]:
-    """(quantity_base، ضریب). اگر فراخوان (مثلاً سندِ بازرگانیِ ثبت‌شده) خودش
-    مقدارِ پایه را داده، همان حفظ می‌شود؛ اگر برایِ واحدِ غیرِپایه مقدارِ پایه
-    = مقدار فرستاده شده (یعنی تبدیل نکرده)، با ضریبِ تعریف‌شدهٔ کالا تبدیل می‌شود."""
+    """(quantity_base، ضریب). اگر فراخوان (مثلاً سند بازرگانی ثبت‌شده) خودش
+    مقدار پایه را داده، همان حفظ می‌شود؛ اگر برای واحد غیرپایه مقدار پایه
+    = مقدار فرستاده شده (یعنی تبدیل نکرده)، با ضریب تعریف‌شدهٔ کالا تبدیل می‌شود."""
     from peecha.services import unit_conversion as uc
 
     if fields.conversion_factor is not None:
@@ -523,7 +523,7 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
         ) + 1
         if doc.document_type_code == "TRANSFER" and doc.source_warehouse_id == doc.destination_warehouse_id:
             if fields.bin_location_id is not None and fields.bin_location_id == fields.destination_bin_location_id:
-                raise ValueError("مکانِ مبدا و مقصد نمی‌توانند یکسان باشند.")
+                raise ValueError("مکان مبدا و مقصد نمی‌توانند یکسان باشند.")
         line = StockDocumentLine(
             stock_document_id=stock_document_id, line_no=next_no, item_id=fields.item_id, uom_id=fields.uom_id,
             quantity=fields.quantity, quantity_base=quantity_base, conversion_factor=conversion_factor,
@@ -586,7 +586,7 @@ def confirm_stock_document(stock_document_id: int, company_id: int) -> None:
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("فقط سندِ پیش‌نویس قابلِ‌تایید است.")
+            raise ValueError("فقط سند پیش‌نویس قابل‌تایید است.")
 
         lines = session.scalars(select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)).all()
         if not lines:
@@ -601,7 +601,7 @@ def confirm_stock_document(stock_document_id: int, company_id: int) -> None:
             # است» رد می‌شد، حتی وقتی همه‌یِ ردیف‌ها واقعاً دلیل داشتند.
             reason_ids = {ln.reason_code_id for ln in lines if ln.reason_code_id is not None}
             if any(ln.reason_code_id is None for ln in lines):
-                raise ValueError("انتخابِ دلیل برایِ این نوعِ سند الزامی است.")
+                raise ValueError("انتخاب دلیل برای این نوع سند الزامی است.")
             if reason_ids:
                 valid_count = session.scalar(
                     select(func.count()).select_from(DocumentReasonCode).where(
@@ -610,15 +610,15 @@ def confirm_stock_document(stock_document_id: int, company_id: int) -> None:
                     )
                 )
                 if valid_count != len(reason_ids):
-                    raise ValueError("دلیلِ انتخاب‌شده با نوعِ این سند سازگار نیست.")
+                    raise ValueError("دلیل انتخاب‌شده با نوع این سند سازگار نیست.")
 
         if doc.document_type_code == "TRANSFER" and doc.source_warehouse_id == doc.destination_warehouse_id:
             for ln in lines:
                 if ln.destination_bin_location_id is None:
-                    raise ValueError("برایِ انتقالِ فقط‌مکانی، انتخابِ مکانِ مقصد الزامی است.")
+                    raise ValueError("برای انتقال فقط‌مکانی، انتخاب مکان مقصد الزامی است.")
                 effective_source_bin = ln.bin_location_id
                 if effective_source_bin is not None and effective_source_bin == ln.destination_bin_location_id:
-                    raise ValueError("مکانِ مبدا و مقصد نمی‌توانند یکسان باشند.")
+                    raise ValueError("مکان مبدا و مقصد نمی‌توانند یکسان باشند.")
 
         doc.status_code = "CONFIRMED"
         session.commit()
@@ -630,7 +630,7 @@ def revert_to_draft(stock_document_id: int, company_id: int) -> None:
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code != "CONFIRMED":
-            raise ValueError("فقط سندِ تاییدشده قابلِ‌بازگشت به پیش‌نویس است.")
+            raise ValueError("فقط سند تاییدشده قابل‌بازگشت به پیش‌نویس است.")
         doc.status_code = "DRAFT"
         session.commit()
 
@@ -641,7 +641,7 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code not in ("DRAFT", "CONFIRMED"):
-            raise ValueError("سندِ ثبت‌شده هرگز لغو نمی‌شود — برایِ اصلاح، سندِ تازه‌ای ثبت کنید.")
+            raise ValueError("سند ثبت‌شده هرگز لغو نمی‌شود — برای اصلاح، سند تازه‌ای ثبت کنید.")
         doc.status_code = "CANCELLED"
         session.commit()
 
@@ -670,9 +670,9 @@ def post_stock_document(
 
 
 def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> engine_service.PostResult:
-    """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ ثبت‌شده باید عیناً برگشت بخورد،
-    نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود») -- پیاده‌سازیِ کاملش
-    در inventory_engine.py است (تنها نقطه‌یِ نوشتنِ stock_ledger/
+    """طبق درخواست صریح («اصلاح فاکتور ثبت‌شده باید عیناً برگشت بخورد،
+    نه اینکه سند اصلی با تاریخ عقب‌دار دست‌کاری شود») — پیاده‌سازی کاملش
+    در inventory_engine.py است (تنها نقطهٔ نوشتن stock_ledger/
     stock_balance)؛ این‌جا فقط delegate می‌کند، هم‌الگو با post_stock_document."""
     from peecha.services import lot_tracking
 
@@ -686,15 +686,15 @@ def create_and_post_in_session(
     fields: DocumentHeaderFields, lines: list[LineFields], role_overrides: dict[str, str] | None = None,
     tracking: dict[int, list] | None = None,
 ) -> tuple[engine_service.PostResult, list[int]]:
-    """R266: ساخت + تأیید + ثبتِ نهاییِ یک سندِ انبار در تراکنشِ فراخواننده (بدونِ commit) -- برایِ عملیاتِ اتمیکِ
-    ماژول‌هایی مثلِ تولید. همان موتورِ انبار، همان ردیابیِ بچ/سریال و همان لایه‌هایِ بها؛ اگر هر مرحله خطا بدهد کلِ
-    تراکنشِ فراخواننده برمی‌گردد. tracking: {اندیسِ ردیف: [lot_tracking.TrackingEntry]}."""
+    """R266: ساخت + تایید + ثبت نهایی یک سند انبار در تراکنش فراخواننده (بدون commit) — برای عملیات اتمیک
+    ماژول‌هایی مثل تولید. همان موتور انبار، همان ردیابی بچ/سریال و همان لایه‌های بها؛ اگر هر مرحله خطا بدهد کل
+    تراکنش فراخواننده برمی‌گردد. tracking: {اندیس ردیف: [lot_tracking.TrackingEntry]}."""
     from peecha.db.models.inventory import LineTrackingEntry
     from peecha.services import lot_tracking
     from peecha.services.costing import engine as costing_engine
 
     if document_type_code not in DOCUMENT_TYPE_CODES or document_type_code in _REASON_REQUIRED_TYPES:
-        raise ValueError("نوعِ سند برایِ ثبتِ خودکار نامعتبر است.")
+        raise ValueError("نوع سند برای ثبت خودکار نامعتبر است.")
     _validate_header_warehouses(document_type_code, fields)
     if not lines:
         raise ValueError("سند حداقل باید یک ردیف داشته باشد.")

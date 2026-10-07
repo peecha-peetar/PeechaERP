@@ -82,10 +82,10 @@ export function VisitListScreen({ apiClient, syncEngine, localCache, onOpenVisit
 
   return (
     <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
-      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.md }]}>برنامه‌یِ مراجعه</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.md }]}>برنامهٔ مراجعه</Text>
       {offline ? (
         <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing.sm }]}>
-          آفلاین -- وضعیتِ واقعیِ ویزیت‌ها بعدِ اتصال نمایش داده می‌شود.
+          آفلاین — وضعیت واقعی ویزیت‌ها بعد اتصال نمایش داده می‌شود.
         </Text>
       ) : null}
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
@@ -93,7 +93,7 @@ export function VisitListScreen({ apiClient, syncEngine, localCache, onOpenVisit
           <SkeletonList count={4} />
         ) : routeEntries !== null ? (
           routeEntries.length === 0 ? (
-            <EmptyState title="برنامه‌ای برایِ امروز نیست" />
+            <EmptyState title="برنامه‌ای برای امروز نیست" />
           ) : (
             <View style={{ gap: spacing.sm }}>
               {routeEntries.map((entry) => (
@@ -111,7 +111,7 @@ export function VisitListScreen({ apiClient, syncEngine, localCache, onOpenVisit
             </View>
           )
         ) : fallbackPlans.length === 0 ? (
-          <EmptyState title="برنامه‌یِ مراجعه‌ای یافت نشد." />
+          <EmptyState title="برنامهٔ مراجعه‌ای یافت نشد." />
         ) : (
           <View style={{ gap: spacing.sm }}>
             {fallbackPlans.map((item) => {
@@ -119,7 +119,7 @@ export function VisitListScreen({ apiClient, syncEngine, localCache, onOpenVisit
               return (
                 <VisitCard
                   key={item.visit_plan_id}
-                  customerName={customer?.name ?? "مشتریِ نامشخص"}
+                  customerName={customer?.name ?? "مشتری نامشخص"}
                   state="UPCOMING"
                   onPress={customer ? () => onOpenVisit(customer, item) : undefined}
                 />

@@ -1,9 +1,9 @@
-"""گزارش‌هایِ حرفه‌ایِ حسابداری -- R245.
+"""گزارش‌های حرفه‌ای حسابداری — R245.
 
-همان موتورِ گزارشِ خرید/فروش (ReportDef/ReportResult، مرتب‌سازی، گروه‌بندی، نمودار، نماهایِ
+همان موتور گزارش خرید/فروش (ReportDef/ReportResult، مرتب‌سازی، گروه‌بندی، نمودار، نماهای
 ذخیره‌شده، خروجی با لوگو) با side="ACCOUNTING". همه فقط-خواندنی از acc.journal_entries/lines
-محاسبه می‌شوند؛ هیچ عددی ذخیره یا اصلاح نمی‌شود. فیلترهایِ مشترک: حساب (با همهٔ زیرحساب‌ها)،
-حسابِ تفصیلی و گزینهٔ «وضعیتِ سند» (پیش‌فرض بدونِ پیش‌نویس، مثلِ تراز آزمایشی).
+محاسبه می‌شوند؛ هیچ عددی ذخیره یا اصلاح نمی‌شود. فیلترهای مشترک: حساب (با همهٔ زیرحساب‌ها)،
+حساب تفصیلی و گزینهٔ «وضعیت سند» (پیش‌فرض بدون پیش‌نویس، مثل تراز آزمایشی).
 """
 
 from __future__ import annotations
@@ -37,9 +37,9 @@ TYPE_LABELS = {"NORMAL": "عادی", "OPENING": "افتتاحیه", "CLOSING": "
                "PAYMENT": "پرداخت", "PAYROLL": "حقوق", "TANKHAH": "تنخواه", "INVENTORY": "انبار", "COMMERCIAL": "بازرگانی",
                "FIXED_ASSET": "دارایی ثابت"}
 SOURCE_LABELS = {"MANUAL": "دستی"}
-_STATUS_OPTION = ("status", "وضعیتِ سند", (("EXCLUDE_DRAFT", "بدونِ پیش‌نویس"), ("ALL", "همه"),
+_STATUS_OPTION = ("status", "وضعیت سند", (("EXCLUDE_DRAFT", "بدون پیش‌نویس"), ("ALL", "همه"),
                                            ("PERMANENT_ONLY", "فقط دائم"), ("DRAFT_ONLY", "فقط پیش‌نویس")))
-_LEVEL_OPTION = ("level", "سطحِ حساب", (("2", "کل"), ("1", "گروه"), ("3", "معین")))
+_LEVEL_OPTION = ("level", "سطح حساب", (("2", "کل"), ("1", "گروه"), ("3", "معین")))
 
 
 # ---------------------------------------------------------------------
@@ -123,7 +123,7 @@ class _Line:
 
 def _lines(company_id: int, f, ctx: _Ctx, *, status_filter: str | None = None, date_from=None, date_to=None,
            account_filter: bool = True) -> list[_Line]:
-    """ردیف‌هایِ سند در بازه، با فیلترِ حساب (زیرشاخه) و تفصیلی."""
+    """ردیف‌های سند در بازه، با فیلتر حساب (زیرشاخه) و تفصیلی."""
     status_filter = status_filter or _status(f)
     date_from = f.date_from if date_from is None else date_from
     date_to = f.date_to if date_to is None else date_to
@@ -226,7 +226,7 @@ def _pct(part: decimal.Decimal, whole: decimal.Decimal) -> decimal.Decimal | Non
 
 def _require_account(f) -> None:
     if f.account_id is None:
-        raise ValueError("برایِ این گزارش ابتدا «حساب» را انتخاب کنید.")
+        raise ValueError("برای این گزارش ابتدا «حساب» را انتخاب کنید.")
 
 
 # ---------------------------------------------------------------------
@@ -247,7 +247,7 @@ def _entry_cells(e: _Entry) -> list:
 
 def voucher_register(company_id: int, f) -> ReportResult:
     ctx = _ctx(company_id)
-    r = _entry_result(_ENTRY_COLUMNS + [("منبع", TEXT), ("تعدادِ ردیف", INT), ("صادرکننده", TEXT), ("تاییدکننده", TEXT)])
+    r = _entry_result(_ENTRY_COLUMNS + [("منبع", TEXT), ("تعداد ردیف", INT), ("صادرکننده", TEXT), ("تاییدکننده", TEXT)])
     for e in _entries(company_id, f, ctx):
         r.add(_entry_cells(e) + [SOURCE_LABELS.get(e.source, e.source), e.line_count, e.created_by, e.posted_by], _ref(e.entry_id))
     return r
@@ -262,14 +262,14 @@ def daily_summary(company_id: int, f) -> ReportResult:
         row[2] += e.line_count
         row[3] += e.debit
         row[4] += e.credit
-    r = ReportResult([("تاریخ", DATE), ("تعدادِ سند", INT), ("تعدادِ ردیف", INT), ("بدهکار", MONEY), ("بستانکار", MONEY)])
+    r = ReportResult([("تاریخ", DATE), ("تعداد سند", INT), ("تعداد ردیف", INT), ("بدهکار", MONEY), ("بستانکار", MONEY)])
     for day in sorted(days):
         r.add(days[day])
     return r
 
 
-_BY_OPTION = ("by", "تفکیک بر اساسِ", (("TYPE", "نوعِ سند"), ("STATUS", "وضعیت"), ("USER", "صادرکننده"),
-                                       ("SOURCE", "منبعِ صدور"), ("MONTH", "ماه")))
+_BY_OPTION = ("by", "تفکیک بر اساس", (("TYPE", "نوع سند"), ("STATUS", "وضعیت"), ("USER", "صادرکننده"),
+                                       ("SOURCE", "منبع صدور"), ("MONTH", "ماه")))
 
 
 def vouchers_by(company_id: int, f) -> ReportResult:
@@ -287,7 +287,7 @@ def vouchers_by(company_id: int, f) -> ReportResult:
         row[4] = e.date if row[4] is None or e.date < row[4] else row[4]
         row[5] = e.date if row[5] is None or e.date > row[5] else row[5]
     total = sum((g[3] for g in groups.values()), _ZERO)
-    r = ReportResult([("گروه", TEXT), ("تعدادِ سند", INT), ("تعدادِ ردیف", INT), ("جمعِ گردش", MONEY),
+    r = ReportResult([("گروه", TEXT), ("تعداد سند", INT), ("تعداد ردیف", INT), ("جمع گردش", MONEY),
                       ("اولین تاریخ", DATE), ("آخرین تاریخ", DATE), ("سهم از گردش", PERCENT)])
     for key in sorted(groups):
         g = groups[key]
@@ -303,7 +303,7 @@ def special_entries(company_id: int, f) -> ReportResult:
         if e.type_code in ("OPENING", "CLOSING", "ADJUSTING"):
             r.add(_entry_cells(e) + [e.created_by], _ref(e.entry_id))
     if not r.rows:
-        r.note = "در این بازه سندِ افتتاحیه/اختتامیه/تعدیلی وجود ندارد."
+        r.note = "در این بازه سند افتتاحیه/اختتامیه/تعدیلی وجود ندارد."
     return r
 
 
@@ -311,13 +311,13 @@ def reversed_entries(company_id: int, f) -> ReportResult:
     ctx = _ctx(company_id)
     all_entries = _entries(company_id, f, ctx, status_filter="ALL", date_from=datetime.date(1900, 1, 1))
     by_id = {e.entry_id: e for e in all_entries}
-    r = _entry_result(_ENTRY_COLUMNS + [("سندِ مرتبط", TEXT), ("صادرکننده", TEXT)])
+    r = _entry_result(_ENTRY_COLUMNS + [("سند مرتبط", TEXT), ("صادرکننده", TEXT)])
     for e in all_entries:
         if e.date < f.date_from:
             continue
         if e.status in ("REVERSED", "CANCELLED") or e.reversed_entry_id:
             target = by_id.get(e.reversed_entry_id)
-            link = f"برگشتِ سندِ {target.temporary_no}" if target else ""
+            link = f"برگشت سند {target.temporary_no}" if target else ""
             r.add(_entry_cells(e) + [link, e.created_by], _ref(e.entry_id))
     return r
 
@@ -326,7 +326,7 @@ def reversed_entries(company_id: int, f) -> ReportResult:
 # تحلیلِ حساب‌ها
 # ---------------------------------------------------------------------
 _PERIOD_OPTION = ("period", "دوره", (("MONTH", "ماهانه"), ("QUARTER", "فصلی"), ("YEAR", "سالانه")))
-_MEASURE_OPTION = ("measure", "مقدار", (("NET", "خالص (طبقِ ماهیت)"), ("DEBIT", "گردشِ بدهکار"), ("CREDIT", "گردشِ بستانکار")))
+_MEASURE_OPTION = ("measure", "مقدار", (("NET", "خالص (طبق ماهیت)"), ("DEBIT", "گردش بدهکار"), ("CREDIT", "گردش بستانکار")))
 
 
 def account_period_matrix(company_id: int, f) -> ReportResult:
@@ -347,7 +347,7 @@ def account_period_matrix(company_id: int, f) -> ReportResult:
     ordered = sorted(keys)
     from peecha import numerals
 
-    r = ReportResult([("حساب", TEXT)] + [(numerals.to_persian_digits(k), MONEY) for k in ordered] + [("جمع", MONEY), ("میانگینِ دوره", MONEY)])
+    r = ReportResult([("حساب", TEXT)] + [(numerals.to_persian_digits(k), MONEY) for k in ordered] + [("جمع", MONEY), ("میانگین دوره", MONEY)])
     for account_id in sorted(cells, key=lambda a: ctx.accounts[a].full_code):
         values = [cells[account_id].get(k, _ZERO) for k in ordered]
         total = sum(values, _ZERO)
@@ -368,7 +368,7 @@ def monthly_balance(company_id: int, f) -> ReportResult:
         row[1] += ln.credit
         row[2] += 1
     r = ReportResult([("ماه", TEXT), ("ماندهٔ ابتدا", MONEY), ("بدهکار", MONEY), ("بستانکار", MONEY), ("ماندهٔ انتها", MONEY),
-                      ("تعدادِ ردیف", INT)])
+                      ("تعداد ردیف", INT)])
     balance = opening
     for key in sorted(months):
         debit, credit, count = months[key]
@@ -376,7 +376,7 @@ def monthly_balance(company_id: int, f) -> ReportResult:
         balance = start + ctx.signed(f.account_id, debit, credit)
         r.add([key, start, debit, credit, balance, count])
     r.no_total = {1, 4}
-    r.note = f"حساب: {ctx.label(f.account_id)} -- مانده طبقِ ماهیتِ حساب؛ ماندهٔ اولِ بازه {gl_fmt(opening)}."
+    r.note = f"حساب: {ctx.label(f.account_id)} -- مانده طبق ماهیت حساب؛ ماندهٔ اول بازه {gl_fmt(opening)}."
     return r
 
 
@@ -387,7 +387,7 @@ def gl_fmt(value: decimal.Decimal) -> str:
 
 
 def contra_accounts(company_id: int, f) -> ReportResult:
-    """برایِ هر سندی که حسابِ انتخابی در آن هست، بقیهٔ ردیف‌هایِ همان سند به‌عنوانِ طرف‌حساب جمع می‌شوند."""
+    """برای هر سندی که حساب انتخابی در آن هست، بقیهٔ ردیف‌های همان سند به‌عنوان طرف‌حساب جمع می‌شوند."""
     _require_account(f)
     ctx = _ctx(company_id)
     subtree = ctx.subtree(f.account_id)
@@ -404,12 +404,12 @@ def contra_accounts(company_id: int, f) -> ReportResult:
         row[1] += ln.debit
         row[2] += ln.credit
         row[3].add(ln.entry_id)
-    r = ReportResult([("طرف‌حساب", TEXT), ("بدهکار", MONEY), ("بستانکار", MONEY), ("خالص", MONEY), ("تعدادِ سند", INT)])
+    r = ReportResult([("طرف‌حساب", TEXT), ("بدهکار", MONEY), ("بستانکار", MONEY), ("خالص", MONEY), ("تعداد سند", INT)])
     for target in sorted(groups, key=lambda a: ctx.accounts[a].full_code if a in ctx.accounts else ""):
         label, debit, credit, entries = groups[target]
         r.add([label, debit, credit, debit - credit, len(entries)])
-    r.note = (f"حساب: {ctx.label(f.account_id)} -- در سندهایِ چندطرفه کلِ ردیفِ طرفِ مقابل به این حساب نسبت داده می‌شود "
-              "(تخصیصِ نسبی انجام نمی‌شود).")
+    r.note = (f"حساب: {ctx.label(f.account_id)} -- در سندهای چندطرفه کل ردیف طرف مقابل به این حساب نسبت داده می‌شود "
+              "(تخصیص نسبی انجام نمی‌شود).")
     return r
 
 
@@ -429,8 +429,8 @@ def detail_by_account(company_id: int, f) -> ReportResult:
             row[0] += ln.debit
             row[1] += ln.credit
             row[2] += 1
-    r = ReportResult([("حسابِ تفصیلی", TEXT), ("حساب", TEXT), ("بدهکار", MONEY), ("بستانکار", MONEY), ("مانده", MONEY),
-                      ("تعدادِ ردیف", INT)])
+    r = ReportResult([("حساب تفصیلی", TEXT), ("حساب", TEXT), ("بدهکار", MONEY), ("بستانکار", MONEY), ("مانده", MONEY),
+                      ("تعداد ردیف", INT)])
     for (detail_id, account_id), (debit, credit, count) in sorted(
             groups.items(), key=lambda kv: (ctx.details.get(kv[0][0], ""), ctx.label(kv[0][1]))):
         r.add([ctx.details.get(detail_id, str(detail_id)), ctx.label(account_id), debit, credit,
@@ -458,14 +458,14 @@ def comparative_trial_balance(company_id: int, f) -> ReportResult:
         return out
 
     current, previous = totals(f.date_from, f.date_to), totals(prev_from, prev_to)
-    r = ReportResult([("حساب", TEXT), ("دورهٔ جاری", MONEY), ("دورهٔ مقایسه", MONEY), ("تغییر", MONEY), ("درصدِ تغییر", PERCENT)])
+    r = ReportResult([("حساب", TEXT), ("دورهٔ جاری", MONEY), ("دورهٔ مقایسه", MONEY), ("تغییر", MONEY), ("درصد تغییر", PERCENT)])
     for account_id in sorted(set(current) | set(previous), key=lambda a: ctx.accounts[a].full_code):
         cur, prev = current.get(account_id, _ZERO), previous.get(account_id, _ZERO)
         r.add([ctx.label(account_id), cur, prev, cur - prev, _pct(cur - prev, abs(prev))])
     r.no_total = {4}
     from peecha import numerals
 
-    r.note = (f"گردشِ خالصِ دوره طبقِ ماهیتِ حساب؛ دورهٔ مقایسه: {numerals.format_jalali_date(prev_from)} تا "
+    r.note = (f"گردش خالص دوره طبق ماهیت حساب؛ دورهٔ مقایسه: {numerals.format_jalali_date(prev_from)} تا "
               f"{numerals.format_jalali_date(prev_to)}.")
     return r
 
@@ -486,7 +486,7 @@ def abnormal_balances(company_id: int, f) -> ReportResult:
     for ln in _lines(company_id, f, ctx):
         sums[ln.account_id][0] += ln.debit
         sums[ln.account_id][1] += ln.credit
-    r = ReportResult([("حساب", TEXT), ("ماهیت", TEXT), ("جمعِ بدهکار", MONEY), ("جمعِ بستانکار", MONEY), ("ماندهٔ خلافِ ماهیت", MONEY)])
+    r = ReportResult([("حساب", TEXT), ("ماهیت", TEXT), ("جمع بدهکار", MONEY), ("جمع بستانکار", MONEY), ("ماندهٔ خلاف ماهیت", MONEY)])
     for account_id in sorted(sums, key=lambda a: ctx.accounts[a].full_code if a in ctx.accounts else ""):
         a = ctx.accounts.get(account_id)
         if a is None or a.nature_code not in ("DEBIT", "CREDIT"):
@@ -496,7 +496,7 @@ def abnormal_balances(company_id: int, f) -> ReportResult:
         if wrong > 0:
             r.add([ctx.label(account_id), "بدهکار" if a.nature_code == "DEBIT" else "بستانکار", debit, credit, wrong])
     if not r.rows:
-        r.note = "هیچ حسابی ماندهٔ خلافِ ماهیت ندارد."
+        r.note = "هیچ حسابی ماندهٔ خلاف ماهیت ندارد."
     return r
 
 
@@ -516,22 +516,22 @@ def dormant_accounts(company_id: int, f) -> ReportResult:
             continue
         when = last.get(a.account_id)
         r.add([ctx.label(a.account_id), when, (f.date_to - when).days if when else None, balance.get(a.account_id, _ZERO),
-               "هرگز گردش نداشته" if when is None else ("راکد با مانده" if balance.get(a.account_id) else "راکد بدونِ مانده")])
+               "هرگز گردش نداشته" if when is None else ("راکد با مانده" if balance.get(a.account_id) else "راکد بدون مانده")])
     return r
 
 
 # ---------------------------------------------------------------------
 # تحلیلِ صورت‌هایِ مالی
 # ---------------------------------------------------------------------
-_CATEGORY_LABELS = {"REVENUE": "درآمد", "COGS": "بهایِ تمام‌شده", "EXPENSE": "هزینه",
-                    "ASSET": "دارایی", "LIABILITY": "بدهی", "EQUITY": "حقوقِ صاحبانِ سهام"}
+_CATEGORY_LABELS = {"REVENUE": "درآمد", "COGS": "بهای تمام‌شده", "EXPENSE": "هزینه",
+                    "ASSET": "دارایی", "LIABILITY": "بدهی", "EQUITY": "حقوق صاحبان سهام"}
 
 
 def income_statement_analysis(company_id: int, f) -> ReportResult:
     s = gl.compute_income_statement(company_id, f.date_from, f.date_to, status_filter=_status(f))
     prev_revenue = sum((row.previous_amount for row in s.rows if row.category_code == "REVENUE"), _ZERO)
     r = ReportResult([("بخش", TEXT), ("حساب", TEXT), ("دورهٔ جاری", MONEY), ("درصد از درآمد", PERCENT),
-                      ("سالِ قبل", MONEY), ("درصد از درآمدِ سالِ قبل", PERCENT), ("تغییر", MONEY), ("درصدِ تغییر", PERCENT)])
+                      ("سال قبل", MONEY), ("درصد از درآمد سال قبل", PERCENT), ("تغییر", MONEY), ("درصد تغییر", PERCENT)])
 
     def add(section, label, cur, prev):
         r.add([section, label, cur, _pct(cur, s.total_revenue), prev, _pct(prev, prev_revenue), cur - prev, _pct(cur - prev, abs(prev))])
@@ -540,7 +540,7 @@ def income_statement_analysis(company_id: int, f) -> ReportResult:
         add(_CATEGORY_LABELS.get(row.category_code, row.category_code), f"{row.full_code} — {row.name}",
             row.current_amount, row.previous_amount)
     prev = {c: sum((x.previous_amount for x in s.rows if x.category_code == c), _ZERO) for c in ("REVENUE", "COGS", "EXPENSE")}
-    add("جمع", "سودِ ناخالص", s.gross_profit, prev["REVENUE"] - prev["COGS"])
+    add("جمع", "سود ناخالص", s.gross_profit, prev["REVENUE"] - prev["COGS"])
     add("جمع", "سود (زیان) خالص", s.net_income, prev["REVENUE"] - prev["COGS"] - prev["EXPENSE"])
     r.no_total = set(range(2, 8))
     return r
@@ -551,16 +551,16 @@ def balance_sheet_analysis(company_id: int, f) -> ReportResult:
     prev_date = _shift_year(f.date_to, -1)
     previous = gl.compute_balance_sheet(company_id, prev_date, status_filter=_status(f))
     prev_by_code = {row.full_code: row.balance for row in previous.asset_rows + previous.liability_rows + previous.equity_rows}
-    r = ReportResult([("بخش", TEXT), ("حساب", TEXT), ("مانده", MONEY), ("درصد از جمعِ بخش", PERCENT),
-                      ("سالِ قبل", MONEY), ("تغییر", MONEY), ("درصدِ تغییر", PERCENT)])
+    r = ReportResult([("بخش", TEXT), ("حساب", TEXT), ("مانده", MONEY), ("درصد از جمع بخش", PERCENT),
+                      ("سال قبل", MONEY), ("تغییر", MONEY), ("درصد تغییر", PERCENT)])
     total_le = current.total_liabilities + current.total_equity
     for section, rows, whole in (("دارایی", current.asset_rows, current.total_assets),
-                                 ("بدهی", current.liability_rows, total_le), ("حقوقِ صاحبانِ سهام", current.equity_rows, total_le)):
+                                 ("بدهی", current.liability_rows, total_le), ("حقوق صاحبان سهام", current.equity_rows, total_le)):
         for row in rows:
             prev = prev_by_code.get(row.full_code, _ZERO)
             r.add([section, f"{row.full_code} — {row.name}", row.balance, _pct(row.balance, whole), prev, row.balance - prev,
                    _pct(row.balance - prev, abs(prev))])
-    r.add(["جمع", "جمعِ دارایی‌ها", current.total_assets, None, previous.total_assets,
+    r.add(["جمع", "جمع دارایی‌ها", current.total_assets, None, previous.total_assets,
            current.total_assets - previous.total_assets, _pct(current.total_assets - previous.total_assets, abs(previous.total_assets))])
     r.no_total = set(range(2, 7))
     return r
@@ -576,19 +576,19 @@ def unbalanced_entries(company_id: int, f) -> ReportResult:
         if e.debit != e.credit or e.line_count == 0:
             r.add(_entry_cells(e) + [e.debit - e.credit, e.created_by], _ref(e.entry_id))
     if not r.rows:
-        r.note = "همهٔ اسنادِ بازه تراز هستند."
+        r.note = "همهٔ اسناد بازه تراز هستند."
     return r
 
 
 def number_gaps(company_id: int, f) -> ReportResult:
-    """شکاف/تکرار در شماره‌هایِ موقت و دائمِ هر سالِ مالی (فقط گزارش؛ شماره‌ای اصلاح نمی‌شود)."""
+    """شکاف/تکرار در شماره‌های موقت و دائم هر سال مالی (فقط گزارش؛ شماره‌ای اصلاح نمی‌شود)."""
     ctx = _ctx(company_id)
     by_year: dict[int, dict[str, list[int]]] = defaultdict(lambda: {"temporary": [], "permanent": []})
     for e in _entries(company_id, f, ctx, status_filter="ALL"):
         by_year[e.fiscal_year_id]["temporary"].append(e.temporary_no)
         if e.permanent_no:
             by_year[e.fiscal_year_id]["permanent"].append(e.permanent_no)
-    r = ReportResult([("سالِ مالی", INT), ("نوعِ شماره", TEXT), ("مشکل", TEXT), ("از شماره", INT), ("تا شماره", INT), ("تعداد", INT)])
+    r = ReportResult([("سال مالی", INT), ("نوع شماره", TEXT), ("مشکل", TEXT), ("از شماره", INT), ("تا شماره", INT), ("تعداد", INT)])
     for year in sorted(by_year):
         for kind, label in (("temporary", "موقت"), ("permanent", "دائم")):
             numbers = sorted(by_year[year][kind])
@@ -604,7 +604,7 @@ def number_gaps(company_id: int, f) -> ReportResult:
                     r.add([year, label, "شکاف در شماره", a + 1, b - 1, b - a - 1])
     r.no_total = {0, 3, 4}
     if not r.rows:
-        r.note = "شماره‌گذاریِ اسنادِ بازه پیوسته و بدونِ تکرار است."
+        r.note = "شماره‌گذاری اسناد بازه پیوسته و بدون تکرار است."
     return r
 
 
@@ -617,39 +617,39 @@ def unposted_entries(company_id: int, f) -> ReportResult:
     return r
 
 
-_LAG_OPTION = ("lag", "حداقلِ فاصله", (("7", "۷ روز"), ("30", "۳۰ روز"), ("90", "۹۰ روز"), ("1", "۱ روز")))
+_LAG_OPTION = ("lag", "حداقل فاصله", (("7", "۷ روز"), ("30", "۳۰ روز"), ("90", "۹۰ روز"), ("1", "۱ روز")))
 
 
 def backdated_entries(company_id: int, f) -> ReportResult:
     ctx = _ctx(company_id)
     lag = int(f.options.get("lag") or 7)
-    r = _entry_result(_ENTRY_COLUMNS + [("تاریخِ ثبت در سیستم", DATE), ("فاصله (روز)", DAYS), ("جهت", TEXT), ("صادرکننده", TEXT)])
+    r = _entry_result(_ENTRY_COLUMNS + [("تاریخ ثبت در سیستم", DATE), ("فاصله (روز)", DAYS), ("جهت", TEXT), ("صادرکننده", TEXT)])
     for e in _entries(company_id, f, ctx):
         if e.created_at is None:
             continue
         diff = (e.created_at.date() - e.date).days
         if abs(diff) >= lag:
-            r.add(_entry_cells(e) + [e.created_at.date(), abs(diff), "عطف به ماسبق" if diff > 0 else "تاریخِ آینده", e.created_by],
+            r.add(_entry_cells(e) + [e.created_at.date(), abs(diff), "عطف به ماسبق" if diff > 0 else "تاریخ آینده", e.created_by],
                   _ref(e.entry_id))
     return r
 
 
 def off_hours_entries(company_id: int, f) -> ReportResult:
     ctx = _ctx(company_id)
-    r = _entry_result(_ENTRY_COLUMNS + [("زمانِ ثبت", TEXT), ("علت", TEXT), ("صادرکننده", TEXT)])
+    r = _entry_result(_ENTRY_COLUMNS + [("زمان ثبت", TEXT), ("علت", TEXT), ("صادرکننده", TEXT)])
     for e in _entries(company_id, f, ctx):
         reasons = []
         if e.date.weekday() == 4:
-            reasons.append("تاریخِ سند جمعه")
+            reasons.append("تاریخ سند جمعه")
         if e.created_at is not None:
             if e.created_at.weekday() == 4:
-                reasons.append("ثبت در روزِ جمعه")
+                reasons.append("ثبت در روز جمعه")
             if e.created_at.hour < 7 or e.created_at.hour >= 20:
-                reasons.append("ثبت خارج از ساعتِ ۷ تا ۲۰")
+                reasons.append("ثبت خارج از ساعت ۷ تا ۲۰")
         if reasons:
             stamp = f"{e.created_at:%H:%M}" if e.created_at else ""
             r.add(_entry_cells(e) + [stamp, "، ".join(reasons), e.created_by], _ref(e.entry_id))
-    r.note = "زمانِ ثبت همان ساعتِ سرورِ پایگاهِ داده است."
+    r.note = "زمان ثبت همان ساعت سرور پایگاه داده است."
     return r
 
 
@@ -667,7 +667,7 @@ def large_lines(company_id: int, f) -> ReportResult:
     return r
 
 
-_ROUND_OPTION = ("unit", "مضربِ", (("1000000", "۱٬۰۰۰٬۰۰۰"), ("10000000", "۱۰٬۰۰۰٬۰۰۰"), ("100000", "۱۰۰٬۰۰۰")))
+_ROUND_OPTION = ("unit", "مضرب", (("1000000", "۱٬۰۰۰٬۰۰۰"), ("10000000", "۱۰٬۰۰۰٬۰۰۰"), ("100000", "۱۰۰٬۰۰۰")))
 
 
 def round_amounts(company_id: int, f) -> ReportResult:
@@ -679,7 +679,7 @@ def round_amounts(company_id: int, f) -> ReportResult:
         amount = max(ln.debit, ln.credit)
         if amount and amount % unit == 0:
             r.add([ln.date, ln.temporary_no, ctx.label(ln.account_id), ln.description, ln.debit, ln.credit], _ref(ln.entry_id))
-    r.note = "مبالغِ رُند لزوماً خطا نیستند؛ این فهرست برایِ بررسیِ برآوردها و ثبت‌هایِ دستی است."
+    r.note = "مبالغ رُند لزوماً خطا نیستند؛ این فهرست برای بررسی برآوردها و ثبت‌های دستی است."
     return r
 
 
@@ -697,62 +697,62 @@ def self_approved(company_id: int, f) -> ReportResult:
 # ---------------------------------------------------------------------
 # فهرست
 # ---------------------------------------------------------------------
-_VR, _AA, _FS, _AU = "اسناد و دفاتر", "تحلیلِ حساب‌ها", "تحلیلِ صورت‌هایِ مالی", "کنترل و حسابرسیِ اسناد"
+_VR, _AA, _FS, _AU = "اسناد و دفاتر", "تحلیل حساب‌ها", "تحلیل صورت‌های مالی", "کنترل و حسابرسی اسناد"
 _AF = ("account", "detail")
 
 ACCOUNTING_REPORTS: list[ReportDef] = [
-    ReportDef("VOUCHER_REGISTER", "دفترِ ثبتِ اسنادِ حسابداری", voucher_register, _AF,
-              "همهٔ اسنادِ بازه با شماره، نوع، وضعیت، جمعِ بدهکار/بستانکار، صادرکننده و تاییدکننده.", group=_VR,
+    ReportDef("VOUCHER_REGISTER", "دفتر ثبت اسناد حسابداری", voucher_register, _AF,
+              "همهٔ اسناد بازه با شماره، نوع، وضعیت، جمع بدهکار/بستانکار، صادرکننده و تاییدکننده.", group=_VR,
               options=(_STATUS_OPTION,)),
     ReportDef("DAILY_SUMMARY", "خلاصهٔ روزانهٔ اسناد", daily_summary, _AF,
-              "تعدادِ سند و ردیف و جمعِ گردشِ هر روز.", group=_VR, options=(_STATUS_OPTION,)),
-    ReportDef("VOUCHERS_BY", "اسناد به تفکیکِ نوع/وضعیت/کاربر/منبع/ماه", vouchers_by, _AF,
-              "تعداد و گردشِ اسناد به تفکیکِ بُعدِ انتخابی.", group=_VR, options=(_BY_OPTION, _STATUS_OPTION)),
-    ReportDef("SPECIAL_ENTRIES", "اسنادِ افتتاحیه، اختتامیه و تعدیلی", special_entries, _AF,
-              "اسنادِ غیرعادیِ پایانِ دوره که معمولاً بررسیِ جداگانه لازم دارند.", group=_VR),
-    ReportDef("REVERSED_ENTRIES", "اسنادِ برگشتی و باطل‌شده", reversed_entries, _AF,
-              "اسنادی که برگشت خورده‌اند، باطل شده‌اند یا خودشان سندِ برگشتِ سندِ دیگری هستند.", group=_VR),
-    ReportDef("ACCOUNT_PERIOD_MATRIX", "گردشِ دوره‌ایِ حساب‌ها (ماهانه/فصلی/سالانه)", account_period_matrix, _AF,
-              "ماتریسِ حساب × دوره برایِ دیدنِ روند؛ مقدار به‌صورتِ خالص طبقِ ماهیت یا گردشِ بدهکار/بستانکار.", group=_AA,
+              "تعداد سند و ردیف و جمع گردش هر روز.", group=_VR, options=(_STATUS_OPTION,)),
+    ReportDef("VOUCHERS_BY", "اسناد به تفکیک نوع/وضعیت/کاربر/منبع/ماه", vouchers_by, _AF,
+              "تعداد و گردش اسناد به تفکیک بُعد انتخابی.", group=_VR, options=(_BY_OPTION, _STATUS_OPTION)),
+    ReportDef("SPECIAL_ENTRIES", "اسناد افتتاحیه، اختتامیه و تعدیلی", special_entries, _AF,
+              "اسناد غیرعادی پایان دوره که معمولاً بررسی جداگانه لازم دارند.", group=_VR),
+    ReportDef("REVERSED_ENTRIES", "اسناد برگشتی و باطل‌شده", reversed_entries, _AF,
+              "اسنادی که برگشت خورده‌اند، باطل شده‌اند یا خودشان سند برگشت سند دیگری هستند.", group=_VR),
+    ReportDef("ACCOUNT_PERIOD_MATRIX", "گردش دوره‌ای حساب‌ها (ماهانه/فصلی/سالانه)", account_period_matrix, _AF,
+              "ماتریس حساب × دوره برای دیدن روند؛ مقدار به‌صورت خالص طبق ماهیت یا گردش بدهکار/بستانکار.", group=_AA,
               options=(_PERIOD_OPTION, _LEVEL_OPTION, _MEASURE_OPTION, _STATUS_OPTION)),
     ReportDef("MONTHLY_BALANCE", "گردش و ماندهٔ ماهانهٔ حساب", monthly_balance, _AF,
-              "برایِ یک حساب (با زیرحساب‌ها): ماندهٔ ابتدا، گردش و ماندهٔ انتهایِ هر ماه.", group=_AA, options=(_STATUS_OPTION,)),
-    ReportDef("CONTRA_ACCOUNTS", "تحلیلِ طرف‌حساب", contra_accounts, _AF,
-              "حسابِ انتخابی با چه حساب‌هایی در یک سند آمده و چه مبلغی -- منشأ و مصرفِ گردشِ حساب.", group=_AA,
-              options=(("level", "سطحِ طرف‌حساب", (("3", "معین"), ("2", "کل"), ("1", "گروه"))), _STATUS_OPTION)),
-    ReportDef("DETAIL_BY_ACCOUNT", "گردشِ تفصیلی‌ها به تفکیکِ حساب", detail_by_account, _AF,
-              "هر حسابِ تفصیلی (شخص، مرکزِ هزینه، پروژه، ...) در کدام حساب‌ها و با چه مانده‌ای گردش داشته است.",
+              "برای یک حساب (با زیرحساب‌ها): ماندهٔ ابتدا، گردش و ماندهٔ انتهای هر ماه.", group=_AA, options=(_STATUS_OPTION,)),
+    ReportDef("CONTRA_ACCOUNTS", "تحلیل طرف‌حساب", contra_accounts, _AF,
+              "حساب انتخابی با چه حساب‌هایی در یک سند آمده و چه مبلغی — منشأ و مصرف گردش حساب.", group=_AA,
+              options=(("level", "سطح طرف‌حساب", (("3", "معین"), ("2", "کل"), ("1", "گروه"))), _STATUS_OPTION)),
+    ReportDef("DETAIL_BY_ACCOUNT", "گردش تفصیلی‌ها به تفکیک حساب", detail_by_account, _AF,
+              "هر حساب تفصیلی (شخص، مرکز هزینه، پروژه، ...) در کدام حساب‌ها و با چه مانده‌ای گردش داشته است.",
               group=_AA, options=(_STATUS_OPTION,)),
-    ReportDef("COMPARATIVE_TB", "ترازِ مقایسه‌ای", comparative_trial_balance, _AF,
-              "گردشِ خالصِ هر حساب در این بازه در برابرِ همان بازهٔ سالِ قبل یا دورهٔ قبل، با مبلغ و درصدِ تغییر.",
-              group=_AA, options=(("compare", "مقایسه با", (("PREV_YEAR", "همان بازهٔ سالِ قبل"), ("PREV_PERIOD", "دورهٔ قبل"))),
+    ReportDef("COMPARATIVE_TB", "تراز مقایسه‌ای", comparative_trial_balance, _AF,
+              "گردش خالص هر حساب در این بازه در برابر همان بازهٔ سال قبل یا دورهٔ قبل، با مبلغ و درصد تغییر.",
+              group=_AA, options=(("compare", "مقایسه با", (("PREV_YEAR", "همان بازهٔ سال قبل"), ("PREV_PERIOD", "دورهٔ قبل"))),
                                   _LEVEL_OPTION, _STATUS_OPTION)),
-    ReportDef("ABNORMAL_BALANCES", "حساب‌هایِ با ماندهٔ خلافِ ماهیت", abnormal_balances, _AF,
-              "مثلاً صندوق یا موجودیِ بستانکار، یا درآمدِ بدهکار -- نشانهٔ خطایِ ثبت.", "as_of", _AA, options=(_STATUS_OPTION,)),
-    ReportDef("DORMANT_ACCOUNTS", "حساب‌هایِ راکد", dormant_accounts, _AF,
-              "حساب‌هایِ معینی که در بازه گردش نداشته‌اند، با تاریخِ آخرین گردش و ماندهٔ فعلی.", group=_AA,
+    ReportDef("ABNORMAL_BALANCES", "حساب‌های با ماندهٔ خلاف ماهیت", abnormal_balances, _AF,
+              "مثلاً صندوق یا موجودی بستانکار، یا درآمد بدهکار — نشانهٔ خطای ثبت.", "as_of", _AA, options=(_STATUS_OPTION,)),
+    ReportDef("DORMANT_ACCOUNTS", "حساب‌های راکد", dormant_accounts, _AF,
+              "حساب‌های معینی که در بازه گردش نداشته‌اند، با تاریخ آخرین گردش و ماندهٔ فعلی.", group=_AA,
               options=(_STATUS_OPTION,)),
-    ReportDef("IS_ANALYSIS", "تحلیلِ عمودی و افقیِ سود و زیان", income_statement_analysis, (),
-              "هر قلم به‌صورتِ درصد از درآمد، و تغییرِ آن نسبت به همان بازه در سالِ قبل.", group=_FS, options=(_STATUS_OPTION,)),
-    ReportDef("BS_ANALYSIS", "تحلیلِ عمودی و افقیِ ترازنامه", balance_sheet_analysis, (),
-              "دارایی‌ها درصد از جمعِ دارایی، بدهی و حقوقِ صاحبانِ سهام درصد از جمعِ آن دو؛ و تغییر نسبت به همین تاریخ در سالِ قبل.", "as_of", _FS,
+    ReportDef("IS_ANALYSIS", "تحلیل عمودی و افقی سود و زیان", income_statement_analysis, (),
+              "هر قلم به‌صورت درصد از درآمد، و تغییر آن نسبت به همان بازه در سال قبل.", group=_FS, options=(_STATUS_OPTION,)),
+    ReportDef("BS_ANALYSIS", "تحلیل عمودی و افقی ترازنامه", balance_sheet_analysis, (),
+              "دارایی‌ها درصد از جمع دارایی، بدهی و حقوق صاحبان سهام درصد از جمع آن دو؛ و تغییر نسبت به همین تاریخ در سال قبل.", "as_of", _FS,
               options=(_STATUS_OPTION,)),
-    ReportDef("UNBALANCED", "اسنادِ نامتوازن", unbalanced_entries, _AF,
-              "اسنادی که جمعِ بدهکار و بستانکارشان برابر نیست یا ردیف ندارند (همهٔ وضعیت‌ها).", group=_AU),
-    ReportDef("NUMBER_GAPS", "شکاف و تکرار در شماره‌گذاریِ اسناد", number_gaps, (),
-              "شماره‌هایِ موقت و دائمِ جاافتاده یا تکراری در هر سالِ مالی.", group=_AU),
-    ReportDef("UNPOSTED", "اسنادِ پیش‌نویس و موقتِ قطعی‌نشده", unposted_entries, _AF,
-              "اسنادی که هنوز دائم نشده‌اند، با سنِ هر سند.", group=_AU),
-    ReportDef("BACKDATED", "اسنادِ عطف به ماسبق / تاریخِ آینده", backdated_entries, _AF,
-              "اسنادی که تاریخِ سندشان با تاریخِ ثبت در سیستم فاصلهٔ زیادی دارد.", group=_AU, options=(_LAG_OPTION, _STATUS_OPTION)),
-    ReportDef("OFF_HOURS", "اسنادِ ثبت‌شده در تعطیلی یا خارج از ساعتِ کاری", off_hours_entries, _AF,
-              "تاریخ یا زمانِ ثبتِ جمعه یا پیش از ۷ صبح/پس از ۸ شب.", group=_AU, options=(_STATUS_OPTION,)),
-    ReportDef("LARGE_LINES", "بزرگ‌ترین ردیف‌هایِ اسناد", large_lines, _AF,
-              "ردیف‌هایِ با بیشترین مبلغ در بازه.", group=_AU, options=(_TOP_OPTION, _STATUS_OPTION)),
-    ReportDef("ROUND_AMOUNTS", "ردیف‌هایِ با مبلغِ رُند", round_amounts, _AF,
-              "ردیف‌هایی که مبلغشان مضربِ عددِ انتخابی است -- آزمونِ متداولِ حسابرسی.", group=_AU,
+    ReportDef("UNBALANCED", "اسناد نامتوازن", unbalanced_entries, _AF,
+              "اسنادی که جمع بدهکار و بستانکارشان برابر نیست یا ردیف ندارند (همهٔ وضعیت‌ها).", group=_AU),
+    ReportDef("NUMBER_GAPS", "شکاف و تکرار در شماره‌گذاری اسناد", number_gaps, (),
+              "شماره‌های موقت و دائم جاافتاده یا تکراری در هر سال مالی.", group=_AU),
+    ReportDef("UNPOSTED", "اسناد پیش‌نویس و موقت قطعی‌نشده", unposted_entries, _AF,
+              "اسنادی که هنوز دائم نشده‌اند، با سن هر سند.", group=_AU),
+    ReportDef("BACKDATED", "اسناد عطف به ماسبق / تاریخ آینده", backdated_entries, _AF,
+              "اسنادی که تاریخ سندشان با تاریخ ثبت در سیستم فاصلهٔ زیادی دارد.", group=_AU, options=(_LAG_OPTION, _STATUS_OPTION)),
+    ReportDef("OFF_HOURS", "اسناد ثبت‌شده در تعطیلی یا خارج از ساعت کاری", off_hours_entries, _AF,
+              "تاریخ یا زمان ثبت جمعه یا پیش از ۷ صبح/پس از ۸ شب.", group=_AU, options=(_STATUS_OPTION,)),
+    ReportDef("LARGE_LINES", "بزرگ‌ترین ردیف‌های اسناد", large_lines, _AF,
+              "ردیف‌های با بیشترین مبلغ در بازه.", group=_AU, options=(_TOP_OPTION, _STATUS_OPTION)),
+    ReportDef("ROUND_AMOUNTS", "ردیف‌های با مبلغ رُند", round_amounts, _AF,
+              "ردیف‌هایی که مبلغشان مضرب عدد انتخابی است — آزمون متداول حسابرسی.", group=_AU,
               options=(_ROUND_OPTION, _STATUS_OPTION)),
-    ReportDef("SELF_APPROVED", "اسنادِ تاییدشده توسطِ صادرکننده (تفکیکِ وظایف)", self_approved, _AF,
+    ReportDef("SELF_APPROVED", "اسناد تاییدشده توسط صادرکننده (تفکیک وظایف)", self_approved, _AF,
               "اسنادی که صادرکننده و تاییدکنندهٔ آن یک کاربر است.", group=_AU),
 ]
 ACCOUNTING_REPORTS_BY_CODE = {r.code: r for r in ACCOUNTING_REPORTS}

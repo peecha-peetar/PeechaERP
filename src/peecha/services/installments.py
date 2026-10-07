@@ -1,8 +1,8 @@
-"""اقساط -- عمومی‌سازیِ InstallmentPlan/InstallmentLineِ ازپیش‌موجود که
-قبلاً فقط در commercial_pos.py، بدونِ هیچ فراخوان‌کننده‌یِ واقعی (نه در
-UI، نه در ثبتِ حسابداری)، تعریف شده بودند. طبقِ درخواستِ صریح («روشِ
-دریافت و پرداختِ اقساطی»)، این ماژول از همان‌جا کاملاً منتقل و عمومی شده
-تا موردِ استفاده‌یِ اصلی‌اش (فرمِ عمومیِ دریافت/پرداخت treasury_voucher.py،
+"""اقساط — عمومی‌سازی InstallmentPlan/InstallmentLine ازپیش‌موجود که
+قبلاً فقط در commercial_pos.py، بدون هیچ فراخوان‌کنندهٔ واقعی (نه در
+UI، نه در ثبت حسابداری)، تعریف شده بودند. طبق درخواست صریح («روش
+دریافت و پرداخت اقساطی»)، این ماژول از همان‌جا کاملاً منتقل و عمومی شده
+تا مورد استفادهٔ اصلی‌اش (فرم عمومی دریافت/پرداخت treasury_voucher.py،
 نه فقط POS) را هم پوشش بدهد."""
 
 from __future__ import annotations
@@ -35,28 +35,28 @@ def create_installment_plan(
     misc_fee_amount: decimal.Decimal = _ZERO,
     due_interval_days: int = 30,
 ) -> int:
-    """طبقِ فاصله‌یِ قابلِ‌تنظیم (پیش‌فرض ۳۰ روز، طبقِ موردِ ۶): هر قسط
-    due_interval_days روز بعدِ قبلی سررسید می‌شود. مبلغِ هر قسط یکسان
-    است، بجز قسطِ آخر که مانده‌یِ دقیقِ گِردکردن را جذب می‌کند.
+    """طبق فاصلهٔ قابل‌تنظیم (پیش‌فرض ۳۰ روز، طبق مورد ۶): هر قسط
+    due_interval_days روز بعد قبلی سررسید می‌شود. مبلغ هر قسط یکسان
+    است، بجز قسط آخر که ماندهٔ دقیق گردکردن را جذب می‌کند.
 
-    document_id: طبقِ موردِ ۵، اختیاری است -- None یعنی طرحِ اقساطِ آزاد
-    (بدونِ فاکتور)، که در این حالت company_id/counterparty_detail_account_id/
-    direction الزامی‌اند تا طرح بتواند بدونِ فاکتور به طرفِ‌حساب و شرکتِ
+    document_id: طبق مورد ۵، اختیاری است — None یعنی طرح اقساط آزاد
+    (بدون فاکتور)، که در این حالت company_id/counterparty_detail_account_id/
+    direction الزامی‌اند تا طرح بتواند بدون فاکتور به طرف‌حساب و شرکت
     خودش وصل بماند.
 
-    interest_rate_percent/misc_fee_amount: طبقِ موردِ ۶ -- مازاد بر اصلِ
-    مبلغ محاسبه و به‌صورتِ مساوی بینِ اقساط تقسیم می‌شود (سهمِ هر قسط در
-    InstallmentLine.interest_fee_amount نگه‌داری می‌شود تا در تسویه قابلِ
-    تفکیک از اصلِ مبلغ باشد)؛ اثرِ حسابداریِ این مازاد (شناساییِ درآمد/
+    interest_rate_percent/misc_fee_amount: طبق مورد ۶ — مازاد بر اصل
+    مبلغ محاسبه و به‌صورت مساوی بین اقساط تقسیم می‌شود (سهم هر قسط در
+    InstallmentLine.interest_fee_amount نگه‌داری می‌شود تا در تسویه قابل
+    تفکیک از اصل مبلغ باشد)؛ اثر حسابداری این مازاد (شناسایی درآمد/
     هزینه) در همان سندی که این طرح را می‌سازد ثبت می‌شود، نه این‌جا."""
     if number_of_installments < 2:
-        raise ValueError("تعدادِ اقساط باید حداقل ۲ باشد.")
+        raise ValueError("تعداد اقساط باید حداقل ۲ باشد.")
     if principal_amount <= _ZERO:
-        raise ValueError("مبلغِ کل باید مثبت باشد.")
+        raise ValueError("مبلغ کل باید مثبت باشد.")
     if document_id is None and (company_id is None or counterparty_detail_account_id is None or direction is None):
-        raise ValueError("برایِ طرحِ اقساطِ بدونِ فاکتور، شرکت، طرفِ‌حساب، و جهت (دریافت/پرداخت) الزامی است.")
+        raise ValueError("برای طرح اقساط بدون فاکتور، شرکت، طرف‌حساب، و جهت (دریافت/پرداخت) الزامی است.")
     if interest_rate_percent < 0:
-        raise ValueError("درصدِ بهره نمی‌تواند منفی باشد.")
+        raise ValueError("درصد بهره نمی‌تواند منفی باشد.")
     if misc_fee_amount < 0:
         raise ValueError("هزینهٔ متفرقه نمی‌تواند منفی باشد.")
     if due_interval_days < 1:
@@ -133,25 +133,25 @@ def record_installment_collection(
     line_id: int, amount: decimal.Decimal, journal_entry_id: int | None, collection_date: datetime.date,
     created_by_user_id: int, description: str | None = None,
 ) -> None:
-    """طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): جایگزینِ
-    mark_installment_paid که همیشه کلِ قسط را یک‌جا PAID می‌کرد -- این‌جا
-    فقط amountِ واقعاً وصول‌شده (که می‌تواند کمتر از مبلغِ کلِ قسط باشد)
-    به‌عنوانِ یک رویدادِ InstallmentCollection ثبت می‌شود؛ قسط فقط وقتی
-    که مجموعِ همه‌یِ وصولی‌هایش به مبلغِ کلش برسد PAID می‌شود، وگرنه
-    وضعیتش (PENDING/OVERDUE) دست‌نخورده می‌ماند و «مانده» از تفاضلِ
-    amount منهایِ مجموعِ وصولی‌ها محاسبه می‌شود."""
+    """طبق درخواست صریح («ممکنه بخشی از اقساط وصول بشه»): جایگزین
+    mark_installment_paid که همیشه کل قسط را یک‌جا PAID می‌کرد — این‌جا
+    فقط amount واقعاً وصول‌شده (که می‌تواند کمتر از مبلغ کل قسط باشد)
+    به‌عنوان یک رویداد InstallmentCollection ثبت می‌شود؛ قسط فقط وقتی
+    که مجموع همهٔ وصولی‌هایش به مبلغ کلش برسد PAID می‌شود، وگرنه
+    وضعیتش (PENDING/OVERDUE) دست‌نخورده می‌ماند و «مانده» از تفاضل
+    amount منهای مجموع وصولی‌ها محاسبه می‌شود."""
     if amount <= _ZERO:
-        raise ValueError("مبلغِ وصول باید مثبت باشد.")
+        raise ValueError("مبلغ وصول باید مثبت باشد.")
     with new_session() as session:
         line = session.get(InstallmentLine, line_id)
         if line is None:
             raise ValueError("قسط نامعتبر است.")
         if line.status_code == "PAID":
-            raise ValueError("این قسط قبلاً به‌طورِ کامل دریافت/پرداخت شده است.")
+            raise ValueError("این قسط قبلاً به‌طور کامل دریافت/پرداخت شده است.")
         collected_so_far = get_installment_collected_amount(line_id, session)
         remaining = _money(line.amount - collected_so_far)
         if amount > remaining:
-            raise ValueError(f"مبلغِ واردشده از ماندهٔ این قسط ({_money(remaining)}) بیشتر است.")
+            raise ValueError(f"مبلغ واردشده از ماندهٔ این قسط ({_money(remaining)}) بیشتر است.")
         session.add(
             InstallmentCollection(
                 line_id=line_id, journal_entry_id=journal_entry_id, collection_date=collection_date,
@@ -218,16 +218,16 @@ def list_installments(
     counterparty_detail_account_id: int | None = None,
     due_date_from: datetime.date | None = None, due_date_to: datetime.date | None = None,
 ) -> list[InstallmentLineRow]:
-    """طبقِ درخواستِ صریح: فهرستِ اقساط (همه یا فیلترشده -- طرفِ‌حساب/
-    بازه‌یِ تاریخِ سررسید) برایِ صفحه‌یِ مدیریتِ اقساط -- پیش از خواندن،
-    معوقه‌هایِ تازه را OVERDUE علامت می‌زند تا وضعیتِ نمایش‌داده‌شده
+    """طبق درخواست صریح: فهرست اقساط (همه یا فیلترشده — طرف‌حساب/
+    بازهٔ تاریخ سررسید) برای صفحهٔ مدیریت اقساط — پیش از خواندن،
+    معوقه‌های تازه را OVERDUE علامت می‌زند تا وضعیت نمایش‌داده‌شده
     همیشه به‌روز باشد.
 
-    طبقِ گزارشِ صریح («جدول نامِ طرفِ‌حساب را نمی‌آورد»): علتِ ریشه‌ای
-    این بود که UI فقط از رویِ سند (که برایِ طرحِ اقساطِ بدونِ فاکتور
-    اصلاً وجود ندارد) و فقط از فهرستِ مشتریان/تامین‌کنندگان (نه هر
-    تفصیلیِ دیگری) طرفِ‌حساب را می‌ساخت -- این‌جا مستقیماً با join به
-    acc.detail_accounts، برایِ هر دو حالت (بافاکتور/بدونِ فاکتور) و هر
+    طبق گزارش صریح («جدول نام طرف‌حساب را نمی‌آورد»): علت ریشه‌ای
+    این بود که UI فقط از روی سند (که برای طرح اقساط بدون فاکتور
+    اصلاً وجود ندارد) و فقط از فهرست مشتریان/تامین‌کنندگان (نه هر
+    تفصیلی دیگری) طرف‌حساب را می‌ساخت — این‌جا مستقیماً با join به
+    acc.detail_accounts، برای هر دو حالت (بافاکتور/بدون فاکتور) و هر
     نوع تفصیلی‌ای برچسب ساخته می‌شود."""
     list_overdue_installments(company_id)
     with new_session() as session:

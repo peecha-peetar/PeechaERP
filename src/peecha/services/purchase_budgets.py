@@ -1,12 +1,12 @@
-"""بودجهٔ خرید -- R243.
+"""بودجهٔ خرید — R243.
 
-مصرفِ هر بودجه همیشه از خودِ اسناد محاسبه می‌شود (هیچ عددی ذخیره نمی‌شود):
-- واقعی = Σ مبلغِ خالصِ (بدونِ مالیات) ردیف‌هایِ فاکتورِ خریدِ ثبت‌شده − برگشت به تامین‌کننده
-- تعهد  = Σ (مقدارِ سفارش − فاکتورشده) × فیِ واحدِ پایهٔ سفارش، برایِ سفارش‌هایِ خریدِ باز
-- در جریان = Σ ماندهٔ سفارش‌نشدهٔ درخواست‌هایِ خریدِ تصویب‌شده × فیِ برآوردی
-- مانده = بودجه − واقعی − تعهد ؛ درصدِ مصرف = (واقعی + تعهد) ÷ بودجه
-ردیف در بودجه حساب می‌شود اگر تاریخِ سند در دورهٔ بودجه باشد و هر بُعدِ پرشدهٔ بودجه
-(مرکزِ هزینه، پروژه، گروهِ کالا) با سند/کالا بخواند. کنترل فقط هشدار است و جلویِ ثبت را نمی‌گیرد.
+مصرف هر بودجه همیشه از خود اسناد محاسبه می‌شود (هیچ عددی ذخیره نمی‌شود):
+- واقعی = Σ مبلغ خالص (بدون مالیات) ردیف‌های فاکتور خرید ثبت‌شده − برگشت به تامین‌کننده
+- تعهد  = Σ (مقدار سفارش − فاکتورشده) × فی واحد پایهٔ سفارش، برای سفارش‌های خرید باز
+- در جریان = Σ ماندهٔ سفارش‌نشدهٔ درخواست‌های خرید تصویب‌شده × فی برآوردی
+- مانده = بودجه − واقعی − تعهد ؛ درصد مصرف = (واقعی + تعهد) ÷ بودجه
+ردیف در بودجه حساب می‌شود اگر تاریخ سند در دورهٔ بودجه باشد و هر بُعد پرشدهٔ بودجه
+(مرکز هزینه، پروژه، گروه کالا) با سند/کالا بخواند. کنترل فقط هشدار است و جلوی ثبت را نمی‌گیرد.
 """
 
 from __future__ import annotations
@@ -53,17 +53,17 @@ def list_budgets(company_id: int, active_only: bool = False) -> list[PurchaseBud
 def save_budget(company_id: int, fields: BudgetFields, budget_id: int | None = None) -> int:
     code, name = (fields.code or "").strip().upper(), (fields.name or "").strip()
     if not code or not name:
-        raise ValueError("کد و نامِ بودجه الزامی است.")
+        raise ValueError("کد و نام بودجه الزامی است.")
     if fields.period_to < fields.period_from:
-        raise ValueError("پایانِ دورهٔ بودجه نمی‌تواند پیش از شروعِ آن باشد.")
+        raise ValueError("پایان دورهٔ بودجه نمی‌تواند پیش از شروع آن باشد.")
     if fields.amount is None or fields.amount < 0:
-        raise ValueError("مبلغِ بودجه نامعتبر است.")
+        raise ValueError("مبلغ بودجه نامعتبر است.")
     if not (0 < fields.warn_percent <= 100):
-        raise ValueError("درصدِ هشدار باید بینِ ۰ و ۱۰۰ باشد.")
+        raise ValueError("درصد هشدار باید بین ۰ و ۱۰۰ باشد.")
     with new_session() as session:
         clash = session.scalar(select(PurchaseBudget).where(PurchaseBudget.company_id == company_id, PurchaseBudget.code == code))
         if clash is not None and clash.budget_id != budget_id:
-            raise ValueError("این کدِ بودجه قبلاً تعریف شده است.")
+            raise ValueError("این کد بودجه قبلاً تعریف شده است.")
         row = session.get(PurchaseBudget, budget_id) if budget_id else PurchaseBudget(company_id=company_id)
         if row is None or row.company_id != company_id:
             raise ValueError("بودجه نامعتبر است.")
@@ -182,7 +182,7 @@ def usages(company_id: int, budgets: list[PurchaseBudget] | None = None, with_de
 
 
 def warnings_for_document(document_id: int, company_id: int) -> list[str]:
-    """بودجه‌هایی که ردیف‌هایِ این سند در آن‌ها حساب می‌شود و به آستانهٔ هشدار رسیده یا عبور کرده‌اند."""
+    """بودجه‌هایی که ردیف‌های این سند در آن‌ها حساب می‌شود و به آستانهٔ هشدار رسیده یا عبور کرده‌اند."""
     from peecha import numerals
     from peecha.services import commercial_documents as documents_service
 

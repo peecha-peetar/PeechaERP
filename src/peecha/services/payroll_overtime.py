@@ -1,17 +1,17 @@
-"""سرویسِ اضافه‌کاری، شب‌کاری، تعطیل‌کاری و شیفتِ گردشی (فصلِ ۱۲).
+"""سرویس اضافه‌کاری، شب‌کاری، تعطیل‌کاری و شیفت گردشی (فصل ۱۲).
 
-⚠ طبقِ یادداشتِ db/schema/046: منبعِ «چند ساعت» به‌جایِ استخراجِ خودکار از
-hr.attendance_records (که در فازِ ۱ از هستهٔ منابعِ انسانی ساخته نشد)،
-ثبتِ دستی است — منطقِ نرخِ ساعتی و ترکیبِ ضرایب دقیقاً طبقِ سند است.
+⚠ طبق یادداشت db/schema/046: منبع «چند ساعت» به‌جای استخراج خودکار از
+hr.attendance_records (که در فاز ۱ از هستهٔ منابع انسانی ساخته نشد)،
+ثبت دستی است — منطق نرخ ساعتی و ترکیب ضرایب دقیقاً طبق سند است.
 
-ترکیبِ هم‌زمانِ چند شرط (مثلِ اضافه‌کاریِ شب‌کاریِ تعطیل): چون هر ردیفِ
-overtime_entries یک عددِ ساعتِ مستقل دارد (نه یک شناسهٔ «بازهٔ ساعتیِ
-مشترک»)، ردیف‌هایی که در یک دوره برایِ یک کارمند عددِ ساعتِ یکسان دارند
-به‌عنوانِ توصیف‌کنندهٔ همان ساعت‌ها از زاویه‌هایِ مختلف (شرط‌هایِ هم‌زمان)
-درنظر گرفته می‌شوند و ضرایب‌شان طبقِ stacking_mode با هم ترکیب می‌شوند؛
-ردیف‌هایی با عددِ ساعتِ متفاوت مستقل محاسبه می‌شوند. این همان مثالِ سند
-(اضافه‌کاریِ شب‌کاریِ تعطیل = ۱ + ۰٫۴ + ۰٫۳۵ + ۱٫۰ = ۲٫۷۵) را با
-هم‌ساعت‌بودنِ ردیف‌ها بازتولید می‌کند."""
+ترکیب هم‌زمان چند شرط (مثل اضافه‌کاری شب‌کاری تعطیل): چون هر ردیف
+overtime_entries یک عدد ساعت مستقل دارد (نه یک شناسهٔ «بازهٔ ساعتی
+مشترک»)، ردیف‌هایی که در یک دوره برای یک کارمند عدد ساعت یکسان دارند
+به‌عنوان توصیف‌کنندهٔ همان ساعت‌ها از زاویه‌های مختلف (شرط‌های هم‌زمان)
+درنظر گرفته می‌شوند و ضرایب‌شان طبق stacking_mode با هم ترکیب می‌شوند؛
+ردیف‌هایی با عدد ساعت متفاوت مستقل محاسبه می‌شوند. این همان مثال سند
+(اضافه‌کاری شب‌کاری تعطیل = ۱ + ۰٫۴ + ۰٫۳۵ + ۱٫۰ = ۲٫۷۵) را با
+هم‌ساعت‌بودن ردیف‌ها بازتولید می‌کند."""
 
 from __future__ import annotations
 
@@ -73,20 +73,20 @@ def create_overtime_rule(
     effective_to: datetime.date | None,
 ) -> int:
     if code not in _RULE_CODES:
-        raise ValueError("نوعِ قانونِ اضافه‌کاری نامعتبر است.")
+        raise ValueError("نوع قانون اضافه‌کاری نامعتبر است.")
     if stacking_mode not in _STACKING_MODES:
-        raise ValueError("حالتِ ترکیبِ ضرایب نامعتبر است.")
+        raise ValueError("حالت ترکیب ضرایب نامعتبر است.")
     if multiplier < 1:
         raise ValueError("ضریب باید حداقل ۱ باشد.")
     if effective_to is not None and effective_to < effective_from:
-        raise ValueError("تاریخِ پایان نمی‌تواند قبل از تاریخِ شروع باشد.")
+        raise ValueError("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.")
     with new_session() as session:
         existing = session.scalars(
             select(OvertimeRule).where(OvertimeRule.company_id == company_id, OvertimeRule.code == code)
         ).all()
         for row in existing:
             if _overlaps(effective_from, effective_to, row.effective_from, row.effective_to):
-                raise ValueError("این بازه با یک قانونِ اضافه‌کاریِ دیگر با همین کد هم‌پوشانی دارد.")
+                raise ValueError("این بازه با یک قانون اضافه‌کاری دیگر با همین کد هم‌پوشانی دارد.")
         rule = OvertimeRule(
             company_id=company_id, code=code, multiplier=multiplier, stacking_mode=stacking_mode,
             max_monthly_hours_policy_code=max_monthly_hours_policy_code,
@@ -101,7 +101,7 @@ def update_overtime_rule(
     overtime_rule_id: int, multiplier: decimal.Decimal, stacking_mode: str, max_monthly_hours_policy_code: str | None
 ) -> None:
     if stacking_mode not in _STACKING_MODES:
-        raise ValueError("حالتِ ترکیبِ ضرایب نامعتبر است.")
+        raise ValueError("حالت ترکیب ضرایب نامعتبر است.")
     if multiplier < 1:
         raise ValueError("ضریب باید حداقل ۱ باشد.")
     with new_session() as session:
@@ -118,7 +118,7 @@ def delete_overtime_rule(overtime_rule_id: int) -> None:
     with new_session() as session:
         used = session.scalar(select(OvertimeEntry).where(OvertimeEntry.overtime_rule_id == overtime_rule_id))
         if used is not None:
-            raise ValueError("این قانون در ثبت‌هایِ اضافه‌کاریِ موجود استفاده شده و قابلِ حذف نیست.")
+            raise ValueError("این قانون در ثبت‌های اضافه‌کاری موجود استفاده شده و قابل حذف نیست.")
         rule = session.get(OvertimeRule, overtime_rule_id)
         if rule is not None:
             session.delete(rule)
@@ -177,7 +177,7 @@ def create_overtime_entry(employee_id: int, period_id: int, overtime_rule_id: in
             )
         )
         if exists is not None:
-            raise ValueError("برایِ این کارمند/دوره/نوعِ اضافه‌کاری، ثبتی از قبل موجود است.")
+            raise ValueError("برای این کارمند/دوره/نوع اضافه‌کاری، ثبتی از قبل موجود است.")
         entry = OvertimeEntry(employee_id=employee_id, period_id=period_id, overtime_rule_id=overtime_rule_id, hours=hours)
         session.add(entry)
         session.commit()
@@ -186,7 +186,7 @@ def create_overtime_entry(employee_id: int, period_id: int, overtime_rule_id: in
 
 def set_overtime_entry_status(overtime_entry_id: int, status: str) -> None:
     if status not in ("PENDING_APPROVAL", "APPROVED", "REJECTED"):
-        raise ValueError("وضعیتِ نامعتبر.")
+        raise ValueError("وضعیت نامعتبر.")
     with new_session() as session:
         entry = session.get(OvertimeEntry, overtime_entry_id)
         if entry is None:
@@ -204,7 +204,7 @@ def delete_overtime_entry(overtime_entry_id: int) -> None:
 
 
 def compute_hourly_base_rate(base_salary: decimal.Decimal, continuous_benefits_total: decimal.Decimal, standard_month_days: int) -> decimal.Decimal:
-    """نرخِ_ساعتیِ_پایه = (حقوقِ‌پایه + مزایایِ پیوسته) ÷ (روزهایِ‌استانداردِ‌ماه × ۷٫۳۳)."""
+    """نرخ_ساعتی_پایه = (حقوق‌پایه + مزایای پیوسته) ÷ (روزهای‌استاندارد‌ماه × ۷٫۳۳)."""
     denominator = decimal.Decimal(standard_month_days) * _HOURS_PER_MONTH_DIVISOR
     if denominator == 0:
         return decimal.Decimal(0)
@@ -232,8 +232,8 @@ def compute_overtime_pay(
     company_id: int, employee_id: int, period_id: int, base_salary: decimal.Decimal,
     continuous_benefits_total: decimal.Decimal, standard_month_days: int,
 ) -> decimal.Decimal:
-    """جمعِ مبلغِ اضافه‌کاریِ یک کارمند در یک دوره، فقط از ثبت‌هایِ APPROVED.
-    ردیف‌هایِ هم‌ساعت با هم ترکیب می‌شوند (نکتهٔ بالایِ فایل)؛ بقیه مستقل."""
+    """جمع مبلغ اضافه‌کاری یک کارمند در یک دوره، فقط از ثبت‌های APPROVED.
+    ردیف‌های هم‌ساعت با هم ترکیب می‌شوند (نکتهٔ بالای فایل)؛ بقیه مستقل."""
     hourly_rate = compute_hourly_base_rate(base_salary, continuous_benefits_total, standard_month_days)
     entries = [e for e in list_overtime_entries(period_id, employee_id) if e.status == "APPROVED"]
     if not entries:

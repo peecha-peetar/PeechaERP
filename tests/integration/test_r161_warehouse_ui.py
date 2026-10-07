@@ -41,11 +41,11 @@ from peecha.services import inventory_locations as locations_service
 
 # ذخیره‌یِ مستقیمِ سرویس با مقداری واقعی.
 wh_id = locations_service.create_warehouse(
-    company_id, "WH-TAX", "انبارِ تستِ مالیات",
+    company_id, "WH-TAX", "انبار تست مالیات",
     locations_service.WarehouseFields(default_tax_percent=decimal.Decimal("7.5")),
 )
 row = locations_service.get_warehouse(wh_id, company_id)
-check(row.fields.default_tax_percent == decimal.Decimal("7.5"), f"مالیاتِ انبار در سرویس ذخیره/بازخوانی شد (got {row.fields.default_tax_percent})")
+check(row.fields.default_tax_percent == decimal.Decimal("7.5"), f"مالیات انبار در سرویس ذخیره/بازخوانی شد (got {row.fields.default_tax_percent})")
 
 # حالا از طریقِ خودِ فرم -- بارگذاری و ذخیره دوباره، مقدار باید حفظ شود.
 from peecha.ui.screens.inventory_warehouses import InventoryWarehousesScreen
@@ -53,12 +53,12 @@ screen = InventoryWarehousesScreen()
 screen.refresh()
 idx = next(i for i in range(screen.table.rowCount()) if screen._rows[i].warehouse_id == wh_id)
 screen._on_row_clicked(idx, 0)
-check(screen.default_tax_percent_field.text() == "7.50", f"فیلدِ درصدِ مالیات در فرم با مقدارِ ذخیره‌شده پر شده (got {screen.default_tax_percent_field.text()!r})")
+check(screen.default_tax_percent_field.text() == "7.50", f"فیلد درصد مالیات در فرم با مقدار ذخیره‌شده پر شده (got {screen.default_tax_percent_field.text()!r})")
 
 screen.default_tax_percent_field.setText("")
 screen._save()
 row = locations_service.get_warehouse(wh_id, company_id)
-check(row.fields.default_tax_percent is None, f"خالی‌کردنِ فیلد و ذخیره، مالیاتِ انبار را None می‌کند (got {row.fields.default_tax_percent})")
+check(row.fields.default_tax_percent is None, f"خالی‌کردن فیلد و ذخیره، مالیات انبار را None می‌کند (got {row.fields.default_tax_percent})")
 
 print("FAIL" if FAIL else "RESULT: ALL PASS")
 sys.exit(1 if FAIL else 0)

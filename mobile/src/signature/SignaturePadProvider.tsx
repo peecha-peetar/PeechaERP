@@ -57,14 +57,14 @@ export function SignaturePadProvider({ children }: { children: React.ReactNode }
               padding: spacing.lg,
             }}
           >
-            <Text style={[typography.h3, { color: colors.textPrimary }]}>امضایِ تحویل‌گیرنده</Text>
+            <Text style={[typography.h3, { color: colors.textPrimary }]}>امضای تحویل‌گیرنده</Text>
             <Button label="انصراف" variant="ghost" fullWidth={false} onPress={() => finish(null)} />
           </View>
-          {/* طبقِ گزارشِ واقعیِ کاربر («بعد از امضا جایی برایِ تایید نبود»):
-              دکمه‌هایِ داخلیِ خودِ کتابخانه (که درونِ WebView رندر
-              می‌شوند) گاهی رویِ گوشی‌هایِ واقعی دیده/لمس نمی‌شوند --
-              پس این‌جا دکمه‌هایِ خودمان (کاملاً بیرونِ WebView، تضمیناً
-              قابلِ‌دیدن) اضافه شد و از طریقِ ref صدا زده می‌شوند. */}
+          {/* طبق گزارش واقعی کاربر («بعد از امضا جایی برای تایید نبود»):
+              دکمه‌های داخلی خود کتابخانه (که درون WebView رندر
+              می‌شوند) گاهی روی گوشی‌های واقعی دیده/لمس نمی‌شوند --
+              پس این‌جا دکمه‌های خودمان (کاملاً بیرون WebView، تضمیناً
+              قابل‌دیدن) اضافه شد و از طریق ref صدا زده می‌شوند. */}
           <View style={{ flex: 1 }}>
             <SignatureCanvas
               ref={canvasRef}
@@ -84,7 +84,7 @@ export function SignaturePadProvider({ children }: { children: React.ReactNode }
               onPress={() => canvasRef.current?.clearSignature()}
             />
             <View style={{ flex: 1 }}>
-              <Button label="تاییدِ امضا" onPress={() => canvasRef.current?.readSignature()} />
+              <Button label="تایید امضا" onPress={() => canvasRef.current?.readSignature()} />
             </View>
           </View>
         </View>
@@ -95,6 +95,6 @@ export function SignaturePadProvider({ children }: { children: React.ReactNode }
 
 export function useSignaturePad(): SignaturePadContextValue {
   const ctx = useContext(SignaturePadContext);
-  if (!ctx) throw new Error("useSignaturePad باید داخلِ SignaturePadProvider استفاده شود.");
+  if (!ctx) throw new Error("useSignaturePad باید داخل SignaturePadProvider استفاده شود.");
   return ctx;
 }

@@ -1,15 +1,15 @@
-"""تاییدِ انبار و توزین -- طبقِ درخواستِ صریحِ کاربر (روالِ کاملِ پخشِ سرد):
-سفارشِ تصویب‌شده (کانالِ پخشِ سرد) باید پیش از تبدیل به فاکتورِ فروش، هم
-تاییدِ انبار بگیرد و هم -- اگر کالایِ توزینی داشت -- تاییدِ توزین.
+"""تایید انبار و توزین — طبق درخواست صریح کاربر (روال کامل پخش سرد):
+سفارش تصویب‌شده (کانال پخش سرد) باید پیش از تبدیل به فاکتور فروش، هم
+تایید انبار بگیرد و هم — اگر کالای توزینی داشت — تایید توزین.
 
-طبقِ گزارشِ صریحِ بعدیِ کاربر: (۱) انباردار باید بتواند خودِ سفارش را
-باز کند و مقدارِ واقعیِ تحویلی (وزنی یا تعدادی) را وارد/ادیت کند --
-نه صرفاً یک دکمهٔ «تایید» ساده روی کلِ سفارش. (۲) بعدِ تاییدِ انبار،
-سفارش نباید کاملاً غیب شود -- تا وقتی به فاکتور تبدیل نشده (که همان
-«تاییدِ نهایی» است)، انباردار باید بتواند تاییدش را برگرداند و دوباره
-مقادیر را ویرایش کند. این صفحه حالا یک فهرستِ واحد (نه دو فهرستِ
-جداگانه) با وضعیتِ هر سفارش نشان می‌دهد؛ همه‌چیز از طریقِ بازکردنِ خودِ
-سفارش (دیالوگِ زیر) انجام می‌شود."""
+طبق گزارش صریح بعدی کاربر: (۱) انباردار باید بتواند خود سفارش را
+باز کند و مقدار واقعی تحویلی (وزنی یا تعدادی) را وارد/ادیت کند --
+نه صرفاً یک دکمهٔ «تایید» ساده روی کل سفارش. (۲) بعد تایید انبار،
+سفارش نباید کاملاً غیب شود — تا وقتی به فاکتور تبدیل نشده (که همان
+«تایید نهایی» است)، انباردار باید بتواند تاییدش را برگرداند و دوباره
+مقادیر را ویرایش کند. این صفحه حالا یک فهرست واحد (نه دو فهرست
+جداگانه) با وضعیت هر سفارش نشان می‌دهد؛ همه‌چیز از طریق بازکردن خود
+سفارش (دیالوگ زیر) انجام می‌شود."""
 
 from __future__ import annotations
 
@@ -39,14 +39,14 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin
 
-_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "عملیات"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ تحویلی"]
+_COLUMNS = ["شماره", "تاریخ", "طرف‌حساب", "جمع کل", "وضعیت", "عملیات"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدار سفارش", "مقدار تحویلی"]
 
 
 class _FulfillmentDialog(QDialog):
     def __init__(self, parent: QWidget, document_id: int, company_id: int) -> None:
         super().__init__(parent)
-        self.setWindowTitle("بازکردنِ سفارش -- تحویلِ انبار/توزین")
+        self.setWindowTitle("بازکردن سفارش — تحویل انبار/توزین")
         self.setMinimumWidth(560)
         self._document_id = document_id
         self._company_id = company_id
@@ -58,8 +58,8 @@ class _FulfillmentDialog(QDialog):
         layout.addWidget(self.header_label)
 
         self.editable_hint = QLabel(
-            "مقدارِ تحویلیِ هر ردیف را وارد/ویرایش کنید -- برایِ کالاهایِ ترازویی همان وزنِ واقعی، "
-            "برایِ بقیه همان تعدادِ واقعیِ تحویلی. اگر خالی/برابرِ مقدارِ سفارش بماند، همان مقدارِ سفارش لحاظ می‌شود."
+            "مقدار تحویلی هر ردیف را وارد/ویرایش کنید — برای کالاهای ترازویی همان وزن واقعی، "
+            "برای بقیه همان تعداد واقعی تحویلی. اگر خالی/برابر مقدار سفارش بماند، همان مقدار سفارش لحاظ می‌شود."
         )
         self.editable_hint.setObjectName("sectionHint")
         self.editable_hint.setWordWrap(True)
@@ -72,7 +72,7 @@ class _FulfillmentDialog(QDialog):
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         layout.addWidget(self.lines_table)
 
-        self.save_button = QPushButton("💾 ذخیرهٔ مقادیرِ تحویلی")
+        self.save_button = QPushButton("💾 ذخیرهٔ مقادیر تحویلی")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self._save_quantities)
         layout.addWidget(self.save_button)
@@ -118,7 +118,7 @@ class _FulfillmentDialog(QDialog):
         requires_weighing = documents_service.document_requires_weighing(self._document_id, self._company_id)
 
         self.header_label.setText(
-            f"سفارشِ شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))} -- "
+            f"سفارش شمارهٔ {numerals.to_persian_digits(str(doc.document_no))} -- "
             f"{dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)} -- "
             f"{numerals.format_jalali_date(doc.document_date)}"
         )
@@ -142,18 +142,18 @@ class _FulfillmentDialog(QDialog):
         self.save_button.setEnabled(not converted)
 
         if converted:
-            self.warehouse_button.setText("✅ تاییدِ انبار (قطعی -- به فاکتور تبدیل شده)")
+            self.warehouse_button.setText("✅ تایید انبار (قطعی — به فاکتور تبدیل شده)")
             self.warehouse_button.setEnabled(False)
-            self.weighing_button.setText("✅ تاییدِ توزین (قطعی -- به فاکتور تبدیل شده)")
+            self.weighing_button.setText("✅ تایید توزین (قطعی — به فاکتور تبدیل شده)")
             self.weighing_button.setEnabled(False)
             self.weighing_button.setVisible(requires_weighing)
             return
 
         if doc.warehouse_approved_at is None:
-            self.warehouse_button.setText("✅ تاییدِ انبار")
+            self.warehouse_button.setText("✅ تایید انبار")
             self.warehouse_button.setObjectName("primaryButton")
         else:
-            self.warehouse_button.setText("↩️ بازگشتِ تاییدِ انبار")
+            self.warehouse_button.setText("↩️ بازگشت تایید انبار")
             self.warehouse_button.setObjectName("dangerButton")
         self.warehouse_button.setStyleSheet("")
         self.warehouse_button.style().unpolish(self.warehouse_button)
@@ -162,14 +162,14 @@ class _FulfillmentDialog(QDialog):
         self.weighing_button.setVisible(requires_weighing)
         if requires_weighing:
             if doc.warehouse_approved_at is None:
-                self.weighing_button.setText("✅ تاییدِ توزین (ابتدا انبار را تایید کنید)")
+                self.weighing_button.setText("✅ تایید توزین (ابتدا انبار را تایید کنید)")
                 self.weighing_button.setEnabled(False)
             elif doc.weighing_approved_at is None:
-                self.weighing_button.setText("✅ تاییدِ توزین")
+                self.weighing_button.setText("✅ تایید توزین")
                 self.weighing_button.setObjectName("primaryButton")
                 self.weighing_button.setEnabled(True)
             else:
-                self.weighing_button.setText("↩️ بازگشتِ تاییدِ توزین")
+                self.weighing_button.setText("↩️ بازگشت تایید توزین")
                 self.weighing_button.setObjectName("dangerButton")
                 self.weighing_button.setEnabled(True)
             self.weighing_button.setStyleSheet("")
@@ -222,12 +222,12 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(14)
 
-        title = QLabel("تاییدِ انبار و توزین -- سفارش‌هایِ پخشِ سرد")
+        title = QLabel("تایید انبار و توزین — سفارش‌های پخش سرد")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "فقط سفارش‌هایِ تصویب‌شده‌یِ کانالِ «پخشِ سرد» که هنوز به فاکتور تبدیل نشده‌اند این‌جا می‌آیند. "
-            "با «📂 بازکردن» می‌توانید مقدارِ واقعیِ تحویلی/توزین‌شدهٔ هر ردیف را وارد کنید و تاییدِ انبار/توزین را "
+            "فقط سفارش‌های تصویب‌شدهٔ کانال «پخش سرد» که هنوز به فاکتور تبدیل نشده‌اند این‌جا می‌آیند. "
+            "با «📂 بازکردن» می‌توانید مقدار واقعی تحویلی/توزین‌شدهٔ هر ردیف را وارد کنید و تایید انبار/توزین را "
             "بزنید یا (تا پیش از تبدیل به فاکتور) برگردانید."
         )
         hint.setObjectName("sectionHint")
@@ -239,8 +239,8 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
         filter_row.addWidget(QLabel("وضعیت"))
         self.status_filter = QComboBox()
         self.status_filter.addItem("(همه)", None)
-        self.status_filter.addItem("در انتظارِ تاییدِ انبار", "در انتظارِ تاییدِ انبار")
-        self.status_filter.addItem("در انتظارِ توزین", "در انتظارِ توزین")
+        self.status_filter.addItem("در انتظار تایید انبار", "در انتظار تایید انبار")
+        self.status_filter.addItem("در انتظار توزین", "در انتظار توزین")
         self.status_filter.addItem("آمادهٔ تبدیل به فاکتور", "آمادهٔ تبدیل به فاکتور")
         self.status_filter.currentIndexChanged.connect(self.refresh)
         filter_row.addWidget(self.status_filter)
@@ -262,7 +262,7 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
 
         self.set_field_help([
             (self.status_filter, "فقط سفارش‌هایی که در همین مرحله هستند نشان داده شوند."),
-            (self.table, "سفارش‌هایِ پخشِ سردِ تصویب‌شده‌ای که هنوز به فاکتور تبدیل نشده‌اند -- با «بازکردن»، مقدارِ تحویلی و تاییدِ انبار/توزین انجام می‌شود."),
+            (self.table, "سفارش‌های پخش سرد تصویب‌شده‌ای که هنوز به فاکتور تبدیل نشده‌اند — با «بازکردن»، مقدار تحویلی و تایید انبار/توزین انجام می‌شود."),
         ])
 
     def _company_id(self) -> int | None:

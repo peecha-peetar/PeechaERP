@@ -22,27 +22,27 @@ const ITEM: CatalogItem = {
 
 const OLD_ITEM: CatalogItem = { ...ITEM, item_id: 8, barcode: "999", units: undefined };
 
-describe("واحدِ فروش در سبد (R225)", () => {
-  it("بارکدِ هر واحد کالا و واحدِ درست را برمی‌گرداند", () => {
+describe("واحد فروش در سبد (R225)", () => {
+  it("بارکد هر واحد کالا و واحد درست را برمی‌گرداند", () => {
     expect(resolveScannedCode([ITEM], "333")?.unit.code).toBe("CTN");
     expect(resolveScannedCode([ITEM], "222")?.unit.code).toBe("PACK");
     expect(resolveScannedCode([ITEM], "111")?.unit.code).toBe("PCS");
     expect(resolveScannedCode([ITEM], "404")).toBeNull();
   });
 
-  it("کشِ قدیمی بدونِ units: فقط واحدِ پایه، بارکدِ کالا همچنان کار می‌کند", () => {
+  it("کش قدیمی بدون units: فقط واحد پایه، بارکد کالا همچنان کار می‌کند", () => {
     expect(itemUnits(OLD_ITEM)).toHaveLength(1);
     const match = resolveScannedCode([OLD_ITEM], "999");
     expect(match?.unit.uom_id).toBe(1);
     expect(match?.unit.factor).toBe("1");
   });
 
-  it("واحدِ پیش‌فرضِ فروش", () => {
+  it("واحد پیش‌فرض فروش", () => {
     expect(defaultSalesUnit(ITEM).code).toBe("CTN");
     expect(defaultSalesUnit(OLD_ITEM).uom_id).toBe(1);
   });
 
-  it("۲ کارتن + ۳ بسته + ۴ عدد = ۷۰ عدد؛ ردیف‌ها جدا و مبلغ به قیمتِ هر واحد", () => {
+  it("۲ کارتن + ۳ بسته + ۴ عدد = ۷۰ عدد؛ ردیف‌ها جدا و مبلغ به قیمت هر واحد", () => {
     const base = { item: ITEM, discountAmount: 0, taxPercent: 0 };
     const cart: Cart = {
       [cartKey(7, 3)]: { ...base, quantity: 2, unitPrice: 230000, uomId: 3, uomCode: "CTN", factor: 24 },

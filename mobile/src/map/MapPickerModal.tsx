@@ -94,9 +94,9 @@ export function MapPickerModal({ visible, initialLatitude, initialLongitude, onC
     <Modal visible={visible} animationType="slide" onRequestClose={onCancel}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <View style={{ padding: spacing.lg, paddingBottom: spacing.sm }}>
-          <Text style={[typography.h3, { color: colors.textPrimary }]}>انتخابِ موقعیتِ مکانی رویِ نقشه</Text>
+          <Text style={[typography.h3, { color: colors.textPrimary }]}>انتخاب موقعیت مکانی روی نقشه</Text>
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-            رویِ نقشه ضربه بزنید یا نشانگر را جابه‌جا کنید، سپس «تایید» را بزنید.
+            روی نقشه ضربه بزنید یا نشانگر را جابه‌جا کنید، سپس «تایید» را بزنید.
           </Text>
         </View>
         {visible ? (

@@ -54,24 +54,24 @@ from peecha.services import detail_dimensions as dimensions_service
 lang_id = company.default_language_id
 A = lambda code, name, nature, typ, perm, post, parent=None: coa_service.create_account(company_id, code, name, nature, typ, perm, post, lang_id, parent_account_id=parent)
 g1 = A("1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False)
-k1 = A("11", "موجودیِ نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+k1 = A("11", "موجودی نقد", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
 cash_gl = A("101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, k1.account_id)
 k2 = A("13", "دریافتنی‌ها", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-ar_gl = A("1304", "دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
-k3 = A("12", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
-inv_gl = A("121", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
+ar_gl = A("1304", "دریافتنی مشتریان", "DEBIT", "ASSET", "PERMANENT", True, k2.account_id)
+k3 = A("12", "موجودی انبار", "DEBIT", "ASSET", "PERMANENT", False, g1.account_id)
+inv_gl = A("121", "موجودی کالا", "DEBIT", "ASSET", "PERMANENT", True, k3.account_id)
 g2 = A("4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False)
-k4 = A("41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
+k4 = A("41", "درآمد عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, g2.account_id)
 rev_gl = A("411", "فروش", "CREDIT", "REVENUE", "TEMPORARY", True, k4.account_id)
-discount_gl = A("412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+discount_gl = A("412", "تخفیف فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
 g4 = A("2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False)
-k7 = A("21", "بدهیِ مالياتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-tax_gl = A("2101", "مالياتِ ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
+k7 = A("21", "بدهی مالیاتی", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
+tax_gl = A("2101", "مالیات ارزش‌افزودهٔ فروش", "CREDIT", "LIABILITY", "PERMANENT", True, k7.account_id)
 g3 = A("5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False)
-k5 = A("51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-cogs_gl = A("511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
+k5 = A("51", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
+cogs_gl = A("511", "بهای تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, k5.account_id)
 k6 = A("59", "سایر", "DEBIT", "EXPENSE", "TEMPORARY", False, g3.account_id)
-adj_gl = A("599", "اصلاحِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+adj_gl = A("599", "اصلاح موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_gl.account_id)
 engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
 engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
@@ -101,8 +101,8 @@ def raises(fn):
     return False
 
 k8 = A("32", "پرداختنی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, g4.account_id)
-ap_gl = A("3201", "پرداختنیِ تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
-reval_gl = A("598", "تسعیرِ موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
+ap_gl = A("3201", "پرداختنی تامین‌کنندگان", "CREDIT", "LIABILITY", "PERMANENT", True, k8.account_id)
+reval_gl = A("598", "تسعیر موجودی", "DEBIT", "EXPENSE", "TEMPORARY", True, k6.account_id)
 engine_service.set_account_mapping(company_id, "SUPPLIER_PAYABLE", ap_gl.account_id)
 engine_service.set_account_mapping(company_id, "INVENTORY_ADJUSTMENT_LOSS", adj_gl.account_id)
 item_dim = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
@@ -195,17 +195,17 @@ s3 = dimensions_service.create_supplier(company_id, "S3", "تامین‌کنند
 req = prs.create_request(company_id, uid, prs.RequestFields(request_date=today, required_date=today + dt.timedelta(days=20), warehouse_id=wh))
 l1 = prs.add_line(req, company_id, bolt, pcs, D(50), None, s1, D(100))
 l2 = prs.add_line(req, company_id, plain, pcs, D(10), None, s2, D(50))
-check(raises(lambda: rfqs.create_from_request(req, company_id, uid)), "استعلام از درخواستِ تصویب‌نشده رد شد")
+check(raises(lambda: rfqs.create_from_request(req, company_id, uid)), "استعلام از درخواست تصویب‌نشده رد شد")
 prs.submit_request(req, company_id); prs.approve_request(req, company_id, uid)
 rfq = rfqs.create_from_request(req, company_id, uid, today + dt.timedelta(days=3))
 row, lines, sups, _q = rfqs.get_rfq(rfq, company_id)
 check(len(lines) == 2 and {s.supplier_detail_account_id for s in sups} == {s1, s2} and lines[0].purchase_request_line_id == l1,
-      "ردیف‌ها و تامین‌کنندگانِ پیشنهادی از درخواست")
+      "ردیف‌ها و تامین‌کنندگان پیشنهادی از درخواست")
 rfqs.add_supplier(rfq, company_id, s3)
-check(raises(lambda: rfqs.add_supplier(rfq, company_id, s3)), "دعوتِ تکراری رد شد")
+check(raises(lambda: rfqs.add_supplier(rfq, company_id, s3)), "دعوت تکراری رد شد")
 check(raises(lambda: rfqs.record_quote(sups[0].rfq_supplier_id, lines[0].line_id, company_id, D(1))), "پیشنهاد پیش از ارسال رد شد")
 rfqs.send_rfq(rfq, company_id)
-check(raises(lambda: rfqs.add_line(rfq, company_id, bolt, pcs, D(1))), "ردیف به استعلامِ ارسال‌شده اضافه نمی‌شود")
+check(raises(lambda: rfqs.add_line(rfq, company_id, bolt, pcs, D(1))), "ردیف به استعلام ارسال‌شده اضافه نمی‌شود")
 sp = {s.supplier_detail_account_id: s.rfq_supplier_id for s in rfqs.get_rfq(rfq, company_id)[2]}
 lb, lp = lines[0].line_id, lines[1].line_id
 
@@ -215,61 +215,61 @@ rfqs.record_quote(sp[s1], lp, company_id, D(45), D(0), 5)
 rfqs.record_quote(sp[s2], lb, company_id, D(95), D(0), 10)
 rfqs.record_quote(sp[s2], lp, company_id, D(40), D(10), 10, today + dt.timedelta(days=30))
 rfqs.decline(sp[s3], company_id, "موجودی ندارد")
-check(raises(lambda: rfqs.record_quote(sp[s1], lb, company_id, D(10), D(150))), "تخفیفِ بیش از ۱۰۰٪ رد شد")
+check(raises(lambda: rfqs.record_quote(sp[s1], lb, company_id, D(10), D(150))), "تخفیف بیش از ۱۰۰٪ رد شد")
 cmp_ = rfqs.compare(rfq, company_id)
 best = {c.line.line_id: c.supplier.supplier_detail_account_id for c in cmp_ if c.is_best}
-check(best == {lb: s1, lp: s2}, f"بهترین: فیِ برابر → زمانِ تحویلِ کمتر؛ تخفیف در فیِ خالص (got {best})")
-check(next(c.net for c in cmp_ if c.line.line_id == lp and c.is_best) == 36, "فیِ خالص = ۴۰ × ۹۰٪")
+check(best == {lb: s1, lp: s2}, f"بهترین: فی برابر → زمان تحویل کمتر؛ تخفیف در فی خالص (got {best})")
+check(next(c.net for c in cmp_ if c.line.line_id == lp and c.is_best) == 36, "فی خالص = ۴۰ × ۹۰٪")
 
 # --- ۳) انتخاب و سفارش
-check(raises(lambda: rfqs.create_orders(rfq, company_id, uid)), "سفارش پیش از انتخابِ برنده رد شد")
+check(raises(lambda: rfqs.create_orders(rfq, company_id, uid)), "سفارش پیش از انتخاب برنده رد شد")
 q_bad = [c.quote.quote_id for c in cmp_ if c.line.line_id == lb]
-check(raises(lambda: rfqs.award(rfq, company_id, uid, q_bad)), "دو برنده برایِ یک ردیف رد شد")
+check(raises(lambda: rfqs.award(rfq, company_id, uid, q_bad)), "دو برنده برای یک ردیف رد شد")
 rfqs.award(rfq, company_id, uid)
 orders = rfqs.create_orders(rfq, company_id, uid)
-check(len(orders) == 2 and rfqs.get_rfq(rfq, company_id)[0].status_code == "ORDERED", "یک سفارش برایِ هر برنده")
+check(len(orders) == 2 and rfqs.get_rfq(rfq, company_id)[0].status_code == "ORDERED", "یک سفارش برای هر برنده")
 po_s2 = next(o for o in orders if doc_of(o)[0].counterparty_detail_account_id == s2)
 d, ls = doc_of(po_s2)
 check(ls[0].unit_price == 40 and ls[0].discount_percent == 10 and ls[0].purchase_request_line_id == l2 and ls[0].rfq_quote_id is not None
-      and d.warehouse_id == wh, "ردیفِ سفارش: فی، تخفیف، پیوند به درخواست و پیشنهاد")
+      and d.warehouse_id == wh, "ردیف سفارش: فی، تخفیف، پیوند به درخواست و پیشنهاد")
 _r, plines = prs.get_request(req, company_id)
-check(prs.fulfilment(plines, prs.ordered_quantities([l1, l2])) == "FULL", "درخواستِ خرید کاملاً سفارش شد")
-check(raises(lambda: rfqs.cancel_rfq(rfq, company_id)), "استعلامِ سفارش‌شده لغو نمی‌شود")
+check(prs.fulfilment(plines, prs.ordered_quantities([l1, l2])) == "FULL", "درخواست خرید کاملاً سفارش شد")
+check(raises(lambda: rfqs.cancel_rfq(rfq, company_id)), "استعلام سفارش‌شده لغو نمی‌شود")
 
 # استعلامِ دوم: پیشنهادِ منقضی و پاسخِ معوق
 rfq2 = rfqs.create_rfq(company_id, uid, today, today + dt.timedelta(days=2), "دستی")
-check(raises(lambda: rfqs.send_rfq(rfq2, company_id)), "ارسالِ استعلامِ بدونِ ردیف رد شد")
+check(raises(lambda: rfqs.send_rfq(rfq2, company_id)), "ارسال استعلام بدون ردیف رد شد")
 x1 = rfqs.add_line(rfq2, company_id, bolt, pcs, D(5))
 rfqs.add_supplier(rfq2, company_id, s1); rfqs.add_supplier(rfq2, company_id, s2)
 rfqs.send_rfq(rfq2, company_id)
 sp2 = {s.supplier_detail_account_id: s.rfq_supplier_id for s in rfqs.get_rfq(rfq2, company_id)[2]}
 qx = rfqs.record_quote(sp2[s1], x1, company_id, D(80), D(0), None, today - dt.timedelta(days=1))
-check(raises(lambda: rfqs.award(rfq2, company_id, uid, [qx])), "انتخابِ پیشنهادِ منقضی رد شد")
-check(raises(lambda: rfqs.create_rfq(company_id, uid, today, today - dt.timedelta(days=1))), "مهلتِ پاسخِ پیش از تاریخ رد شد")
+check(raises(lambda: rfqs.award(rfq2, company_id, uid, [qx])), "انتخاب پیشنهاد منقضی رد شد")
+check(raises(lambda: rfqs.create_rfq(company_id, uid, today, today - dt.timedelta(days=1))), "مهلت پاسخ پیش از تاریخ رد شد")
 
 # --- ۴) گزارش‌ها
 r = {x[0]: x for x in rows("RFQ_REGISTER")}
-check(r[1][5] == 3 and r[1][6] == 2 and r[1][7] == 1 and r[1][8] == 95 * 50 + 36 * 10, f"دفترِ استعلام‌ها (got {r[1]})")
+check(r[1][5] == 3 and r[1][6] == 2 and r[1][7] == 1 and r[1][8] == 95 * 50 + 36 * 10, f"دفتر استعلام‌ها (got {r[1]})")
 check(len(rows("RFQ_COMPARISON")) == 5 and len(rows("RFQ_COMPARISON", options={"view": "AWARDED"})) == 2, "مقایسهٔ پیشنهادها")
 r = {x[0][:2]: x for x in rows("RFQ_RESPONSE")}
-check(r["S1"][1] == 2 and r["S1"][2] == 2 and r["S1"][6] == 1 and r["S3"][3] == 1 and r["S3"][4] == 0, f"پاسخ‌گوییِ تامین‌کنندگان (got {r})")
+check(r["S1"][1] == 2 and r["S1"][2] == 2 and r["S1"][6] == 1 and r["S3"][3] == 1 and r["S3"][4] == 0, f"پاسخ‌گویی تامین‌کنندگان (got {r})")
 r = {x[1]: x for x in rows("RFQ_SAVINGS")}
 pl = next(v for k, v in r.items() if "پارچه" in k)
-check(pl[4] == 36 and pl[7] == 45 and pl[8] == 90, f"صرفه‌جوییِ استعلام (got {pl})")
+check(pl[4] == 36 and pl[7] == 45 and pl[8] == 90, f"صرفه‌جویی استعلام (got {pl})")
 r = rows("RFQ_PENDING")
-check(len(r) == 1 and "دو" in r[0][4], f"پاسخِ معوق (got {r})")
+check(len(r) == 1 and "دو" in r[0][4], f"پاسخ معوق (got {r})")
 check(len(rows("PO_WITHOUT_RFQ")) >= 1 and all(x[0] not in [doc_of(o)[0].document_no for o in orders] for x in rows("PO_WITHOUT_RFQ")),
-      "خریدِ بدونِ استعلام")
+      "خرید بدون استعلام")
 
 # --- ۵) UI
 from peecha import nav_catalog
 menu_codes = [e[0] for _g, _l, entries in nav_catalog.PURCHASE_REPORT_MENU for e in entries if not isinstance(e, dict)]
-check(sorted(menu_codes) == sorted(x.code for x in pr.REPORTS), "منویِ گزارش‌ها هم‌خوان")
+check(sorted(menu_codes) == sorted(x.code for x in pr.REPORTS), "منوی گزارش‌ها هم‌خوان")
 from peecha.ui.shell_window import MainWindow
 mw = MainWindow(); mw.resize(1400, 900); mw.show(); app.processEvents()
 mw.open_screen("PURCH_RFQ"); app.processEvents()
 scr = mw._screens["rfqs"]
-check(scr.list_table.rowCount() == 2, "فهرستِ استعلام‌ها")
+check(scr.list_table.rowCount() == 2, "فهرست استعلام‌ها")
 scr.new_rfq(); scr.description_field.setText("از فرم")
 scr.item_combo.setCurrentIndex(scr.item_combo.findData(plain)); app.processEvents()
 scr.qty_field.setText("۴"); scr.add_line()
@@ -280,20 +280,20 @@ scr.send()
 line_id = scr._lines[0].line_id
 scr.enter_quote([(line_id, D(30), D(0), 3, today + dt.timedelta(days=9))], scr._suppliers[0])
 scr.enter_quote([(line_id, D(28), D(0), 7, today + dt.timedelta(days=9))], scr._suppliers[1])
-check(scr.comparison_table.rowCount() == 2 and scr.comparison_table.item(0, 9).text() == "بهترین", "جدولِ مقایسه در فرم")
+check(scr.comparison_table.rowCount() == 2 and scr.comparison_table.item(0, 9).text() == "بهترین", "جدول مقایسه در فرم")
 scr.award(None)
 created = scr.create_orders(); app.processEvents()
 check(len(created) == 1 and doc_of(created[0])[0].counterparty_detail_account_id == s2
-      and mw._screens["commercial_document_purchase_order"]._document_id == created[0], "انتخابِ برنده و سفارش از فرم")
+      and mw._screens["commercial_document_purchase_order"]._document_id == created[0], "انتخاب برنده و سفارش از فرم")
 for code in ("RFQ_REGISTER", "RFQ_COMPARISON", "RFQ_RESPONSE", "RFQ_SAVINGS", "RFQ_PENDING", "PO_WITHOUT_RFQ"):
     mw.open_screen(f"PURCH_RPT_{code}"); app.processEvents()
     rs = mw._screens[f"purchase_report_{code.lower()}"]
     rs.date_from.setDate(today - dt.timedelta(days=60)); rs._reload()
-    check(rs.table.columnCount() > 0, f"گزارشِ {code} از منو")
+    check(rs.table.columnCount() > 0, f"گزارش {code} از منو")
 rs = mw._screens["purchase_report_rfq_register"]; rs._reload()
 rs._open_row(0, 0); app.processEvents()
 check(scr._rfq_id is not None and rfqs.get_rfq(scr._rfq_id, company_id)[0].rfq_no == int(numerals.to_ascii_digits(rs.table.item(0, 0).text())),
-      "دابل‌کلیکِ گزارش، استعلام را باز کرد")
+      "دابل‌کلیک گزارش، استعلام را باز کرد")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

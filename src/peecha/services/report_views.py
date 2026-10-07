@@ -1,6 +1,6 @@
-"""نماهایِ ذخیره‌شدهٔ گزارش -- R244: شخصی یا اشتراکی (در پایگاه‌داده، برایِ همهٔ کاربرانِ شرکت).
+"""نماهای ذخیره‌شدهٔ گزارش — R244: شخصی یا اشتراکی (در پایگاه‌داده، برای همهٔ کاربران شرکت).
 
-payload همان دیکشنریِ نما (فیلترها، گزینه‌ها، مرتب‌سازی، گروه‌بندی، ستون‌هایِ پنهان) به‌صورتِ JSON است."""
+payload همان دیکشنری نما (فیلترها، گزینه‌ها، مرتب‌سازی، گروه‌بندی، ستون‌های پنهان) به‌صورت JSON است."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def list_views(company_id: int, report_key: str, user_id: int | None) -> list[Vi
 def save_view(company_id: int, report_key: str, user_id: int, name: str, payload: dict, is_shared: bool = False) -> int:
     name = (name or "").strip()
     if not name:
-        raise ValueError("نامِ نما الزامی است.")
+        raise ValueError("نام نما الزامی است.")
     with new_session() as session:
         row = session.scalar(select(ReportView).where(
             ReportView.company_id == company_id, ReportView.report_key == report_key, ReportView.owner_user_id == user_id,
