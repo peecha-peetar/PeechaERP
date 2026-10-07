@@ -18,6 +18,8 @@ interface Props {
   hideVisitPlan?: boolean;
   /** طبقِ «پخشِ سرد و گرم کاملاً مجزا باشند»: آمارِ امروز فقط سندِ همین حالت. */
   salesMode?: SalesMode;
+  /** R286: کارهای CRM (پیگیری‌ها، تیکت‌ها، ثبت سرنخ). */
+  onOpenCrmTasks?: () => void;
 }
 
 /** صفحه‌یِ خانه -- طبقِ اصلِ صریحِ کاربر («در ۳ ثانیه اطلاعاتِ مهم را
@@ -25,7 +27,7 @@ interface Props {
  * درخواستِ تکی (/dashboard/today). برایِ بازکردنِ ویزیت، مشتری/برنامه‌یِ
  * کاملشان از کشِ محلیِ pull (که از قبل رویِ دستگاه هست) resolve می‌شود --
  * نه یک درخواستِ شبکه‌یِ دیگر. */
-export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, hideVisitPlan, salesMode }: Props) {
+export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, hideVisitPlan, salesMode, onOpenCrmTasks }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [summary, setSummary] = useState<TodaySummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,12 @@ export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, h
         <Text style={[typography.h2, { color: colors.textPrimary }]}>
           سلام، {userFullName.split(" ")[0]}
         </Text>
+
+        {onOpenCrmTasks ? (
+          <Card onPress={onOpenCrmTasks}>
+            <Text style={[typography.bodyBold, { color: colors.primary }]}>کارهای من، پیگیری‌ها و ثبت سرنخ</Text>
+          </Card>
+        ) : null}
 
         {loading ? (
           <SkeletonList count={3} />

@@ -139,6 +139,26 @@ export class SyncEngine {
         await this.api.recordSerialCount(action.payload.sessionId, action.payload.locationId, action.payload.itemId,
           action.payload.serialNos, action.idempotencyKey);
         return;
+      case "CRM_CREATE_LEAD":
+        await this.api.createCrmLead(action.payload, action.idempotencyKey);
+        return;
+      case "CRM_CREATE_ACTIVITY": {
+        // پیگیریِ پس از ویزیت: اگر شروعِ ویزیت هنوز شناسه نگرفته، پیگیری بدونِ اتصال به ویزیت ثبت می‌شود (رد نمی‌شود)
+        const { visitStartActionKey, ...payload } = action.payload;
+        if (visitStartActionKey && payload.customer_visit_id == null) {
+          payload.customer_visit_id = await this.visitCorrelation.get(visitStartActionKey);
+        }
+        await this.api.createCrmActivity(payload, action.idempotencyKey);
+        return;
+      }
+      case "CRM_COMPLETE_ACTIVITY": {
+        const { activityId, ...payload } = action.payload;
+        await this.api.completeCrmActivity(activityId, payload, action.idempotencyKey);
+        return;
+      }
+      case "CRM_CREATE_TICKET":
+        await this.api.createCrmTicket(action.payload, action.idempotencyKey);
+        return;
     }
   }
 

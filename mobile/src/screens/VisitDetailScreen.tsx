@@ -3,6 +3,7 @@ import { ScrollView, Text, View } from "react-native";
 import { CustomerRow, VisitPlanRow } from "../api/types";
 import { CaptureProvider } from "../capture";
 import { Button, Card, Input, StatusBadge } from "../components";
+import { parseJalaliDate } from "../jalali";
 import { LocationProvider } from "../location";
 import { OfflineQueue } from "../sync/offlineQueue";
 import { useTheme } from "../theme/ThemeProvider";
@@ -34,6 +35,9 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
   const [startActionKey, setStartActionKey] = useState<string | undefined>();
   const [gpsCaptured, setGpsCaptured] = useState(false);
   const [notes, setNotes] = useState("");
+  // R286: پیگیریِ پس از ویزیت (فعالیتِ CRM با تاریخ)
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpSubject, setFollowUpSubject] = useState("");
   const [skipReason, setSkipReason] = useState("");
   const [busy, setBusy] = useState(false);
   // طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
@@ -89,10 +93,22 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
 
   const complete = async () => {
     if (!startActionKey) return;
+    const followIso = followUpDate.trim() ? parseJalaliDate(followUpDate) : null;
+    if (followUpDate.trim() && !followIso) return;
     await offlineQueue.enqueue({
       type: "COMPLETE_VISIT",
       payload: { startActionKey, notes: notes.trim() || undefined, photoBase64, signatureBase64 },
     });
+    if (followIso) {
+      await offlineQueue.enqueue({
+        type: "CRM_CREATE_ACTIVITY",
+        payload: {
+          activity_type_code: "FOLLOW_UP", subject: followUpSubject.trim() || `پیگیری ویزیت ${customer.name}`,
+          customer_detail_account_id: customer.detail_account_id, due_date: followIso, description: notes.trim() || null,
+          visitStartActionKey: startActionKey,
+        },
+      });
+    }
     setPhase("DONE");
     onDone();
   };
@@ -147,6 +163,13 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
                 loading={capturingSignature}
               />
               <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} placeholder="مثلاً: قفسه‌چینی محصولات انجام شد" />
+              <Input label="پیگیری بعدی (تاریخ شمسی، اختیاری)" value={followUpDate} onChangeText={setFollowUpDate} placeholder="۱۴۰۵/۰۸/۱۵" />
+              {followUpDate.trim() ? (
+                <Input label="موضوع پیگیری" value={followUpSubject} onChangeText={setFollowUpSubject} />
+              ) : null}
+              {followUpDate.trim() && !parseJalaliDate(followUpDate) ? (
+                <StatusBadge statusCode="FAILED" label="تاریخ پیگیری نامعتبر است" />
+              ) : null}
               <Button label="تکمیل ویزیت" onPress={complete} />
 
               <Input

@@ -7,6 +7,7 @@ import {
   StartVisitRequest,
   StockTransferRequest,
 } from "../api/types";
+import { CrmActivityCompleteRequest, CrmActivityRequest, CrmLeadRequest, CrmTicketRequest } from "../api/crmTypes";
 import { generateIdempotencyKey } from "./idempotency";
 
 const QUEUE_KEY = "peecha.offline_queue";
@@ -68,7 +69,12 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "WMS_PICK"; payload: { taskId: number; quantity: string } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_REPLENISH"; payload: { taskId: number; quantity: string | null } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; quantity: string; batchNo?: string | null } }
-  | { idempotencyKey: string; createdAt: string; type: "WMS_SERIAL_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; serialNos: string[] } };
+  | { idempotencyKey: string; createdAt: string; type: "WMS_SERIAL_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; serialNos: string[] } }
+  // R286: CRM میدانی
+  | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_LEAD"; payload: CrmLeadRequest }
+  | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_ACTIVITY"; payload: CrmActivityRequest & { visitStartActionKey?: string } }
+  | { idempotencyKey: string; createdAt: string; type: "CRM_COMPLETE_ACTIVITY"; payload: { activityId: number } & CrmActivityCompleteRequest }
+  | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_TICKET"; payload: CrmTicketRequest };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -84,7 +90,11 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "WMS_PICK" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "WMS_REPLENISH" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "WMS_COUNT" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "WMS_SERIAL_COUNT" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "WMS_SERIAL_COUNT" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "CRM_CREATE_LEAD" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "CRM_CREATE_ACTIVITY" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "CRM_COMPLETE_ACTIVITY" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "CRM_CREATE_TICKET" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

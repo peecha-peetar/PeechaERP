@@ -59,6 +59,16 @@ import {
   LocationLabel,
   PutawaySource,
 } from "./types";
+import {
+  Crm360Response,
+  CrmActivityCompleteRequest,
+  CrmActivityRequest,
+  CrmLeadRequest,
+  CrmLeadRow,
+  CrmLeadSource,
+  CrmTasksResponse,
+  CrmTicketRequest,
+} from "./crmTypes";
 
 export type Fetcher = typeof fetch;
 
@@ -546,5 +556,38 @@ export class ApiClient {
 
   async getLocationLabels(locationId: number): Promise<LocationLabel[]> {
     return this.request<LocationLabel[]>(`/locations/${locationId}/labels`);
+  }
+
+  // --- CRM (R286) -------------------------------------------------------------
+  async getCrmTasks(): Promise<CrmTasksResponse> {
+    return this.request<CrmTasksResponse>("/crm/tasks");
+  }
+
+  async getCrm360(detailAccountId: number): Promise<Crm360Response> {
+    return this.request<Crm360Response>(`/crm/customers/${detailAccountId}/360`);
+  }
+
+  async listCrmLeadSources(): Promise<CrmLeadSource[]> {
+    return this.request<CrmLeadSource[]>("/crm/lead-sources");
+  }
+
+  async listMyLeads(): Promise<CrmLeadRow[]> {
+    return this.request<CrmLeadRow[]>("/crm/leads?open_only=true&mine=true");
+  }
+
+  async createCrmLead(payload: CrmLeadRequest, idempotencyKey?: string): Promise<{ lead_id: number }> {
+    return this.request("/crm/leads", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async createCrmActivity(payload: CrmActivityRequest, idempotencyKey?: string): Promise<{ activity_id: number }> {
+    return this.request("/crm/activities", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async completeCrmActivity(activityId: number, payload: CrmActivityCompleteRequest, idempotencyKey?: string): Promise<{ follow_up_activity_id: number | null }> {
+    return this.request(`/crm/activities/${activityId}/complete`, { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async createCrmTicket(payload: CrmTicketRequest, idempotencyKey?: string): Promise<{ ticket_id: number }> {
+    return this.request("/crm/tickets", { method: "POST", body: payload, idempotencyKey });
   }
 }

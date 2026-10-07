@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
 import { Customer360Response, CustomerStatement } from "../api/types";
+import { Crm360Response } from "../api/crmTypes";
 import { Button, Card, ErrorState, Input, SkeletonList, StatusBadge, useToast } from "../components";
 import { formatAmount } from "../format";
 import { formatJalaliDate, formatJalaliDateTime } from "../jalali";
@@ -11,6 +12,8 @@ interface Props {
   apiClient: ApiClient;
   detailAccountId: number;
   onBack: () => void;
+  /** R286: ثبتِ شکایت/درخواست برای همین مشتری. */
+  onNewTicket?: (customerName: string) => void;
 }
 
 const GUARANTEE_TYPE_LABELS: Record<string, string> = {
@@ -76,16 +79,59 @@ function StatTile({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
+const HEALTH_TONE: Record<string, "success" | "danger" | undefined> = { HEALTHY: "success", AT_RISK: "danger" };
+
+/** R286: خلاصهٔ هوشمندِ CRM -- همان تحلیلِ دسکتاپ (RFM، سلامت، ریسک ریزش، اقدام پیشنهادی). */
+function CrmInsights({ crm }: { crm: Crm360Response }) {
+  const { colors, spacing, typography, radius } = useTheme();
+  const a = crm.analytics;
+  return (
+    <View style={{ backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, marginTop: spacing.md }}>
+      <Text style={[typography.h3, { color: colors.textPrimary }]}>بینش مشتری</Text>
+      {a ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: spacing.sm }}>
+          <StatTile label="سلامت" value={`${a.health_score} — ${a.health_label}`} tone={HEALTH_TONE[a.health_band]} />
+          <StatTile label="ریسک ریزش" value={`${a.churn_risk}٪ — ${a.churn_label}`} tone={a.churn_band === "HIGH" ? "danger" : undefined} />
+          <StatTile label="RFM" value={`${a.rfm} — ${a.rfm_label}`} />
+          <StatTile label="ارزش طول عمر" value={formatAmount(a.clv_historical)} />
+        </View>
+      ) : null}
+      {a && a.segments.length > 0 ? (
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>سگمنت‌ها: {a.segments.join("، ")}</Text>
+      ) : null}
+      {crm.loyalty && crm.loyalty.lifetime_points > 0 ? (
+        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xxs }]}>
+          باشگاه مشتریان: {crm.loyalty.points} امتیاز — سطح {crm.loyalty.tier_label}
+        </Text>
+      ) : null}
+      <Text style={[typography.body, { color: colors.textPrimary, marginTop: spacing.sm }]}>{crm.summary}</Text>
+      {crm.smart_actions.map((s) => (
+        <Text key={s.code} style={[typography.caption, {
+          color: s.severity === "danger" ? colors.danger : s.severity === "warning" ? colors.warning : colors.info, marginTop: spacing.xxs,
+        }]}>
+          {s.text} ← {s.suggestion}
+        </Text>
+      ))}
+      <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.sm }]}>
+        کار باز: {crm.counts.open_activities} — عقب‌افتاده: {crm.counts.overdue_activities} — فرصت باز: {crm.counts.open_opportunities} —
+        تیکت باز: {crm.counts.open_tickets}
+      </Text>
+    </View>
+  );
+}
+
 /** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer 360)
  * و بازخوردِ کاربر رویِ R220 («بسیار ساده، بدونِ جذابیتِ گرافیکی» +
  * «CRM کجاست؟»): یک صفحه‌یِ واحد -- مالی/اعتبار، ضمانت‌ها، قراردادها،
  * CRM (فعالیت/تماس/یادداشت -- حالا با فرمِ ثبت/بستن، نه فقط نمایش)،
  * آدرس‌ها، Merchandising، ویزیت‌هایِ اخیر -- با ساختاربندیِ بصریِ
  * روشن‌تر (StatusBadge/کارت‌هایِ آماری) به‌جایِ فهرستِ متنیِ ساده. */
-export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props) {
+export function Customer360Screen({ apiClient, detailAccountId, onBack, onNewTicket }: Props) {
   const { colors, spacing, typography } = useTheme();
   const toast = useToast();
   const [data, setData] = useState<Customer360Response | null>(null);
+  // R286: بینش CRM (سلامت، ریسک ریزش، اقدام پیشنهادی) -- بدون دسترسی CRM یا آفلاین فقط پنهان می‌شود
+  const [crm, setCrm] = useState<Crm360Response | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,6 +164,10 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    apiClient.getCrm360(detailAccountId).then(setCrm).catch(() => setCrm(null));
+  }, [apiClient, detailAccountId]);
 
   const resetActivityForm = () => {
     setShowActivityForm(false);
@@ -238,6 +288,13 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
           </Text>
         ) : null}
       </View>
+
+      {crm ? <CrmInsights crm={crm} /> : null}
+      {onNewTicket ? (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button label="ثبت شکایت یا درخواست" variant="secondary" onPress={() => onNewTicket(detail.name)} />
+        </View>
+      ) : null}
 
       <SectionHeader label="معین حساب" count={statement?.lines.length ?? 0} />
       <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>

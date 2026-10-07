@@ -16,6 +16,9 @@ import { ApprovalsInboxScreen } from "./screens/ApprovalsInboxScreen";
 import { CustomerAddressesScreen } from "./screens/CustomerAddressesScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
+import { CrmLeadScreen } from "./screens/CrmLeadScreen";
+import { CrmTasksScreen } from "./screens/CrmTasksScreen";
+import { CrmTicketScreen } from "./screens/CrmTicketScreen";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -80,6 +83,9 @@ export type RootStackParamList = {
   Approvals: undefined;
   VehicleSettlement: undefined;
   Warehouse: undefined;
+  CrmTasks: undefined;
+  CrmLead: undefined;
+  CrmTicket: { detailAccountId: number; customerName?: string };
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -490,6 +496,44 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 apiClient={services.apiClient}
                 detailAccountId={route.params.detailAccountId}
                 onBack={() => navigation.navigate("CustomerDetail", { detailAccountId: route.params.detailAccountId })}
+                onNewTicket={(customerName) =>
+                  navigation.navigate("CrmTicket", { detailAccountId: route.params.detailAccountId, customerName })
+                }
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="CrmTasks">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CrmTasksScreen
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+                onOpenCustomer={(detailAccountId) => navigation.navigate("Customer360", { detailAccountId })}
+                onNewLead={() => navigation.navigate("CrmLead")}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="CrmLead">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CrmLeadScreen apiClient={services.apiClient} offlineQueue={services.offlineQueue} onDone={() => navigation.goBack()} />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="CrmTicket">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CrmTicketScreen
+                offlineQueue={services.offlineQueue}
+                customerDetailAccountId={route.params.detailAccountId}
+                customerName={route.params.customerName}
+                onDone={() => navigation.goBack()}
               />
             </SafeAreaView>
           )}
@@ -685,6 +729,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
               onOpenVisit={onOpenVisit}
               hideVisitPlan={selectedMode === "VAN_SALES"}
               salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
+              onOpenCrmTasks={() => navigation.navigate("CrmTasks")}
             />
           )}
         </MainTab.Screen>
