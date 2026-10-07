@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_settlements as settlements_service
@@ -121,7 +121,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         settings_box.addWidget(self.guest_customer_combo, stretch=1)
         settings_box.addWidget(QLabel("آستانهٔ مغایرت"))
         self.threshold_field = QDoubleSpinBox()
-        self.threshold_field.setDecimals(2)
+        self.threshold_field.setDecimals(decimals.money_decimals())
         self.threshold_field.setRange(0, 999999999)
         settings_box.addWidget(self.threshold_field)
         save_settings_button = QPushButton("💾")
@@ -438,7 +438,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         open_box = QHBoxLayout()
         open_box.addWidget(QLabel("وجه نقد ابتدای کار"))
         self.opening_cash_field = QDoubleSpinBox()
-        self.opening_cash_field.setDecimals(2)
+        self.opening_cash_field.setDecimals(decimals.money_decimals())
         self.opening_cash_field.setRange(0, 999999999)
         open_box.addWidget(self.opening_cash_field)
         self.open_session_button = QPushButton("📂")
@@ -452,7 +452,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         close_box = QHBoxLayout()
         close_box.addWidget(QLabel("وجه نقد شمارش‌شده"))
         self.closing_cash_field = QDoubleSpinBox()
-        self.closing_cash_field.setDecimals(2)
+        self.closing_cash_field.setDecimals(decimals.money_decimals())
         self.closing_cash_field.setRange(0, 999999999)
         close_box.addWidget(self.closing_cash_field)
         self.close_session_button = QPushButton("🔒")

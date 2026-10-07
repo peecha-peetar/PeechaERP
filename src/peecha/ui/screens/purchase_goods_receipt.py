@@ -171,7 +171,7 @@ class _GoodsReceiptDialog(QDialog):
 
         items_by_id = {it.item_id: it for it in catalog_service.list_items(self._company_id)}
         uoms = catalog_service.list_uoms(self._company_id)
-        uom_decimal_places = {u.uom_id: u.decimal_places for u in uoms}
+        uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in uoms}
         uom_names = {u.uom_id: u.name or u.code for u in uoms}
         self._qty_fields = {}
         self._line_warehouse_combos = {}

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import companies as companies_service
 from peecha.services import purchase_dashboard as dashboard_service
 from peecha.ui import theme
@@ -39,6 +39,8 @@ def format_kpi(value, kind: str, decimal_places: int = 0) -> str:
         return f"{numerals.format_money(decimal.Decimal(value), 1, None)}٪"
     if kind == "DAYS":
         return f"{numerals.to_persian_digits(str(value))} روز"
+    if isinstance(value, decimal.Decimal):
+        return decimals.format_qty(value)
     return numerals.to_persian_digits(str(value))
 
 

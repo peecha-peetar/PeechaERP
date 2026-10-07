@@ -29,7 +29,7 @@ from peecha.numerals import format_jalali_date
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import vehicle_loading as vehicle_loading_service
-from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import bind_qty_decimals, FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "انبار مبدا", "وضعیت"]
 _LINE_COLUMNS = ["کالا", "واحد", "مقدار برنامه‌ریزی‌شده", "موجودی لحظهٔ برنامه‌ریزی", "کسری"]
@@ -108,6 +108,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         self.quantity_field = QDoubleSpinBox()
         self.quantity_field.setRange(0.001, 999_999)
         self.quantity_field.setDecimals(3)
+        bind_qty_decimals(self.quantity_field, self.item_combo)
         add_line_row.addWidget(self.quantity_field)
         self.add_line_button = QPushButton("➕")
         self.add_line_button.setObjectName("iconButton")

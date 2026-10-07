@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import stock_count as count_service
@@ -114,7 +114,7 @@ class StockCountScreen(QWidget):
             self.warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
         self._items = [it for it in catalog_service.list_items(company_id, active_only=True, transactable_only=True) if it.is_stock_tracked]
         self._uom_names = {u.uom_id: u.name for u in catalog_service.list_uoms(company_id)}
-        self._uom_decimals = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        self._uom_decimals = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in catalog_service.list_uoms(company_id)}
         self.item_combo.blockSignals(True)
         self.item_combo.clear()
         for it in self._items:
@@ -203,10 +203,10 @@ class StockCountScreen(QWidget):
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
                 self._uom_names.get(ln.counted_uom_id, ""),
-                numerals.format_money(ln.counted_quantity, 3) if ln.counted_quantity is not None else "",
-                f"{numerals.format_money(ln.counted_quantity_base, 3)} {base_name}" if ln.counted_quantity_base is not None else "",
-                f"{numerals.format_money(ln.expected_quantity_base, 3)} {base_name}",
-                (("+" if variance > 0 else "") + numerals.format_money(variance, 3)) if variance is not None else "",
+                decimals.format_qty(ln.counted_quantity) if ln.counted_quantity is not None else "",
+                f"{decimals.format_qty(ln.counted_quantity_base)} {base_name}" if ln.counted_quantity_base is not None else "",
+                f"{decimals.format_qty(ln.expected_quantity_base)} {base_name}",
+                (("+" if variance > 0 else "") + decimals.format_qty(variance)) if variance is not None else "",
             ]
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QTableWidgetItem(v))

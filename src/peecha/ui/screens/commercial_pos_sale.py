@@ -505,7 +505,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self._items = catalog_service.list_items(company_id, active_only=True)
         uoms = catalog_service.list_uoms(company_id)
         self._uom_names = {u.uom_id: u.name for u in uoms}
-        self._uom_decimals = {u.uom_id: u.decimal_places for u in uoms}
+        self._uom_decimals = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in uoms}
         # طبقِ رفعِ باگِ گزارش‌شده («وقتی کالایِ متغیردار انتخاب می‌شود،
         # متغیرها پیشنهاد داده نمی‌شوند و چیزی برایِ ثبت نیست»): این
         # مجموعه در _add_item_to_cart برایِ تشخیصِ «این کالا خودش

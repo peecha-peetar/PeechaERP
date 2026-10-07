@@ -75,6 +75,9 @@ def update_currency_decimal_places(currency_id: int, decimal_places: int) -> Non
             raise ValueError("ارز نامعتبر است.")
         currency.decimal_places = decimal_places
         session.commit()
+    from peecha import decimals
+
+    decimals.invalidate()
 
 
 def list_companies() -> list[CompanyRow]:

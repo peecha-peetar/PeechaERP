@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import commercial_pricing as pricing_service
@@ -52,7 +52,7 @@ from peecha.services import supplier_price_import as spi_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.db.models.commercial import DiscountRule, DiscountRuleTier, PriceList, PriceListItem, PriceListItemPriceHistory
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, confirm_and_delete, delete_button, wrap_scrollable
+from peecha.ui.widgets import bind_qty_decimals, FieldHelpMixin, JalaliDateEdit, confirm_and_delete, delete_button, wrap_scrollable
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "AMOUNT": "مبلغ ثابت", "TIERED": "پلکانی"}
 _PREVIEW_FIXED_COLUMNS = ["ردیف", "کد تامین‌کننده", "نام تامین‌کننده", "کالای شناسایی‌شده", "قیمت تامین‌کننده"]
@@ -210,11 +210,12 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         self.pl_min_qty_field = QDoubleSpinBox()
         self.pl_min_qty_field.setDecimals(2)
         self.pl_min_qty_field.setRange(1, 999999999)
+        bind_qty_decimals(self.pl_min_qty_field, self.pl_item_combo)
         self.pl_min_qty_field.setValue(1)
         self.pl_min_qty_field.setMaximumWidth(110)
         item_form.addWidget(self.pl_min_qty_field)
         self.pl_unit_price_field = QDoubleSpinBox()
-        self.pl_unit_price_field.setDecimals(2)
+        self.pl_unit_price_field.setDecimals(decimals.money_decimals())
         self.pl_unit_price_field.setRange(0, 999999999999)
         self.pl_unit_price_field.setMaximumWidth(150)
         item_form.addWidget(self.pl_unit_price_field)
@@ -317,7 +318,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(r.item_id),
                 "",
-                numerals.to_persian_digits(str(r.min_quantity)),
+                decimals.format_qty(r.min_quantity),
                 numerals.format_company_amount(r.unit_price),
             ]
             for col_index, value in enumerate(values):

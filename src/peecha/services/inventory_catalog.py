@@ -153,6 +153,9 @@ def create_uom(
         )
         session.add(uom)
         session.commit()
+        from peecha import decimals
+
+        decimals.invalidate()
         return uom.uom_id
 
 
@@ -181,6 +184,9 @@ def update_uom(
         uom.description = description or None
         uom.updated_at = func.now()
         session.commit()
+        from peecha import decimals
+
+        decimals.invalidate()
 
 
 def _uom_in_use(session, uom_id: int) -> bool:

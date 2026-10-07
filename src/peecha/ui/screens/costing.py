@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import roles as roles_service
 from peecha.services.costing import dashboard as costing_dashboard
 from peecha.services.costing import replacement as costing_replacement
@@ -162,7 +162,7 @@ class ReplacementCostScreen(QWidget):
         self.warehouse_combo = QComboBox()
         self.cost_field = QDoubleSpinBox()
         self.cost_field.setRange(0, 1e13)
-        self.cost_field.setDecimals(2)
+        self.cost_field.setDecimals(decimals.money_decimals())
         self.date_field = JalaliDateEdit()
         self.note_field = QLineEdit()
         self.note_field.setPlaceholderText("علت/منبع")
@@ -218,7 +218,7 @@ class ReplacementCostScreen(QWidget):
         if item_id is None:
             return
         for u in uc.get_item_units(item_id):
-            self.uom_combo.addItem(f"{u.name or u.code} (×{numerals.to_persian_digits(str(u.factor.normalize()))})", u.uom_id)
+            self.uom_combo.addItem(f"{u.name or u.code} (×{decimals.plain(u.factor)})", u.uom_id)
 
     def _fill_table(self) -> None:
         company_id = self._company_id()
@@ -228,7 +228,7 @@ class ReplacementCostScreen(QWidget):
         for r, row in enumerate(rows):
             item = self._items.get(row.item_id)
             cells = [f"{item.code} — {item.name or ''}" if item else str(row.item_id), whs.get(row.warehouse_id, ""),
-                     numerals.format_money(row.unit_cost, 2), numerals.format_jalali_date(row.effective_date),
+                     decimals.format_amount(row.unit_cost), numerals.format_jalali_date(row.effective_date),
                      costing_replacement.SOURCES.get(row.source_code, row.source_code), row.note or ""]
             for c, text in enumerate(cells):
                 self.table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
@@ -364,9 +364,9 @@ class RecalculationScreen(QWidget):
             item = self._items.get(ln.item_id)
             cells = [f"{item.code} — {item.name or ''}" if item else str(ln.item_id), self._warehouses.get(ln.warehouse_id, ""),
                      f"{DOC_TYPE_TITLES.get(ln.doc_type, ln.doc_type)} {ln.document_no}" + (" (ورود)" if ln.direction == "IN" else ""),
-                     numerals.format_jalali_date(ln.movement_date), numerals.format_money(ln.quantity, 2, None),
-                     numerals.format_money(ln.old_amount, 0), numerals.format_money(ln.new_amount, 0),
-                     numerals.format_money(ln.delta, 0)]
+                     numerals.format_jalali_date(ln.movement_date), decimals.format_qty(ln.quantity),
+                     decimals.format_amount(ln.old_amount), decimals.format_amount(ln.new_amount),
+                     decimals.format_amount(ln.delta)]
             for c, text in enumerate(cells):
                 self.table.setItem(row, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
         skipped = [r for r in self.results if not r.ok]
@@ -374,7 +374,7 @@ class RecalculationScreen(QWidget):
             f"«{self._items[r.item_id].code if r.item_id in self._items else r.item_id}»: {r.message}" for r in skipped))
         total = sum((ln.delta for ln in changed if ln.direction == "OUT"), decimal.Decimal(0))
         self.status_label.setText(numerals.to_persian_digits(
-            f"{len(changed)} ردیف تغییر می‌کند؛ اثر بر بهای تمام‌شده: {numerals.format_money(total, 0)}" if changed
+            f"{len(changed)} ردیف تغییر می‌کند؛ اثر بر بهای تمام‌شده: {decimals.format_amount(total)}" if changed
             else "اختلافی پیدا نشد."))
         return changed
 

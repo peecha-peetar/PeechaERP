@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_settings as settings_service
 from peecha.services import roles as roles_service
@@ -267,7 +267,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             return "تبدیل‌نشده"
         if invoiced >= ordered:
             return "کامل"
-        return f"جزئی ({numerals.format_money(invoiced, 3)} از {numerals.format_money(ordered, 3)})"
+        return f"جزئی ({decimals.format_qty(invoiced)} از {decimals.format_qty(ordered)})"
 
     def _build_row_actions(self, d, fulfillment=None, pre_sales_status: str | None = None) -> QWidget:
         actions = QWidget()

@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -146,15 +146,15 @@ class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
             item = items_by_id.get(status.item_id)
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(status.item_id),
-                numerals.format_money(status.quantity, 3),
-                numerals.format_money(status.settled_quantity, 3),
-                numerals.format_money(status.returned_quantity, 3),
-                numerals.format_money(status.remaining_quantity, 3),
+                decimals.format_qty(status.quantity),
+                decimals.format_qty(status.settled_quantity),
+                decimals.format_qty(status.returned_quantity),
+                decimals.format_qty(status.remaining_quantity),
             ]
             for col_index, value in enumerate(values):
                 self.line_table.setItem(row_index, col_index, QTableWidgetItem(value))
             qty_field = _AmountField()
-            qty_field.setDecimals(3)
+            qty_field.setDecimals(decimals.qty_decimals(item_id=status.item_id, default=3))
             qty_field.setValue(0)
             self._qty_fields[status.line_id] = qty_field
             self.line_table.setCellWidget(row_index, len(_LINE_COLUMNS) - 1, qty_field)

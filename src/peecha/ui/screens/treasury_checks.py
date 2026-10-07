@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.journal_entry import _make_searchable_combo
@@ -442,7 +442,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
                 c.check_no,
                 c.drawee_bank_name or "—",
                 c.drawer_name or "—",
-                numerals.format_money(c.amount, 0, None),
+                decimals.format_amount(c.amount),
                 numerals.format_jalali_date(c.due_date),
                 numerals.format_jalali_date(c.received_date),
                 c.current_location_label or "—",
@@ -463,7 +463,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         scope_word = "چک‌های تیک‌خورده" if checked_ids else "همهٔ چک‌های نمایش‌داده‌شده"
         self.ras_label.setText(
             f"راس روز ({scope_word}): {numerals.format_jalali_date(ras_date)}    —    "
-            f"جمع مبلغ: {numerals.format_money(total, 0, None)}"
+            f"جمع مبلغ: {decimals.format_amount(total)}"
         )
 
     def _checked_check_ids(self) -> list[int]:
@@ -737,7 +737,7 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
                 c.check_no,
                 c.bank_account_label or "—",
                 c.payee_name or "—",
-                numerals.format_money(c.amount, 0, None),
+                decimals.format_amount(c.amount),
                 numerals.format_jalali_date(c.due_date),
             ]
             for col_index, value in enumerate(values, start=1):
@@ -756,7 +756,7 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         scope_word = "چک‌های تیک‌خورده" if checked_ids else "همهٔ چک‌های نمایش‌داده‌شده"
         self.ras_label.setText(
             f"راس روز ({scope_word}): {numerals.format_jalali_date(ras_date)}    —    "
-            f"جمع مبلغ: {numerals.format_money(total, 0, None)}"
+            f"جمع مبلغ: {decimals.format_amount(total)}"
         )
 
     def _checked_check_ids(self) -> list[int]:

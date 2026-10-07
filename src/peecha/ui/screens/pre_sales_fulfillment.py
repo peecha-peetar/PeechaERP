@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -130,9 +130,9 @@ class _FulfillmentDialog(QDialog):
             item = items_by_id.get(ln.item_id)
             self.lines_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(ln.item_id)))
             self.lines_table.setItem(row_index, 1, QTableWidgetItem(item.base_uom_code if item else ""))
-            self.lines_table.setItem(row_index, 2, QTableWidgetItem(numerals.format_money(ln.quantity, 3)))
+            self.lines_table.setItem(row_index, 2, QTableWidgetItem(decimals.format_qty(ln.quantity)))
             qty_field = _AmountField()
-            qty_field.setDecimals(3)
+            qty_field.setDecimals(decimals.qty_decimals(getattr(ln, "uom_id", None), ln.item_id, default=3))
             qty_field.setValue(float(ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity))
             qty_field.setEnabled(not converted)
             self._qty_fields[ln.line_id] = qty_field
@@ -287,7 +287,7 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
                 numerals.to_persian_digits(str(doc.document_no)),
                 numerals.format_jalali_date(doc.document_date),
                 dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id),
-                numerals.format_money(doc.total_amount, 0),
+                decimals.format_amount(doc.total_amount),
                 statuses.get(doc.document_id, ""),
             ]
             for col_index, value in enumerate(values):

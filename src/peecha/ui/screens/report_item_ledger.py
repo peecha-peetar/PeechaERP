@@ -205,7 +205,7 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         # واحد با تعدادِ رقمِ اعشارِ ارزِ پایه‌یِ شرکت -- نه رقمِ خامِ
         # ذخیره‌شده در ستونِ Numeric.
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
-        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in catalog_service.list_uoms(company_id)}
         item = items_by_id.get(item_id)
         qty_decimals = uom_decimal_places.get(item.base_uom_id, 2) if item else 2
         cost_decimals = companies_service.get_base_currency_decimal_places(company_id)

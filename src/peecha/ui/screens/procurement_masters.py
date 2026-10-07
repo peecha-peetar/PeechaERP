@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.db.models.commercial import Branch, CancellationReason, PurchaseType
@@ -39,7 +39,7 @@ def _fill_table(table: QTableWidget, rows: list[list]) -> None:
 
 
 def _qty(value) -> str:
-    return "" if value is None else numerals.format_money(value, 2, None)
+    return "" if value is None else decimals.format_qty(value)
 
 
 class _CodeNameTab(QWidget):
@@ -427,8 +427,8 @@ class _BudgetsTab(QWidget):
         _fill_table(self.table, [[
             b.code, b.name, numerals.format_jalali_date(b.period_from), numerals.format_jalali_date(b.period_to),
             self._names.get(b.cost_center_detail_account_id, "همه"), self._names.get(b.project_detail_account_id, "همه"),
-            self._categories.get(b.category_id, "همه"), numerals.format_money(b.amount, 0, None),
-            numerals.format_money(usage[b.budget_id].consumed, 0, None), f"{numerals.format_money(usage[b.budget_id].used_percent, 1, None)}٪",
+            self._categories.get(b.category_id, "همه"), decimals.format_amount(b.amount),
+            decimals.format_amount(usage[b.budget_id].consumed), f"{numerals.format_money(usage[b.budget_id].used_percent, 1, None)}٪",
             "بله" if b.is_active else "خیر",
         ] for b in self._rows])
 

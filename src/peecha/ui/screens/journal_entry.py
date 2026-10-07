@@ -64,7 +64,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import decimals, session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -242,7 +242,8 @@ class _AmountField(QLineEdit):
     def __init__(self) -> None:
         super().__init__()
         self._value = 0.0
-        self._decimals = 0
+        # پیش‌فرض: اعشار ارز پایهٔ شرکت؛ فیلدهای مقدار/درصد خودشان setDecimals می‌کنند
+        self._decimals = decimals.money_decimals()
         self.setAlignment(Qt.AlignCenter)
         self._set_display()
         self.textEdited.connect(self._on_text_edited)

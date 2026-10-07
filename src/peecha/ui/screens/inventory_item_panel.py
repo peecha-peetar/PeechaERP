@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_pricing as pricing_service
@@ -70,7 +70,7 @@ _ECOMMERCE_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پ
 
 
 def _decimal_or_none(text: str) -> decimal.Decimal | None:
-    text = text.strip()
+    text = numerals.to_ascii_digits(text).replace(",", "").replace("٬", "").replace("٫", ".").strip()
     if not text:
         return None
     try:
@@ -1682,8 +1682,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.own_barcode_label.setText(it.barcode or "(بدون بارکد)")
 
         self.purchase_lead_time_field.setText(str(it.purchase_lead_time_days) if it.purchase_lead_time_days is not None else "")
-        self.purchase_min_order_field.setText(str(it.purchase_min_order_qty) if it.purchase_min_order_qty is not None else "")
-        self.purchase_package_qty_field.setText(str(it.purchase_package_qty) if it.purchase_package_qty is not None else "")
+        self.purchase_min_order_field.setText(decimals.plain(it.purchase_min_order_qty) if it.purchase_min_order_qty is not None else "")
+        self.purchase_package_qty_field.setText(decimals.plain(it.purchase_package_qty) if it.purchase_package_qty is not None else "")
 
         self.max_discount_field.setText(str(it.max_discount_percent) if it.max_discount_percent is not None else "")
         self.sales_commission_field.setText(str(it.sales_commission_percent) if it.sales_commission_percent is not None else "")
@@ -1896,16 +1896,16 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             if key == "method_label":
                 text = value
             elif key in ("quantity", "pending_allocations"):
-                text = numerals.format_money(value, 2, None) if value is not None else "—"
+                text = decimals.format_qty(value, item_id=self._item_id) if value is not None else "—"
             else:
-                text = numerals.format_money(value, 0) if value is not None else "—"
+                text = decimals.format_amount(value) if value is not None else "—"
             if key == "replacement_cost" and info.replacement_source:
                 text += f"  ({info.replacement_source})"
             label.setText(numerals.to_persian_digits(str(text)))
         rows = cost_valuation.cost_history(self._company_id, self._item_id)[-20:][::-1]
         self.cost_history_table.setRowCount(len(rows))
         for r, h in enumerate(rows):
-            cells = [numerals.format_jalali_date(h.date), numerals.format_money(h.unit_cost, 0),
+            cells = [numerals.format_jalali_date(h.date), decimals.format_amount(h.unit_cost),
                      "ورود" if h.direction == "IN" else "خروج", DOC_TYPE_TITLES.get(h.source, h.source), h.supplier,
                      str(h.document_no or ""), cost_strategies.METHOD_LABELS.get(h.method, h.method)]
             for c, text in enumerate(cells):
@@ -1919,7 +1919,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.locations_table.setRowCount(len(self._location_rows))
         for r, loc in enumerate(self._location_rows):
             cells = [loc.warehouse, loc.zone, loc.aisle, loc.rack, loc.level, loc.bin, loc.location_code,
-                     numerals.format_money(loc.quantity, 2, None)]
+                     decimals.format_qty(loc.quantity)]
             for c, text in enumerate(cells):
                 self.locations_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
         self._load_storage_profile()
@@ -2130,7 +2130,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
                 "✓" if u.is_default_purchase else "",
                 "✓" if u.is_default_sales else "",
                 "، ".join(u.barcodes),
-                numerals.format_money(price, 0) if price is not None else "",
+                decimals.format_amount(price) if price is not None else "",
                 "فعال" if u.is_active else "غیرفعال",
             ]
             for col_index, value in enumerate(values):
@@ -2563,7 +2563,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         for row_index, line in enumerate(lines):
             other = next((r for r in self._rows if r.item_id == line.component_item_id), None)
             label = f"{other.code} — {other.name or ''}" if other is not None else str(line.component_item_id)
-            values = [str(line.quantity_per), label]
+            values = [decimals.format_qty(line.quantity_per), label]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, line.bom_line_id)

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QMessageBox, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
@@ -76,8 +76,8 @@ class ConvertToOrderDialog(QDialog):
         for r, ln in enumerate(self._lines):
             remaining = (ln.quantity_base - ordered.get(ln.line_id, decimal.Decimal(0))) / ln.conversion_factor
             self.table.setItem(r, 0, QTableWidgetItem(numerals.to_persian_digits(item_labels.get(ln.item_id, ""))))
-            self.table.setItem(r, 1, QTableWidgetItem(numerals.format_money(ln.quantity, 2, None)))
-            self.table.setItem(r, 2, QTableWidgetItem(numerals.format_money(remaining, 2, None)))
+            self.table.setItem(r, 1, QTableWidgetItem(decimals.format_qty(ln.quantity)))
+            self.table.setItem(r, 2, QTableWidgetItem(decimals.format_qty(remaining, uom_id=ln.uom_id)))
             field = QLineEdit(numerals.to_persian_digits(format(remaining.normalize(), "f")))
             self.table.setCellWidget(r, 3, field)
             self.qty_fields.append(field)
@@ -331,11 +331,11 @@ class PurchaseRequestScreen(QWidget):
                 units[ln.item_id] = {u.uom_id: u.name for u in uc.get_item_units(ln.item_id, active_only=False)}
             done = ordered.get(ln.line_id, decimal.Decimal(0))
             cells = [self._items.get(ln.item_id, str(ln.item_id)), units[ln.item_id].get(ln.uom_id, ""),
-                     numerals.format_money(ln.quantity, 2, None),
+                     decimals.format_qty(ln.quantity),
                      numerals.format_jalali_date(ln.required_date) if ln.required_date else "",
                      suppliers.get(ln.suggested_supplier_detail_account_id, ""),
-                     numerals.format_money(ln.estimated_unit_price, 0, None) if ln.estimated_unit_price is not None else "",
-                     numerals.format_money(done, 2, None), numerals.format_money(max(ln.quantity_base - done, 0), 2, None)]
+                     decimals.format_amount(ln.estimated_unit_price) if ln.estimated_unit_price is not None else "",
+                     decimals.format_qty(done), decimals.format_qty(max(ln.quantity_base - done, 0), item_id=ln.item_id)]
             for c, text in enumerate(cells):
                 self.lines_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
 

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin
@@ -100,7 +100,7 @@ class TreasuryChecksDueScreen(FieldHelpMixin, QWidget):
                 kind,
                 check_no,
                 party,
-                numerals.format_money(amount, 0, None),
+                decimals.format_amount(amount),
                 numerals.format_jalali_date(due_date),
                 status_label,
                 numerals.to_persian_digits(str(days_left)),

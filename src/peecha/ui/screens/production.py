@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton, QSplitter, QStackedWidget, QTableWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha.services.production import common as pc
 from peecha.services.production import costing as pcost
 from peecha.services.production import dashboard as pdash
@@ -168,7 +168,7 @@ class PrdDashboard(_ProcurementDashboardBase):
         for code, kpi in self._kpis.items():
             card = self.cards[code]
             card._title_label.setText(kpi.title)
-            card.set_value("—" if kpi.kind == "MONEY" and not show_cost else format_kpi(kpi.value, kpi.kind, 0))
+            card.set_value("—" if kpi.kind == "MONEY" and not show_cost else format_kpi(kpi.value, kpi.kind, decimals.money_decimals()))
             card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارش مبدا")
         self._alerts = alerts
         level = {"RED": "🔴", "YELLOW": "🟡", "ORANGE": "🟠"}
@@ -315,7 +315,7 @@ class ProductionWizard(QDialog):
                 view = po.order_view(cid, self.order_id)
                 fill(self.consume_table, [[m.item_label, qty(m.required), qty(m.remaining)] for m in view.materials if not m.is_optional],
                      [m.material_id for m in view.materials if not m.is_optional])
-                self.produced_edit.setText(P(po.get_order(cid, self.order_id).planned_qty.normalize()))
+                self.produced_edit.setText(decimals.plain(po.get_order(cid, self.order_id).planned_qty))
             if i == 6:
                 lines = []
                 for r in range(self.consume_table.rowCount()):
@@ -586,7 +586,7 @@ class OrdersScreen(QWidget):
         forms = {
             "issue": [("material_id", "ماده", combo(mats)), ("quantity", "مقدار مصرف", num_field()), ("reason", "توضیح", QLineEdit())],
             "return": [("material_id", "ماده", combo(mats)), ("quantity", "مقدار برگشت", num_field()), ("reason", "علت", QLineEdit())],
-            "receipt": [("quantity", "تولید سالم", num_field(self.view.order.remaining_qty.normalize())),
+            "receipt": [("quantity", "تولید سالم", num_field(decimals.plain(self.view.order.remaining_qty))),
                         ("batch_no", "شمارهٔ بچ (اختیاری)", QLineEdit())]
             + [(f"out_{o.item_id}", f"{pc.OUTPUT_TYPES[o.output_type]}: {o.item_label}", num_field(0))
                for o in self.view.outputs if o.output_type != "MAIN"],
@@ -598,10 +598,10 @@ class OrdersScreen(QWidget):
             "machine": [("order_operation_id", "عملیات", combo(ops, "—")), ("hours", "ساعت", num_field()),
                         ("rate", "نرخ (خالی = خودکار)", num_field())],
             "hold": [("reason", "دلیل توقف", QLineEdit())],
-            "complete": [("quantity", "رسید نهایی (اختیاری)", num_field(self.view.order.remaining_qty.normalize())),
+            "complete": [("quantity", "رسید نهایی (اختیاری)", num_field(decimals.plain(self.view.order.remaining_qty))),
                          ("joint_method", "روش تخصیص تولید مشترک", combo([(v, k) for k, v in pc.JOINT_METHODS.items()]))],
             "reopen": [("reason", "دلیل بازگشایی", QLineEdit())], "cancel": [("reason", "دلیل لغو", QLineEdit())],
-            "reverse": [("txn_id", "رسید", combo([(f"{numerals.format_jalali_date(t.date)} -- {t.item_label} -- {t.quantity.normalize()}", t.txn_id)
+            "reverse": [("txn_id", "رسید", combo([(f"{numerals.format_jalali_date(t.date)} -- {t.item_label} -- {decimals.format_qty(t.quantity)}", t.txn_id)
                                                    for t in self.view.transactions if t.txn_type in ("RECEIPT", "CO_PRODUCT", "BY_PRODUCT")
                                                    and not t.reversed])),
                         ("reason", "دلیل", QLineEdit())],
@@ -1025,7 +1025,7 @@ class MasterDataScreen(QWidget):
         cid = company_id()
         rows = pm.list_work_centers(cid)
         fill(self.t_wcs, [[w.code, w.name, pc.CENTER_TYPES.get(w.center_type, ""), w.operator_count,
-                           f"{w.shifts_per_day} × {w.hours_per_shift.normalize()}", qty(w.efficiency_percent), w.labor_rate, w.machine_rate,
+                           f"{w.shifts_per_day} × {decimals.plain(w.hours_per_shift)}", qty(w.efficiency_percent), w.labor_rate, w.machine_rate,
                            w.overhead_rate, "، ".join(m.code for m in pm.work_center_machines(cid, w.work_center_id))] for w in rows],
              [w.work_center_id for w in rows])
 
@@ -1540,7 +1540,7 @@ class PrdSettingsScreen(QWidget):
                         w.addItem(P(label), data)
                 set_combo(w, value)
             else:
-                w.setText(P(value.normalize() if isinstance(value, decimal.Decimal) else value))
+                w.setText(decimals.plain(value) if isinstance(value, decimal.Decimal) else P(value))
         missing = pc.missing_roles(cid, tuple(pc.ROLE_LABELS))
         self.accounts_label.setText("نگاشت حساب‌های تولید (تنظیمات انبار ← نگاشت حساب‌ها): " +
                                     ("کامل است ✓" if not missing else "ناقص: " + "، ".join(missing)))

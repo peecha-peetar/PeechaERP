@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
@@ -158,7 +158,7 @@ class LotTraceScreen(QWidget):
             values = [
                 row.item_label, row.warehouse_label, row.batch_no or "", _date(row.manufacture_date), expiry,
                 row.serial_no or "", row.supplier_name or "", "امانی" if row.is_consignment else "",
-                numerals.format_money(row.quantity, 3),
+                decimals.format_qty(row.quantity),
             ]
             for c, v in enumerate(values):
                 self.balance_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(v) if c in (2, 5) else v))
@@ -190,7 +190,7 @@ class LotTraceScreen(QWidget):
             values = [
                 numerals.format_jalali_datetime(row.created_at), numerals.to_persian_digits(row.document_label),
                 row.item_label, row.warehouse_label, row.batch_no or "", row.serial_no or "",
-                row.supplier_name or "", "امانی" if row.is_consignment else "", numerals.format_money(row.quantity, 3),
+                row.supplier_name or "", "امانی" if row.is_consignment else "", decimals.format_qty(row.quantity),
             ]
             for c, v in enumerate(values):
                 self.trace_table.setItem(r, c, QTableWidgetItem(v))

@@ -91,6 +91,9 @@ def update_currency(currency_id: int, iso_code: str, symbol: str | None, decimal
         currency.decimal_places = decimal_places
         currency.is_active = is_active
         session.commit()
+        from peecha import decimals
+
+        decimals.invalidate()
 
 
 def delete_currency(currency_id: int) -> None:

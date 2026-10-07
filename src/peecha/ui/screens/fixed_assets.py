@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.db.models import fixed_assets as fam
 from peecha.services.fixed_assets import approval
 from peecha.services.fixed_assets import assets as fa
@@ -42,7 +42,7 @@ def P(value) -> str:
 
 
 def money(value) -> str:
-    return numerals.format_money(value, 0) if value is not None else "—"
+    return decimals.format_amount(value) if value is not None else "—"
 
 
 def dec(text: str) -> decimal.Decimal:
@@ -300,7 +300,7 @@ class FaDashboard(_ProcurementDashboardBase):
         for code, kpi in self._kpis.items():
             card = self.cards[code]
             card._title_label.setText(kpi.title)
-            card.set_value(format_kpi(kpi.value, kpi.kind, 0))
+            card.set_value(format_kpi(kpi.value, kpi.kind, decimals.money_decimals()))
             card.setToolTip(f"فرمول: {kpi.formula}\nکلیک: گزارش مبدا")
         fill(self.alerts_table, [[label, n] for label, n in alert_rows])
         for key, data in charts.items():
@@ -1159,8 +1159,8 @@ class SetupScreen(QWidget):
         self._grp_clear()
         s = fac.get_settings(cid)
         set_combo(self.start_rule, s.depreciation_start_rule)
-        self.improve_min.setText(P(s.improvement_capitalize_min.normalize()))
-        self.large_improve.setText(P(s.large_improvement_approval_min.normalize()) if s.large_improvement_approval_min else "")
+        self.improve_min.setText(decimals.plain(s.improvement_capitalize_min))
+        self.large_improve.setText(decimals.plain(s.large_improvement_approval_min) if s.large_improvement_approval_min else "")
         self.require_cc.setChecked(s.require_cost_center)
         allowed = can(self.FORM, "EDIT")
         for b in self.findChildren(QPushButton):
@@ -1214,8 +1214,8 @@ class SetupScreen(QWidget):
         self.cat_name.setText(c.name)
         set_combo(self.cat_method, c.default_method)
         self.cat_life.setText(P(c.default_life_months or ""))
-        self.cat_residual.setText(P(c.default_residual_percent.normalize()))
-        self.cat_rate.setText(P(c.default_declining_rate.normalize()) if c.default_declining_rate else "")
+        self.cat_residual.setText(decimals.plain(c.default_residual_percent))
+        self.cat_rate.setText(decimals.plain(c.default_declining_rate) if c.default_declining_rate else "")
         self.cat_cc_required.setChecked(c.cost_center_required)
         set_combo(self.cat_cc, c.default_cost_center_detail_account_id)
         for k, box in self.cat_accounts.items():

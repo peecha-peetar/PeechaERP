@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha import session as app_session
 from peecha.services import inventory_locations as locations_service
 from peecha.services import warehouse_locations as wl
@@ -722,14 +722,14 @@ class WarehouseMapScreen(QWidget):
             return [f"<hr><b>{_p(names)}</b>: در این محل موجودی ندارد"]
         unit = self._item_labels.get(self.search_item_ids[0], ("", "", ""))[2] if len(self.search_item_ids) == 1 else ""
         lines = ["<hr>" + _p(f"<b>{names}</b>"),
-                 _p(f"مقدار در این محل: <b>{numerals.format_money(p.quantity, 2, None)}</b> {unit}")]
+                 _p(f"مقدار در این محل: <b>{decimals.format_qty(p.quantity)}</b> {unit}")]
         if p.serials:
             shown = p.serials[:30]
             more = len(p.serials) - len(shown)
             lines.append(_p(f"سریال‌ها ({len(p.serials)}): ") + "، ".join(shown) + (_p(f" و {more} سریال دیگر") if more else ""))
         if p.batches:
             lines.append("بچ‌ها: " + _p("، ".join(
-                f"{lt.batch_no} ({numerals.format_money(lt.quantity, 2, None)}"
+                f"{lt.batch_no} ({decimals.format_qty(lt.quantity)}"
                 + (f"، انقضا {numerals.format_jalali_date(lt.expiry_date)}" if lt.expiry_date else "") + ")"
                 for lt in p.batches[:10])))
         return lines
@@ -749,7 +749,7 @@ class WarehouseMapScreen(QWidget):
             shelves = [k for k in self.nodes if k.parent_id == location_id and k.level == "SHELF"]
             lines.append(_p(f"{len(shelves)} طبقه، {sum(1 for k in self.nodes if k.parent_id in {s.location_id for s in shelves})} محل"))
         if o and o.quantity:
-            lines.append(_p(f"کالا: {len(o.items)} | مقدار: {numerals.format_money(o.quantity, 2, None)}")
+            lines.append(_p(f"کالا: {len(o.items)} | مقدار: {decimals.format_qty(o.quantity)}")
                          + (f" | اشغال: {_p(o.percent)}٪" if o.percent is not None else ""))
         lines += self._presence_html(location_id)
         return "<div dir='rtl'>" + "<br>".join(lines) + "</div>"
@@ -781,7 +781,7 @@ class WarehouseMapScreen(QWidget):
         if o:
             info.append(f"وزن: {cap(o.weight, 'kg')} از {cap(o.max_weight, 'kg')} | حجم: {cap(o.volume, 'm³')} از {cap(o.max_volume, 'm³')}")
             info.append(f"اشغال: <b>{_p(o.percent) + '٪' if o.percent is not None else 'ظرفیت تعریف نشده'}</b> | "
-                        f"تعداد کالا: {_p(len(o.items))} | مقدار: {_p(numerals.format_money(o.quantity, 2, None))}")
+                        f"تعداد کالا: {_p(len(o.items))} | مقدار: {_p(decimals.format_qty(o.quantity))}")
             if o.percent is not None and o.percent > 100:
                 info.append(f"<span style='color:{theme.DANGER}'>⚠ اشغال بیش از ظرفیت است.</span>")
         flags = [t for t, ok in (("برداشت", node.is_pickable), ("جانمایی", node.allow_putaway),
@@ -806,7 +806,7 @@ class WarehouseMapScreen(QWidget):
         self._contents = rows
         self.contents_table.setRowCount(len(rows))
         for r, c in enumerate(rows):
-            cells = [c.location_code, f"{c.item_code} — {c.item_name or ''}", numerals.format_money(c.quantity, 2, None), c.unit,
+            cells = [c.location_code, f"{c.item_code} — {c.item_name or ''}", decimals.format_qty(c.quantity), c.unit,
                      c.batches, c.serials, numerals.format_jalali_date(c.expiry) if c.expiry else ""]
             for col, text in enumerate(cells):
                 self.contents_table.setItem(r, col, QTableWidgetItem(_p(text)))
@@ -834,7 +834,7 @@ class WarehouseMapScreen(QWidget):
                  f"طبقه: {_p(len(shelves))} | خانهٔ قفسه: {_p(n_bins)} | وضعیت: {wl.STATUSES.get(rack.status_code, '')}"]
         if ro:
             lines.append(f"اشغال: <b>{_p(ro.percent) + '٪' if ro.percent is not None else 'ظرفیت تعریف نشده'}</b> | "
-                         f"تعداد کالا: {_p(len(ro.items))} | مقدار: {_p(numerals.format_money(ro.quantity, 2, None))}")
+                         f"تعداد کالا: {_p(len(ro.items))} | مقدار: {_p(decimals.format_qty(ro.quantity))}")
         self.rack_title.setText(_p(f"قفسهٔ {rack.full_code}" + (f" -- {rack.name}" if rack.name else "")))
         self.rack_info.setText("<br>".join(lines))
         self.elevation_table.setRowCount(len(shelves))
@@ -865,7 +865,7 @@ class WarehouseMapScreen(QWidget):
         self.history_table.setRowCount(len(rows))
         for r, h in enumerate(rows):
             cells = [numerals.format_jalali_datetime(h.at) if h.at else "", h.kind, h.detail, h.item,
-                     numerals.format_money(h.quantity, 2, None) if h.quantity is not None else ""]
+                     decimals.format_qty(h.quantity) if h.quantity is not None else ""]
             for col, text in enumerate(cells):
                 self.history_table.setItem(r, col, QTableWidgetItem(_p(text)))
 
@@ -1046,7 +1046,7 @@ class WarehouseMapScreen(QWidget):
         rows = [c for c in getattr(self, "_contents", []) if c.location_id == node.location_id] or getattr(self, "_contents", [])
         if not rows:
             raise ValueError("این محل کالایی ندارد.")
-        labels = [_p(f"{c.item_code} — {c.item_name} ({numerals.format_money(c.quantity, 2, None)}) @ {c.location_code}") for c in rows]
+        labels = [_p(f"{c.item_code} — {c.item_name} ({decimals.format_qty(c.quantity)}) @ {c.location_code}") for c in rows]
         choice, ok = QInputDialog.getItem(self, "انتقال", "کالا:", labels, 0, False)
         if not ok:
             return

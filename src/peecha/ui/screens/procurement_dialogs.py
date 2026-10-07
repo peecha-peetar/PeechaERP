@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha.services import commercial_documents as documents_service
 from peecha.services import procurement_masters as masters_service
 from peecha.ui.widgets import JalaliDateEdit
@@ -118,7 +118,7 @@ class LineDeliveryDatesDialog(QDialog):
         self.date_edits: list[JalaliDateEdit] = []
         for r, ln in enumerate(lines):
             self.table.setItem(r, 0, QTableWidgetItem(numerals.to_persian_digits(item_labels.get(ln.item_id, str(ln.item_id)))))
-            self.table.setItem(r, 1, QTableWidgetItem(numerals.format_money(ln.quantity, 2, None)))
+            self.table.setItem(r, 1, QTableWidgetItem(decimals.format_qty(ln.quantity)))
             edit = JalaliDateEdit()
             edit.setDate(ln.expected_delivery_date or doc.requested_delivery_date or doc.document_date)
             self.table.setCellWidget(r, 2, edit)

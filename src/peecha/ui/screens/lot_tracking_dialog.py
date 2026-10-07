@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha.services import lot_tracking
 from peecha.ui.widgets import JalaliDateEdit
 
@@ -78,7 +78,7 @@ class LotTrackingDialog(QDialog):
         layout = QVBoxLayout(self)
         need = [k for k, on in (("بچ", self.track_batch), ("تاریخ انقضا", self.track_expiry), ("سریال", self.track_serial)) if on]
         qty_text = (
-            f" -- مقدار ردیف: {numerals.to_persian_digits(str(self._quantity_base.normalize()))} {base_uom_label}"
+            f" -- مقدار ردیف: {decimals.format_qty(self._quantity_base)} {base_uom_label}"
             if self._quantity_base is not None else ""
         )
         header = QLabel(
@@ -190,7 +190,7 @@ class LotTrackingDialog(QDialog):
                 numerals.to_persian_digits(row.serial_no or ""),
                 row.supplier_name or "",
                 "امانی" if row.is_consignment else "خریداری‌شده",
-                numerals.format_money(row.quantity, 3),
+                decimals.format_qty(row.quantity),
             ]
             for c, v in enumerate(values):
                 self.available_table.setItem(r, c, QTableWidgetItem(v))
@@ -231,7 +231,7 @@ class LotTrackingDialog(QDialog):
         source = QLabel(source_label or "")
         source.setProperty("supplier_id", entry.supplier_detail_account_id if entry else None)
         source.setProperty("is_consignment", entry.is_consignment if entry else None)
-        qty = QLineEdit(str((entry.quantity if entry else decimal.Decimal(1)).normalize()))
+        qty = QLineEdit(decimals.plain(entry.quantity if entry else decimal.Decimal(1)))
         qty.setAlignment(Qt.AlignCenter)
         if self.track_serial:
             qty.setText("1")
@@ -277,9 +277,9 @@ class LotTrackingDialog(QDialog):
 
     def _update_total(self, *_args) -> None:
         total = sum((e.quantity for e in self.entries()), decimal.Decimal(0))
-        text = f"{'شمارش‌شده' if self._direction == 'COUNT' else 'واردشده'}: {numerals.to_persian_digits(str(total.normalize()))}"
+        text = f"{'شمارش‌شده' if self._direction == 'COUNT' else 'واردشده'}: {decimals.format_qty(total)}"
         if self._quantity_base is not None:
-            text += f" از {numerals.to_persian_digits(str(self._quantity_base.normalize()))}"
+            text += f" از {decimals.format_qty(self._quantity_base)}"
         self.total_label.setText(text)
 
     def _save(self) -> None:

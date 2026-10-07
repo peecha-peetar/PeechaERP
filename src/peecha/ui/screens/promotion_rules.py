@@ -26,10 +26,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session as app_session
+from peecha import decimals, session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import promotions as promotions_service
-from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import bind_qty_decimals, FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "کد", "نام", "نوع"]
 _TYPE_LABELS = {"BUY_X_GET_Y": "بخر و ببر", "THRESHOLD_DISCOUNT": "تخفیف پلکانی"}
@@ -127,6 +127,8 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         buy_get_layout.addWidget(QLabel("کالای هدیه (اختیاری — خالی یعنی همان کالا)"))
         self.get_item_combo = QComboBox()
         self.get_item_combo.addItem("(همان کالای خرید)", None)
+        bind_qty_decimals(self.buy_quantity_field, self.applies_item_combo)
+        bind_qty_decimals(self.get_quantity_field, self.get_item_combo, fallback_item_combo=self.applies_item_combo)
         buy_get_layout.addWidget(self.get_item_combo)
         layout.addWidget(self.buy_get_row)
 
@@ -136,7 +138,7 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         threshold_layout.addWidget(QLabel("سقف مبلغ سند"))
         self.threshold_amount_field = QDoubleSpinBox()
         self.threshold_amount_field.setRange(0, 999_999_999_999)
-        self.threshold_amount_field.setDecimals(0)
+        self.threshold_amount_field.setDecimals(decimals.money_decimals())
         threshold_layout.addWidget(self.threshold_amount_field)
         threshold_layout.addWidget(QLabel("درصد تخفیف"))
         self.discount_percent_field = QDoubleSpinBox()

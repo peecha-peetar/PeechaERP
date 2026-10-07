@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.reporting import jasper_bridge
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -100,7 +100,7 @@ def _build_stock_document_print_html(
         rows_html += (
             "<tr>"
             f"<td>{esc(item_label)}</td>"
-            f"<td style='text-align:center;'>{numerals.format_money(ln.quantity, 3)}</td>"
+            f"<td style='text-align:center;'>{decimals.format_qty(ln.quantity)}</td>"
             f"<td style='text-align:center;'>{numerals.format_money(ln.unit_cost, decimal_places) if ln.unit_cost is not None else '—'}</td>"
             f"<td style='text-align:center;'>{numerals.format_money(ln.line_total_cost, decimal_places) if ln.line_total_cost is not None else '—'}</td>"
             f"<td>{esc(ln.description or '')}</td>"
@@ -997,7 +997,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._items = catalog_service.list_items(company_id, active_only=True, transactable_only=True)
         self._warehouses = locations_service.list_warehouses(company_id, active_only=True)
         uoms = catalog_service.list_uoms(company_id)
-        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in uoms}
+        self._uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in uoms}
         self._uom_names = {u.uom_id: u.name for u in uoms}
         self._unit_cost_decimal_places = companies_service.get_base_currency_decimal_places(company_id)
 
@@ -1305,8 +1305,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         item_id = widgets["item_combo"].currentData()
         item = next((it for it in self._items if it.item_id == item_id), None)
-        decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
-        widgets["qty"].setDecimals(decimals)
+        qty_dp = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
+        widgets["qty"].setDecimals(qty_dp)
         has_item = item_id is not None
         widgets["info_kardex_button"].setEnabled(has_item)
         counterparty_id = self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None

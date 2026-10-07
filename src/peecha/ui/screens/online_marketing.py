@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import online_marketing as marketing_service
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin
 
@@ -86,9 +86,9 @@ class OnlineMarketingScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for row_index, row in enumerate(rows):
             values = [
                 f"{row.item_code} — {row.item_name}",
-                numerals.format_money(row.stock_available, 2),
-                numerals.format_money(row.quantity_sold, 2),
-                numerals.format_money(row.net_revenue, 0),
+                decimals.format_qty(row.stock_available),
+                decimals.format_qty(row.quantity_sold),
+                decimals.format_amount(row.net_revenue),
                 row.suggested_action,
             ]
             for col_index, value in enumerate(values):

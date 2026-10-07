@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -349,7 +349,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         for row_index, inv in enumerate(self._eligible):
             values = [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
-                _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+                _dimensions_label(inv.counterparty_detail_account_id), decimals.format_amount(inv.total_amount),
                 self._settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
@@ -364,7 +364,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         for row_index, inv in enumerate(invoices):
             values = [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
-                _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+                _dimensions_label(inv.counterparty_detail_account_id), decimals.format_amount(inv.total_amount),
                 self._settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
@@ -473,7 +473,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         rows = [
             [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
-                _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+                _dimensions_label(inv.counterparty_detail_account_id), decimals.format_amount(inv.total_amount),
                 self._settlement_type_label(inv.settlement_type_code), "", "", "",
             ]
             for inv in self._current_run.invoices

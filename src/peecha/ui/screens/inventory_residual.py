@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_residual as residual_service
 from peecha.ui.widgets import persist_column_widths
@@ -92,7 +92,7 @@ class InventoryResidualScreen(QWidget):
         self.table.setRowCount(len(self._rows))
         for r, row in enumerate(self._rows):
             values = [
-                numerals.to_persian_digits(row.item_label), numerals.format_money(row.quantity_on_hand, 3),
+                numerals.to_persian_digits(row.item_label), decimals.format_qty(row.quantity_on_hand),
                 numerals.format_money(row.stock_value), numerals.format_money(row.ledger_balance),
                 numerals.format_money(row.residual),
             ]

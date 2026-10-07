@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -431,7 +431,7 @@ class PurchaseReportScreen(ReportScreenBase):
         if kind == reports_service.MONEY:
             return numerals.format_money(decimal.Decimal(value), self._decimal_places, None)
         if kind == reports_service.QTY:
-            return numerals.format_money(decimal.Decimal(value), 2, None)
+            return decimals.format_qty(value)
         if kind == reports_service.PERCENT:
             return f"{numerals.format_money(decimal.Decimal(value), 1, None)}٪"
         if kind in (reports_service.INT, reports_service.DAYS):

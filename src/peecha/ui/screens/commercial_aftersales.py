@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha import session as app_session
 from peecha.services import commercial_aftersales as aftersales_service
 from peecha.services import commercial_documents as documents_service
@@ -328,7 +328,7 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
         for row_index, p in enumerate(parts):
             item = items_by_id.get(p.item_id)
             self.ticket_parts_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(p.item_id)))
-            self.ticket_parts_table.setItem(row_index, 1, QTableWidgetItem(str(p.quantity)))
+            self.ticket_parts_table.setItem(row_index, 1, QTableWidgetItem(decimals.format_qty(p.quantity)))
 
     def _apply_ticket_status(self) -> None:
         if self._selected_ticket_id is None:
@@ -535,7 +535,7 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
             customer = customers_by_id.get(r.customer_detail_account_id)
             values = [
                 f"{customer['code']} — {customer['name'] or ''}" if customer else str(r.customer_detail_account_id),
-                _RMA_REASON_LABELS.get(r.reason_code, r.reason_code), str(r.requested_quantity),
+                _RMA_REASON_LABELS.get(r.reason_code, r.reason_code), decimals.format_qty(r.requested_quantity),
                 _RMA_STATUS_LABELS.get(r.status_code, r.status_code),
             ]
             for col_index, value in enumerate(values):

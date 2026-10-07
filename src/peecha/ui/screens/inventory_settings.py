@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -72,7 +72,7 @@ class _UomDialog(QDialog):
         for r in rows:
             if row is None or r.uom_id != row.uom_id:
                 self.base_combo.addItem(f"{r.name} ({r.code})", r.uom_id)
-        self.factor_field = QLineEdit(str(row.conversion_factor.normalize()) if row else "1")
+        self.factor_field = QLineEdit(decimals.plain(row.conversion_factor) if row else "1")
         self.decimal_spin = QSpinBox()
         self.decimal_spin.setRange(0, 6)
         self.allow_decimal_checkbox = QCheckBox("اعشار مجاز است")

@@ -1682,3 +1682,30 @@ def row_actions(*buttons: QWidget) -> QWidget:
         box.addWidget(button)
     box.addStretch(1)
     return host
+
+
+def set_qty_decimals(spin, dp: int) -> None:
+    """اعشار فیلد مقدار؛ اگر حداقلِ فیلد مثبت بود، کمترین مقدار مجاز همان واحد (۱ برای واحد بی‌اعشار) می‌شود."""
+    positive_min = spin.minimum() > 0
+    spin.setDecimals(dp)
+    if positive_min:
+        spin.setMinimum(float(10 ** -dp) if dp else 1.0)
+
+
+def bind_qty_decimals(spin, item_combo=None, uom_combo=None, fallback_item_combo=None) -> None:
+    """R279: اعشار فیلد مقدار همیشه طبق واحد انتخاب‌شده (یا واحد پایهٔ کالای انتخاب‌شده) در تنظیمات."""
+    from peecha import decimals
+
+    def apply() -> None:
+        uom_id = uom_combo.currentData() if uom_combo is not None else None
+        item_id = item_combo.currentData() if item_combo is not None else None
+        if item_id is None and fallback_item_combo is not None:
+            item_id = fallback_item_combo.currentData()
+        dp = decimals.qty_decimals(uom_id, item_id)
+        if dp is not None:
+            set_qty_decimals(spin, dp)
+
+    for combo in (item_combo, uom_combo, fallback_item_combo):
+        if combo is not None:
+            combo.currentIndexChanged.connect(lambda _index: apply())
+    apply()

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import purchase_requests as pr_service
@@ -41,7 +41,7 @@ def _fill(table: QTableWidget, rows: list[list[str]]) -> None:
 
 
 def _money(value) -> str:
-    return numerals.format_money(decimal.Decimal(value), 0, None) if value is not None else ""
+    return decimals.format_amount(value) if value is not None else ""
 
 
 class QuoteDialog(QDialog):
@@ -62,7 +62,7 @@ class QuoteDialog(QDialog):
         for r, ln in enumerate(lines):
             q = quotes_by_line.get(ln.line_id)
             self.table.setItem(r, 0, QTableWidgetItem(numerals.to_persian_digits(item_labels.get(ln.item_id, ""))))
-            self.table.setItem(r, 1, QTableWidgetItem(numerals.format_money(ln.quantity, 2, None)))
+            self.table.setItem(r, 1, QTableWidgetItem(decimals.format_qty(ln.quantity)))
             price = QLineEdit(numerals.to_persian_digits(format(q.unit_price.normalize(), "f")) if q else "")
             discount = QLineEdit(numerals.to_persian_digits(format(q.discount_percent.normalize(), "f")) if q else "")
             lead = QSpinBox()
@@ -278,7 +278,7 @@ class RfqScreen(QWidget):
         for ln in self._lines:
             if ln.item_id not in units:
                 units[ln.item_id] = {u.uom_id: u.name for u in uc.get_item_units(ln.item_id, active_only=False)}
-            rows.append([self._items.get(ln.item_id, ln.item_id), units[ln.item_id].get(ln.uom_id, ""), numerals.format_money(ln.quantity, 2, None),
+            rows.append([self._items.get(ln.item_id, ln.item_id), units[ln.item_id].get(ln.uom_id, ""), decimals.format_qty(ln.quantity),
                          numerals.format_jalali_date(ln.required_date) if ln.required_date else "",
                          "بله" if ln.purchase_request_line_id else ""])
         _fill(self.lines_table, rows)

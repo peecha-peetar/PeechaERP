@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import petty_cash as petty_cash_service
@@ -458,7 +458,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         status_word = "باز" if fund.status == "OPEN" else "بسته"
         self.fund_no_label.setText(
             f"تنخواه شمارهٔ {numerals.to_persian_digits(str(fund.fund_no))} — وضعیت: {status_word} — "
-            f"مبلغ افتتاح: {numerals.format_money(fund.opening_amount, 0)}"
+            f"مبلغ افتتاح: {decimals.format_amount(fund.opening_amount)}"
         )
         self.close_fund_button.setEnabled(fund.status == "OPEN")
         self.line_method_combo.setEnabled(fund.status == "OPEN")
@@ -695,7 +695,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             self._lines = petty_cash_service.list_lines(self._current_fund_id)
         self.lines_table.setRowCount(len(self._lines))
         for row_index, line in enumerate(self._lines):
-            values = [_METHOD_LABELS.get(line.method, line.method), numerals.format_money(line.amount, 0), line.description or ""]
+            values = [_METHOD_LABELS.get(line.method, line.method), decimals.format_amount(line.amount), line.description or ""]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, line.line_id)
@@ -708,7 +708,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             delete_button.setEnabled(self.close_fund_button.isEnabled())
             self.lines_table.setCellWidget(row_index, 3, delete_button)
         total = sum((l.amount for l in self._lines), decimal.Decimal(0))
-        self.lines_total_label.setText(f"جمع ردیف‌ها: {numerals.format_money(total, 0)}")
+        self.lines_total_label.setText(f"جمع ردیف‌ها: {decimals.format_amount(total)}")
 
     def _add_line(self) -> None:
         if self._current_fund_id is None:

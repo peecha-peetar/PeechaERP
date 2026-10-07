@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import treasury as treasury_service
 from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable_with_footer
@@ -237,7 +237,7 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
             total += r[4]
             values = [
                 r[0], r[1], r[2], r[3],
-                numerals.format_money(r[4], 0, None),
+                decimals.format_amount(r[4]),
                 numerals.format_jalali_date(r[5]),
                 numerals.format_jalali_date(r[6]),
                 r[7],
@@ -246,18 +246,18 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
         self._total = total
         self.summary_label.setText(
-            f"{numerals.to_persian_digits(str(len(rows)))} چک — جمع مبلغ: {numerals.format_money(total, 0, None)}"
+            f"{numerals.to_persian_digits(str(len(rows)))} چک — جمع مبلغ: {decimals.format_amount(total)}"
         )
 
     def _export_rows(self) -> tuple[list[str], list[list], list]:
         table_rows = [
             [
-                r[0], r[1], r[2], r[3], numerals.format_money(r[4], 0, None),
+                r[0], r[1], r[2], r[3], decimals.format_amount(r[4]),
                 numerals.format_jalali_date(r[5]), numerals.format_jalali_date(r[6]), r[7],
             ]
             for r in self._rows
         ]
-        footer = ["", "", "", "جمع کل", numerals.format_money(self._total, 0, None), "", "", ""]
+        footer = ["", "", "", "جمع کل", decimals.format_amount(self._total), "", "", ""]
         return list(_COLUMNS), table_rows, footer
 
     def _filters_summary(self) -> list[tuple[str, str]]:

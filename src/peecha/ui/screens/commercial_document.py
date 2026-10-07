@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session as app_session
+from peecha import decimals, numerals, session as app_session
 from peecha.reporting import jasper_bridge
 from peecha.reporting import registry as report_templates_registry
 from peecha.services import chart_of_accounts as coa_service
@@ -382,7 +382,7 @@ def _show_invoice_print(
             counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
         company_name = app_session.current_company.display_name if app_session.current_company else ""
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
-        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in catalog_service.list_uoms(company_id)}
         html = _build_invoice_print_html(
             company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
             header_text=header_text, footer_text=footer_text, uom_decimal_places=uom_decimal_places,
@@ -426,7 +426,7 @@ def _show_invoice_print(
         counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
     company_name = app_session.current_company.display_name if app_session.current_company else ""
     items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
-    uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+    uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in catalog_service.list_uoms(company_id)}
     html = _build_invoice_print_html(
         company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
         header_text=header_text, footer_text=footer_text, uom_decimal_places=uom_decimal_places,
@@ -620,7 +620,7 @@ class _ReturnLinesPickerDialog(QDialog):
         _doc, lines = documents_service.get_document(source_document_id, company_id)
         fulfillment_by_line = {f.line_id: f for f in documents_service.get_line_fulfillment(source_document_id, company_id)}
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id, active_only=False)}
-        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in catalog_service.list_uoms(company_id)}
 
         self.table = QTableWidget(len(lines), 5)
         self.table.setHorizontalHeaderLabels(["", "کالا", "مقدار فاکتور", "قبلاً برگشتی", "مقدار برگشتی"])
@@ -638,7 +638,7 @@ class _ReturnLinesPickerDialog(QDialog):
             checkbox = QCheckBox()
             self.table.setCellWidget(row_index, 0, checkbox)
             self.table.setItem(row_index, 1, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(ln.item_id)))
-            self.table.setItem(row_index, 2, QTableWidgetItem(numerals.to_persian_digits(str(ln.quantity))))
+            self.table.setItem(row_index, 2, QTableWidgetItem(decimals.format_qty(ln.quantity, uom_id=ln.uom_id)))
             self.table.setItem(row_index, 3, QTableWidgetItem(numerals.to_persian_digits(str(already_returned))))
 
             qty_field = _AmountField()
@@ -757,7 +757,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._document_date = document_date
         self._main_window = main_window
         self._decimal_places = decimal_places
-        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        self._uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in catalog_service.list_uoms(company_id)}
         self._is_new_row = initial is None
         self._default_warehouse_id = default_warehouse_id
         self._warehouses_by_id = {w.warehouse_id: w for w in (warehouses or [])}
@@ -3190,7 +3190,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         uoms = catalog_service.list_uoms(company_id)
-        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in uoms}
+        self._uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in uoms}
         self._uom_codes = {u.uom_id: u.name or u.code for u in uoms}
         self._skip_purchase_order_approval = (
             self.document_type_code == "PURCHASE_ORDER"

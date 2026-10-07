@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import currencies as currencies_service
 from peecha.ui.screens.reports_common import ReportScreenBase
@@ -49,7 +49,7 @@ class SalesReportByChannelScreen(ReportScreenBase):
                 r.channel_name,
                 _CHANNEL_TYPE_LABELS.get(r.channel_type_code, r.channel_type_code or "—"),
                 numerals.to_persian_digits(str(r.invoice_count)),
-                numerals.format_money(r.quantity_sold, 2),
+                decimals.format_qty(r.quantity_sold),
                 self._fmt(r.net_revenue),
             ]
             for r in rows
@@ -60,7 +60,7 @@ class SalesReportByChannelScreen(ReportScreenBase):
         total_revenue = sum((r.net_revenue for r in rows), _ZERO)
         footer = [
             "جمع کل", "",
-            numerals.to_persian_digits(str(total_invoices)), numerals.format_money(total_quantity, 2),
+            numerals.to_persian_digits(str(total_invoices)), decimals.format_qty(total_quantity),
             self._fmt(total_revenue),
         ]
         return headers, table_rows, footer

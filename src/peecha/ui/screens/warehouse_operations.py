@@ -9,12 +9,13 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha import session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import warehouse_operations as ops
 from peecha.ui import theme
+from peecha.ui.widgets import bind_qty_decimals
 
 
 def _table(headers: list[str]) -> QTableWidget:
@@ -123,8 +124,8 @@ class _TasksTab(QWidget):
         self.table.setRowCount(len(self._tasks))
         for row, t in enumerate(self._tasks):
             cells = [str(t.task_id), ops.TASK_TYPES[t.task_type_code], self._whs.get(t.warehouse_id, ""), self._items.get(t.item_id, ""),
-                     numerals.format_money(t.quantity_base, 2, None),
-                     numerals.format_money(t.done_quantity_base, 2, None) if t.done_quantity_base is not None else "",
+                     decimals.format_qty(t.quantity_base),
+                     decimals.format_qty(t.done_quantity_base) if t.done_quantity_base is not None else "",
                      self._bins.get(t.from_bin_location_id, ""), self._bins.get(t.to_bin_location_id, ""),
                      ops.TASK_STATUSES[t.status_code], self._users.get(t.completed_by_user_id or t.assigned_user_id, ""),
                      _fmt_dt(t.created_at), _fmt_dt(t.started_at), _fmt_dt(t.completed_at)]
@@ -347,6 +348,7 @@ class _ReplenishTab(QWidget):
         for spin in (self.min_spin, self.max_spin):
             spin.setRange(0, 1e9)
             spin.setDecimals(3)
+            bind_qty_decimals(spin, self.item_combo)
         for label, widget in (("انبار:", self.warehouse_combo), ("محل:", self.location_combo), ("کالا:", self.item_combo),
                               ("حداقل:", self.min_spin), ("حداکثر:", self.max_spin)):
             form.addWidget(QLabel(label))
@@ -417,10 +419,10 @@ class _ReplenishTab(QWidget):
         self.table.setRowCount(len(self._rules))
         for row, r in enumerate(self._rules):
             need = needs.get(r.rule_id)
-            cells = [codes.get(r.bin_location_id, ""), self._items.get(r.item_id, ""), numerals.format_money(r.min_quantity, 3, None),
-                     numerals.format_money(r.max_quantity, 3, None),
-                     numerals.format_money(need.on_hand, 3, None) if need else "",
-                     numerals.format_money(need.need, 3, None) if need else "",
+            cells = [codes.get(r.bin_location_id, ""), self._items.get(r.item_id, ""), decimals.format_qty(r.min_quantity),
+                     decimals.format_qty(r.max_quantity),
+                     decimals.format_qty(need.on_hand, item_id=r.item_id) if need else "",
+                     decimals.format_qty(need.need, item_id=r.item_id) if need else "",
                      "، ".join(s.location_code for s in need.sources[:3]) if need else "", "بله" if r.is_active else "خیر"]
             for col, text in enumerate(cells):
                 self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
@@ -527,7 +529,7 @@ class _WavesTab(QWidget):
             codes = {n.location_id: n.full_code for n in wl.tree(self._company_id(), wave.warehouse_id)}
         self.tasks_table.setRowCount(len(self._tasks))
         for row, t in enumerate(self._tasks):
-            cells = [str(t.wave_sequence or ""), str(t.task_id), self._items.get(t.item_id, ""), numerals.format_money(t.quantity_base, 2, None),
+            cells = [str(t.wave_sequence or ""), str(t.task_id), self._items.get(t.item_id, ""), decimals.format_qty(t.quantity_base),
                      codes.get(t.from_bin_location_id, ""), ops.TASK_STATUSES[t.status_code]]
             for col, text in enumerate(cells):
                 self.tasks_table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
@@ -654,7 +656,7 @@ class _LocationCountTab(QWidget):
         sid = self.session_combo.currentData()
         self._lines = lc.count_lines(self._company_id(), sid) if sid else []
         self.table.setRowCount(len(self._lines))
-        fmt = lambda v: numerals.format_money(v, 3, None) if v is not None else ""  # noqa: E731
+        fmt = lambda v: decimals.format_qty(v) if v is not None else ""  # noqa: E731
         for row, ln in enumerate(self._lines):
             cells = [ln.location_code, f"{ln.item_code} — {ln.item_name}" + (f" (بچ {ln.batch_no})" if ln.batch_no else ""),
                      "—" if ln.blind and ln.counted is None else fmt(ln.expected),

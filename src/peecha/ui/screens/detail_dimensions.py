@@ -53,7 +53,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals
+from peecha import decimals, numerals
 from peecha import session
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_partners as partners_service
@@ -67,6 +67,7 @@ from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
 from peecha.ui.widgets import (
+    bind_qty_decimals,
     FieldGrid,
     FieldHelpMixin,
     FieldSpec,
@@ -306,11 +307,22 @@ def _find_combo_index(combo: QComboBox, data: tuple[str, int | str] | None) -> i
     return -1
 
 
-def _make_field_widget(kind: str) -> QWidget:
+_MONEY_FIELD_KEYS = {"credit_limit_amount", "min_order_amount", "base_salary"}
+_WHOLE_NUMBER_FIELD_KEYS = {"payment_term_days", "expected_delivery_days", "allowed_order_days_mask",
+                            "allowed_order_hour_from", "allowed_order_hour_to"}
+
+
+def _make_field_widget(kind: str, key: str = "") -> QWidget:
     if kind == "decimal":
         widget = QDoubleSpinBox()
         widget.setRange(0, 10_000_000_000)
-        widget.setDecimals(2)
+        # R279: مبلغ با اعشار ارز پایه، روز/ساعت بدون اعشار
+        if key in _MONEY_FIELD_KEYS:
+            widget.setDecimals(decimals.money_decimals())
+        elif key in _WHOLE_NUMBER_FIELD_KEYS:
+            widget.setDecimals(0)
+        else:
+            widget.setDecimals(2)
         return widget
     if kind == "date":
         return JalaliDateEdit(allow_empty=True)
@@ -888,7 +900,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         form_row.addWidget(self.pay_component_item_combo, stretch=2)
         self.pay_component_amount_field = QDoubleSpinBox()
         self.pay_component_amount_field.setRange(0, 10_000_000_000)
-        self.pay_component_amount_field.setDecimals(0)
+        self.pay_component_amount_field.setDecimals(decimals.money_decimals())
         form_row.addWidget(self.pay_component_amount_field, stretch=1)
         layout.addLayout(form_row)
 
@@ -1281,7 +1293,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         type_row.addWidget(QLabel("مبلغ"))
         self.guarantee_amount_field = QDoubleSpinBox()
         self.guarantee_amount_field.setRange(0, 1_000_000_000_000)
-        self.guarantee_amount_field.setDecimals(0)
+        self.guarantee_amount_field.setDecimals(decimals.money_decimals())
         type_row.addWidget(self.guarantee_amount_field, stretch=1)
         layout.addLayout(type_row)
 
@@ -1471,7 +1483,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         amount_row.addWidget(QLabel("سهمیهٔ مبلغی (اختیاری)"))
         self.contract_committed_amount_field = QDoubleSpinBox()
         self.contract_committed_amount_field.setRange(0, 1_000_000_000_000)
-        self.contract_committed_amount_field.setDecimals(0)
+        self.contract_committed_amount_field.setDecimals(decimals.money_decimals())
         amount_row.addWidget(self.contract_committed_amount_field, stretch=1)
         layout.addLayout(amount_row)
 
@@ -1483,6 +1495,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.contract_committed_quantity_field = QDoubleSpinBox()
         self.contract_committed_quantity_field.setRange(0, 1_000_000_000)
         self.contract_committed_quantity_field.setDecimals(2)
+        bind_qty_decimals(self.contract_committed_quantity_field, self.contract_item_combo)
         item_row.addWidget(self.contract_committed_quantity_field, stretch=1)
         layout.addLayout(item_row)
 
@@ -2033,7 +2046,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     for item_value, item_label in loader(company_id):
                         widget.addItem(item_label, item_value)
             else:
-                widget = _make_field_widget(kind)
+                widget = _make_field_widget(kind, field_key)
             self.person_fields_grid.addWidget(widget, row_index, 1)
             self._person_field_widgets[field_key] = widget
             if values is not None and values.get(field_key) is not None:
