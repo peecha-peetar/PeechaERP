@@ -22,10 +22,11 @@ from peecha.services.crm import leads as lead_service
 from peecha.services.crm import opportunities as opp_service
 from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
+from peecha.services.crm import reports as report_service
 from peecha.services.crm import segments as seg_service
 from peecha.services.crm import tasks as task_service
 from peecha.services.crm import tickets as ticket_service
-from peecha_api.deps import AuthContext, get_idempotency_key
+from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import require_permission
 from peecha_api.schemas import (
@@ -751,3 +752,70 @@ def templates_update(template_id: int, body: CrmTemplateRequest, ctx: AuthContex
 def templates_delete(template_id: int, ctx: AuthContext = Depends(require_permission(F_AUTO, "DELETE"))) -> dict:
     _call(comm_service.delete_template, ctx.company_id, ctx.user_id, template_id)
     return {"ok": True}
+
+
+# --- داشبورد، پیش‌بینی، گزارش‌ها، جستجو و تقویم (R288) -------------------------------------------------
+F_DASH = "crm_dashboard"
+
+
+def _period(date_from: datetime.date | None, date_to: datetime.date | None) -> tuple[datetime.date, datetime.date]:
+    date_to = date_to or datetime.date.today()
+    return date_from or date_to.replace(day=1), date_to
+
+
+@router.get("/dashboard")
+def crm_dashboard(date_from: datetime.date | None = None, date_to: datetime.date | None = None, mine: bool = False,
+                  ctx: AuthContext = Depends(require_permission(F_DASH, "VIEW"))) -> dict:
+    f, t = _period(date_from, date_to)
+    return _json({**report_service.dashboard(ctx.company_id, f, t, ctx.user_id if mine else None), "date_from": f, "date_to": t})
+
+
+@router.get("/forecast")
+def crm_forecast(months: int = 3, ctx: AuthContext = Depends(require_permission(F_DASH, "VIEW"))) -> list[dict]:
+    return _json(report_service.forecast(ctx.company_id, max(1, min(months, 12))))
+
+
+@router.get("/performance")
+def crm_performance(date_from: datetime.date | None = None, date_to: datetime.date | None = None,
+                    ctx: AuthContext = Depends(require_permission(F_DASH, "VIEW"))) -> list[dict]:
+    f, t = _period(date_from, date_to)
+    return _json(report_service.performance(ctx.company_id, f, t))
+
+
+@router.get("/search")
+def crm_search(q: str, ctx: AuthContext = Depends(require_permission(F_360, "VIEW"))) -> list[dict]:
+    return _json(report_service.search(ctx.company_id, q))
+
+
+@router.get("/calendar")
+def crm_calendar(date_from: datetime.date, date_to: datetime.date, all_users: bool = False,
+                 ctx: AuthContext = Depends(require_permission(F_TASKS, "VIEW"))) -> list[dict]:
+    if (date_to - date_from).days > 92 or date_to < date_from:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="بازهٔ تقویم حداکثر سه ماه است.")
+    return _json(report_service.calendar(ctx.company_id, None if all_users else ctx.user_id, date_from, date_to))
+
+
+@router.get("/reports")
+def crm_reports(ctx: AuthContext = Depends(require_permission(F_DASH, "VIEW"))) -> list[dict]:
+    return [{"code": r.code, "title": r.title, "group": r.group, "hint": r.hint, "date_mode": r.date_mode,
+             "options": [{"key": k, "label": lbl, "choices": [{"value": v, "label": vl} for v, vl in ch]} for k, lbl, ch in r.options]}
+            for r in report_service.CRM_REPORTS]
+
+
+@router.get("/reports/{code}")
+def crm_report_run(code: str, date_from: datetime.date | None = None, date_to: datetime.date | None = None, option: str | None = None,
+                   ctx: AuthContext = Depends(get_current_context)) -> dict:
+    """option: «کلید=مقدار» با ویرگول. دسترسی همان فرم گزارش در منو (warehouse_report_crm_*)."""
+    from peecha.services import roles as roles_service
+    from peecha.services.purchase_reports import PurchaseFilters
+
+    rep = next((r for r in report_service.CRM_REPORTS if r.code == code.upper()), None)
+    if rep is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="گزارش یافت نشد.")
+    if not roles_service.user_has_permission(ctx.user_id, ctx.company_id, f"warehouse_report_{rep.code.lower()}", "VIEW"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="دسترسی به این گزارش وجود ندارد.")
+    f, t = _period(date_from, date_to)
+    opts = dict(p.split("=", 1) for p in (option or "").split(",") if "=" in p)
+    res = rep.func(ctx.company_id, PurchaseFilters(f, t, side="INVENTORY", options=opts))
+    return _json({"code": rep.code, "title": rep.title, "columns": [{"title": h, "kind": k} for h, k in res.columns], "rows": res.rows,
+                  "footer": res.footer(), "note": res.note})

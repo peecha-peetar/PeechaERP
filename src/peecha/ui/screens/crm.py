@@ -2917,3 +2917,155 @@ class AutomationScreen(QWidget):
         if ok:
             self.reload()
         return ok
+
+
+# =========================================================================================================
+# داشبورد CRM: شاخص‌ها، پیش‌بینی، عملکرد، تقویم و جستجوی سراسری (R288)
+@ms.styled
+class CrmDashboardScreen(QWidget):
+    scroll_in_mdi = True
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        title = QLabel("داشبورد CRM")
+        title.setObjectName("pageTitle")
+        today = datetime.date.today()
+        self.date_from, self.date_to = date_field(today.replace(day=1)), date_field(today)
+        self.mine = QCheckBox("فقط من")
+        self.mine.toggled.connect(lambda _c: self.reload())
+        apply = _quick("نمایش", self.reload)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("جستجوی سراسری: مشتری، سرنخ، فرصت، تیکت، کمپین، شمارهٔ سند")
+        self.search.returnPressed.connect(lambda: self.run_search())
+        outer.addWidget(ms.header_card(title, QLabel("از:"), self.date_from, QLabel("تا:"), self.date_to, self.mine, apply, self.search))
+        cards, self.cards = ms.summary([
+            ("leads", "سرنخ تازه / تبدیل", "info", "🧲"), ("conversion", "نرخ تبدیل سرنخ", "success", "🔄"),
+            ("pipeline", "ارزش قیف باز", "info", "🎯"), ("weighted", "ارزش وزنی قیف", "info", "⚖️"),
+            ("won", "برنده / مبلغ", "success", "🏆"), ("win_rate", "نرخ موفقیت", "success", "📈"),
+            ("cycle", "میانگین چرخهٔ فروش (روز)", "neutral", "⏱"), ("sales", "فروش خالص دوره", "success", "💰"),
+            ("activities", "فعالیت انجام‌شده / عقب‌افتاده", "warning", "✅"), ("tickets", "تیکت باز / نقض SLA", "danger", "🎫"),
+            ("csat", "رضایت مشتری", "success", "⭐"), ("churn", "مشتری با ریسک ریزش زیاد", "danger", "📉")], per_row=6)
+        outer.addWidget(cards)
+        self.tabs = QTabWidget()
+        self.t_forecast = table(["ماه", "فرصت باز", "مبلغ فرصت‌ها", "وزنی", "قطعی (≥۸۰٪)", "روند فروش ماهانه", "پیش‌بینی فروش"])
+        self.tabs.addTab(self.t_forecast, "پیش‌بینی فروش")
+        self.t_perf = table(["کاربر", "سرنخ", "تبدیل", "فرصت باز", "برنده", "بازنده", "نرخ موفقیت", "مبلغ برنده", "فعالیت",
+                             "عقب‌افتاده", "تیکت حل‌شده", "فروش خالص"])
+        self.tabs.addTab(self.t_perf, "عملکرد فروشندگان")
+        cw = QWidget()
+        cl = QVBoxLayout(cw)
+        bar = QHBoxLayout()
+        self.cal_all = QCheckBox("همهٔ کاربران")
+        self.cal_all.toggled.connect(lambda _c: self.load_calendar())
+        self.cal_range = combo([("هفتهٔ پیش رو", 7), ("دو هفته", 14), ("ماه پیش رو", 30)])
+        self.cal_range.currentIndexChanged.connect(lambda _i: self.load_calendar())
+        bar.addWidget(self.cal_range)
+        bar.addWidget(self.cal_all)
+        bar.addStretch(1)
+        cl.addLayout(bar)
+        self.t_cal = table(["تاریخ", "روز", "نوع", "عنوان", "طرف", "وضعیت"])
+        self.t_cal.cellDoubleClicked.connect(lambda r, _c: self._open_customer(self.t_cal, r))
+        cl.addWidget(self.t_cal, stretch=1)
+        self.tabs.addTab(cw, "تقویم و برنامه")
+        self.t_search = table(["نوع", "عنوان", "توضیح"])
+        self.t_search.cellDoubleClicked.connect(lambda r, _c: self.open_result(r))
+        self.tabs.addTab(self.t_search, "نتیجهٔ جستجو")
+        rw = QWidget()
+        rl = QVBoxLayout(rw)
+        from peecha.services.crm import reports as report_service
+
+        self._reports = report_service.CRM_REPORTS
+        self.report_list = QListWidget()
+        for r in self._reports:
+            item = QListWidgetItem(f"{r.group} ‹ {r.title} — {r.hint}")
+            item.setData(Qt.UserRole, r.code)
+            self.report_list.addItem(item)
+        self.report_list.itemDoubleClicked.connect(lambda item: self.open_report(item.data(Qt.UserRole)))
+        rl.addWidget(self.report_list)
+        self.tabs.addTab(rw, "گزارش‌ها (۱۶)")
+        outer.addWidget(self.tabs, stretch=1)
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        self.reload()
+
+    def reload(self) -> None:
+        from peecha.services.crm import reports as report_service
+
+        cid = company_id()
+        f, t = self.date_from.date(), self.date_to.date()
+        if t < f:
+            QMessageBox.warning(self, "داشبورد", "تاریخ پایان پیش از تاریخ شروع است.")
+            return
+        d = report_service.dashboard(cid, f, t, user_id() if self.mine.isChecked() else None)
+        dash = lambda v, suf="": P(f"{v}{suf}") if v is not None else "—"
+        self.cards["leads"].setText(P(f"{d['new_leads']} / {d['converted_leads']}"))
+        self.cards["conversion"].setText(dash(d["lead_conversion"], "٪"))
+        self.cards["pipeline"].setText(money(d["pipeline_amount"]))
+        self.cards["weighted"].setText(money(d["weighted_pipeline"]))
+        self.cards["won"].setText(P(f"{d['won']} / ") + money(d["won_amount"]))
+        self.cards["win_rate"].setText(dash(d["win_rate"], "٪"))
+        self.cards["cycle"].setText(dash(d["avg_cycle_days"]))
+        self.cards["sales"].setText(money(d["sales"]))
+        self.cards["activities"].setText(P(f"{d['activities_done']} / {d['overdue_activities']}"))
+        self.cards["tickets"].setText(P(f"{d['open_tickets']} / {d['breached_tickets']}"))
+        self.cards["csat"].setText(dash(d["csat"]))
+        self.cards["churn"].setText(P(d["high_churn"]))
+        fc = report_service.forecast(cid, 6)
+        fill(self.t_forecast, [[x["month"], x["opportunities"], x["pipeline"], x["weighted"], x["commit"], x["run_rate"], x["forecast"]]
+                               for x in fc])
+        perf = report_service.performance(cid, f, t)
+        fill(self.t_perf, [[p["name"], p["leads"], p["converted"], p["open_opps"], p["won"], p["lost"],
+                            P(f"{p['win_rate']}٪") if p["win_rate"] is not None else "—", p["won_amount"], p["activities"], p["overdue"],
+                            p["tickets"], p["sales"]] for p in perf])
+        self.load_calendar()
+
+    def load_calendar(self) -> None:
+        from peecha.services.crm import reports as report_service
+
+        start = datetime.date.today()
+        self.events = report_service.calendar(company_id(), None if self.cal_all.isChecked() else user_id(), start,
+                                              start + datetime.timedelta(days=int(self.cal_range.currentData() or 7)))
+        days = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
+        fill(self.t_cal, [[e["date"], days[e["date"].weekday()], e["kind_label"], e["title"], e["party"], "انجام‌شده" if e["done"] else ""]
+                          for e in self.events], [e["customer_id"] for e in self.events])
+        for i, e in enumerate(self.events):
+            if e["date"] == start and not e["done"]:
+                self.t_cal.item(i, 0).setForeground(_AMBER)
+
+    def run_search(self, text: str | None = None) -> list[dict]:
+        from peecha.services.crm import reports as report_service
+
+        self.results = report_service.search(company_id(), text if text is not None else self.search.text())
+        fill(self.t_search, [[r["kind_label"], r["title"], r["subtitle"] or ""] for r in self.results], list(range(len(self.results))))
+        self.tabs.setCurrentWidget(self.t_search)
+        return self.results
+
+    def _open_customer(self, t: QTableWidget, row: int) -> None:
+        cid = t.item(row, 0).data(Qt.UserRole)
+        if cid and self._main_window is not None:
+            self._main_window.open_screen("CRM_CUSTOMER360", then=lambda s: s.load_customer(cid))
+
+    def open_result(self, row: int) -> None:
+        if self._main_window is None or not (0 <= row < len(self.results)):
+            return
+        r = self.results[row]
+        if r["kind"] == "DOCUMENT":
+            open_document(self._main_window, r["document_type_code"], r["id"])
+        elif r["kind"] == "LEAD" and not r["customer_id"]:
+            self._main_window.open_screen("CRM_LEADS")
+        elif r["kind"] == "CAMPAIGN":
+            self._main_window.open_screen("CRM_CAMPAIGNS")
+        elif r["kind"] == "TICKET":
+            self._main_window.open_screen("CRM_TICKETS")
+        elif r["customer_id"]:
+            self._main_window.open_screen("CRM_CUSTOMER360", then=lambda s: s.load_customer(r["customer_id"]))
+
+    def open_report(self, code: str) -> None:
+        if self._main_window is not None:
+            self._main_window.open_screen(f"CRM_RPT_{code}")

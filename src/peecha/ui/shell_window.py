@@ -1903,6 +1903,7 @@ class MainWindow(QMainWindow):
         self.register_screen("crm_campaigns", lambda: crm_screens.CampaignsScreen(self))  # R284
         self.register_screen("crm_tickets", lambda: crm_screens.TicketsScreen(self))  # R285
         self.register_screen("crm_automation", lambda: crm_screens.AutomationScreen(self))  # R287
+        self.register_screen("crm_dashboard", lambda: crm_screens.CrmDashboardScreen(self))  # R288
         self.register_screen("crm_settings", lambda: crm_screens.CrmSettingsScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 

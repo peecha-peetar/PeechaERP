@@ -737,6 +737,9 @@ class PurchaseReportScreen(ReportScreenBase):
             if doc_type == "FA_ASSET":  # R265: صفحهٔ دارایی
                 self._main_window.open_screen("FA_ASSETS", then=lambda screen: screen.open_asset(document_id))
                 return
+            if doc_type == "CRM_CUSTOMER":  # R288: پروندهٔ ۳۶۰ مشتری
+                self._main_window.open_screen("CRM_CUSTOMER360", then=lambda screen: screen.load_customer(document_id))
+                return
             if doc_type == "PRD_ORDER":  # R270: صفحهٔ مرکزیِ دستورِ تولید
                 self._main_window.open_screen("PRD_ORDERS", then=lambda screen: screen.open_order(document_id))
                 return

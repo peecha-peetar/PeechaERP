@@ -252,6 +252,24 @@ FA_REPORT_MENU = [
     ]),
 ]
 
+# R288: «گزارش‌ها ‹ CRM» -- services/crm/reports.CRM_REPORTS (همان موتور/صفحهٔ گزارش)
+CRM_REPORT_MENU = [
+    ("CRM_SALES", "فروش و قیف", [
+        ("CRM_LEAD_SOURCES", "عملکرد منابع سرنخ"), ("CRM_LEAD_FUNNEL", "قیف سرنخ"), ("CRM_PIPELINE", "قیف فروش به تفکیک مرحله"),
+        ("CRM_WON_LOST", "تحلیل برد و باخت"), ("CRM_PERFORMANCE", "عملکرد فروشندگان"), ("CRM_FORECAST", "پیش‌بینی فروش"),
+    ]),
+    ("CRM_CUST", "تحلیل مشتری", [
+        ("CRM_RFM", "تحلیل RFM مشتریان"), ("CRM_CHURN", "مشتریان در معرض ریزش"), ("CRM_CLV", "ارزش طول عمر مشتریان"),
+        ("CRM_INACTIVE", "مشتریان غیرفعال"),
+    ]),
+    ("CRM_SERV", "خدمات مشتری", [
+        ("CRM_TICKETS_SLA", "تیکت‌ها و پایبندی SLA"), ("CRM_COMPLAINTS", "شکایت‌های مشتریان"), ("CRM_SATISFACTION", "رضایت مشتری"),
+    ]),
+    ("CRM_MKT", "بازاریابی و فعالیت", [
+        ("CRM_CAMPAIGNS", "عملکرد کمپین‌ها"), ("CRM_ACTIVITIES", "فعالیت‌ها به تفکیک کاربر"), ("CRM_OVERDUE", "پیگیری‌های عقب‌افتاده"),
+    ]),
+]
+
 # R270: «گزارش‌ها ‹ تولید» -- services/production/reports.PRODUCTION_REPORTS
 PRD_REPORT_MENU = [
     ("PRD", "تولید", [
@@ -515,6 +533,7 @@ NAV_ITEMS = [
         "code": "CRM",
         "label": "مدیریت ارتباط با مشتری",
         "children": [
+            {"code": "CRM_DASHBOARD", "label": "داشبورد CRM", "screen": "crm_dashboard"},
             {"code": "CRM_CUSTOMER360", "label": "پروندهٔ ۳۶۰ مشتری", "screen": "crm_customer360"},
             {"code": "CRM_TASKS", "label": "مرکز کارها و پیگیری‌ها", "screen": "crm_tasks"},
             {"code": "CRM_LEADS", "label": "سرنخ‌ها", "screen": "crm_leads"},
@@ -523,6 +542,7 @@ NAV_ITEMS = [
             {"code": "CRM_CAMPAIGNS", "label": "کمپین‌ها و باشگاه مشتریان", "screen": "crm_campaigns"},
             {"code": "CRM_TICKETS", "label": "تیکت‌ها و شکایات", "screen": "crm_tickets"},
             {"code": "CRM_AUTOMATION", "label": "اتوماسیون و پیام‌ها", "screen": "crm_automation"},
+            {"code": "CRM_REPORTS", "label": "گزارش‌ها", "children": _report_menu("CRM_RPT", "warehouse_report_", CRM_REPORT_MENU)},
             {"code": "CRM_SETTINGS", "label": "تنظیمات ارتباط با مشتری (قیف فروش، منابع سرنخ)", "screen": "crm_settings", "in_ribbon": False},
         ],
     },
@@ -596,6 +616,7 @@ NAV_ITEMS = [
             {"code": "REPORTS_INV", "label": "انبار", "children": _report_menu("INV_RPT", "warehouse_report_", WAREHOUSE_REPORT_MENU)},
             {"code": "REPORTS_FA", "label": "دارایی‌های ثابت", "children": _report_menu("INV_RPT", "warehouse_report_", FA_REPORT_MENU)},
             {"code": "REPORTS_PRD", "label": "تولید", "children": _report_menu("INV_RPT", "warehouse_report_", PRD_REPORT_MENU)},
+            {"code": "REPORTS_CRM", "label": "ارتباط با مشتری", "children": _report_menu("INV_RPT", "warehouse_report_", CRM_REPORT_MENU)},
             # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
             {"code": "REPORTS_PURCHASE", "label": "گزارشات خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
             {"code": "REPORTS_SALES", "label": "گزارشات فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
