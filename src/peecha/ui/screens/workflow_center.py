@@ -770,6 +770,10 @@ class WfRulesPanel(QWidget):
         grid.addWidget(self.max_steps, 0, 1)
         grid.addWidget(QLabel("حداکثر زنجیرهٔ رویدادهای پشت‌سرهم"), 1, 0)
         grid.addWidget(self.max_depth, 1, 1)
+        self.step_up_amount = num_field()
+        self.step_up_amount.setPlaceholderText("خالی یعنی بدون سقف")
+        grid.addWidget(QLabel("تایید در موبایل با رمز دوباره، برای مبلغ از"), 2, 0)
+        grid.addWidget(self.step_up_amount, 2, 1)
         for w in (self.self_approval, self.notify_end):
             layout.addWidget(w)
         layout.addLayout(grid)
@@ -790,11 +794,14 @@ class WfRulesPanel(QWidget):
         self.notify_end.setChecked(bool(s.get("notify_starter_on_end", True)))
         self.max_steps.setText(P(s.get("max_steps") or 200))
         self.max_depth.setText(P(s.get("max_event_depth") or 5))
+        self.step_up_amount.setText(P(s.get("mobile_step_up_amount")) if s.get("mobile_step_up_amount") else "")
 
     def save(self) -> bool:
         try:
             steps = int(numerals.to_ascii_digits(self.max_steps.text().strip() or "200"))
             depth = int(numerals.to_ascii_digits(self.max_depth.text().strip() or "5"))
+            amount_text = numerals.to_ascii_digits(self.step_up_amount.text().strip()).replace(",", "").replace("٬", "")
+            step_up_amount = int(amount_text) if amount_text else None
         except ValueError:
             _warn(self, "قواعد گردش کار", "سقف‌ها باید عدد صحیح باشند.")
             return False
@@ -802,7 +809,8 @@ class WfRulesPanel(QWidget):
             _warn(self, "قواعد گردش کار", "حداکثر مراحل بین ۱۰ تا ۵۰۰۰ و زنجیرهٔ رویدادها بین ۱ تا ۲۰ باشد.")
             return False
         save_settings(company_id(), user_id(), allow_self_approval=self.self_approval.isChecked(),
-                      notify_starter_on_end=self.notify_end.isChecked(), max_steps=steps, max_event_depth=depth)
+                      notify_starter_on_end=self.notify_end.isChecked(), max_steps=steps, max_event_depth=depth,
+                      mobile_step_up_amount=step_up_amount)
         return True
 
 

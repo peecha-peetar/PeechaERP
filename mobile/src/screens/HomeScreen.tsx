@@ -20,6 +20,8 @@ interface Props {
   salesMode?: SalesMode;
   /** R286: کارهای CRM (پیگیری‌ها، تیکت‌ها، ثبت سرنخ). */
   onOpenCrmTasks?: () => void;
+  /** R297: کارتابل یکپارچهٔ گردش کار (تاییدها و کارها) */
+  onOpenWorkInbox?: () => void;
 }
 
 /** صفحه‌یِ خانه -- طبقِ اصلِ صریحِ کاربر («در ۳ ثانیه اطلاعاتِ مهم را
@@ -27,7 +29,9 @@ interface Props {
  * درخواستِ تکی (/dashboard/today). برایِ بازکردنِ ویزیت، مشتری/برنامه‌یِ
  * کاملشان از کشِ محلیِ pull (که از قبل رویِ دستگاه هست) resolve می‌شود --
  * نه یک درخواستِ شبکه‌یِ دیگر. */
-export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, hideVisitPlan, salesMode, onOpenCrmTasks }: Props) {
+export function HomeScreen({
+  apiClient, localCache, userFullName, onOpenVisit, hideVisitPlan, salesMode, onOpenCrmTasks, onOpenWorkInbox,
+}: Props) {
   const { colors, spacing, typography } = useTheme();
   const [summary, setSummary] = useState<TodaySummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +79,12 @@ export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, h
         <Text style={[typography.h2, { color: colors.textPrimary }]}>
           سلام، {userFullName.split(" ")[0]}
         </Text>
+
+        {onOpenWorkInbox ? (
+          <Card onPress={onOpenWorkInbox}>
+            <Text style={[typography.bodyBold, { color: colors.primary }]}>تاییدها و کارهای گردش کار</Text>
+          </Card>
+        ) : null}
 
         {onOpenCrmTasks ? (
           <Card onPress={onOpenCrmTasks}>

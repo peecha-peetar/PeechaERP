@@ -74,7 +74,11 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_LEAD"; payload: CrmLeadRequest }
   | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_ACTIVITY"; payload: CrmActivityRequest & { visitStartActionKey?: string } }
   | { idempotencyKey: string; createdAt: string; type: "CRM_COMPLETE_ACTIVITY"; payload: { activityId: number } & CrmActivityCompleteRequest }
-  | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_TICKET"; payload: CrmTicketRequest };
+  | { idempotencyKey: string; createdAt: string; type: "CRM_CREATE_TICKET"; payload: CrmTicketRequest }
+  // R297: گردش کار (تصمیم‌های غیرحساس؛ تایید حساس فقط آنلاین با رمز)
+  | { idempotencyKey: string; createdAt: string; type: "WF_DECIDE"; payload: { taskId: number; decision: string; comment: string; rowVersion?: number | null } }
+  | { idempotencyKey: string; createdAt: string; type: "WF_COMMENT"; payload: { taskId: number; text: string } }
+  | { idempotencyKey: string; createdAt: string; type: "WF_DELEGATE"; payload: { taskId: number; toUserId: number; comment: string } };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -94,7 +98,10 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "CRM_CREATE_LEAD" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CRM_CREATE_ACTIVITY" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CRM_COMPLETE_ACTIVITY" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "CRM_CREATE_TICKET" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "CRM_CREATE_TICKET" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WF_DECIDE" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WF_COMMENT" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WF_DELEGATE" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

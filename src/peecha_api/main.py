@@ -31,6 +31,7 @@ from peecha_api.routers import (
     sync,
     vehicle_settlement,
     visits,
+    workflow,
 )
 
 app = FastAPI(title="Peecha Field Sales API", version="R186")
@@ -41,6 +42,7 @@ from peecha.services.workflow import registry as _wf_registry  # noqa: E402
 _wf_registry.ensure_loaded()
 
 app.include_router(auth.router)
+app.include_router(workflow.router)  # R297
 app.include_router(sync.router)
 app.include_router(visits.router)
 app.include_router(orders.router)

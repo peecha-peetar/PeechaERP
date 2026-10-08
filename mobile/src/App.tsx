@@ -18,6 +18,8 @@ import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
 import { CrmLeadScreen } from "./screens/CrmLeadScreen";
 import { CrmTasksScreen } from "./screens/CrmTasksScreen";
+import { WorkInboxScreen } from "./screens/WorkInboxScreen";
+import { WorkTaskScreen } from "./screens/WorkTaskScreen";
 import { CrmTicketScreen } from "./screens/CrmTicketScreen";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
 import { HomeScreen } from "./screens/HomeScreen";
@@ -84,6 +86,8 @@ export type RootStackParamList = {
   VehicleSettlement: undefined;
   Warehouse: undefined;
   CrmTasks: undefined;
+  WorkInbox: undefined;
+  WorkTask: { taskId: number };
   CrmLead: undefined;
   CrmTicket: { detailAccountId: number; customerName?: string };
 };
@@ -518,6 +522,35 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
           )}
         </RootStack.Screen>
 
+        <RootStack.Screen name="WorkInbox">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <WorkInboxScreen
+                apiClient={services.apiClient}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+                onOpenTask={(taskId) => navigation.navigate("WorkTask", { taskId })}
+                onOpenApprovals={() => navigation.navigate("Approvals")}
+                onOpenCrmTasks={() => navigation.navigate("CrmTasks")}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="WorkTask">
+          {({ navigation, route }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <WorkTaskScreen
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                syncEngine={services.syncEngine}
+                taskId={route.params.taskId}
+                onBack={() => navigation.goBack()}
+                onDone={() => navigation.navigate("WorkInbox")}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
         <RootStack.Screen name="CrmLead">
           {({ navigation }) => (
             <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -611,6 +644,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
                 onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
                 onOpenApprovals={() => navigation.navigate("Approvals")}
+                onOpenWorkInbox={() => navigation.navigate("WorkInbox")}
                 onOpenWarehouse={() => navigation.navigate("Warehouse")}
                 onOpenVehicleSettlement={
                   settlementVehicleWarehouseId != null ? () => navigation.navigate("VehicleSettlement") : undefined
@@ -730,6 +764,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
               hideVisitPlan={selectedMode === "VAN_SALES"}
               salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
               onOpenCrmTasks={() => navigation.navigate("CrmTasks")}
+              onOpenWorkInbox={() => navigation.navigate("WorkInbox")}
             />
           )}
         </MainTab.Screen>

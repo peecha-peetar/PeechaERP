@@ -21,6 +21,8 @@ interface Props {
    * مدیریت -- همیشه نشان داده می‌شود؛ کارتابلِ خالی/بدونِ مشتریِ
    * درانتظار یعنی چیزی برایِ این کاربر نیست، نه خطا. */
   onOpenApprovals: () => void;
+  /** R297: کارتابل یکپارچهٔ گردش کار */
+  onOpenWorkInbox?: () => void;
   /** R249: اپِ انباردار (جستجو/اسکنِ محل، وظایف، انتقال). */
   onOpenWarehouse?: () => void;
   /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورتِ انتخابی به
@@ -49,7 +51,7 @@ interface Props {
  * کاربر از چنین حالتی است، بدونِ نیاز به پاک‌کردنِ کاملِ دیتایِ اپ. */
 export function SettingsScreen({
   apiClient, offlineQueue, syncEngine, syncErrorLog, userFullName, onLoggedOut, onBack, onOpenManagerDashboard,
-  onOpenApprovals, onOpenWarehouse, onOpenVehicleSettlement, onChangeMode,
+  onOpenApprovals, onOpenWorkInbox, onOpenWarehouse, onOpenVehicleSettlement, onChangeMode,
 }: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
@@ -163,6 +165,8 @@ export function SettingsScreen({
       <Button label="داشبورد مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 
       <Button label="صندوق تاییدها" variant="secondary" onPress={onOpenApprovals} />
+
+      {onOpenWorkInbox ? <Button label="تاییدها و کارهای گردش کار" variant="secondary" onPress={onOpenWorkInbox} /> : null}
 
       {onOpenWarehouse ? <Button label="انبار: اسکن، وظایف و انتقال" variant="secondary" onPress={onOpenWarehouse} /> : null}
 

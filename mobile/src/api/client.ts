@@ -69,6 +69,7 @@ import {
   CrmTasksResponse,
   CrmTicketRequest,
 } from "./crmTypes";
+import { Colleague, WorkDecideRequest, WorkDecideResponse, WorkInboxResponse, WorkTaskDetail } from "./workflowTypes";
 
 export type Fetcher = typeof fetch;
 
@@ -561,6 +562,33 @@ export class ApiClient {
   // --- CRM (R286) -------------------------------------------------------------
   async getCrmTasks(): Promise<CrmTasksResponse> {
     return this.request<CrmTasksResponse>("/crm/tasks");
+  }
+
+  // R297: گردش کار -- کارتابل یکپارچه، تصمیم، یادداشت و سپردن به همکار
+  async getWorkInbox(source?: string): Promise<WorkInboxResponse> {
+    return this.request<WorkInboxResponse>(source ? `/workflow/inbox?source=${encodeURIComponent(source)}` : "/workflow/inbox");
+  }
+
+  async getWorkTask(taskId: number): Promise<WorkTaskDetail> {
+    return this.request<WorkTaskDetail>(`/workflow/tasks/${taskId}`);
+  }
+
+  async decideWorkTask(taskId: number, body: WorkDecideRequest, idempotencyKey?: string): Promise<WorkDecideResponse> {
+    return this.request<WorkDecideResponse>(`/workflow/tasks/${taskId}/decide`, { method: "POST", body, idempotencyKey });
+  }
+
+  async commentWorkTask(taskId: number, text: string, idempotencyKey?: string): Promise<void> {
+    await this.request<void>(`/workflow/tasks/${taskId}/comment`, { method: "POST", body: { text }, idempotencyKey });
+  }
+
+  async delegateWorkTask(taskId: number, toUserId: number, comment: string, idempotencyKey?: string): Promise<void> {
+    await this.request<void>(`/workflow/tasks/${taskId}/delegate`, {
+      method: "POST", body: { to_user_id: toUserId, comment }, idempotencyKey,
+    });
+  }
+
+  async listColleagues(): Promise<Colleague[]> {
+    return this.request<Colleague[]>("/workflow/colleagues");
   }
 
   async getCrm360(detailAccountId: number): Promise<Crm360Response> {

@@ -1093,7 +1093,8 @@ class DesignerScreen(QWidget):
             if t == "APPROVAL":
                 for key, label, default in (("allow_delegate", "امکان واگذاری به همکار", True),
                                             ("require_comment_on_reject", "نوشتن علت رد الزامی باشد", True),
-                                            ("distinct_approvers", "تاییدکنندهٔ مراحل قبل دوباره تایید نکند", False)):
+                                            ("distinct_approvers", "تاییدکنندهٔ مراحل قبل دوباره تایید نکند", False),
+                                            ("step_up", "تایید در موبایل با وارد کردن دوبارهٔ رمز", False)):
                     box = QCheckBox(label)
                     box.setChecked(bool(node.get(key, default)))
                     self._row(key, "", box)
@@ -1257,7 +1258,7 @@ class DesignerScreen(QWidget):
             node["mode"] = w["mode"].currentData()
             if t == "APPROVAL":
                 put("percent", int(num("percent") or 50) if node["mode"] == "PERCENT" else None)
-                for key in ("allow_delegate", "require_comment_on_reject", "distinct_approvers"):
+                for key in ("allow_delegate", "require_comment_on_reject", "distinct_approvers", "step_up"):
                     node[key] = w[key].isChecked()
             else:
                 table_w = w["fields"].table

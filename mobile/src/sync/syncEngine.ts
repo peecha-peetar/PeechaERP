@@ -159,6 +159,17 @@ export class SyncEngine {
       case "CRM_CREATE_TICKET":
         await this.api.createCrmTicket(action.payload, action.idempotencyKey);
         return;
+      case "WF_DECIDE":
+        await this.api.decideWorkTask(action.payload.taskId, {
+          decision: action.payload.decision, comment: action.payload.comment, row_version: action.payload.rowVersion ?? null,
+        }, action.idempotencyKey);
+        return;
+      case "WF_COMMENT":
+        await this.api.commentWorkTask(action.payload.taskId, action.payload.text, action.idempotencyKey);
+        return;
+      case "WF_DELEGATE":
+        await this.api.delegateWorkTask(action.payload.taskId, action.payload.toUserId, action.payload.comment, action.idempotencyKey);
+        return;
     }
   }
 
