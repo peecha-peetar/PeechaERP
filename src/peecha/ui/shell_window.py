@@ -2051,6 +2051,10 @@ class MainWindow(QMainWindow):
         self.register_screen("wf_notifications", lambda: wf_screens.NotificationCenterScreen(self))
         self.register_screen("wf_delegations", lambda: wf_screens.DelegationsScreen(self))
         self.register_screen("wf_settings", lambda: wf_screens.WorkflowSettingsScreen(self))
+        from peecha.ui.screens import workflow_studio as wf_studio
+
+        self.register_screen("wf_processes", lambda: wf_studio.ProcessListScreen(self))
+        self.register_screen("wf_designer", lambda: wf_studio.DesignerScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())

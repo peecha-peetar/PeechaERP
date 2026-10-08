@@ -194,6 +194,8 @@ check(inbox.quick_decide(company_id, a1, f"WF:{tasks.list_tasks(company_id, inst
 import re
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QScrollArea
 qapp = QApplication.instance() or QApplication([])
+from PySide6.QtCore import Qt
+qapp.setLayoutDirection(Qt.RightToLeft)  # مثل برنامهٔ واقعی
 WARN = []
 QMessageBox.warning = staticmethod(lambda *a, **k: WARN.append(a[2] if len(a) > 2 else ""))
 from peecha import nav_catalog, session as sess
@@ -270,7 +272,7 @@ nc.refresh()
 no_text_buttons(nc, "Notifications")
 n_unread = notify.unread_count(company_id, a1)
 check(nc.table.rowCount() == n_unread and nc.cards["unread"].text() == numerals.to_persian_digits(str(n_unread)), "notification list")
-nc.table.selectRow(0)
+nc.table.setCurrentCell(0, 0)
 check(nc.mark_selected() == 1 and notify.unread_count(company_id, a1) == n_unread - 1, "mark one read from UI")
 nc.mark_all()
 check(notify.unread_count(company_id, a1) == 0 and nc.table.rowCount() == 0, "mark all read from UI")
@@ -284,7 +286,7 @@ ds.refresh()
 no_text_buttons(ds, "Delegations")
 did = ds.create({"from": a1, "to": boss, "starts_on": today, "ends_on": today + datetime.timedelta(days=2), "reason": "مرخصی"})
 check(did and ds.table.rowCount() == 1 and ds.cards["mine"].text() == "۱", "delegation created from UI")
-ds.table.selectRow(0)
+ds.table.setCurrentCell(0, 0)
 check(ds.end_selected() and ds.table.rowCount() == 0, "delegation ended from UI")
 
 login(uid)
@@ -306,7 +308,7 @@ cal.refresh()
 cal.days[3][2].setText("۱۲:۰۰")
 check(cal.save_hours() and calendar.work_hours(company_id)[3][1] == datetime.time(12, 0), "work hours from UI")
 check(cal.add_holiday({"date": datetime.date(2026, 11, 1), "title": "تعطیلی آزمایشی"}) and cal.t_holidays.rowCount() == 1, "holiday from UI")
-cal.t_holidays.selectRow(0)
+cal.t_holidays.setCurrentCell(0, 0)
 check(cal.delete_holiday() and cal.t_holidays.rowCount() == 0, "holiday removed from UI")
 sp = page("تعهد زمانی و ارجاع")
 sp.refresh()

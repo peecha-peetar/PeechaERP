@@ -555,6 +555,9 @@ NAV_ITEMS = [
             {"code": "WF_APPROVALS", "label": "مرکز تایید", "screen": "wf_approvals"},
             {"code": "WF_NOTIFICATIONS", "label": "اعلان‌ها", "screen": "wf_notifications"},
             {"code": "WF_DELEGATIONS", "label": "تفویض اختیار", "screen": "wf_delegations"},
+            # R294: طراحی فرایند بدون کدنویسی
+            {"code": "WF_PROCESSES", "label": "فرایندها و طراحی", "screen": "wf_processes"},
+            {"code": "WF_DESIGNER", "label": "طراح فرایند", "screen": "wf_designer", "hidden_from_sidebar": True},
             {"code": "WF_SETTINGS", "label": "تنظیمات گردش کار", "screen": "wf_settings", "hidden_from_sidebar": True},
         ],
     },
@@ -819,6 +822,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("WF_APPROVALS", "🖊️"),
         ("WF_NOTIFICATIONS", "🔔"),
         ("WF_DELEGATIONS", "🤝"),
+        ("WF_PROCESSES", "🔀"),
     ],
     "SETTINGS": [],
 }

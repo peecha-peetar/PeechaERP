@@ -220,7 +220,7 @@ class MyWorkScreen(QWidget):
     def select_key(self, key: str) -> bool:
         for r in range(self.table.rowCount()):
             if self.table.item(r, 0).data(Qt.UserRole) == key:
-                self.table.selectRow(r)
+                self.table.setCurrentCell(r, 0)
                 return True
         return False
 
@@ -396,12 +396,12 @@ class ApprovalCenterScreen(QWidget):
         self.current = None
         self._show_detail(None)
         if shown:
-            self.table.selectRow(0)
+            self.table.setCurrentCell(0, 0)
 
     def select_key(self, key: str) -> bool:
         for r in range(self.table.rowCount()):
             if self.table.item(r, 0).data(Qt.UserRole) == key:
-                self.table.selectRow(r)
+                self.table.setCurrentCell(r, 0)
                 return True
         return False
 
