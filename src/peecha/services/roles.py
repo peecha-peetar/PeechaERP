@@ -1,19 +1,19 @@
 """سرویس نقش‌ها و دسترسی‌ها (sec.roles + sec.role_form_permissions +
-sec.user_roles). کاتالوگِ ماژول/فرم (sec.modules/sec.forms) چون داده‌ی
-ثابتِ خودِ برنامه است (نه چیزی که کاربر تعریف کند)، با ensure_catalog()
+sec.user_roles). کاتالوگ ماژول/فرم (sec.modules/sec.forms) چون داده‌ی
+ثابت خود برنامه است (نه چیزی که کاربر تعریف کند)، با ensure_catalog()
 به‌صورت خودکار/idempotent در دیتابیس ساخته می‌شود — دقیقاً همان الگوی
 get-or-create که برای سال مالی در journal_entries.py استفاده شده.
 
-فقط ۴ اکشنِ VIEW/CREATE/EDIT/DELETE در این نسخه قابل‌تنظیم‌اند (نه همه‌ی
-۷ اکشنِ جدولِ permission_actions) — چون فقط همین‌ها در فرم‌های فعلی برنامه
+فقط ۴ اکشن VIEW/CREATE/EDIT/DELETE در این نسخه قابل‌تنظیم‌اند (نه همه‌ی
+۷ اکشن جدول permission_actions) — چون فقط همین‌ها در فرم‌های فعلی برنامه
 واقعاً معنا دارند (چاپ/خروجی/تایید هنوز به هیچ صفحه‌ای وصل نشده).
 
-طبقِ بازخوردِ صریح: قبلاً `_FORMS` یک فهرستِ دستیِ جداگانه بود که با
-اضافه‌شدنِ صفحه‌هایِ تازه (در طولِ توسعه) به‌روز نمی‌شد و آن صفحاتِ تازه
-هیچ‌وقت در جدولِ دسترسیِ نقش‌ها ظاهر نمی‌شدند — حالا از
-`peecha.nav_catalog` (همان تکِ منبعِ حقیقتی که ناوبریِ shell_window.py هم
-از آن می‌خواند) ساخته می‌شود تا افزودنِ آیتمِ تازه به NAV_ITEMS به‌طورِ
-خودکار در جدولِ دسترسی‌ها هم ظاهر شود."""
+طبق بازخورد صریح: قبلاً `_FORMS` یک فهرست دستی جداگانه بود که با
+اضافه‌شدن صفحه‌های تازه (در طول توسعه) به‌روز نمی‌شد و آن صفحات تازه
+هیچ‌وقت در جدول دسترسی نقش‌ها ظاهر نمی‌شدند — حالا از
+`peecha.nav_catalog` (همان تک منبع حقیقتی که ناوبری shell_window.py هم
+از آن می‌خواند) ساخته می‌شود تا افزودن آیتم تازه به NAV_ITEMS به‌طور
+خودکار در جدول دسترسی‌ها هم ظاهر شود."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from peecha.nav_catalog import build_form_catalog
 # (کدِ ماژول، برچسبِ فارسی، آیکون، ترتیب) — همان ماژول‌های شِل (shell_window.py NAV_ITEMS)
 _MODULES = [
     ("DASH", "داشبورد", "view-dashboard-outline", 0),
-    ("MY_TASKS", "کارتابلِ من", "inbox-outline", 1),
+    ("MY_TASKS", "کارتابل من", "inbox-outline", 1),
     ("GL", "مالی و حسابداری", "cash-multiple", 2),
     ("TREASURY", "خزانه‌داری", "bank-outline", 3),
     ("INV", "انبار و موجودی", "package-variant-closed", 4),
@@ -47,6 +47,11 @@ _MODULES = [
     ("INVOICES", "فاکتورها", "receipt-text-outline", 8),
     ("REPORTS", "گزارش‌ها", "chart-bar", 9),
     ("SETTINGS", "مدیریت سیستم", "cog-outline", 10),
+    ("COSTING", "بهای تمام‌شده", "calculator-variant-outline", 11),
+    ("FA", "دارایی‌های ثابت", "office-building-cog-outline", 12),
+    ("PRD", "تولید", "factory", 13),
+    ("CRM", "مدیریت ارتباط با مشتری", "account-heart-outline", 14),
+    ("WF", "گردش کار و تایید", "sitemap-outline", 15),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()
@@ -66,10 +71,13 @@ def ensure_catalog() -> None:
         session.flush()
 
         modules_by_code = {m.code: m.module_id for m in session.scalars(select(Module))}
-        existing_forms = {f.code for f in session.scalars(select(Form))}
+        existing_forms = {f.code: f for f in session.scalars(select(Form))}
         for code, module_code, _label in _FORMS:
             if code not in existing_forms:
                 session.add(Form(module_id=modules_by_code[module_code], code=code, is_active=True))
+            elif existing_forms[code].module_id != modules_by_code[module_code]:
+                # R261: جابه‌جاییِ فرم به ماژولِ دیگر (مثلِ بهایِ تمام‌شده) -- همان فرم و دسترسی‌ها، فقط گروهِ ماژول
+                existing_forms[code].module_id = modules_by_code[module_code]
         session.commit()
 
 
@@ -127,7 +135,7 @@ def list_roles(company_id: int) -> list[RoleRow]:
 def create_role(company_id: int, code: str, parent_role_id: int | None) -> Role:
     with new_session() as session:
         if session.scalar(select(Role).where(Role.company_id == company_id, Role.code == code)):
-            raise ValueError("این کدِ نقش قبلاً در این شرکت تعریف شده است.")
+            raise ValueError("این کد نقش قبلاً در این شرکت تعریف شده است.")
         role = Role(company_id=company_id, parent_role_id=parent_role_id, code=code, is_active=True)
         session.add(role)
         session.commit()
@@ -136,21 +144,50 @@ def create_role(company_id: int, code: str, parent_role_id: int | None) -> Role:
         return role
 
 
-def update_role(role_id: int, company_id: int, parent_role_id: int | None, is_active: bool) -> Role:
+def update_role(role_id: int, company_id: int, code: str, parent_role_id: int | None, is_active: bool) -> Role:
+    """طبق گزارش صریح («نقش را می‌شود ساخت ولی نمی‌شود ویرایش کرد»): حالا
+    کد نقش هم — نه فقط والد/فعال‌بودن — قابل‌تغییر است."""
     with new_session() as session:
         role = session.get(Role, role_id)
         if role is None or role.company_id != company_id:
             raise ValueError("نقش نامعتبر است.")
         if parent_role_id == role_id:
-            raise ValueError("یک نقش نمی‌تواند والدِ خودش باشد.")
+            raise ValueError("یک نقش نمی‌تواند والد خودش باشد.")
         if role.is_system_role and not is_active:
             raise ValueError("نقش‌های سیستمی غیرقابل‌غیرفعال‌سازی‌اند.")
+        code = code.strip()
+        if not code:
+            raise ValueError("کد نقش نمی‌تواند خالی باشد.")
+        if code != role.code and session.scalar(
+            select(Role).where(Role.company_id == company_id, Role.code == code, Role.role_id != role_id)
+        ):
+            raise ValueError("این کد نقش قبلاً در این شرکت تعریف شده است.")
+        role.code = code
         role.parent_role_id = parent_role_id
         role.is_active = is_active
         session.commit()
         session.refresh(role)
         session.expunge(role)
         return role
+
+
+def delete_role(role_id: int, company_id: int) -> None:
+    """طبق گزارش صریح: حذف کامل نقش — شامل دسترسی‌ها و تخصیص‌های
+    خودش (که چیزی جز تنظیمات کنترل‌دسترسی نیستند، نه دادهٔ مالی، پس
+    حذف آبشاری‌شان بی‌خطر است)."""
+    with new_session() as session:
+        role = session.get(Role, role_id)
+        if role is None or role.company_id != company_id:
+            raise ValueError("نقش نامعتبر است.")
+        if role.is_system_role:
+            raise ValueError("نقش‌های سیستمی حذف‌ناپذیرند.")
+        has_children = session.scalar(select(Role.role_id).where(Role.parent_role_id == role_id))
+        if has_children is not None:
+            raise ValueError("ابتدا نقش‌های فرزند این نقش را حذف کنید یا والد شان را عوض کنید.")
+        session.query(RoleFormPermission).filter(RoleFormPermission.role_id == role_id).delete()
+        session.query(UserRole).filter(UserRole.role_id == role_id).delete()
+        session.delete(role)
+        session.commit()
 
 
 def get_role_permissions(role_id: int) -> set[tuple[int, str]]:
@@ -169,7 +206,7 @@ def set_role_permission(role_id: int, form_id: int, action_code: str, is_allowed
     with new_session() as session:
         action = session.scalar(select(PermissionAction).where(PermissionAction.code == action_code))
         if action is None:
-            raise ValueError("اکشنِ دسترسیِ نامعتبر است.")
+            raise ValueError("نوع دسترسی نامعتبر است.")
         existing = session.get(RoleFormPermission, {"role_id": role_id, "form_id": form_id, "action_id": action.action_id})
         if existing is None:
             if is_allowed:
@@ -230,3 +267,58 @@ def set_user_role(user_id: int, role_id: int, company_id: int, assigned: bool) -
         elif not assigned and existing is not None:
             session.delete(existing)
         session.commit()
+
+
+# طبقِ درخواستِ صریح («مدیر — با نقشِ سوپروایزر/ادمین — بتواند فاکتورِ
+# ثبت‌شده را اصلاح کند»): چون این سیستمِ نقش‌ها کاملاً آزاد و کاربرساخته
+# است (بدونِ هیچ نقشِ سیستمیِ ازپیش‌ساخته)، «مدیر بودن» یعنی کاربر حداقل
+# یکی از نقش‌هایِ زیر را داشته باشد -- کدها به‌صورتِ غیرِحساس‌به‌بزرگی/
+# کوچکیِ حروف و هم‌فارسی/هم‌انگلیسی بررسی می‌شوند.
+_MANAGER_ROLE_CODES = {"ADMIN", "SUPERVISOR", "MANAGER", "ادمین", "سوپروایزر", "مدیر"}
+
+
+def is_manager(user_id: int, company_id: int) -> bool:
+    with new_session() as session:
+        # طبقِ رفعِ باگِ واقعی («وقتی کاربر مدیرِ کلِ سیستم است، دیگر
+        # نیازی به نقشِ جداگانه نیست -- او همه‌یِ دسترسی‌ها را دارد»):
+        # is_super_admin از سیستمِ نقش‌هایِ این شرکت کاملاً مستقل است.
+        user = session.get(User, user_id)
+        if user is not None and user.is_super_admin:
+            return True
+        codes = session.scalars(
+            select(Role.code)
+            .join(UserRole, UserRole.role_id == Role.role_id)
+            .where(UserRole.user_id == user_id, UserRole.company_id == company_id)
+        ).all()
+        return any(code.strip().upper() in _MANAGER_ROLE_CODES for code in codes)
+
+
+def user_has_permission(user_id: int, company_id: int, form_code: str, action_code: str) -> bool:
+    """طبق کشف حسابرسی: جدول‌های sec.role_form_permissions از قبل کاملاً
+    تعریف می‌شوند (تب «نقش‌ها»/roles.py) ولی تا این تابع هیچ‌جای برنامه
+    (نه دسکتاپ، نه API) واقعاً enforce نمی‌شدند — این تابع همان تعریف
+    موجود را فعال می‌کند، بدون هیچ جدول/مفهوم تازه. مدیر کل سیستم
+    (is_super_admin) طبق همان قاعدهٔ is_manager همیشه مجاز است."""
+    with new_session() as session:
+        user = session.get(User, user_id)
+        if user is not None and user.is_super_admin:
+            return True
+        form_id = session.scalar(select(Form.form_id).where(Form.code == form_code))
+        if form_id is None:
+            return False
+        role_ids = session.scalars(
+            select(UserRole.role_id).where(UserRole.user_id == user_id, UserRole.company_id == company_id)
+        ).all()
+        if not role_ids:
+            return False
+        allowed = session.scalar(
+            select(RoleFormPermission.role_id)
+            .join(PermissionAction, PermissionAction.action_id == RoleFormPermission.action_id)
+            .where(
+                RoleFormPermission.role_id.in_(role_ids),
+                RoleFormPermission.form_id == form_id,
+                RoleFormPermission.is_allowed.is_(True),
+                PermissionAction.code == action_code,
+            )
+        )
+        return allowed is not None

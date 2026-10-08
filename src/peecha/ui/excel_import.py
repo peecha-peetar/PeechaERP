@@ -1,8 +1,8 @@
-"""زیرساختِ مشترکِ ایمپورتِ اکسل — طبقِ درخواستِ صریح («در فرم‌هایِ موجود و
-فرم‌هایِ ورودِ اطلاعات بتوان از فایلِ اکسل اطلاعات را ایمپورت کرد، مثلِ فرمِ
-تعریفِ حساب‌ها»): دیالوگِ تناظرِ ستون‌ها که برایِ ایمپورتِ ردیف‌هایِ سند
-(journal_entry.py) ساخته شده بود، این‌جا عمومی شده — هر فرمی فقط فهرستِ
-فیلدهایِ مقصدِ خودش را می‌دهد (به‌جایِ کپی‌کردنِ کلِ دیالوگ)."""
+"""زیرساخت مشترک ورود اکسل — طبق درخواست صریح («در فرم‌های موجود و
+فرم‌های ورود اطلاعات بتوان از فایل اکسل اطلاعات را ورود کرد، مثل فرم
+تعریف حساب‌ها»): دیالوگ تناظر ستون‌ها که برای ورود ردیف‌های سند
+(journal_entry.py) ساخته شده بود، این‌جا عمومی شده — هر فرمی فقط فهرست
+فیلدهای مقصد خودش را می‌دهد (به‌جای کپی‌کردن کل دیالوگ)."""
 
 from __future__ import annotations
 
@@ -29,9 +29,9 @@ def excel_column_letter(index: int) -> str:
 
 
 class ExcelColumnMappingDialog(QDialog):
-    """دیالوگِ عمومیِ تناظرِ ستون‌هایِ اکسل با فیلدهایِ مقصد — هر فرم فهرستِ
-    (کلید، برچسب، الزامی؟) و کلیدواژه‌هایِ حدسِ خودکار را می‌دهد؛ خودِ
-    دیالوگ فقط UI و اعتبارسنجیِ «فیلدهایِ الزامی مشخص شده‌اند» را انجام
+    """دیالوگ عمومی تناظر ستون‌های اکسل با فیلدهای مقصد — هر فرم فهرست
+    (کلید، برچسب، الزامی؟) و کلیدواژه‌های حدس خودکار را می‌دهد؛ خود
+    دیالوگ فقط UI و اعتبارسنجی «فیلدهای الزامی مشخص شده‌اند» را انجام
     می‌دهد."""
 
     def __init__(
@@ -41,7 +41,7 @@ class ExcelColumnMappingDialog(QDialog):
         header_row: tuple,
         parent: QWidget | None = None,
         *,
-        title: str = "ایمپورتِ اطلاعات از اکسل — تناظرِ ستون‌ها",
+        title: str = "ورود اطلاعات از اکسل — تناظر ستون‌ها",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
@@ -52,15 +52,15 @@ class ExcelColumnMappingDialog(QDialog):
         for i, value in enumerate(header_row):
             letter = excel_column_letter(i)
             text = str(value).strip() if value is not None else ""
-            self._column_labels.append(f"{letter}: {text}" if text else f"ستونِ {letter}")
+            self._column_labels.append(f"{letter}: {text}" if text else f"ستون {letter}")
 
         layout = QVBoxLayout(self)
 
-        self.header_checkbox = QCheckBox("ردیفِ اولِ فایل، عنوانِ ستون‌هاست (وارد نشود)")
+        self.header_checkbox = QCheckBox("ردیف اول فایل، عنوان ستون‌هاست (وارد نشود)")
         self.header_checkbox.setChecked(True)
         layout.addWidget(self.header_checkbox)
 
-        hint = QLabel("هر فیلدِ مقصد را به یکی از ستون‌هایِ فایلِ اکسل نسبت دهید:")
+        hint = QLabel("هر فیلد مقصد را به یکی از ستون‌های فایل اکسل نسبت دهید:")
         hint.setObjectName("sectionHint")
         layout.addWidget(hint)
 
@@ -94,7 +94,7 @@ class ExcelColumnMappingDialog(QDialog):
     def _on_accept(self) -> None:
         for key, _label, required in self._target_fields:
             if required and self.field_combos[key].currentData() is None:
-                QMessageBox.warning(self, "ناقص", "همه‌یِ فیلدهایِ الزامی (*) باید مشخص شوند.")
+                QMessageBox.warning(self, "ناقص", "همهٔ فیلدهای الزامی (*) باید مشخص شوند.")
                 return
         self.accept()
 
@@ -106,10 +106,10 @@ class ExcelColumnMappingDialog(QDialog):
 
 
 def read_excel_rows(parent_widget: QWidget, path: str) -> list[tuple] | None:
-    """بازکردنِ فایلِ اکسل یا CSV و برگرداندنِ ردیف‌هایِ غیرِخالی؛ در صورتِ
-    خطا، پیغام به کاربر نمایش داده و None برمی‌گردد. طبقِ خواستهٔ صریح
-    («دستگاه‌هایِ حضوروغیاب معمولاً CSV خروجی می‌دهند»)، پسوندِ .csv هم
-    کنارِ .xlsx/.xls پشتیبانی می‌شود."""
+    """بازکردن فایل اکسل یا CSV و برگرداندن ردیف‌های غیرخالی؛ در صورت
+    خطا، پیغام به کاربر نمایش داده و None برمی‌گردد. طبق خواستهٔ صریح
+    («دستگاه‌های حضور و غیاب معمولاً CSV خروجی می‌دهند»)، پسوند .csv هم
+    کنار .xlsx/.xls پشتیبانی می‌شود."""
     if path.lower().endswith(".csv"):
         return _read_csv_rows(parent_widget, path)
 
@@ -120,10 +120,10 @@ def read_excel_rows(parent_widget: QWidget, path: str) -> list[tuple] | None:
         worksheet = workbook.active
         rows = [row for row in worksheet.iter_rows(values_only=True) if any(c is not None for c in row)]
     except Exception as exc:
-        QMessageBox.critical(parent_widget, "خطا در خواندنِ فایل", f"فایلِ اکسل قابلِ‌خواندن نبود:\n{exc}")
+        QMessageBox.critical(parent_widget, "خطا در خواندن فایل", f"فایل اکسل قابل‌خواندن نبود:\n{exc}")
         return None
     if not rows:
-        QMessageBox.warning(parent_widget, "فایلِ خالی", "فایلِ انتخاب‌شده هیچ ردیفی ندارد.")
+        QMessageBox.warning(parent_widget, "فایل خالی", "فایل انتخاب‌شده هیچ ردیفی ندارد.")
         return None
     return rows
 
@@ -141,9 +141,9 @@ def _read_csv_rows(parent_widget: QWidget, path: str) -> list[tuple] | None:
                 dialect = csv.excel
             rows = [tuple(row) for row in csv.reader(f, dialect) if any(c.strip() for c in row)]
     except Exception as exc:
-        QMessageBox.critical(parent_widget, "خطا در خواندنِ فایل", f"فایلِ CSV قابلِ‌خواندن نبود:\n{exc}")
+        QMessageBox.critical(parent_widget, "خطا در خواندن فایل", f"فایل CSV قابل‌خواندن نبود:\n{exc}")
         return None
     if not rows:
-        QMessageBox.warning(parent_widget, "فایلِ خالی", "فایلِ انتخاب‌شده هیچ ردیفی ندارد.")
+        QMessageBox.warning(parent_widget, "فایل خالی", "فایل انتخاب‌شده هیچ ردیفی ندارد.")
         return None
     return rows

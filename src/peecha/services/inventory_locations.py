@@ -1,4 +1,4 @@
-"""سرویسِ مکان — انبارها و مکان‌هایِ انبار (inv.warehouses/bin_locations)."""
+"""سرویس مکان — انبارها و مکان‌های انبار (inv.warehouses/bin_locations)."""
 
 from __future__ import annotations
 
@@ -8,15 +8,16 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.inventory import BinLocation, StockDocument, StockLedger, Warehouse, WarehouseUserAccess
+from peecha.db.models.inventory import BinLocation, StockBalance, StockDocument, StockLedger, Warehouse, WarehouseUserAccess
 
 DEFAULT_BIN_CODE = "GENERAL"
-DEFAULT_BIN_NAME = "مکانِ پیش‌فرض"
+DEFAULT_BIN_NAME = "مکان پیش‌فرض"
 
 WAREHOUSE_TYPE_CODES = (
     "GENERAL", "PROJECT", "PRODUCTION_LINE", "QUARANTINE", "TRANSIT",
     "CENTRAL", "BRANCH", "STORE", "RAW_MATERIAL", "FINISHED_GOODS",
     "SEMI_FINISHED", "SCRAP", "CONSIGNMENT", "VEHICLE", "RETURNED",
+    "DISTRIBUTION", "COLD_STORAGE", "HOT_STORAGE",  # R248
 )
 
 WITHDRAWAL_POLICY_CODES = ("FIFO", "LIFO", "FEFO", "MANUAL")
@@ -92,8 +93,23 @@ class WarehouseFields:
     scrap_warehouse_id: int | None = None
     # مالی
     profit_center_detail_account_id: int | None = None
+    default_tax_percent: decimal.Decimal | None = None
     # توضیحات
     notes: str | None = None
+    # طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ گرم):
+    # فقط برایِ warehouse_type_code == "VEHICLE" پر می‌شوند.
+    vehicle_plate_number: str | None = None
+    vehicle_driver_detail_account_id: int | None = None
+    vehicle_capacity_weight_kg: decimal.Decimal | None = None
+    vehicle_capacity_volume_m3: decimal.Decimal | None = None
+    # R247: ظرفیتِ وزنی/حجمیِ هر انبار (غیرِ خودرو)
+    capacity_weight_kg: decimal.Decimal | None = None
+    capacity_volume_m3: decimal.Decimal | None = None
+    # R248: ابعادِ انبار (نقشه) و توضیح
+    width_m: decimal.Decimal | None = None
+    length_m: decimal.Decimal | None = None
+    height_m: decimal.Decimal | None = None
+    description: str | None = None
 
 
 @dataclass
@@ -132,40 +148,65 @@ def get_warehouse(warehouse_id: int, company_id: int) -> WarehouseRow | None:
 
 
 def get_default_warehouse(company_id: int) -> WarehouseRow | None:
+    # طبقِ رفعِ باگِ واقعیِ کشف‌شده: is_default رویِ خودِ WarehouseRow
+    # نیست -- داخلِ WarehouseFields (r.fields.is_default) است؛ نسخه‌یِ
+    # قبلی همیشه با AttributeError شکست می‌خورد، پس این تابع در عمل
+    # هرگز کار نکرده بود.
     rows = list_warehouses(company_id, active_only=True)
     for r in rows:
-        if r.is_default:
+        if r.fields.is_default:
             return r
     return rows[0] if rows else None
 
 
+def get_available_quantity(item_id: int, warehouse_id: int) -> decimal.Decimal:
+    """موجودی فعلی یک کالا در یک انبار (مجموع همهٔ مکان‌ها/بچ‌ها) —
+    فقط برای بررسی ازپیش/مشورتی (مثلاً «آیا برای صدور فاکتور کافی
+    است؟») است، نه جایگزین قفل ردیفی واقعی inventory_engine.py هنگام
+    ثبت‌نهایی؛ پس با شرایط رقابتی (race) می‌تواند کمی قدیمی باشد."""
+    with new_session() as session:
+        total = session.scalar(
+            select(func.sum(StockBalance.quantity_on_hand)).where(
+                StockBalance.item_id == item_id, StockBalance.warehouse_id == warehouse_id
+            )
+        )
+        return total or decimal.Decimal("0")
+
+
+def list_vehicles(company_id: int, active_only: bool = False) -> list[WarehouseRow]:
+    """طبق درخواست صریح («خودرو به‌عنوان انبار سیار» — ماژول پخش
+    گرم): انبارهای نوع VEHICLE این شرکت — برای فهرست انتخاب خودرو
+    در فرم فروش خودرویی."""
+    return [w for w in list_warehouses(company_id, active_only) if w.fields.warehouse_type_code == "VEHICLE"]
+
+
 def _validate_warehouse(fields: WarehouseFields) -> None:
     if fields.warehouse_type_code not in WAREHOUSE_TYPE_CODES:
-        raise ValueError("نوعِ انبار نامعتبر است.")
+        raise ValueError("نوع انبار نامعتبر است.")
     if fields.warehouse_type_code == "PROJECT" and fields.project_detail_account_id is None:
-        raise ValueError("برایِ انبارِ پروژه‌ای، انتخابِ پروژه (تفصیلی) الزامی است.")
+        raise ValueError("برای انبار پروژه‌ای، انتخاب پروژه (تفصیلی) الزامی است.")
     if (
         fields.is_temperature_controlled
         and fields.min_temp_c is not None
         and fields.max_temp_c is not None
         and fields.min_temp_c > fields.max_temp_c
     ):
-        raise ValueError("دمایِ حداقل نمی‌تواند بیشتر از دمایِ حداکثر باشد.")
+        raise ValueError("دمای حداقل نمی‌تواند بیشتر از دمای حداکثر باشد.")
     if fields.withdrawal_policy_code is not None and fields.withdrawal_policy_code not in WITHDRAWAL_POLICY_CODES:
-        raise ValueError("سیاستِ برداشت نامعتبر است.")
+        raise ValueError("سیاست برداشت نامعتبر است.")
     if fields.access_level_code not in ACCESS_LEVEL_CODES:
-        raise ValueError("سطحِ دسترسی نامعتبر است.")
+        raise ValueError("سطح دسترسی نامعتبر است.")
     if (
         fields.default_min_qty is not None
         and fields.default_max_qty is not None
         and fields.default_min_qty > fields.default_max_qty
     ):
-        raise ValueError("حداقلِ موجودی نمی‌تواند بیشتر از حداکثر باشد.")
+        raise ValueError("حداقل موجودی نمی‌تواند بیشتر از حداکثر باشد.")
     if fields.default_reorder_point_qty is not None:
         if fields.default_min_qty is not None and fields.default_reorder_point_qty < fields.default_min_qty:
-            raise ValueError("نقطهٔ‌سفارش نمی‌تواند کمتر از حداقلِ موجودی باشد.")
+            raise ValueError("نقطهٔ‌سفارش نمی‌تواند کمتر از حداقل موجودی باشد.")
         if fields.default_max_qty is not None and fields.default_reorder_point_qty > fields.default_max_qty:
-            raise ValueError("نقطهٔ‌سفارش نمی‌تواند بیشتر از حداکثرِ موجودی باشد.")
+            raise ValueError("نقطهٔ‌سفارش نمی‌تواند بیشتر از حداکثر موجودی باشد.")
 
 
 def create_warehouse(company_id: int, code: str, name: str, fields: WarehouseFields) -> int:
@@ -218,7 +259,7 @@ def delete_warehouse(warehouse_id: int, company_id: int) -> None:
             )
         )
         if has_movement or has_document:
-            raise ValueError("این انبار سابقهٔ سند/حرکت دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این انبار سابقهٔ سند/حرکت دارد و قابل‌حذف نیست.")
         session.query(BinLocation).filter(BinLocation.warehouse_id == warehouse_id).delete()
         session.query(WarehouseUserAccess).filter(WarehouseUserAccess.warehouse_id == warehouse_id).delete()
         session.delete(warehouse)
@@ -256,11 +297,46 @@ def list_bin_locations(warehouse_id: int, active_only: bool = False) -> list[Bin
         ]
 
 
+def set_default_bin_location(company_id: int, warehouse_id: int, bin_location_id: int | None, user_id: int | None = None) -> None:
+    """R253: مکان پیش‌فرض انبار (ردیف بی‌محل اسناد انبار در آن ثبت می‌شود)؛ None = رفتار قبلی (GENERAL)."""
+    from peecha.services import audit as audit_service
+
+    with new_session() as session:
+        wh = session.get(Warehouse, warehouse_id)
+        if wh is None or wh.company_id != company_id:
+            raise ValueError("انبار نامعتبر است.")
+        if bin_location_id is not None:
+            b = session.get(BinLocation, bin_location_id)
+            if b is None or b.warehouse_id != warehouse_id:
+                raise ValueError("مکان پیش‌فرض باید از همین انبار باشد.")
+            if not b.is_active:
+                raise ValueError("مکان غیرفعال نمی‌تواند پیش‌فرض باشد.")
+        if wh.default_bin_location_id != bin_location_id:
+            audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="Warehouse", entity_id=warehouse_id,
+                                       action="UPDATE", changes={"default_bin_location_id": [wh.default_bin_location_id, bin_location_id]})
+        wh.default_bin_location_id = bin_location_id
+        session.commit()
+
+
+def get_explicit_default_bin_id(warehouse_id: int) -> int | None:
+    """R253: همان مقدار انتخابی کاربر (بدون جایگزینی GENERAL) — برای فرم انبار."""
+    with new_session() as session:
+        wh = session.get(Warehouse, warehouse_id)
+        return wh.default_bin_location_id if wh is not None else None
+
+
 def get_default_bin_location(warehouse_id: int) -> BinLocationRow | None:
     with new_session() as session:
-        row = session.scalar(
-            select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == DEFAULT_BIN_CODE)
-        )
+        row = None
+        wh = session.get(Warehouse, warehouse_id)
+        if wh is not None and wh.default_bin_location_id is not None:  # R253: مکانِ پیش‌فرضِ انتخابیِ کاربر
+            row = session.get(BinLocation, wh.default_bin_location_id)
+            if row is not None and not row.is_active:
+                row = None
+        if row is None:
+            row = session.scalar(
+                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == DEFAULT_BIN_CODE)
+            )
         if row is None:
             row = session.scalar(
                 select(BinLocation).where(BinLocation.warehouse_id == warehouse_id).order_by(BinLocation.bin_location_id)
@@ -281,7 +357,7 @@ def create_bin_location(
         if parent_bin_location_id is not None:
             parent = session.get(BinLocation, parent_bin_location_id)
             if parent is None or parent.warehouse_id != warehouse_id:
-                raise ValueError("مکانِ والد نامعتبر است.")
+                raise ValueError("مکان والد نامعتبر است.")
         bin_location = BinLocation(
             warehouse_id=warehouse_id, code=code.strip(), name=(name or None),
             parent_bin_location_id=parent_bin_location_id, bin_type_code=bin_type_code,
@@ -299,7 +375,7 @@ def update_bin_location(
     with new_session() as session:
         bin_location = session.get(BinLocation, bin_location_id)
         if bin_location is None or bin_location.warehouse_id != warehouse_id:
-            raise ValueError("مکانِ انبار نامعتبر است.")
+            raise ValueError("مکان انبار نامعتبر است.")
         bin_location.code, bin_location.is_active = code.strip(), is_active
         bin_location.name = name or None
         bin_location.bin_type_code = bin_type_code
@@ -312,14 +388,14 @@ def delete_bin_location(bin_location_id: int, warehouse_id: int) -> None:
     with new_session() as session:
         bin_location = session.get(BinLocation, bin_location_id)
         if bin_location is None or bin_location.warehouse_id != warehouse_id:
-            raise ValueError("مکانِ انبار نامعتبر است.")
+            raise ValueError("مکان انبار نامعتبر است.")
         if bin_location.code == DEFAULT_BIN_CODE:
-            raise ValueError("مکانِ پیش‌فرضِ انبار قابلِ‌حذف نیست.")
+            raise ValueError("مکان پیش‌فرض انبار قابل‌حذف نیست.")
         has_movement = session.scalar(
             select(func.count()).select_from(StockLedger).where(StockLedger.bin_location_id == bin_location_id)
         )
         if has_movement:
-            raise ValueError("این مکان سابقهٔ حرکتِ انبار دارد و قابلِ‌حذف نیست.")
+            raise ValueError("این مکان سابقهٔ حرکت انبار دارد و قابل‌حذف نیست.")
         session.delete(bin_location)
         session.commit()
 

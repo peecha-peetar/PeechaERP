@@ -1,13 +1,13 @@
-"""نگاشتِ صورت‌هایِ مالی — محیطی برایِ مرور/ویرایشِ سریعِ اینکه هر گروهِ
-حساب (سطحِ ۱) در کدام صورتِ مالی و کدام بخشِ آن قرار می‌گیرد، بدونِ نیاز
-به بازکردنِ تک‌تکِ فرمِ هرکدام در «کدینگِ حسابداری».
+"""نگاشت صورت‌های مالی — محیطی برای مرور/ویرایش سریع اینکه هر گروه
+حساب (سطح ۱) در کدام صورت مالی و کدام بخش آن قرار می‌گیرد، بدون نیاز
+به بازکردن تک‌تک فرم هرکدام در «کدینگ حسابداری».
 
-طبقِ درخواستِ صریح: تشخیصِ ترازنامه/سود-زیان از قبل با category_code
+طبق درخواست صریح: تشخیص ترازنامه/سود-زیان از قبل با category_code
 (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE) و account_type_code
-(PERMANENT/TEMPORARY) انجام می‌شود — این دو همیشه در فرمِ حسابِ سطحِ گروه
-قابلِ‌تنظیم بوده‌اند (chart_of_accounts.py)؛ این صفحه فقط یک نمایِ
-متمرکز و سریع‌ترِ همان دو فیلد + فیلدِ تازه‌یِ سوم (بخشِ گردشِ وجوهِ نقد)
-است، برایِ مرورِ همه‌یِ گروه‌ها یک‌جا."""
+(PERMANENT/TEMPORARY) انجام می‌شود — این دو همیشه در فرم حساب سطح گروه
+قابل‌تنظیم بوده‌اند (chart_of_accounts.py)؛ این صفحه فقط یک نمای
+متمرکز و سریع‌تر همان دو فیلد + فیلد تازهٔ سوم (بخش گردش وجوه نقد)
+است، برای مرور همهٔ گروه‌ها یک‌جا."""
 
 from __future__ import annotations
 
@@ -30,32 +30,32 @@ from peecha.ui.widgets import wrap_scrollable_with_footer
 
 _CATEGORY_OPTIONS = [
     ("ASSET", "دارایی"), ("LIABILITY", "بدهی"), ("EQUITY", "حقوق صاحبان سهام"),
-    ("REVENUE", "درآمد"), ("COGS", "بهایِ تمام‌شده"), ("EXPENSE", "هزینه"),
-    ("STATISTICAL", "حساب‌هایِ آماری"),
+    ("REVENUE", "درآمد"), ("COGS", "بهای تمام‌شده"), ("EXPENSE", "هزینه"),
+    ("STATISTICAL", "حساب‌های آماری"),
 ]
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت"), ("STATISTICAL", "انتظامی")]
 _CASH_FLOW_SECTION_OPTIONS = [
-    (None, "— بدونِ طبقه‌بندی —"),
-    ("OPERATING", "۱. فعالیت‌هایِ عملیاتی"),
-    ("INVESTMENT_RETURNS_FINANCE_COST", "۲. بازده‌یِ سرمایه‌گذاری‌ها و سودِ پرداختیِ تامینِ مالی"),
+    (None, "— بدون طبقه‌بندی —"),
+    ("OPERATING", "۱. فعالیت‌های عملیاتی"),
+    ("INVESTMENT_RETURNS_FINANCE_COST", "۲. بازدهٔ سرمایه‌گذاری‌ها و سود پرداختی تامین مالی"),
     ("INCOME_TAX", "۳. مالیات بر درآمد"),
-    ("INVESTING", "۴. فعالیت‌هایِ سرمایه‌گذاری"),
-    ("FINANCING", "۵. فعالیت‌هایِ تامینِ مالی"),
+    ("INVESTING", "۴. فعالیت‌های سرمایه‌گذاری"),
+    ("FINANCING", "۵. فعالیت‌های تامین مالی"),
 ]
 _LIQUIDITY_CLASS_OPTIONS = [
-    (None, "— بدونِ طبقه‌بندی —"),
+    (None, "— بدون طبقه‌بندی —"),
     ("CURRENT", "جاری"),
     ("CURRENT_INVENTORY", "جاری (موجودی)"),
-    ("NON_CURRENT", "غیرِجاری"),
+    ("NON_CURRENT", "غیرجاری"),
 ]
 _BALANCE_SHEET_SIDE_OPTIONS = [
-    (None, "— خودکار (از رویِ دسته) —"),
+    (None, "— خودکار (از روی دسته) —"),
     ("RIGHT", "راست"),
     ("LEFT", "چپ"),
 ]
 
 _COLUMNS = [
-    "کد", "نام", "دسته‌یِ حساب", "نوعِ حساب", "بخشِ گردشِ نقد", "طبقه‌یِ نقدینگی", "سمتِ ترازنامه",
+    "کد", "نام", "دستهٔ حساب", "نوع حساب", "بخش گردش نقد", "طبقهٔ نقدینگی", "سمت ترازنامه",
 ]
 
 
@@ -88,14 +88,14 @@ class FinancialStatementMappingScreen(QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("تنظیماتِ صورت‌هایِ مالی")
+        title = QLabel("تنظیمات صورت‌های مالی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
-            "مشخص کنید هر گروهِ حساب در کدام گزارشِ مالی بیاید: دارایی/بدهی/سرمایه در ترازنامه، "
-            "درآمد/هزینه در سود و زیان. «بخشِ گردشِ نقد» و «طبقه‌یِ نقدینگی» اختیاری‌اند و فقط در "
-            "گزارش‌هایِ مربوطه اثر دارند. تغییراتِ همه‌یِ ردیف‌ها را با یک دکمه‌یِ ذخیره در پایینِ "
+            "مشخص کنید هر گروه حساب در کدام گزارش مالی بیاید: دارایی/بدهی/سرمایه در ترازنامه، "
+            "درآمد/هزینه در سود و زیان. «بخش گردش نقد» و «طبقهٔ نقدینگی» اختیاری‌اند و فقط در "
+            "گزارش‌های مربوطه اثر دارند. تغییرات همهٔ ردیف‌ها را با یک دکمهٔ ذخیره در پایین "
             "صفحه یک‌جا ثبت کنید."
         )
         hint.setObjectName("sectionHint")
@@ -128,7 +128,7 @@ class FinancialStatementMappingScreen(QWidget):
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
-        self.save_button.setToolTip("ذخیره‌یِ تغییرات")
+        self.save_button.setToolTip("ذخیرهٔ تغییرات")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._save_all)
         outer.addWidget(wrap_scrollable_with_footer(content, [self.save_button]), stretch=1)
@@ -213,5 +213,5 @@ class FinancialStatementMappingScreen(QWidget):
                 return
         self.refresh()
         theme.set_status_label(
-            self.status_label, f"تنظیماتِ {len(saved_codes)} گروهِ حساب ذخیره شد.", ok=True
+            self.status_label, f"تنظیمات {len(saved_codes)} گروه حساب ذخیره شد.", ok=True
         )

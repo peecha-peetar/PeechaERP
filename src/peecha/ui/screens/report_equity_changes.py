@@ -1,5 +1,5 @@
-"""صورتِ تغییرات در حقوقِ صاحبانِ سهام — مانده‌یِ اول + افزایش/کاهشِ دوره +
-مانده‌یِ آخر، به‌ازایِ هر حسابِ EQUITY (سطحِ کل)."""
+"""صورت تغییرات در حقوق صاحبان سهام — ماندهٔ اول + افزایش/کاهش دوره +
+ماندهٔ آخر، به‌ازای هر حساب EQUITY (سطح کل)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range
 
 class EquityChangesScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("صورتِ تغییرات در حقوقِ صاحبانِ سهام")
+        super().__init__("صورت تغییرات در حقوق صاحبان سهام")
         self.enable_code_range_filter()
         self._currency_decimal_places = 0
 
@@ -41,7 +41,7 @@ class EquityChangesScreen(ReportScreenBase):
         rows_data = reports_service.compute_equity_changes(company_id, date_from, date_to, status_filter=self.status_filter())
         rows_data = [r for r in rows_data if code_in_range(r.full_code, code_from, code_to)]
 
-        headers = ["کد", "نام", "مانده‌ی اول", "افزایش", "کاهش", "مانده‌ی آخر"]
+        headers = ["کد", "نام", "ماندهٔ اول", "افزایش", "کاهش", "ماندهٔ آخر"]
         rows: list[list] = []
         total_opening = decimal.Decimal(0)
         total_increase = decimal.Decimal(0)
@@ -64,7 +64,7 @@ class EquityChangesScreen(ReportScreenBase):
             )
         footer = [
             "",
-            "جمعِ کل",
+            "جمع کل",
             self._fmt(total_opening),
             self._fmt(total_increase),
             self._fmt(total_decrease),

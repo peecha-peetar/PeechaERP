@@ -1,13 +1,13 @@
-"""تراز آزمایشی — سطحِ گروه/کل/معین/تفصیلی، در سه حالتِ ستونی (۴/۶/۸).
+"""تراز آزمایشی — سطح گروه/کل/معین/تفصیلی، در سه حالت ستونی (۴/۶/۸).
 
-تعریفِ حالت‌هایِ ستونی (طبقِ رایج‌ترین قراردادِ حسابداریِ ایران):
-- ۴ ستونی: فقط گردشِ دوره (بد/بس) + مانده‌یِ آخر (بد/بس خالص) — بدونِ مانده‌یِ اول.
-- ۶ ستونی: مانده‌یِ اول (بد/بس خالص) + گردشِ دوره (بد/بس) + مانده‌یِ آخر (بد/بس خالص).
-- ۸ ستونی: مانده‌یِ اولِ سالِ مالی (بد/بس خالص) + گردشِ همین بازه (بد/بس) +
-  گردشِ تجمعیِ از ابتدایِ سالِ مالی تا پایانِ بازه (بد/بس) + مانده‌یِ آخر (بد/بس خالص).
+تعریف حالت‌های ستونی (طبق رایج‌ترین قرارداد حسابداری ایران):
+- ۴ ستونی: فقط گردش دوره (بد/بس) + ماندهٔ آخر (بد/بس خالص) — بدون ماندهٔ اول.
+- ۶ ستونی: ماندهٔ اول (بد/بس خالص) + گردش دوره (بد/بس) + ماندهٔ آخر (بد/بس خالص).
+- ۸ ستونی: ماندهٔ اول سال مالی (بد/بس خالص) + گردش همین بازه (بد/بس) +
+  گردش تجمعی از ابتدای سال مالی تا پایان بازه (بد/بس) + ماندهٔ آخر (بد/بس خالص).
 
-چون در سیستم سندِ اختتامیه‌ای وجود ندارد، «مانده‌یِ اول» همیشه یعنی جمعِ همه‌چیز
-پیش از تاریخِ شروع (نه مانده‌یِ بعدِ یک بستنِ رسمی) — طبقِ محدودیتِ مستندشده در
+چون در سیستم سند اختتامیه‌ای وجود ندارد، «ماندهٔ اول» همیشه یعنی جمع همه‌چیز
+پیش از تاریخ شروع (نه ماندهٔ بعد یک بستن رسمی) — طبق محدودیت مستندشده در
 reports.py."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QMessageBox
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
@@ -50,7 +50,7 @@ class TrialBalanceScreen(ReportScreenBase):
         self.level_combo.currentIndexChanged.connect(self._on_level_changed)
         self.extra_filter_row.addWidget(self.level_combo)
 
-        self.dimension_label = QLabel("نوعِ تفصیلی:")
+        self.dimension_label = QLabel("نوع تفصیلی:")
         self.dimension_label.setVisible(False)
         self.extra_filter_row.addWidget(self.dimension_label)
         self.dimension_combo = QComboBox()
@@ -58,7 +58,7 @@ class TrialBalanceScreen(ReportScreenBase):
         self.dimension_combo.currentIndexChanged.connect(self._on_dimension_changed)
         self.extra_filter_row.addWidget(self.dimension_combo)
 
-        self.extra_filter_row.addWidget(QLabel("حالتِ ستونی:"))
+        self.extra_filter_row.addWidget(QLabel("حالت ستونی:"))
         self.column_mode_combo = QComboBox()
         for mode, label in _COLUMN_MODE_OPTIONS:
             self.column_mode_combo.addItem(label, mode)
@@ -66,7 +66,7 @@ class TrialBalanceScreen(ReportScreenBase):
 
         # طبقِ درخواستِ صریح: در سطحِ تفصیلی، امکانِ تفکیکِ گردشِ هر
         # تفصیلی بر اساسِ حسابِ کدینگی‌ای که در آن گردش داشته.
-        self.breakdown_checkbox = QCheckBox("تفکیکِ گردش بر اساسِ حساب")
+        self.breakdown_checkbox = QCheckBox("تفکیک گردش بر اساس حساب")
         self.breakdown_checkbox.setVisible(False)
         self.breakdown_checkbox.stateChanged.connect(self._on_breakdown_toggled)
         self.extra_filter_row.addWidget(self.breakdown_checkbox)
@@ -79,6 +79,7 @@ class TrialBalanceScreen(ReportScreenBase):
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
         self.enable_document_no_filter()
+        self.enable_jasper_report("TRIAL_BALANCE")
 
         self.add_field_help([
             (
@@ -87,19 +88,19 @@ class TrialBalanceScreen(ReportScreenBase):
             ),
             (
                 self.dimension_combo,
-                "کدام نوعِ تفصیلی (کالا، بانک، مشتری و بقیه) نشان داده شود — فقط وقتی سطح روی «تفصیلی» باشد فعال می‌شود.",
+                "کدام نوع تفصیلی (کالا، بانک، مشتری و بقیه) نشان داده شود — فقط وقتی سطح روی «تفصیلی» باشد فعال می‌شود.",
             ),
             (
                 self.column_mode_combo,
-                "چند ستون نشان داده شود. «۴ ستونی» فقط گردشِ دوره و مانده‌یِ آخر را دارد. "
-                "«۶ ستونی» مانده‌یِ اول را هم اضافه می‌کند. «۸ ستونی» گردشِ تجمعیِ از اولِ سالِ مالی را هم نشان می‌دهد.",
+                "چند ستون نشان داده شود. «۴ ستونی» فقط گردش دوره و ماندهٔ آخر را دارد. "
+                "«۶ ستونی» ماندهٔ اول را هم اضافه می‌کند. «۸ ستونی» گردش تجمعی از اول سال مالی را هم نشان می‌دهد.",
             ),
             (
                 self.breakdown_checkbox,
-                "وقتی فعال باشد، گردشِ هرکدام از حساب‌هایِ تفصیلیِ انتخاب‌شده به‌تفکیکِ حسابِ کدینگی‌ای که در آن گردش داشته "
-                "(در سطحِ کنارش) نشان داده می‌شود — یعنی این تفصیلی در چه حساب‌هایی گردش داشته.",
+                "وقتی فعال باشد، گردش هرکدام از حساب‌های تفصیلی انتخاب‌شده به‌تفکیک حساب کدینگی‌ای که در آن گردش داشته "
+                "(در سطح کنارش) نشان داده می‌شود — یعنی این تفصیلی در چه حساب‌هایی گردش داشته.",
             ),
-            (self.breakdown_level_combo, "سطحِ حسابِ کدینگی برایِ تفکیکِ گردشِ تفصیلی: گروه، کل یا معین."),
+            (self.breakdown_level_combo, "سطح حساب کدینگی برای تفکیک گردش تفصیلی: گروه، کل یا معین."),
         ])
 
         self._currency_decimal_places = 0
@@ -107,8 +108,8 @@ class TrialBalanceScreen(ReportScreenBase):
     def extra_filters_summary(self) -> list[tuple[str, str]]:
         parts = [("سطح", self.level_combo.currentText())]
         if self.dimension_combo.isVisibleTo(self) and self.dimension_combo.currentData() is not None:
-            parts.append(("نوعِ تفصیلی", self.dimension_combo.currentText()))
-        parts.append(("حالتِ ستونی", self.column_mode_combo.currentText()))
+            parts.append(("نوع تفصیلی", self.dimension_combo.currentText()))
+        parts.append(("حالت ستونی", self.column_mode_combo.currentText()))
         return parts
 
     def code_range_account_level(self) -> int | None:
@@ -189,14 +190,14 @@ class TrialBalanceScreen(ReportScreenBase):
         def fmt(value: decimal.Decimal) -> str:
             return numerals.format_money(value, self._currency_decimal_places, None)
 
-        headers = ["کدِ تفصیلی", "نامِ تفصیلی", "کدِ حساب", "نامِ حساب", "گردش (بد)", "گردش (بس)"]
+        headers = ["کد تفصیلی", "نام تفصیلی", "کد حساب", "نام حساب", "گردش (بد)", "گردش (بس)"]
         table_rows = [
             [r.detail_full_code, r.detail_name, r.account_full_code, r.account_name, fmt(r.debit), fmt(r.credit)]
             for r in rows
         ]
         total_debit = sum((r.debit for r in rows), _ZERO)
         total_credit = sum((r.credit for r in rows), _ZERO)
-        footer = ["", "", "", "جمعِ کل", fmt(total_debit), fmt(total_credit)]
+        footer = ["", "", "", "جمع کل", fmt(total_debit), fmt(total_credit)]
         return headers, table_rows, footer
 
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
@@ -263,19 +264,19 @@ class TrialBalanceScreen(ReportScreenBase):
         headers = ["کد", "نام"]
         if column_mode == 8:
             headers += [
-                "مانده‌ی اولِ سال (بد)", "مانده‌ی اولِ سال (بس)",
-                "گردشِ دوره (بد)", "گردشِ دوره (بس)",
-                "گردشِ تجمعیِ سال (بد)", "گردشِ تجمعیِ سال (بس)",
-                "مانده‌ی آخر (بد)", "مانده‌ی آخر (بس)",
+                "ماندهٔ اول سال (بد)", "ماندهٔ اول سال (بس)",
+                "گردش دوره (بد)", "گردش دوره (بس)",
+                "گردش تجمعی سال (بد)", "گردش تجمعی سال (بس)",
+                "ماندهٔ آخر (بد)", "ماندهٔ آخر (بس)",
             ]
         elif column_mode == 6:
             headers += [
-                "مانده‌ی اول (بد)", "مانده‌ی اول (بس)",
+                "ماندهٔ اول (بد)", "ماندهٔ اول (بس)",
                 "گردش (بد)", "گردش (بس)",
-                "مانده‌ی آخر (بد)", "مانده‌ی آخر (بس)",
+                "ماندهٔ آخر (بد)", "ماندهٔ آخر (بس)",
             ]
         else:
-            headers += ["گردش (بد)", "گردش (بس)", "مانده‌ی آخر (بد)", "مانده‌ی آخر (بس)"]
+            headers += ["گردش (بد)", "گردش (بس)", "ماندهٔ آخر (بد)", "ماندهٔ آخر (بس)"]
 
         table_rows: list[list] = []
         totals = [_ZERO] * (len(headers) - 2)
@@ -304,5 +305,58 @@ class TrialBalanceScreen(ReportScreenBase):
                 totals[i] += v
             table_rows.append([r.full_code, r.name, *[fmt(v) for v in values]])
 
-        footer = ["", "جمعِ کل", *[fmt(v) for v in totals]]
+        footer = ["", "جمع کل", *[fmt(v) for v in totals]]
         return headers, table_rows, footer
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        # طبقِ محدودیتِ مستندشده: قالبِ trial_balance.jrxml فقط شکلِ
+        # استانداردِ «۶ ستونی» (کد، نام + مانده‌یِ اول/گردش/مانده‌یِ آخرِ
+        # بد و بس) را پوشش می‌دهد -- حالتِ ۴/۸ ستونی یا «تفکیکِ گردش»
+        # شکلِ ستونیِ کاملاً متفاوتی دارند؛ برایِ آن‌ها می‌توان از همان
+        # تنظیماتِ گزارش‌هایِ حرفه‌ای یک گزارشِ اختصاصی (با قالبِ دیگر) ساخت.
+        if self.column_mode_combo.currentData() != 6:
+            QMessageBox.information(
+                self, "گزارش", "چاپ حرفه‌ای فعلاً فقط برای حالت «۶ ستونی» پشتیبانی می‌شود."
+            )
+            return None
+        if self.level_combo.currentData() == 4 and self.breakdown_checkbox.isChecked():
+            QMessageBox.information(
+                self, "گزارش", "چاپ حرفه‌ای برای حالت «تفکیک گردش بر اساس حساب» فعلاً پشتیبانی نمی‌شود."
+            )
+            return None
+        if not self._rows:
+            QMessageBox.information(self, "گزارش", "داده‌ای برای چاپ وجود ندارد.")
+            return None
+
+        print_rows = [
+            {
+                "account_code": row[0],
+                "account_name": row[1],
+                "opening_debit_display": row[2],
+                "opening_credit_display": row[3],
+                "period_debit_display": row[4],
+                "period_credit_display": row[5],
+                "closing_debit_display": row[6],
+                "closing_credit_display": row[7],
+            }
+            for row in self._rows
+        ]
+        company = session.current_company
+        date_range_label = (
+            f"از {numerals.format_jalali_date(self.date_from.date())} "
+            f"تا {numerals.format_jalali_date(self.date_to.date())}"
+        )
+        footer = self._footer or ["", "", "", "", "", "", "", ""]
+        params = {
+            "companyName": company.display_name if company else "",
+            "levelLabel": self.level_combo.currentText(),
+            "dateRangeLabel": date_range_label,
+            "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+            "totalOpeningDebitDisplay": footer[2],
+            "totalOpeningCreditDisplay": footer[3],
+            "totalPeriodDebitDisplay": footer[4],
+            "totalPeriodCreditDisplay": footer[5],
+            "totalClosingDebitDisplay": footer[6],
+            "totalClosingCreditDisplay": footer[7],
+        }
+        return print_rows, params

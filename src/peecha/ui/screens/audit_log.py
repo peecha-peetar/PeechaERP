@@ -1,6 +1,6 @@
-"""ردِ حسابرسی — معادلِ Qt برایِ audit_log.py/.kv در Kivy.
+"""رد حسابرسی — معادل Qt برای audit_log.py/.kv در Kivy.
 
-فقط‌خواندنی (طبقِ ماهیتِ تغییرناپذیرِ خودِ جدول)."""
+فقط‌خواندنی (طبق ماهیت تغییرناپذیر خود جدول)."""
 
 from __future__ import annotations
 
@@ -19,14 +19,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
 from peecha.services import audit as audit_service
 from peecha.ui.widgets import FieldHelpMixin
 
-_COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوعِ موجودیت"]
+_COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوع موجودیت"]
 
 _ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف"}
-_ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سندِ حسابداری"}
+_ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سند حسابداری"}
 
 
 class AuditLogScreen(FieldHelpMixin, QWidget):
@@ -38,16 +38,16 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("وقایعِ کاربران")
+        title = QLabel("وقایع کاربران")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("رویدادهای ایجاد/ویرایش/حذفِ اطلاعاتِ کسب‌وکاری — فقط‌خواندنی و تغییرناپذیر.")
+        hint = QLabel("رویدادهای ایجاد/ویرایش/حذف اطلاعات کسب‌وکاری — فقط‌خواندنی و تغییرناپذیر.")
         hint.setObjectName("sectionHint")
         layout.addWidget(hint)
 
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("نوعِ موجودیت"))
+        filter_row.addWidget(QLabel("نوع موجودیت"))
         self.entity_type_combo = QComboBox()
         self.entity_type_combo.currentIndexChanged.connect(self._apply_filter)
         filter_row.addWidget(self.entity_type_combo)
@@ -70,8 +70,8 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.entity_type_combo,
-                "فقط رویدادهایِ مربوط به یک نوع اطلاعات را نشان بده، مثلاً فقط تغییراتِ حساب‌ها یا فقط اسناد. "
-                "«همه‌ی انواع» یعنی بدونِ فیلتر. برایِ دیدنِ جزئیاتِ کاملِ یک رویداد، رویِ ردیفش دابل‌کلیک کنید.",
+                "فقط رویدادهای مربوط به یک نوع اطلاعات را نشان بده، مثلاً فقط تغییرات حساب‌ها یا فقط اسناد. "
+                "«همهٔ انواع» یعنی بدون فیلتر. برای دیدن جزئیات کامل یک رویداد، روی ردیفش دابل‌کلیک کنید.",
             ),
         ])
 
@@ -82,7 +82,7 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         entity_types = audit_service.list_entity_types()
         self.entity_type_combo.blockSignals(True)
         self.entity_type_combo.clear()
-        self.entity_type_combo.addItem("همه‌ی انواع", None)
+        self.entity_type_combo.addItem("همهٔ انواع", None)
         for et in entity_types:
             self.entity_type_combo.addItem(_ENTITY_TYPE_LABELS.get(et, et), et)
         self.entity_type_combo.blockSignals(False)
@@ -96,7 +96,7 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, r in enumerate(self._rows):
             values = [
-                r.created_at.strftime("%Y-%m-%d %H:%M"),
+                numerals.format_jalali_datetime(r.created_at),
                 r.user_full_name or "سیستم",
                 _ACTION_LABELS.get(r.action, r.action),
                 str(r.entity_id),
@@ -111,4 +111,4 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
 
         changes = self.table.item(row, 0).data(Qt.UserRole)
-        QMessageBox.information(self, "جزئیاتِ تغییرات", json.dumps(changes, ensure_ascii=False, indent=2, default=str))
+        QMessageBox.information(self, "جزئیات تغییرات", json.dumps(changes, ensure_ascii=False, indent=2, default=str))

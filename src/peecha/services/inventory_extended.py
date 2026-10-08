@@ -1,6 +1,6 @@
-"""لایهٔ سرویسِ فیلدهایِ توسعه‌یافتهٔ کاتالوگِ کالا (فازِ ۱ تا ۱۵): تامین‌کنندگانِ
-کالا، رسانه/اسناد، فهرستِ موادِ اولیه (BOM)، و دارایی/استهلاک. بخشِ ۱۴
-(نگاشتِ حسابِ دسته‌بندی) در inventory_engine.py است، نه این‌جا."""
+"""لایهٔ سرویس فیلدهای توسعه‌یافتهٔ کاتالوگ کالا (فاز ۱ تا ۱۵): تامین‌کنندگان
+کالا، رسانه/اسناد، فهرست مواد اولیه (BOM)، و دارایی/استهلاک. بخش ۱۴
+(نگاشت حساب دسته‌بندی) در inventory_engine.py است، نه این‌جا."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def add_item_supplier(
             )
         )
         if existing is not None:
-            raise ValueError("این تامین‌کننده قبلاً برایِ این کالا ثبت شده است.")
+            raise ValueError("این تامین‌کننده قبلاً برای این کالا ثبت شده است.")
         row = ItemSupplier(
             item_id=item_id, supplier_detail_account_id=supplier_detail_account_id,
             supplier_sku=(supplier_sku or None), lead_time_days=lead_time_days,
@@ -77,7 +77,7 @@ def remove_item_supplier(item_supplier_id: int, item_id: int) -> None:
     with new_session() as session:
         row = session.get(ItemSupplier, item_supplier_id)
         if row is None or row.item_id != item_id:
-            raise ValueError("ردیفِ تامین‌کننده نامعتبر است.")
+            raise ValueError("ردیف تامین‌کننده نامعتبر است.")
         session.delete(row)
         session.commit()
 
@@ -114,7 +114,7 @@ def add_item_media(
     alt_text: str | None = None, is_primary: bool = False,
 ) -> int:
     if media_type_code not in _MEDIA_TYPE_CODES:
-        raise ValueError("نوعِ رسانه نامعتبر است.")
+        raise ValueError("نوع رسانه نامعتبر است.")
     with new_session() as session:
         row = ItemMedia(
             item_id=item_id, attachment_id=attachment_id, media_type_code=media_type_code,
@@ -129,7 +129,7 @@ def remove_item_media(item_media_id: int, item_id: int) -> None:
     with new_session() as session:
         row = session.get(ItemMedia, item_media_id)
         if row is None or row.item_id != item_id:
-            raise ValueError("ردیفِ رسانه نامعتبر است.")
+            raise ValueError("ردیف رسانه نامعتبر است.")
         session.delete(row)
         session.commit()
 
@@ -203,13 +203,18 @@ def add_bom_line(
     bom_id: int, component_item_id: int, quantity_per: decimal.Decimal, scrap_percent: decimal.Decimal = decimal.Decimal(0)
 ) -> int:
     if quantity_per <= 0:
-        raise ValueError("مقدارِ مصرفی باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مقدار مصرفی باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         bom = session.get(BomHeader, bom_id)
         if bom is None:
-            raise ValueError("فهرستِ موادِ اولیه نامعتبر است.")
+            raise ValueError("فهرست مواد اولیه نامعتبر است.")
+        from peecha.services.production import master as prd_master
+
+        prd_master.refresh_bom_lock(session, bom_id)  # R280: قفل فقط با دستورِ دارای گردش
+        if bom.is_locked:  # R266: نسخهٔ استفاده‌شده در دستورِ تولید
+            raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ تازه بسازید.")
         if bom.finished_item_id == component_item_id:
-            raise ValueError("یک کالا نمی‌تواند جزوِ موادِ اولیهٔ خودش باشد.")
+            raise ValueError("یک کالا نمی‌تواند جزو مواد اولیهٔ خودش باشد.")
         next_no = (
             session.scalar(select(BomLine.line_no).where(BomLine.bom_id == bom_id).order_by(BomLine.line_no.desc()))
             or 0
@@ -227,7 +232,15 @@ def remove_bom_line(bom_line_id: int, bom_id: int) -> None:
     with new_session() as session:
         row = session.get(BomLine, bom_line_id)
         if row is None or row.bom_id != bom_id:
-            raise ValueError("ردیفِ فهرستِ موادِ اولیه نامعتبر است.")
+            raise ValueError("ردیف فهرست مواد اولیه نامعتبر است.")
+        from peecha.db.models.production import OrderMaterial
+        from peecha.services.production import master as prd_master
+
+        prd_master.refresh_bom_lock(session, bom_id)
+        if session.get(BomHeader, bom_id).is_locked:  # R266
+            raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ تازه بسازید.")
+        for m in session.scalars(select(OrderMaterial).where(OrderMaterial.bom_line_id == bom_line_id)):
+            m.bom_line_id = None
         session.delete(row)
         session.commit()
 
@@ -267,9 +280,9 @@ def set_asset_detail(
     depreciation_group_code: str | None = None, salvage_value: decimal.Decimal = decimal.Decimal(0),
 ) -> None:
     if depreciation_method_code not in _DEPRECIATION_METHOD_CODES:
-        raise ValueError("روشِ استهلاک نامعتبر است.")
+        raise ValueError("روش استهلاک نامعتبر است.")
     if useful_life_months <= 0:
-        raise ValueError("عمرِ مفید باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("عمر مفید باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         row = session.get(AssetDetail, item_id)
         if row is None:
@@ -299,18 +312,18 @@ def post_monthly_depreciation(
     with new_session() as session:
         asset = session.get(AssetDetail, item_id)
         if asset is None:
-            raise ValueError("این کالا دارایی نیست یا اطلاعاتِ دارایی هنوز ثبت نشده است.")
+            raise ValueError("این کالا دارایی نیست یا اطلاعات دارایی هنوز ثبت نشده است.")
         if session.scalar(
             select(AssetDepreciationEntry).where(
                 AssetDepreciationEntry.item_id == item_id, AssetDepreciationEntry.period_date == period_date
             )
         ) is not None:
-            raise ValueError("استهلاکِ این دوره قبلاً ثبت شده است.")
+            raise ValueError("استهلاک این دوره قبلاً ثبت شده است.")
         depreciable_base = asset.acquisition_cost - asset.salvage_value
         accumulated = _accumulated_depreciation(session, item_id)
         remaining = depreciable_base - accumulated
         if remaining <= 0:
-            raise ValueError("این دارایی به‌طورِ کامل مستهلک شده است.")
+            raise ValueError("این دارایی به‌طور کامل مستهلک شده است.")
         if asset.depreciation_method_code == "STRAIGHT_LINE":
             monthly_amount = depreciable_base / asset.useful_life_months
         else:
@@ -318,20 +331,20 @@ def post_monthly_depreciation(
             monthly_amount = (depreciable_base - accumulated) * rate
         monthly_amount = min(monthly_amount, remaining).quantize(_Q2, rounding=decimal.ROUND_HALF_UP)
         if monthly_amount <= 0:
-            raise ValueError("مبلغِ استهلاکِ این دوره صفر است.")
+            raise ValueError("مبلغ استهلاک این دوره صفر است.")
 
         item = session.get(Item, item_id)
         item_name = item.notes or f"دارایی #{item_id}" if item is not None else f"دارایی #{item_id}"
 
     je_result = je_service.create_journal_entry(
-        company_id, posted_by_user_id, period_date, f"استهلاکِ ماهانهٔ دارایی — {item_name}",
+        company_id, posted_by_user_id, period_date, f"استهلاک ماهانهٔ دارایی — {item_name}",
         [
             je_service.LineInput(
                 account_id=depreciation_expense_account_id, description="هزینهٔ استهلاک",
                 debit=monthly_amount, credit=decimal.Decimal(0),
             ),
             je_service.LineInput(
-                account_id=accumulated_depreciation_account_id, description="استهلاکِ انباشته",
+                account_id=accumulated_depreciation_account_id, description="استهلاک انباشته",
                 debit=decimal.Decimal(0), credit=monthly_amount,
             ),
         ],

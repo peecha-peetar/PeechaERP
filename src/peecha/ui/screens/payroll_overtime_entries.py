@@ -1,14 +1,14 @@
-"""ثبت/تاییدِ ساعاتِ اضافه‌کاری (فصلِ ۱۲) + ایمپورتِ فایلِ اکسل/CSVِ
-خروجیِ دستگاهِ حضوروغیاب.
+"""ثبت/تایید ساعات اضافه‌کاری (فصل ۱۲) + ورود فایل اکسل/CSV
+خروجی دستگاه حضور و غیاب.
 
-طبقِ گزارشِ کاربر: `services/payroll_overtime.py` و موتورِ محاسبه از
+طبق گزارش کاربر: `services/payroll_overtime.py` و موتور محاسبه از
 قبل کامل بودند، ولی هیچ صفحه‌ای این سرویس را صدا نمی‌زد — یعنی هیچ‌وقت
-یک ردیفِ اضافه‌کاریِ واقعی ساخته/تاییده نمی‌شد و مبلغِ اضافه‌کاری در فیش
-همیشه صفر بود. این صفحه همان حلقه‌یِ گمشده است: ثبتِ دستیِ یک ردیف،
-تایید/ردِ ردیف‌هایِ درانتظار، و ایمپورتِ دسته‌ای از فایلِ اکسل/CSVِ خروجیِ
-دستگاه (طبقِ تاییدِ صریحِ کاربر: فقط ایمپورتِ فایل، نه اتصالِ مستقیم به
-سخت‌افزار). قوانینِ اضافه‌کاری (ضریب/حالتِ ترکیب) در تبِ «قوانینِ
-اضافه‌کاری»یِ تنظیماتِ حقوق‌ودستمزد مدیریت می‌شوند (payroll_settings.py)،
+یک ردیف اضافه‌کاری واقعی ساخته/تاییده نمی‌شد و مبلغ اضافه‌کاری در فیش
+همیشه صفر بود. این صفحه همان حلقهٔ گمشده است: ثبت دستی یک ردیف،
+تایید/رد ردیف‌های درانتظار، و ورود دسته‌ای از فایل اکسل/CSV خروجی
+دستگاه (طبق تایید صریح کاربر: فقط ورود فایل، نه اتصال مستقیم به
+سخت‌افزار). قوانین اضافه‌کاری (ضریب/حالت ترکیب) در تب «قوانین
+اضافه‌کاری»ی تنظیمات حقوق‌ودستمزد مدیریت می‌شوند (payroll_settings.py)،
 نه این‌جا — چون آن‌ها تنظیماتی‌اند، این‌جا فقط تراکنشی."""
 
 from __future__ import annotations
@@ -41,29 +41,30 @@ from peecha.ui import theme
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
 from peecha.ui.widgets import (
     FieldHelpMixin,
+    FormDrawer,
     PersianDigitLineEdit,
     wrap_scrollable,
     wrap_scrollable_with_footer,
 )
 
-_ENTRY_COLUMNS = ["وضعیت", "ساعت", "نوعِ اضافه‌کاری", "کارمند"]
-_ENTRY_STATUS_LABELS = {"PENDING_APPROVAL": "درانتظارِ تایید", "APPROVED": "تاییدشده", "REJECTED": "ردشده"}
+_ENTRY_COLUMNS = ["وضعیت", "ساعت", "نوع اضافه‌کاری", "کارمند"]
+_ENTRY_STATUS_LABELS = {"PENDING_APPROVAL": "درانتظار تایید", "APPROVED": "تاییدشده", "REJECTED": "ردشده"}
 _RULE_CODE_LABELS = {
-    "OVERTIME": "اضافه‌کاریِ عادی",
+    "OVERTIME": "اضافه‌کاری عادی",
     "NIGHT_SHIFT": "شب‌کاری",
     "HOLIDAY_WORK": "تعطیل‌کاری",
     "FRIDAY_WORK": "جمعه‌کاری",
-    "ROTATING_SHIFT_BONUS": "فوق‌العادهٔ شیفتِ گردشی",
+    "ROTATING_SHIFT_BONUS": "فوق‌العادهٔ شیفت گردشی",
 }
 
 _IMPORT_TARGET_FIELDS = [
-    ("employee_code", "کدِ پرسنلیِ کارمند", True),
+    ("employee_code", "کد پرسنلی کارمند", True),
     ("period", "دوره (مثلاً ۱۴۰۳/۰۵)", True),
-    ("rule_code", "نوعِ اضافه‌کاری (کد، مثلاً OVERTIME)", True),
+    ("rule_code", "نوع اضافه‌کاری (کد، مثلاً OVERTIME)", True),
     ("hours", "ساعت", True),
 ]
 _IMPORT_GUESS_KEYWORDS = {
-    "employee_code": ["کدِ پرسنلی", "کد پرسنلی", "کد کارمند", "employee"],
+    "employee_code": ["کد پرسنلی", "کد پرسنلی", "کد کارمند", "employee"],
     "period": ["دوره", "ماه", "period"],
     "rule_code": ["نوع", "قانون", "rule"],
     "hours": ["ساعت", "hours"],
@@ -86,16 +87,24 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
         outer.addWidget(self._build_entries_panel(), stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.form_status_label.clear, new_tooltip="ثبت اضافه‌کاری جدید", handle_new=False)
 
         self.set_field_help([
-            (self.hours_field, "تعدادِ ساعاتِ این نوعِ اضافه‌کاری برایِ این کارمند در این دوره."),
+            (self.employee_combo, "کارمندی که این اضافه‌کاری برای او ثبت می‌شود."),
+            (self.period_combo, "دورهٔ حقوقی‌ای که این اضافه‌کاری متعلق به آن است."),
+            (self.rule_combo, "نوع اضافه‌کاری (طبق قوانین تعریف‌شده در تنظیمات حقوق) که ضریب محاسبه از آن خوانده می‌شود."),
+            (self.hours_field, "تعداد ساعات این نوع اضافه‌کاری برای این کارمند در این دوره."),
             (
                 self.import_button,
-                "فایلِ اکسل/CSVِ خروجیِ دستگاهِ حضوروغیاب را انتخاب کنید — با ستون‌هایِ کدِ پرسنلی، "
-                "دوره، نوعِ اضافه‌کاری، و ساعت. ردیف‌هایِ ایمپورت‌شده هم مثلِ ثبتِ دستی، درانتظارِ تایید می‌مانند.",
+                "فایل اکسل/CSV خروجی دستگاه حضور و غیاب را انتخاب کنید — با ستون‌های کد پرسنلی، "
+                "دوره، نوع اضافه‌کاری، و ساعت. ردیف‌های واردشده هم مثل ثبت دستی، درانتظار تایید می‌مانند.",
             ),
+            (self.period_filter_combo, "فقط ردیف‌های همین دوره را نشان بده — خالی یعنی همهٔ دوره‌ها."),
+            (self.employee_filter_combo, "فقط ردیف‌های همین کارمند را نشان بده — خالی یعنی همهٔ کارمندان."),
         ])
 
     def _build_form_panel(self) -> QWidget:
@@ -104,7 +113,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("ثبتِ اضافه‌کاری")
+        title = QLabel("ثبت اضافه‌کاری")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -116,7 +125,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         self.period_combo = QComboBox()
         layout.addWidget(self.period_combo)
 
-        layout.addWidget(QLabel("نوعِ اضافه‌کاری"))
+        layout.addWidget(QLabel("نوع اضافه‌کاری"))
         self.rule_combo = QComboBox()
         layout.addWidget(self.rule_combo)
 
@@ -137,7 +146,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         self.import_button = QPushButton("📥")
         self.import_button.setObjectName("iconButton")
         self.import_button.setFixedWidth(44)
-        self.import_button.setToolTip("ایمپورت از اکسل")
+        self.import_button.setToolTip("ورود از اکسل")
         self.import_button.clicked.connect(self._on_import_excel)
 
         return wrap_scrollable_with_footer(panel, [create_button, self.import_button])
@@ -148,7 +157,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("ردیف‌هایِ اضافه‌کاری")
+        title = QLabel("ردیف‌های اضافه‌کاری")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -261,12 +270,12 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         period_id = self.period_combo.currentData()
         rule_id = self.rule_combo.currentData()
         if employee_id is None or period_id is None or rule_id is None:
-            theme.set_status_label(self.form_status_label, "کارمند، دوره، و نوعِ اضافه‌کاری را انتخاب کنید.", ok=False)
+            theme.set_status_label(self.form_status_label, "کارمند، دوره، و نوع اضافه‌کاری را انتخاب کنید.", ok=False)
             return
         try:
             hours = decimal.Decimal(numerals.to_ascii_digits(self.hours_field.text()) or "0")
         except decimal.InvalidOperation:
-            theme.set_status_label(self.form_status_label, "ساعت را به‌صورتِ عدد وارد کنید.", ok=False)
+            theme.set_status_label(self.form_status_label, "ساعت را به‌صورت عدد وارد کنید.", ok=False)
             return
         try:
             overtime_service.create_overtime_entry(employee_id, period_id, rule_id, hours)
@@ -287,7 +296,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
 
     def _set_selected_status(self, status: str) -> None:
         if self._selected_entry_id is None:
-            QMessageBox.information(self, "تغییرِ وضعیت", "یک ردیف را از فهرست انتخاب کنید.")
+            QMessageBox.information(self, "تغییر وضعیت", "یک ردیف را از فهرست انتخاب کنید.")
             return
         try:
             overtime_service.set_overtime_entry_status(self._selected_entry_id, status)
@@ -301,7 +310,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         if self._selected_entry_id is None:
             QMessageBox.information(self, "حذف", "یک ردیف را از فهرست انتخاب کنید.")
             return
-        confirm = QMessageBox.question(self, "حذفِ ردیف", "این ردیفِ اضافه‌کاری حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف ردیف", "این ردیف اضافه‌کاری حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         overtime_service.delete_overtime_entry(self._selected_entry_id)
@@ -312,7 +321,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         path, _filter = QFileDialog.getOpenFileName(
-            self, "انتخابِ فایلِ اکسل/CSVِ حضوروغیاب/اضافه‌کاری", "", "Excel/CSV Files (*.xlsx *.csv)"
+            self, "انتخاب فایل اکسل/CSV حضور و غیاب/اضافه‌کاری", "", "Excel/CSV Files (*.xlsx *.csv)"
         )
         if not path:
             return
@@ -321,7 +330,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
             return
         dialog = ExcelColumnMappingDialog(
             _IMPORT_TARGET_FIELDS, _IMPORT_GUESS_KEYWORDS, rows[0], self,
-            title="ایمپورتِ اضافه‌کاری از اکسل — تناظرِ ستون‌ها",
+            title="ورود اضافه‌کاری از اکسل — تناظر ستون‌ها",
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -338,26 +347,26 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
                 employee_code = str(row[mapping["employee_code"]]).strip()
                 employee_id = employees_by_code.get(employee_code)
                 if employee_id is None:
-                    raise ValueError(f"کارمندی با کدِ «{employee_code}» یافت نشد.")
+                    raise ValueError(f"کارمندی با کد «{employee_code}» یافت نشد.")
 
                 period_text = numerals.to_ascii_digits(str(row[mapping["period"]]).strip())
                 year_str, month_str = period_text.replace("-", "/").split("/")
                 period = periods_by_key.get((int(year_str), int(month_str)))
                 if period is None:
-                    raise ValueError("دوره‌یِ متناظر با این تاریخ تعریف نشده است.")
+                    raise ValueError("دورهٔ متناظر با این تاریخ تعریف نشده است.")
 
                 rule_code = str(row[mapping["rule_code"]]).strip().upper()
                 rule = overtime_service.get_active_overtime_rule(company_id, rule_code, period.period_start_date)
                 if rule is None:
-                    raise ValueError(f"قانونِ اضافه‌کاریِ فعال برایِ «{rule_code}» در این دوره یافت نشد.")
+                    raise ValueError(f"قانون اضافه‌کاری فعال برای «{rule_code}» در این دوره یافت نشد.")
 
                 hours = decimal.Decimal(numerals.to_ascii_digits(str(row[mapping["hours"]]).strip()))
                 overtime_service.create_overtime_entry(employee_id, period.period_id, rule.overtime_rule_id, hours)
                 created += 1
             except (ValueError, IndexError, KeyError, decimal.InvalidOperation) as exc:
-                errors.append(f"ردیفِ {row_no}: {exc}")
+                errors.append(f"ردیف {row_no}: {exc}")
 
         if errors:
-            QMessageBox.warning(self, "خطاهایِ ایمپورت", "\n".join(errors[:20]))
-        theme.set_status_label(self.form_status_label, f"{created} ردیف واردِ لیستِ درانتظارِ تایید شد.", ok=created > 0)
+            QMessageBox.warning(self, "خطاهای ورود", "\n".join(errors[:20]))
+        theme.set_status_label(self.form_status_label, f"{created} ردیف وارد لیست درانتظار تایید شد.", ok=created > 0)
         self.refresh()

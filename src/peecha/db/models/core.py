@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, SmallInteger, String, func
+from sqlalchemy import Boolean, Date, ForeignKey, LargeBinary, Numeric, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from peecha.db.base import Base
@@ -72,6 +72,10 @@ class Company(Base):
     default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    # R245: لوگویِ شرکت برایِ سربرگِ گزارش‌ها (بارگذاری با deferred تا خواندنِ شرکت سنگین نشود)
+    logo_image: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    logo_mime: Mapped[str | None] = mapped_column(String(30))
+    report_logo_position: Mapped[str] = mapped_column(String(10), default="RIGHT")
 
     base_currency: Mapped[Currency] = relationship(foreign_keys=[base_currency_id])
     default_language: Mapped[Language] = relationship(foreign_keys=[default_language_id])

@@ -1,6 +1,6 @@
-"""گزارشِ خزانه‌داری: چک‌هایِ دریافتی/پرداختیِ درجریانِ وصول، مرتب‌شده بر
-اساسِ نزدیکیِ سررسید (سررسیدگذشته‌ها هم مشخص می‌شوند) — طبقِ درخواستِ
-صریحِ کاربر برایِ «گزارشاتِ خزانه‌داری»."""
+"""گزارش خزانه‌داری: چک‌های دریافتی/پرداختی درجریان وصول، مرتب‌شده بر
+اساس نزدیکی سررسید (سررسیدگذشته‌ها هم مشخص می‌شوند) — طبق درخواست
+صریح کاربر برای «گزارشات خزانه‌داری»."""
 
 from __future__ import annotations
 
@@ -20,15 +20,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin
 
 _RECEIVED_PENDING = ["IN_HAND", "DEPOSITED"]
 _ISSUED_PENDING = ["ISSUED"]
-_RECEIVED_STATUS_LABELS = {"IN_HAND": "نزدِ صندوق", "DEPOSITED": "واگذارشده به بانک"}
-_ISSUED_STATUS_LABELS = {"ISSUED": "صادر/نزدِ گیرنده"}
+_RECEIVED_STATUS_LABELS = {"IN_HAND": "نزد صندوق", "DEPOSITED": "واگذارشده به بانک"}
+_ISSUED_STATUS_LABELS = {"ISSUED": "صادر/نزد گیرنده"}
 
 
 class TreasuryChecksDueScreen(FieldHelpMixin, QWidget):
@@ -39,23 +39,23 @@ class TreasuryChecksDueScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(16)
 
-        title = QLabel("گزارشِ چک‌هایِ درجریانِ وصول")
+        title = QLabel("گزارش چک‌های درجریان وصول")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("نمایشِ چک‌هایِ تا"))
+        filter_row.addWidget(QLabel("نمایش چک‌های تا"))
         self.days_spin = QSpinBox()
         self.days_spin.setRange(1, 365)
         self.days_spin.setValue(14)
         self.days_spin.valueChanged.connect(self.refresh)
         filter_row.addWidget(self.days_spin)
-        filter_row.addWidget(QLabel("روزِ آینده (چک‌هایِ سررسیدگذشته همیشه نشان داده می‌شوند)"))
+        filter_row.addWidget(QLabel("روز آینده (چک‌های سررسیدگذشته همیشه نشان داده می‌شوند)"))
         filter_row.addStretch(1)
         layout.addLayout(filter_row)
 
         self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels(["نوع", "شماره‌یِ چک", "طرف", "مبلغ", "سررسید", "وضعیت", "روزِ باقی‌مانده"])
+        self.table.setHorizontalHeaderLabels(["نوع", "شمارهٔ چک", "طرف", "مبلغ", "سررسید", "وضعیت", "روز باقی‌مانده"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -63,10 +63,11 @@ class TreasuryChecksDueScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         self.set_field_help([
+            (self.days_spin, "چک‌های نزدیک به سررسید تا چند روز آینده نشان داده شوند — چک‌های سررسیدگذشته صرف‌نظر از این عدد همیشه نشان داده می‌شوند."),
             (
                 self.table,
-                "چک‌هایِ دریافتی (نزدِ صندوق/واگذارشده به بانک) و چک‌هایِ پرداختی (صادر/نزدِ گیرنده) که هنوز وصول نشده‌اند، "
-                "بر اساسِ نزدیکیِ سررسید مرتب شده‌اند؛ عددِ منفی یعنی سررسید گذشته است.",
+                "چک‌های دریافتی (نزد صندوق/واگذارشده به بانک) و چک‌های پرداختی (صادر/نزد گیرنده) که هنوز وصول نشده‌اند، "
+                "بر اساس نزدیکی سررسید مرتب شده‌اند؛ عدد منفی یعنی سررسید گذشته است.",
             ),
         ])
 
@@ -99,7 +100,7 @@ class TreasuryChecksDueScreen(FieldHelpMixin, QWidget):
                 kind,
                 check_no,
                 party,
-                numerals.format_money(amount, 0, None),
+                decimals.format_amount(amount),
                 numerals.format_jalali_date(due_date),
                 status_label,
                 numerals.to_persian_digits(str(days_left)),

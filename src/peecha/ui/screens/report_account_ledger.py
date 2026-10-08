@@ -1,18 +1,18 @@
-"""دفتر کل/معین/تفصیلی + مرورِ حساب‌ها — یک صفحه‌یِ مشترک، چون هرسه گزارش
-از نظرِ داده یکی‌اند: فقط سطحِ فیلتر فرق دارد.
+"""دفتر کل/معین/تفصیلی + مرور حساب‌ها — یک صفحهٔ مشترک، چون هرسه گزارش
+از نظر داده یکی‌اند: فقط سطح فیلتر فرق دارد.
 
 دو حالت:
-- «خلاصه»: همان جدولِ ماندهِ تراز آزمایشی (سطحِ گروه/کل/معین/تفصیلی)؛
-  دابل‌کلیک رویِ ردیفِ گروه/کل به فرزندانش Drill-down می‌کند (مرورِ حساب‌ها).
-- «گردشِ حساب»: با دابل‌کلیک رویِ ردیفِ معین یا تفصیلی، گردشِ زمانیِ همان یک
-  حساب (دفتر کل/معین/تفصیلی) با مانده‌یِ رواگرد نمایش داده می‌شود."""
+- «خلاصه»: همان جدول ماندهٔ تراز آزمایشی (سطح گروه/کل/معین/تفصیلی)؛
+  دابل‌کلیک روی ردیف گروه/کل به فرزندانش ریزنمایی می‌کند (مرور حساب‌ها).
+- «گردش حساب»: با دابل‌کلیک روی ردیف معین یا تفصیلی، گردش زمانی همان یک
+  حساب (دفتر کل/معین/تفصیلی) با ماندهٔ رواگرد نمایش داده می‌شود."""
 
 from __future__ import annotations
 
 import datetime
 import decimal
 
-from PySide6.QtWidgets import QComboBox, QLabel, QPushButton
+from PySide6.QtWidgets import QComboBox, QLabel, QMessageBox, QPushButton
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
@@ -31,7 +31,7 @@ _ALL_DIMENSIONS = 0
 
 class AccountLedgerScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("دفتر کل / معین / تفصیلی — مرورِ حساب‌ها")
+        super().__init__("دفتر کل / معین / تفصیلی — مرور حساب‌ها")
 
         self.extra_filter_row.addWidget(QLabel("سطح:"))
         self.level_combo = QComboBox()
@@ -41,7 +41,7 @@ class AccountLedgerScreen(ReportScreenBase):
         self.level_combo.currentIndexChanged.connect(self._on_level_changed)
         self.extra_filter_row.addWidget(self.level_combo)
 
-        self.dimension_label = QLabel("نوعِ تفصیلی:")
+        self.dimension_label = QLabel("نوع تفصیلی:")
         self.dimension_label.setVisible(False)
         self.extra_filter_row.addWidget(self.dimension_label)
         self.dimension_combo = QComboBox()
@@ -63,22 +63,26 @@ class AccountLedgerScreen(ReportScreenBase):
         self.ledger_button = QPushButton("📖")
         self.ledger_button.setObjectName("iconButton")
         self.ledger_button.setFixedWidth(44)
-        self.ledger_button.setToolTip("گردشِ حسابِ ردیفِ انتخاب‌شده")
+        self.ledger_button.setToolTip("گردش حساب ردیف انتخاب‌شده")
         self.ledger_button.clicked.connect(self._show_ledger_for_selected)
         self.extra_filter_row.addWidget(self.ledger_button)
 
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
         self.enable_document_no_filter()
+        # طبقِ اینکه این صفحه دو شکلِ ستونیِ متفاوت دارد (خلاصه/گردشِ حساب)،
+        # form_code در _build_jasper_rows_and_params بسته به self._mode
+        # همان‌جا عوض می‌شود؛ این‌جا فقط مقدارِ اولیه لازم است.
+        self.enable_jasper_report("ACCOUNT_LEDGER_SUMMARY")
 
         self.add_field_help([
             (
                 self.level_combo,
-                "گزارش تا کدام سطح خلاصه شود: گروه، کل، معین یا تفصیلی. برایِ دیدنِ جزئیاتِ بیشتر، سطحِ پایین‌تر را انتخاب کنید.",
+                "گزارش تا کدام سطح خلاصه شود: گروه، کل، معین یا تفصیلی. برای دیدن جزئیات بیشتر، سطح پایین‌تر را انتخاب کنید.",
             ),
             (
                 self.dimension_combo,
-                "کدام نوعِ تفصیلی (کالا، بانک، مشتری و بقیه) نشان داده شود — فقط وقتی سطح روی «تفصیلی» باشد فعال می‌شود.",
+                "کدام نوع تفصیلی (کالا، بانک، مشتری و بقیه) نشان داده شود — فقط وقتی سطح روی «تفصیلی» باشد فعال می‌شود.",
             ),
         ])
 
@@ -94,7 +98,7 @@ class AccountLedgerScreen(ReportScreenBase):
     def extra_filters_summary(self) -> list[tuple[str, str]]:
         parts = [("سطح", self.level_combo.currentText())]
         if self.dimension_combo.isVisibleTo(self) and self.dimension_combo.currentData() is not None:
-            parts.append(("نوعِ تفصیلی", self.dimension_combo.currentText()))
+            parts.append(("نوع تفصیلی", self.dimension_combo.currentText()))
         return parts
 
     def code_range_account_level(self) -> int | None:
@@ -146,7 +150,7 @@ class AccountLedgerScreen(ReportScreenBase):
         self.dimension_combo.clear()
         if company_id is None:
             return
-        self.dimension_combo.addItem("— همه‌یِ گروه‌ها —", _ALL_DIMENSIONS)
+        self.dimension_combo.addItem("— همهٔ گروه‌ها —", _ALL_DIMENSIONS)
         for t in dimensions_service.list_dimension_types(company_id, include_system=True):
             if t.is_active:
                 self.dimension_combo.addItem(dimension_label(t.code), t.dimension_type_id)
@@ -170,9 +174,9 @@ class AccountLedgerScreen(ReportScreenBase):
         return numerals.format_money(value, self._currency_decimal_places, None)
 
     def show_ledger_for_detail(self, detail_account_id: int, name: str) -> None:
-        """طبقِ آیتمِ ۹: بازکردنِ مستقیمِ گردشِ حسابِ یک تفصیلیِ مشخص —
-        بدونِ نیازِ کاربر به drill-downِ دستی (مثلاً از دکمه‌یِ «گزارشِ
-        معینِ طرفِ‌حساب» در فرمِ دریافت/پرداخت)."""
+        """طبق آیتم ۹: بازکردن مستقیم گردش حساب یک تفصیلی مشخص —
+        بدون نیاز کاربر به drill-down دستی (مثلاً از دکمهٔ «گزارش
+        معین طرف‌حساب» در فرم دریافت/پرداخت)."""
         self._reset_drill()
         self._mode = "ledger"
         self._ledger_target = ("detail", detail_account_id, name)
@@ -253,7 +257,7 @@ class AccountLedgerScreen(ReportScreenBase):
                 rows = [r for r in all_rows if r.parent_account_id == self._parent_id]
         rows = [r for r in rows if code_in_range(r.full_code, code_from, code_to)]
 
-        headers = ["کد", "نام", "مانده‌ی اول (بد)", "مانده‌ی اول (بس)", "گردش (بد)", "گردش (بس)", "مانده‌ی آخر (بد)", "مانده‌ی آخر (بس)"]
+        headers = ["کد", "نام", "ماندهٔ اول (بد)", "ماندهٔ اول (بس)", "گردش (بد)", "گردش (بس)", "ماندهٔ آخر (بد)", "ماندهٔ آخر (بس)"]
         table_rows: list[list] = []
         totals = [_ZERO] * 6
         self._all_row_ids = []
@@ -266,8 +270,8 @@ class AccountLedgerScreen(ReportScreenBase):
             table_rows.append([r.full_code, r.name, *[self._fmt(v) for v in values]])
             self._all_row_ids.append(r.account_id)
 
-        hint = "" if self._parent_id is None else " (زیرمجموعه — دابل‌کلیکِ ردیفِ معین/تفصیلی گردشِ حساب را نشان می‌دهد)"
-        footer = ["", f"جمعِ کل{hint}", *[self._fmt(v) for v in totals]]
+        hint = "" if self._parent_id is None else " (زیرمجموعه — دابل‌کلیک ردیف معین/تفصیلی گردش حساب را نشان می‌دهد)"
+        footer = ["", f"جمع کل{hint}", *[self._fmt(v) for v in totals]]
         return headers, table_rows, footer
 
     def _load_ledger(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
@@ -302,11 +306,11 @@ class AccountLedgerScreen(ReportScreenBase):
         # اصلیِ ردیف (به ارزِ خودش) + کدِ همان ارز را نشان می‌دهند؛ برایِ
         # ردیف‌هایی که با ارزِ پایه ثبت شده‌اند، این دو ستون خالی می‌مانند
         # چون بدهکار/بستانکارِ اصلی خودش همان ارزِ پایه است.
-        headers = ["تاریخ", "شماره‌یِ سند", "شرح", "بدهکار", "بستانکار", "مانده", "مبلغِ ارزی", "ارز"]
+        headers = ["تاریخ", "شمارهٔ سند", "شرح", "بدهکار", "بستانکار", "مانده", "مبلغ ارزی", "ارز"]
         table_rows: list[list] = []
         opening_net = opening_debit - opening_credit
         table_rows.append(
-            ["", "", f"مانده‌ی اول — {name}", "", "", self._signed(opening_net), "", ""]
+            ["", "", f"ماندهٔ اول — {name}", "", "", self._signed(opening_net), "", ""]
         )
         total_debit = _ZERO
         total_credit = _ZERO
@@ -336,10 +340,67 @@ class AccountLedgerScreen(ReportScreenBase):
                 ]
             )
         self._all_row_ids = [0] * len(table_rows)
-        footer = ["", "", "جمعِ گردش", self._fmt(total_debit), self._fmt(total_credit), "", "", ""]
+        footer = ["", "", "جمع گردش", self._fmt(total_debit), self._fmt(total_credit), "", "", ""]
         return headers, table_rows, footer
 
     def _signed(self, net: decimal.Decimal) -> str:
         if net >= 0:
             return f"{self._fmt(net)} (بد)"
         return f"{self._fmt(-net)} (بس)"
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        if not self._rows:
+            QMessageBox.information(self, "گزارش", "داده‌ای برای چاپ وجود ندارد.")
+            return None
+
+        company = session.current_company
+        date_range_label = (
+            f"از {numerals.format_jalali_date(self.date_from.date())} "
+            f"تا {numerals.format_jalali_date(self.date_to.date())}"
+        )
+        generated_at = numerals.format_jalali_datetime(datetime.datetime.now())
+
+        if self._mode == "ledger":
+            # طبقِ اشتراکِ منطقِ Jasper بینِ دو حالتِ این صفحه: فرمِ
+            # مقصد این‌جا بسته به حالتِ فعلی تعیین می‌شود، چون این دو
+            # حالت شکلِ ستونیِ کاملاً متفاوتی دارند.
+            self.jasper_form_code = "ACCOUNT_LEDGER_DETAIL"
+            field_names = [
+                "date_display", "document_no_display", "description",
+                "debit_display", "credit_display", "balance_display",
+                "fc_amount_display", "fc_currency_display",
+            ]
+            print_rows = [dict(zip(field_names, row)) for row in self._rows]
+            footer = self._footer or [""] * 8
+            params = {
+                "companyName": company.display_name if company else "",
+                "accountLabel": self._ledger_target[2] if self._ledger_target else "",
+                "dateRangeLabel": date_range_label,
+                "generatedAt": generated_at,
+                "totalDebitDisplay": footer[3],
+                "totalCreditDisplay": footer[4],
+            }
+            return print_rows, params
+
+        self.jasper_form_code = "ACCOUNT_LEDGER_SUMMARY"
+        field_names = [
+            "account_code", "account_name",
+            "opening_debit_display", "opening_credit_display",
+            "period_debit_display", "period_credit_display",
+            "closing_debit_display", "closing_credit_display",
+        ]
+        print_rows = [dict(zip(field_names, row)) for row in self._rows]
+        footer = self._footer or [""] * 8
+        params = {
+            "companyName": company.display_name if company else "",
+            "levelLabel": self.level_combo.currentText(),
+            "dateRangeLabel": date_range_label,
+            "generatedAt": generated_at,
+            "totalOpeningDebitDisplay": footer[2],
+            "totalOpeningCreditDisplay": footer[3],
+            "totalPeriodDebitDisplay": footer[4],
+            "totalPeriodCreditDisplay": footer[5],
+            "totalClosingDebitDisplay": footer[6],
+            "totalClosingCreditDisplay": footer[7],
+        }
+        return print_rows, params

@@ -1,13 +1,13 @@
-"""تنظیماتِ کدینگِ حسابداری — تعدادِ رقم + بازه‌یِ از-تا برایِ هر سطحِ کدینگِ
-حساب‌ها (گروه/کل/معین). طبقِ درخواستِ صریح، این تنظیمات باید پیش از هر
-کارِ دیگری در حسابداری انجام شود و بعدِ اولین سندِ شرکت دیگر قابلِ‌تغییر
-نیست — چون کدهایِ ثبت‌شده‌ی موجود با تغییرِ طول/بازه ناسازگار می‌شوند.
+"""تنظیمات کدینگ حسابداری — تعداد رقم + بازهٔ از-تا برای هر سطح کدینگ
+حساب‌ها (گروه/کل/معین). طبق درخواست صریح، این تنظیمات باید پیش از هر
+کار دیگری در حسابداری انجام شود و بعد اولین سند شرکت دیگر قابل‌تغییر
+نیست — چون کدهای ثبت‌شدهٔ موجود با تغییر طول/بازه ناسازگار می‌شوند.
 
-طبقِ درخواستِ صریحِ بعدی: تبِ «کدینگِ حسابداری» در تنظیماتِ سیستم حالا
-خودش دو زیرتب دارد — این فایل دو صفحه‌ی مستقل را تعریف می‌کند
-(AccountingCodingSettingsScreen برایِ کدینگِ حساب‌ها، و
-DetailLevelDigitSettingsScreen برایِ تعدادِ رقمِ سطوحِ تفصیلی) که در
-system_settings.py با _sub_tabs کنارِ هم قرار می‌گیرند."""
+طبق درخواست صریح بعدی: تب «کدینگ حسابداری» در تنظیمات سیستم حالا
+خودش دو زیرتب دارد — این فایل دو صفحهٔ مستقل را تعریف می‌کند
+(AccountingCodingSettingsScreen برای کدینگ حساب‌ها، و
+DetailLevelDigitSettingsScreen برای تعداد رقم سطوح تفصیلی) که در
+system_settings.py با _sub_tabs کنار هم قرار می‌گیرند."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
 
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
-_DETAIL_LEVEL_LABELS = {1: "سطحِ ۱", 2: "سطحِ ۲", 3: "سطحِ ۳", 4: "سطحِ ۴"}
+_DETAIL_LEVEL_LABELS = {1: "سطح ۱", 2: "سطح ۲", 3: "سطح ۳", 4: "سطح ۴"}
 
 
 class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
@@ -44,13 +44,13 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("کدینگِ حسابداری")
+        title = QLabel("کدینگ حسابداری")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         hint = QLabel(
-            "تعدادِ رقم و بازه‌ی از-تا برایِ هر سطحِ کدینگِ حساب‌ها — این تنظیمات باید پیش از شروعِ "
-            "کدینگ انجام شود؛ بعدِ ثبتِ اولین سندِ شرکت دیگر قابلِ‌تغییر نیست. مقدارِ صفر یعنی بدونِ محدودیت."
+            "تعداد رقم و بازهٔ از-تا برای هر سطح کدینگ حساب‌ها — این تنظیمات باید پیش از شروع "
+            "کدینگ انجام شود؛ بعد ثبت اولین سند شرکت دیگر قابل‌تغییر نیست. مقدار صفر یعنی بدون محدودیت."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -63,7 +63,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         grid.setSpacing(10)
 
         grid.addWidget(QLabel("سطح"), 0, 0)
-        grid.addWidget(QLabel("تعدادِ رقم"), 0, 1)
+        grid.addWidget(QLabel("تعداد رقم"), 0, 1)
         grid.addWidget(QLabel("از"), 0, 2)
         grid.addWidget(QLabel("تا"), 0, 3)
 
@@ -116,7 +116,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
-        self.save_button.setToolTip("ذخیره‌ی تنظیماتِ کدینگ")
+        self.save_button.setToolTip("ذخیرهٔ تنظیمات کدینگ")
         self.save_button.clicked.connect(self._save)
         footer_layout.addWidget(self.save_button)
         root_layout.addWidget(footer)
@@ -126,15 +126,15 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
             name = _LEVEL_LABELS[level]
             level_help.append((
                 code_length,
-                f"تعدادِ رقمِ کدِ سطحِ «{name}». مثلاً اگر ۲ بگذارید، کدِ این سطح همیشه دو رقمی است، مثلِ «۰۱».",
+                f"تعداد رقم کد سطح «{name}». مثلاً اگر ۲ بگذارید، کد این سطح همیشه دو رقمی است، مثل «۰۱».",
             ))
             level_help.append((
                 range_from,
-                f"کمترین کدِ مجاز برایِ سطحِ «{name}». صفر یعنی بدونِ محدودیتِ ابتدا.",
+                f"کمترین کد مجاز برای سطح «{name}». صفر یعنی بدون محدودیت ابتدا.",
             ))
             level_help.append((
                 range_to,
-                f"بیشترین کدِ مجاز برایِ سطحِ «{name}». صفر یعنی بدونِ محدودیتِ انتها.",
+                f"بیشترین کد مجاز برای سطح «{name}». صفر یعنی بدون محدودیت انتها.",
             ))
         self.set_field_help(level_help)
 
@@ -169,7 +169,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
             names = "، ".join(_LEVEL_LABELS[level] for level in sorted(locked_levels))
             self.status_label.setObjectName("sectionHint")
             self.status_label.setStyleSheet("")
-            self.status_label.setText(f"برایِ سطحِ «{names}» قبلاً حساب تعریف شده؛ دیگر قابلِ‌تغییر نیست.")
+            self.status_label.setText(f"برای سطح «{names}» قبلاً حساب تعریف شده؛ دیگر قابل‌تغییر نیست.")
 
     def _save(self) -> None:
         company_id = self._company_id()
@@ -188,7 +188,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return
         self.refresh()
-        theme.set_status_label(self.status_label, "تنظیماتِ کدینگ ذخیره شد.", ok=True)
+        theme.set_status_label(self.status_label, "تنظیمات کدینگ ذخیره شد.", ok=True)
 
 
 class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
@@ -208,14 +208,14 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        detail_title = QLabel("تعدادِ رقمِ سطوحِ تفصیلی")
+        detail_title = QLabel("تعداد رقم سطوح تفصیلی")
         detail_title.setObjectName("pageTitle")
         outer.addWidget(detail_title)
 
         detail_hint = QLabel(
-            "طبقِ درخواستِ صریح، تعدادِ رقمِ هر سطحِ تفصیلی (کالا/بانک/مشتری/تامین‌کننده/...) سراسری و "
-            "برایِ همه‌ی گروه‌ها یکسان است — فقط بازه‌ی از-تا مخصوصِ هر گروه در صفحه‌ی «پیکربندیِ "
-            "گروه‌هایِ تفصیلی» تنظیم می‌شود. مقدارِ صفر یعنی بدونِ محدودیتِ طول."
+            "تعداد رقم هر سطح تفصیلی (کالا، بانک، مشتری، تامین‌کننده و ...) برای همهٔ گروه‌ها یکسان "
+            "است؛ فقط بازهٔ «از ـ تا» هر گروه جداگانه در صفحهٔ «پیکربندی "
+            "گروه‌های تفصیلی» تنظیم می‌شود. مقدار صفر یعنی بدون محدودیت طول."
         )
         detail_hint.setObjectName("sectionHint")
         detail_hint.setWordWrap(True)
@@ -228,7 +228,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         detail_grid.setSpacing(10)
 
         detail_grid.addWidget(QLabel("سطح"), 0, 0)
-        detail_grid.addWidget(QLabel("تعدادِ رقم"), 0, 1)
+        detail_grid.addWidget(QLabel("تعداد رقم"), 0, 1)
 
         for row, level in enumerate(sorted(_DETAIL_LEVEL_LABELS), start=1):
             detail_grid.addWidget(QLabel(_DETAIL_LEVEL_LABELS[level]), row, 0)
@@ -255,7 +255,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         self.save_detail_button = QPushButton("💾")
         self.save_detail_button.setObjectName("primaryIconButton")
         self.save_detail_button.setFixedWidth(48)
-        self.save_detail_button.setToolTip("ذخیره‌ی تعدادِ رقمِ سطوحِ تفصیلی")
+        self.save_detail_button.setToolTip("ذخیرهٔ تعداد رقم سطوح تفصیلی")
         self.save_detail_button.clicked.connect(self._save_detail_digits)
         footer_layout.addWidget(self.save_detail_button)
         root_layout.addWidget(footer)
@@ -263,8 +263,8 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 code_length,
-                f"تعدادِ رقمِ کدِ «{_DETAIL_LEVEL_LABELS[level]}» برایِ همه‌یِ گروه‌هایِ تفصیلی — کالا، بانک، مشتری و بقیه. "
-                "این عدد سراسری است، یعنی برایِ همه‌یِ گروه‌ها یکسان است. بازه‌یِ از-تایِ هر گروه جداگانه در «پیکربندیِ گروه‌هایِ تفصیلی» تنظیم می‌شود.",
+                f"تعداد رقم کد «{_DETAIL_LEVEL_LABELS[level]}» برای همهٔ گروه‌های تفصیلی — کالا، بانک، مشتری و بقیه. "
+                "این عدد سراسری است، یعنی برای همهٔ گروه‌ها یکسان است. بازهٔ از-تای هر گروه جداگانه در «پیکربندی گروه‌های تفصیلی» تنظیم می‌شود.",
             )
             for level, code_length in self._detail_level_widgets.items()
         ])
@@ -291,7 +291,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
             names = "، ".join(_DETAIL_LEVEL_LABELS[level] for level in sorted(locked_levels))
             self.detail_status_label.setObjectName("sectionHint")
             self.detail_status_label.setStyleSheet("")
-            self.detail_status_label.setText(f"برایِ «{names}» قبلاً حسابِ تفصیلی تعریف شده؛ دیگر قابلِ‌تغییر نیست.")
+            self.detail_status_label.setText(f"برای «{names}» قبلاً حساب تفصیلی تعریف شده؛ دیگر قابل‌تغییر نیست.")
 
     def _save_detail_digits(self) -> None:
         company_id = self._company_id()
@@ -304,4 +304,4 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
             theme.set_status_label(self.detail_status_label, str(exc), ok=False)
             return
         self.refresh()
-        theme.set_status_label(self.detail_status_label, "تعدادِ رقمِ سطوحِ تفصیلی ذخیره شد.", ok=True)
+        theme.set_status_label(self.detail_status_label, "تعداد رقم سطوح تفصیلی ذخیره شد.", ok=True)

@@ -1,6 +1,6 @@
-"""فهرستِ مرجعِ نام‌هایِ بانک — طبقِ درخواستِ صریح: «نام بانک اگر لیستی
-باشه ... در فرمی جدا تعریف بشه بهتره» — برایِ انتخاب در فیلدِ «بانکِ
-صادرکننده»یِ فرمِ ثبتِ چکِ دریافتی، به‌جایِ تایپِ آزادِ نام."""
+"""فهرست مرجع نام‌های بانک — طبق درخواست صریح: «نام بانک اگر لیستی
+باشه ... در فرمی جدا تعریف بشه بهتره» — برای انتخاب در فیلد «بانک
+صادرکننده»ی فرم ثبت چک دریافتی، به‌جای تایپ آزاد نام."""
 
 from __future__ import annotations
 
@@ -51,15 +51,12 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.code_field.setMaximumWidth(120)
         add_row.addWidget(self.code_field)
         self.name_field = QLineEdit()
-        self.name_field.setPlaceholderText("نامِ بانک (مثلاً بانکِ ملی)")
+        self.name_field.setPlaceholderText("نام بانک (مثلاً بانک ملی)")
         self.name_field.returnPressed.connect(self._save)
         add_row.addWidget(self.name_field, stretch=1)
 
-        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها: دکمه‌ها باید کنارِ هم و به‌ترتیبِ
-        # چپ‌به‌راست بمانند، بدونِ اینکه جهتِ فیلدهایِ کد/نامِ همین ردیف تغییر کند —
-        # پس فقط خوشه‌یِ دکمه‌ها در یک زیرویجتِ LTR جداگانه قرار می‌گیرد.
+        # دکمه‌ها کنار هم در یک خوشه (R301: هم‌جهت با برنامه، راست‌به‌چپ)
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         button_cluster_layout = QHBoxLayout(button_cluster)
         button_cluster_layout.setContentsMargins(0, 0, 0, 0)
         button_cluster_layout.setSpacing(8)
@@ -89,7 +86,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         layout.addLayout(add_row)
 
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["کد", "نامِ بانک"])
+        self.table.setHorizontalHeaderLabels(["کد", "نام بانک"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -100,8 +97,9 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         outer.addWidget(wrap_scrollable(panel))
 
         self.set_field_help([
-            (self.name_field, "نامِ بانک — بعداً در فرمِ ثبتِ چکِ دریافتی از این فهرست انتخاب می‌شود."),
-            (self.table, "برایِ ویرایشِ یک بانک، رویِ ردیفش کلیک کنید."),
+            (self.code_field, "کد اختیاری بانک — خالی هم می‌تواند بماند."),
+            (self.name_field, "نام بانک — بعداً در فرم ثبت چک دریافتی از این فهرست انتخاب می‌شود."),
+            (self.table, "برای ویرایش یک بانک، روی ردیفش کلیک کنید."),
         ])
 
     def _company_id(self) -> int | None:
@@ -139,7 +137,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.status_label.setText("")
         self.code_field.setText(code_item.text())
         self.name_field.setText(self.table.item(row, 1).text())
-        self.save_button.setToolTip("ذخیره‌یِ ویرایش")
+        self.save_button.setToolTip("ذخیرهٔ ویرایش")
         self.cancel_button.setVisible(True)
         self.delete_button.setVisible(True)
 
@@ -160,7 +158,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
     def _delete(self) -> None:
         if self.company_id is None or self._editing_bank_id is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ بانک", "این بانک حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذف بانک", "این بانک حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:

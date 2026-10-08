@@ -1,10 +1,10 @@
-"""سرویسِ واقعیِ «تنخواه‌گردان» (طبقِ گزارشِ صریح — نه یک فرمِ پرداختِ
-سرپوش‌دار): هر تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ «تنخواه») می‌تواند
-هم‌زمان چند تنخواهِ باز داشته باشد، هرکدام با شماره‌یِ خودکارِ مستقلِ
-خودش. افتتاحِ یک تنخواه یک سندِ پرداختِ واقعی است (واریزیِ اولیه به
-تنخواه‌دار)؛ ردیف‌هایی که در دورانِ بازبودن ثبت می‌شوند هیچ سندِ
-حسابداری‌ای نمی‌سازند؛ بستنِ تنخواه یک سندِ موقتِ پیش‌نویس می‌سازد که
-تنخواه‌دار را به‌اندازه‌یِ جمعِ ردیف‌ها بستانکار می‌کند (مثلِ تسویه‌حساب)."""
+"""سرویس واقعی «تنخواه‌گردان» (طبق گزارش صریح — نه یک فرم پرداخت
+سرپوش‌دار): هر تنخواه‌دار (تفصیلی سطح آخر گروه «تنخواه») می‌تواند
+هم‌زمان چند تنخواه باز داشته باشد، هرکدام با شمارهٔ خودکار مستقل
+خودش. افتتاح یک تنخواه یک سند پرداخت واقعی است (واریزی اولیه به
+تنخواه‌دار)؛ ردیف‌هایی که در دوران بازبودن ثبت می‌شوند هیچ سند
+حسابداری‌ای نمی‌سازند؛ بستن تنخواه یک سند موقت پیش‌نویس می‌سازد که
+تنخواه‌دار را به‌اندازهٔ جمع ردیف‌ها بستانکار می‌کند (مثل تسویه‌حساب)."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ ALLOWED_LINE_METHODS = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING")
 
 @dataclass
 class ExtraDetailRequirement:
-    """یک بُعد/گروهِ شخصِ اضافیِ الزامیِ حسابِ پیش‌پرداختِ تنخواه — یعنی
-    چیزی غیر از خودِ بُعدِ تنخواه‌دار که با انتخابِ تنخواه‌دار در بالای
+    """یک بُعد/گروه شخص اضافی الزامی حساب پیش‌پرداخت تنخواه — یعنی
+    چیزی غیر از خود بُعد تنخواه‌دار که با انتخاب تنخواه‌دار در بالای
     فرم قبلاً پوشش داده می‌شود."""
 
     dimension_type_id: int
@@ -40,10 +40,10 @@ _HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimension
 
 
 def get_advance_shared_dimension_options(company_id: int, code: str) -> tuple[bool, list]:
-    """طبقِ هم‌الگو با هدرِ فرمِ دریافت/پرداخت: مرکزِ هزینه/پروژه فیلدهایِ
-    همیشه‌حاضرِ هدرند (فقط enable/disable می‌شوند، نه پویا مثلِ بقیه‌یِ
-    ابعادِ اضافی) — تا کاربر بتواند شرح/مرکزِ هزینه/پروژه را در یک ردیفِ
-    واحد ببیند، دقیقاً مثلِ فرمِ دریافت/پرداخت. خروجی: (آیا الزامی است, گزینه‌ها)."""
+    """طبق هم‌الگو با هدر فرم دریافت/پرداخت: مرکز هزینه/پروژه فیلدهای
+    همیشه‌حاضر هدرند (فقط enable/disable می‌شوند، نه پویا مثل بقیهٔ
+    ابعاد اضافی) — تا کاربر بتواند شرح/مرکز هزینه/پروژه را در یک ردیف
+    واحد ببیند، دقیقاً مثل فرم دریافت/پرداخت. خروجی: (آیا الزامی است, گزینه‌ها)."""
     dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, code)
     if dim_type_id is None:
         return False, []
@@ -57,14 +57,14 @@ def get_advance_shared_dimension_options(company_id: int, code: str) -> tuple[bo
 
 
 def get_advance_extra_requirements(company_id: int) -> list[ExtraDetailRequirement]:
-    """طبقِ رفعِ باگِ واقعی («برایِ حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
-    فراموش شده است» حتی وقتی روش/تفصیلیِ ردیف‌ها درست بودند): حسابِ
-    پیش‌پرداختِ تنخواه ممکن است، جدا از بُعدِ تنخواه‌دار، بُعد/گروهِ شخصِ
-    دیگری هم رویش الزامی شده باشد. قبلاً open_fund/close_fund فقط بُعدِ
-    تنخواه‌دار را می‌فرستادند و هر نیازِ دیگری را نادیده می‌گرفتند — نتیجه
+    """طبق رفع باگ واقعی («برای حساب X انتخاب گروه‌های تفصیلی الزامی
+    فراموش شده است» حتی وقتی روش/تفصیلی ردیف‌ها درست بودند): حساب
+    پیش‌پرداخت تنخواه ممکن است، جدا از بُعد تنخواه‌دار، بُعد/گروه شخص
+    دیگری هم رویش الزامی شده باشد. قبلاً open_fund/close_fund فقط بُعد
+    تنخواه‌دار را می‌فرستادند و هر نیاز دیگری را نادیده می‌گرفتند — نتیجه
     این بود که create_journal_entry همیشه رد می‌کرد، مستقل از این‌که
-    کاربر چه روشی/تفصیلی‌ای در ردیف‌ها انتخاب کرده بود. مرکزِ هزینه/پروژه
-    این‌جا نیستند — آن‌ها فیلدهایِ همیشه‌حاضرِ هدرند (get_advance_shared_dimension_options)."""
+    کاربر چه روشی/تفصیلی‌ای در ردیف‌ها انتخاب کرده بود. مرکز هزینه/پروژه
+    این‌جا نیستند — آن‌ها فیلدهای همیشه‌حاضر هدرند (get_advance_shared_dimension_options)."""
     advance_account_id = treasury_service.get_account_mapping(company_id, PETTY_CASH_ADVANCE_MAPPING_KEY)
     if advance_account_id is None:
         return []
@@ -86,12 +86,12 @@ def get_advance_extra_requirements(company_id: int) -> list[ExtraDetailRequireme
         person_dim_id = dimensions_service.get_person_dimension_type_id(company_id)
         group_ids = {g.person_group_id for g in person_groups}
         persons = [p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in group_ids]
-        requirements.append(ExtraDetailRequirement(person_dim_id, "تفصیلیِ اشخاص", persons))
+        requirements.append(ExtraDetailRequirement(person_dim_id, "تفصیلی اشخاص", persons))
     return requirements
 
 
 def list_custodians(company_id: int) -> list[dimensions_service.DetailAccountRow]:
-    """تفصیلی‌هایِ سطحِ آخرِ گروهِ «تنخواه» — همان‌هایی که می‌توانند
+    """تفصیلی‌های سطح آخر گروه «تنخواه» — همان‌هایی که می‌توانند
     تنخواه‌دار باشند."""
     dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PETTY_CASH_CODE)
     return dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
@@ -160,22 +160,22 @@ def open_fund(
     dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PETTY_CASH_CODE)
     leaves = {r.detail_account_id for r in dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)}
     if custodian_detail_account_id not in leaves:
-        raise ValueError("تنخواه‌دار باید یک تفصیلیِ سطحِ آخرِ گروهِ «تنخواه» باشد.")
+        raise ValueError("تنخواه‌دار باید یک تفصیلی سطح آخر گروه «تنخواه» باشد.")
     if not method_lines:
-        raise ValueError("برایِ افتتاحِ تنخواه حداقل یک ردیفِ روشِ پرداخت لازم است.")
+        raise ValueError("برای افتتاح تنخواه حداقل یک ردیف روش پرداخت لازم است.")
     advance_account_id = treasury_service.get_account_mapping(company_id, PETTY_CASH_ADVANCE_MAPPING_KEY)
     if advance_account_id is None:
-        raise ValueError("حسابِ پیش‌پرداختِ تنخواه در تنظیماتِ خزانه‌داری مشخص نشده است.")
+        raise ValueError("حساب پیش‌پرداخت تنخواه در تنظیمات خزانه‌داری مشخص نشده است.")
     opening_amount = sum((ml.amount for ml in method_lines), decimal.Decimal(0))
     if opening_amount <= 0:
-        raise ValueError("مبلغِ افتتاحِ تنخواه باید مثبت باشد.")
+        raise ValueError("مبلغ افتتاح تنخواه باید مثبت باشد.")
 
     extra_details = dict(extra_details or {})
     requirements = get_advance_extra_requirements(company_id)
     missing = [r.label for r in requirements if r.dimension_type_id not in extra_details]
     if missing:
         raise ValueError(
-            "برایِ حسابِ پیش‌پرداختِ تنخواه انتخابِ " + "، ".join(missing) + " الزامی است."
+            "برای حساب پیش‌پرداخت تنخواه انتخاب " + "، ".join(missing) + " الزامی است."
         )
     counterparty_details = {dim_type_id: custodian_detail_account_id, **extra_details}
 
@@ -235,11 +235,11 @@ def list_lines(fund_id: int) -> list[PettyCashFundLineRow]:
 
 
 def is_allowed_line_method(company_id: int, method: str) -> bool:
-    """طبقِ آیتمِ ۹: علاوه بر نقد/بانک/چک/تخفیف/تهاتر، روش‌هایِ سفارشیِ
-    فعالِ همین شرکت (کدشان با CUSTOM_ شروع می‌شود) هم مجازند — دقیقاً
-    همان روش‌هایِ پرداختیِ فرمِ دریافت/پرداخت، به‌جز خرجِ چک
-    (CHECK_DISBURSEMENT) که به‌دلیلِ منطقِ حسابداریِ کاملاً متفاوتش
-    (بازنشستگیِ یک چکِ دریافتیِ خاص، نه یک ردیفِ بدهکارِ ساده) عمداً از
+    """طبق آیتم ۹: علاوه بر نقد/بانک/چک/تخفیف/تهاتر، روش‌های سفارشی
+    فعال همین شرکت (کدشان با CUSTOM_ شروع می‌شود) هم مجازند — دقیقاً
+    همان روش‌های پرداختی فرم دریافت/پرداخت، به‌جز خرج چک
+    (CHECK_DISBURSEMENT) که به‌دلیل منطق حسابداری کاملاً متفاوتش
+    (بازنشستگی یک چک دریافتی خاص، نه یک ردیف بدهکار ساده) عمداً از
     این فرم خارج نگه داشته شده است."""
     if method in ALLOWED_LINE_METHODS:
         return True
@@ -264,15 +264,15 @@ def add_line(
     line_date: datetime.date | None = None,
 ) -> int:
     if amount <= 0:
-        raise ValueError("مبلغِ ردیف باید مثبت باشد.")
+        raise ValueError("مبلغ ردیف باید مثبت باشد.")
     with new_session() as session:
         fund = session.get(PettyCashFund, fund_id)
         if fund is None:
             raise ValueError("تنخواه یافت نشد.")
         if not is_allowed_line_method(fund.company_id, method):
-            raise ValueError("روشِ ردیف نامعتبر است.")
+            raise ValueError("روش ردیف نامعتبر است.")
         if fund.status != "OPEN":
-            raise ValueError("این تنخواه بسته شده و دیگر قابلِ ثبتِ ردیفِ تازه نیست.")
+            raise ValueError("این تنخواه بسته شده و دیگر قابل ثبت ردیف تازه نیست.")
         line = PettyCashFundLine(
             fund_id=fund_id, method=method, amount=amount, description=(description or None),
             detail_account_id=detail_account_id, check_no=check_no, check_due_date=check_due_date,
@@ -290,7 +290,7 @@ def delete_line(line_id: int) -> None:
             return
         fund = session.get(PettyCashFund, line.fund_id)
         if fund is not None and fund.status != "OPEN":
-            raise ValueError("این تنخواه بسته شده و دیگر قابلِ ویرایش نیست.")
+            raise ValueError("این تنخواه بسته شده و دیگر قابل ویرایش نیست.")
         session.delete(line)
         session.commit()
 
@@ -306,7 +306,7 @@ def close_fund(
             raise ValueError("این تنخواه قبلاً بسته شده است.")
         lines = session.scalars(select(PettyCashFundLine).where(PettyCashFundLine.fund_id == fund_id)).all()
         if not lines:
-            raise ValueError("برایِ بستنِ تنخواه حداقل یک ردیف لازم است.")
+            raise ValueError("برای بستن تنخواه حداقل یک ردیف لازم است.")
         company_id = fund.company_id
         custodian_detail_account_id = fund.custodian_detail_account_id
         fund_no = fund.fund_no
@@ -318,7 +318,7 @@ def close_fund(
 
     advance_account_id = treasury_service.get_account_mapping(company_id, PETTY_CASH_ADVANCE_MAPPING_KEY)
     if advance_account_id is None:
-        raise ValueError("حسابِ پیش‌پرداختِ تنخواه در تنظیماتِ خزانه‌داری مشخص نشده است.")
+        raise ValueError("حساب پیش‌پرداخت تنخواه در تنظیمات خزانه‌داری مشخص نشده است.")
     dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PETTY_CASH_CODE)
 
     # همان روش‌هایِ پرداختِ ازپیش‌تعریف‌شده (PAYMENT_CASH/PAYMENT_BANK/
@@ -327,12 +327,12 @@ def close_fund(
     for method, amount, detail_account_id in line_data:
         account_id = treasury_service.get_account_mapping(company_id, f"PAYMENT_{method}")
         if account_id is None:
-            raise ValueError(f"حسابِ روشِ «{method}» در تنظیماتِ پرداخت مشخص نشده است.")
+            raise ValueError(f"حساب روش «{method}» در تنظیمات پرداخت مشخص نشده است.")
         key = (account_id, detail_account_id)
         debit_lines[key] = debit_lines.get(key, decimal.Decimal(0)) + amount
 
     total = sum((amount for _, amount, _ in line_data), decimal.Decimal(0))
-    description = closing_description or f"بستنِ تنخواهِ شماره‌یِ {fund_no}"
+    description = closing_description or f"بستن تنخواه شمارهٔ {fund_no}"
 
     def to_details(detail_account_id: int | None) -> dict[int, int]:
         if detail_account_id is None:
@@ -370,15 +370,15 @@ def close_fund(
 
 
 def delete_fund(fund_id: int, company_id: int, changed_by_user_id: int) -> None:
-    """طبقِ گزارشِ صریح («سندِ صادرشده‌یِ تنخواه را نمی‌توان حذف کرد»):
-    چون petty_cash_funds با کلیدِ خارجیِ الزامی به سندِ افتتاح (و اگر
-    بسته باشد، سندِ بستن) اشاره می‌کند، تلاش برایِ حذفِ مستقیمِ آن سند از
-    صفحه‌ی عمومیِ اسناد همیشه با خطایِ خامِ کلیدِ خارجی رد می‌شد (نه یک
-    پیامِ روشن). این تابع، هم‌الگو با delete_received_check/
-    delete_issued_check (که پیش از حذفِ سندِ حسابداری، ابتدا رکوردِ
-    وابسته را پاک می‌کنند)، کلِ تنخواه — ردیف‌ها، تفصیلی‌هایِ اضافی، و در
-    آخر خودِ سند(هایِ) حسابداری — را یک‌جا حذف می‌کند؛ فقط وقتی همه‌ی
-    سندهایِ مربوطه هنوز موقت/پیش‌نویس‌اند (وگرنه ابتدا اعتبارسنجی می‌شود،
+    """طبق گزارش صریح («سند صادرشدهٔ تنخواه را نمی‌توان حذف کرد»):
+    چون petty_cash_funds با کلید خارجی الزامی به سند افتتاح (و اگر
+    بسته باشد، سند بستن) اشاره می‌کند، تلاش برای حذف مستقیم آن سند از
+    صفحهٔ عمومی اسناد همیشه با خطای خام کلید خارجی رد می‌شد (نه یک
+    پیام روشن). این تابع، هم‌الگو با delete_received_check/
+    delete_issued_check (که پیش از حذف سند حسابداری، ابتدا رکورد
+    وابسته را پاک می‌کنند)، کل تنخواه — ردیف‌ها، تفصیلی‌های اضافی، و در
+    آخر خود سند(های) حسابداری — را یک‌جا حذف می‌کند؛ فقط وقتی همه‌ی
+    سندهای مربوطه هنوز موقت/پیش‌نویس‌اند (وگرنه ابتدا اعتبارسنجی می‌شود،
     پیش از دست‌زدن به هیچ رکوردی)."""
     from peecha.db.models.accounting import FiscalYear, JournalEntry, JournalEntryStatus
     from peecha.services.journal_entries import _ensure_fiscal_period_open, _ensure_fiscal_year_open
@@ -396,7 +396,7 @@ def delete_fund(fund_id: int, company_id: int, changed_by_user_id: int) -> None:
                 continue
             status = session.get(JournalEntryStatus, entry.status_id)
             if status is None or status.code not in ("TEMPORARY", "DRAFT"):
-                raise ValueError("این تنخواه دیگر قابلِ حذف نیست، چون سندِ حسابداریِ آن به وضعیتِ دائم رسیده است.")
+                raise ValueError("این تنخواه دیگر قابل حذف نیست، چون سند حسابداری آن به وضعیت دائم رسیده است.")
             fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
             if fiscal_year is not None:
                 _ensure_fiscal_year_open(fiscal_year)

@@ -1,38 +1,38 @@
-"""زیرساختِ مشترکِ خروجیِ گزارش‌ها — چاپ/PDF با QtPrintSupport (بدونِ
-وابستگیِ بیرونی) و Excel با openpyxl. هر صفحه‌یِ گزارش (reports_common.py و
-زیرکلاس‌هایش) همین سه تابع را با دیتایِ جدولِ فعلی‌اش صدا می‌زند.
+"""زیرساخت مشترک خروجی گزارش‌ها — چاپ/PDF با QtPrintSupport (بدون
+وابستگی بیرونی) و Excel با openpyxl. هر صفحهٔ گزارش (reports_common.py و
+زیرکلاس‌هایش) همین سه تابع را با دیتای جدول فعلی‌اش صدا می‌زند.
 
-طبقِ گزارش‌هایِ صریحِ کاربر، چند مشکلِ واقعی در خروجیِ چاپ/PDF پیدا و رفع شد:
+طبق گزارش‌های صریح کاربر، چند مشکل واقعی در خروجی چاپ/PDF پیدا و رفع شد:
 
-۱. ترتیبِ ستون‌ها برعکس بود — ترتیبِ سلول‌ها در خودِ HTML معکوس نوشته
-   می‌شود (نکته‌ی فنی: QTextDocument با dir="rtl" ستونِ *اول*ِ HTML را
-   چپ‌ترین رسم می‌کند، برعکسِ قراردادِ راست‌به‌چپ).
+۱. ترتیب ستون‌ها برعکس بود — ترتیب سلول‌ها در خود HTML معکوس نوشته
+   می‌شود (نکتهٔ فنی: QTextDocument با dir="rtl" ستون *اول* HTML را
+   چپ‌ترین رسم می‌کند، برعکس قرارداد راست‌به‌چپ).
 
-۲. حاشیه‌یِ چاپ به‌صراحت به ۶ میلی‌متر تنظیم می‌شود.
+۲. حاشیهٔ چاپ به‌صراحت به ۶ میلی‌متر تنظیم می‌شود.
 
-۳. فونتِ چاپ از فونتِ واقعیِ برنامه (get_font_family) استفاده می‌کند،
-   با اندازه‌یِ پیش‌فرضِ ۹pt (کوچک‌تر از حالتِ قبلی).
+۳. فونت چاپ از فونت واقعی برنامه (get_font_family) استفاده می‌کند،
+   با اندازهٔ پیش‌فرض ۹pt (کوچک‌تر از حالت قبلی).
 
-۴. **ریشه‌یِ واقعیِ باگِ «صفحه‌های نصفه/خالی» پیدا شد**: نسخه‌هایِ قبلی
-   گزارش را به چند جدولِ جدا با CSS `page-break-after: always` بینِ آن‌ها
-   می‌شکستند — پشتیبانیِ QTextDocument از page-break-* رویِ جدول‌هایِ
-   چندبخشی قابلِ‌اتکا نیست و صفحه‌یِ خالیِ اضافه می‌ساخت.
+۴. **ریشهٔ واقعی باگ «صفحه‌های نصفه/خالی» پیدا شد**: نسخه‌های قبلی
+   گزارش را به چند جدول جدا با CSS `page-break-after: always` بین آن‌ها
+   می‌شکستند — پشتیبانی QTextDocument از page-break-* روی جدول‌های
+   چندبخشی قابل‌اتکا نیست و صفحهٔ خالی اضافه می‌ساخت.
 
-۵. **هدر/فوترِ تکرارشونده + شماره‌یِ صفحه رویِ همه‌ی صفحات** (طبقِ
-   درخواستِ صریح): چون `QTextDocument.print_` به‌تنهایی چنین چیزی نمی‌دهد
-   (و شکستِ دستی هم باگ‌زا بود)، چاپ حالا به‌صورتِ دستی و صفحه‌به‌صفحه با
-   `QPainter` انجام می‌شود (`_paint_report`): یک نوارِ هدرِ ثابت (که عیناً
-   رویِ هر صفحه تکرار می‌شود) بالا، یک تکه از جدولِ محتوا (که خودِ Qt
-   بومی و درست بینِ صفحات می‌شکند، بدونِ CSSِ دستی) در وسط، و یک نوارِ
-   فوتر (متنِ کاربر + «صفحه‌یِ X از Y») پایینِ هر صفحه. ردیف‌هایِ «جمعِ
-   این صفحه» هم به‌عنوانِ ردیفِ عادیِ همان جدولِ محتوا، در فاصله‌هایِ
+۵. **هدر/فوتر تکرارشونده + شمارهٔ صفحه روی همهٔ صفحات** (طبق
+   درخواست صریح): چون `QTextDocument.print_` به‌تنهایی چنین چیزی نمی‌دهد
+   (و شکست دستی هم باگ‌زا بود)، چاپ حالا به‌صورت دستی و صفحه‌به‌صفحه با
+   `QPainter` انجام می‌شود (`_paint_report`): یک نوار هدر ثابت (که عیناً
+   روی هر صفحه تکرار می‌شود) بالا، یک تکه از جدول محتوا (که خود Qt
+   بومی و درست بین صفحات می‌شکند، بدون CSS دستی) در وسط، و یک نوار
+   فوتر (متن کاربر + «صفحهٔ X از Y») پایین هر صفحه. ردیف‌های «جمع
+   این صفحه» هم به‌عنوان ردیف عادی همان جدول محتوا، در فاصله‌های
    تخمین‌زده‌شده (یا دستی‌تنظیم‌شده) درج می‌شوند.
 
-۶. **فرمِ «تنظیماتِ چاپ»** پیش از هر چاپ/PDF/اکسل باز می‌شود: اندازه‌یِ
-   فونت، عرضِ هر ستون (٪)، تعدادِ ردیف در هر صفحه (یا خودکار)، و متنِ
-   *کاملِ* هدر/فوتر (چندخطی، با متنِ پیش‌فرضِ همان نام‌شرکت/عنوان/تاریخ
-   به‌عنوانِ نقطه‌یِ شروعِ قابلِ‌ویرایش) — این تنظیمات با QSettings رویِ
-   دیسک (بر اساسِ عنوانِ هر گزارش) ذخیره می‌شوند و در اجراهایِ بعدی هم
+۶. **فرم «تنظیمات چاپ»** پیش از هر چاپ/PDF/اکسل باز می‌شود: اندازهٔ
+   فونت، عرض هر ستون (٪)، تعداد ردیف در هر صفحه (یا خودکار)، و متن
+   *کامل* هدر/فوتر (چندخطی، با متن پیش‌فرض همان نام‌شرکت/عنوان/تاریخ
+   به‌عنوان نقطهٔ شروع قابل‌ویرایش) — این تنظیمات با QSettings روی
+   دیسک (بر اساس عنوان هر گزارش) ذخیره می‌شوند و در اجراهای بعدی هم
    می‌مانند."""
 
 from __future__ import annotations
@@ -40,8 +40,8 @@ from __future__ import annotations
 import decimal
 from dataclasses import dataclass
 
-from PySide6.QtCore import QMarginsF, QRectF, QSettings, QSizeF
-from PySide6.QtGui import QAbstractTextDocumentLayout, QPageLayout, QPainter, QTextDocument
+from PySide6.QtCore import QMarginsF, QRectF, QSettings, QSizeF, Qt, QUrl
+from PySide6.QtGui import QAbstractTextDocumentLayout, QImage, QPageLayout, QPainter, QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -94,10 +94,10 @@ def _settings_key(title: str) -> str:
 
 
 def load_print_options(title: str) -> PrintOptions | None:
-    """طبقِ درخواستِ صریح («تنظیماتِ هر گزارش ذخیره بشه، هر بار تغییر
-    نکنه»): تنظیماتِ چاپِ هر گزارش با QSettings (رویِ دیسک، مستقل از
-    اجراهایِ بعدیِ برنامه) ذخیره/بازخوانی می‌شود — کلید بر اساسِ عنوانِ
-    گزارش، پس هر گزارش تنظیماتِ خودش را جدا نگه می‌دارد."""
+    """طبق درخواست صریح («تنظیمات هر گزارش ذخیره بشه، هر بار تغییر
+    نکنه»): تنظیمات چاپ هر گزارش با QSettings (روی دیسک، مستقل از
+    اجراهای بعدی برنامه) ذخیره/بازخوانی می‌شود — کلید بر اساس عنوان
+    گزارش، پس هر گزارش تنظیمات خودش را جدا نگه می‌دارد."""
     settings = QSettings("Peecha", "PeechaERP")
     key = _settings_key(title)
     if not settings.contains(f"{key}/font_size_pt"):
@@ -169,7 +169,7 @@ def _sum_amount_cells(rows: list[list], col_index: int) -> decimal.Decimal:
 
 def _subtotal_row(headers: list[str], amount_col_indices: list[int], chunk_rows: list[list]) -> list:
     totals: list[str] = ["" for _ in headers]
-    totals[0] = "جمعِ این صفحه"
+    totals[0] = "جمع این صفحه"
     for col in amount_col_indices:
         totals[col] = numerals.format_amount(_sum_amount_cells(chunk_rows, col))
     return totals
@@ -182,7 +182,7 @@ def _default_header_plain_text(title: str, company_name: str, report_date: str, 
     lines.append(title)
     meta_parts = []
     if report_date:
-        meta_parts.append(f"تاریخِ گزارش: {report_date}")
+        meta_parts.append(f"تاریخ گزارش: {report_date}")
     for label, value in filters or []:
         meta_parts.append(f"{label}: {value}")
     if meta_parts:
@@ -197,7 +197,7 @@ def _auto_header_html(title: str, company_name: str, report_date: str, filters: 
     header_lines += f'<h3 style="margin:4px 0;">{_escape(title)}</h3>'
     meta_parts = []
     if report_date:
-        meta_parts.append(f"تاریخِ گزارش: {_escape(report_date)}")
+        meta_parts.append(f"تاریخ گزارش: {_escape(report_date)}")
     for label, value in filters or []:
         meta_parts.append(f"{_escape(label)}: {_escape(value)}")
     if meta_parts:
@@ -205,6 +205,56 @@ def _auto_header_html(title: str, company_name: str, report_date: str, filters: 
             '<div style="font-size:9pt; color:#444;">' + " &nbsp;|&nbsp; ".join(meta_parts) + "</div>"
         )
     return header_lines
+
+
+# --- R245: لوگویِ شرکت در سربرگ ------------------------------------------------
+_LOGO_URL = "peecha-logo://report"
+_LOGO_HEIGHT_PT = 54
+
+
+def company_logo() -> tuple[bytes | None, str]:
+    """(بایت‌های لوگو، محل) برای شرکت جاری؛ بدون لوگو یا با «بدون لوگو» -> (None, ...)."""
+    from peecha import session as app_session
+    from peecha.services import companies as companies_service
+
+    company = app_session.current_company
+    if company is None:
+        return None, "NONE"
+    try:
+        return companies_service.get_report_logo(company.company_id)
+    except Exception:  # noqa: BLE001 -- نبودِ ستون/اتصال نباید جلویِ چاپ را بگیرد
+        return None, "NONE"
+
+
+def _with_logo(header_html: str, position: str) -> str:
+    """لوگو در یک سو، متن سربرگ وسط، و یک ستون خالی هم‌عرض در سوی دیگر تا متن وسط بماند (جهت سند rtl است)."""
+    logo_cell = f'<td width="90" valign="middle"><img src="{_LOGO_URL}" height="{_LOGO_HEIGHT_PT}"></td>'
+    blank_cell = '<td width="90"></td>'
+    first, last = (logo_cell, blank_cell) if position == "RIGHT" else (blank_cell, logo_cell)
+    return (f'<table width="100%" cellspacing="0" cellpadding="0"><tr>{first}'
+            f'<td align="center" valign="middle">{header_html}</td>{last}</tr></table>')
+
+
+def _add_logo_resource(document: QTextDocument, data: bytes) -> bool:
+    image = QImage()
+    if not image.loadFromData(data):
+        return False
+    if image.height() > 300:
+        image = image.scaledToHeight(300, Qt.SmoothTransformation)
+    document.addResource(QTextDocument.ImageResource, QUrl(_LOGO_URL), image)
+    return True
+
+
+def logo_header_html(inner_html: str) -> str:
+    """سربرگ با لوگوی شرکت جاری (اگر تعریف شده)؛ سندی که این را می‌گیرد باید attach_logo هم بشود."""
+    data, position = company_logo()
+    return _with_logo(inner_html, position) if data else inner_html
+
+
+def attach_logo(document: QTextDocument) -> None:
+    data, _position = company_logo()
+    if data:
+        _add_logo_resource(document, data)
 
 
 def _multiline_html(text: str) -> str:
@@ -288,14 +338,14 @@ def _estimate_rows_per_page(
     font_family: str,
     font_size_pt: float,
 ) -> int:
-    """چند ردیفِ *اول* در یک صفحه جا می‌شوند — با جستجویِ دودویی رویِ
-    اندازه‌گیریِ واقعیِ QTextDocument.pageCount(). این فقط برایِ تعیینِ
-    فاصله‌یِ درجِ ردیف‌هایِ «جمعِ این صفحه» استفاده می‌شود (نه برایِ شکستِ
-    اجباریِ صفحه) — پس یک تخمینِ کمی نادرست هم صفحه‌یِ خالی نمی‌سازد،
-    فقط ردیفِ جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند. طبقِ بازطراحیِ
-    هدر/فوترِ تکرارشونده (که حالا بیرونِ محتوایِ جدول، به‌صورتِ نوارهایِ
-    ثابت کشیده می‌شوند)، ظرفیتِ محتوایِ هر صفحه دیگر یکنواخت است — نیازی
-    به تخمینِ جداگانه برایِ صفحه‌یِ اول نیست."""
+    """چند ردیف *اول* در یک صفحه جا می‌شوند — با جستجوی دودویی روی
+    اندازه‌گیری واقعی QTextDocument.pageCount(). این فقط برای تعیین
+    فاصلهٔ درج ردیف‌های «جمع این صفحه» استفاده می‌شود (نه برای شکست
+    اجباری صفحه) — پس یک تخمین کمی نادرست هم صفحهٔ خالی نمی‌سازد،
+    فقط ردیف جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند. طبق بازطراحی
+    هدر/فوتر تکرارشونده (که حالا بیرون محتوای جدول، به‌صورت نوارهای
+    ثابت کشیده می‌شوند)، ظرفیت محتوای هر صفحه دیگر یکنواخت است — نیازی
+    به تخمین جداگانه برای صفحهٔ اول نیست."""
     lo, hi, best = 1, len(rows), 1
     while lo <= hi:
         mid = (lo + hi) // 2
@@ -352,7 +402,7 @@ def _page_footer_html(footer_text: str, page_no: int, page_count: int) -> str:
     page_no_fa = numerals.to_persian_digits(str(page_no))
     page_count_fa = numerals.to_persian_digits(str(page_count))
     parts.append(
-        f'<div style="text-align:center; font-size:8pt; color:#666;">صفحه‌یِ {page_no_fa} از {page_count_fa}</div>'
+        f'<div style="text-align:center; font-size:8pt; color:#666;">صفحهٔ {page_no_fa} از {page_count_fa}</div>'
     )
     return "".join(parts)
 
@@ -374,12 +424,12 @@ def _paint_report(
     filters: list[tuple[str, str]] | None,
     options: PrintOptions | None = None,
 ) -> None:
-    """طبقِ درخواستِ صریح («روی هر صفحه باید نشون بده صفحه چند از
+    """طبق درخواست صریح («روی هر صفحه باید نشون بده صفحه چند از
     چنده و هدر و فوتر روی همه صفحات نمایش بده»): QTextDocument.print_
-    به‌تنهایی هدر/فوترِ تکرارشونده یا شماره‌یِ صفحه نمی‌دهد — چاپ به‌صورتِ
-    دستی، صفحه‌به‌صفحه، با QPainter انجام می‌شود: یک نوارِ هدر (ثابت،
-    عیناً تکرارشونده) بالایِ هر صفحه، یک تکه از جدولِ محتوا در وسط، و یک
-    نوارِ فوتر (متنِ کاربر + «صفحه‌یِ X از Y») پایینِ هر صفحه."""
+    به‌تنهایی هدر/فوتر تکرارشونده یا شمارهٔ صفحه نمی‌دهد — چاپ به‌صورت
+    دستی، صفحه‌به‌صفحه، با QPainter انجام می‌شود: یک نوار هدر (ثابت،
+    عیناً تکرارشونده) بالای هر صفحه، یک تکه از جدول محتوا در وسط، و یک
+    نوار فوتر (متن کاربر + «صفحهٔ X از Y») پایین هر صفحه."""
     options = options or PrintOptions()
     font_family = _print_font_family()
     font_size_pt = options.font_size_pt
@@ -405,6 +455,9 @@ def _paint_report(
     page_height = page_rect.height()
 
     header_doc = QTextDocument()
+    logo_data, logo_position = company_logo()
+    if logo_data and _add_logo_resource(header_doc, logo_data):
+        header_html = _with_logo(header_html, logo_position)
     header_doc.setHtml(_wrap_document(f'<div style="text-align:center;">{header_html}</div>', font_family, font_size_pt))
     header_doc.setTextWidth(page_width)
     header_height = header_doc.size().height()
@@ -478,13 +531,13 @@ class _PrintOptionsDialog(QDialog):
         *, company_name: str, report_date: str, filters: list[tuple[str, str]] | None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"تنظیماتِ چاپ — {title}")
+        self.setWindowTitle(f"تنظیمات چاپ — {title}")
         self.setMinimumWidth(460)
         defaults = defaults or PrintOptions()
         layout = QVBoxLayout(self)
 
         top_row = QHBoxLayout()
-        top_row.addWidget(QLabel("اندازه‌یِ فونت (pt):"))
+        top_row.addWidget(QLabel("اندازهٔ فونت (pt):"))
         self.font_size_field = QSpinBox()
         self.font_size_field.setRange(6, 16)
         self.font_size_field.setValue(int(round(defaults.font_size_pt)))
@@ -498,11 +551,11 @@ class _PrintOptionsDialog(QDialog):
         top_row.addStretch(1)
         layout.addLayout(top_row)
 
-        self.gridlines_checkbox = QCheckBox("نمایشِ خطوطِ جدول (ردیف‌بندی)")
+        self.gridlines_checkbox = QCheckBox("نمایش خطوط جدول (ردیف‌بندی)")
         self.gridlines_checkbox.setChecked(defaults.show_gridlines)
         layout.addWidget(self.gridlines_checkbox)
 
-        layout.addWidget(QLabel("عرضِ ستون‌ها (٪ از عرضِ کلِ جدول):"))
+        layout.addWidget(QLabel("عرض ستون‌ها (٪ از عرض کل جدول):"))
         columns_scroll = QScrollArea()
         columns_scroll.setWidgetResizable(True)
         columns_scroll.setMaximumHeight(200)
@@ -522,7 +575,7 @@ class _PrintOptionsDialog(QDialog):
         columns_scroll.setWidget(columns_widget)
         layout.addWidget(columns_scroll)
 
-        layout.addWidget(QLabel("متنِ هدر (کاملاً قابلِ‌ویرایش — همین متن به‌جایِ هدرِ خودکار چاپ می‌شود):"))
+        layout.addWidget(QLabel("متن هدر (کاملاً قابل‌ویرایش — همین متن به‌جای هدر خودکار چاپ می‌شود):"))
         self.header_text_field = QTextEdit()
         self.header_text_field.setPlainText(
             defaults.header_text or _default_header_plain_text(title, company_name, report_date, filters)
@@ -530,14 +583,14 @@ class _PrintOptionsDialog(QDialog):
         self.header_text_field.setMaximumHeight(90)
         layout.addWidget(self.header_text_field)
 
-        layout.addWidget(QLabel("متنِ فوتر (اختیاری — رویِ همه‌ی صفحات همراه با «صفحه‌ی X از Y» تکرار می‌شود):"))
+        layout.addWidget(QLabel("متن فوتر (اختیاری — روی همهٔ صفحات همراه با «صفحه‌ی X از Y» تکرار می‌شود):"))
         self.footer_text_field = QTextEdit()
         self.footer_text_field.setPlainText(defaults.footer_text)
         self.footer_text_field.setMaximumHeight(70)
         layout.addWidget(self.footer_text_field)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("تاییدِ تنظیمات و ادامه")
+        buttons.button(QDialogButtonBox.Ok).setText("تایید تنظیمات و ادامه")
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -589,7 +642,7 @@ def print_report(
     options: PrintOptions | None = None,
 ) -> None:
     if not rows:
-        QMessageBox.information(parent_widget, "چاپ", "گزارشی برایِ چاپ وجود ندارد.")
+        QMessageBox.information(parent_widget, "چاپ", "گزارشی برای چاپ وجود ندارد.")
         return
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     _apply_page_setup(printer)
@@ -618,9 +671,9 @@ def export_report_pdf(
     options: PrintOptions | None = None,
 ) -> None:
     if not rows:
-        QMessageBox.information(parent_widget, "PDF", "گزارشی برایِ خروجیِ PDF وجود ندارد.")
+        QMessageBox.information(parent_widget, "PDF", "گزارشی برای خروجی PDF وجود ندارد.")
         return
-    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیره‌یِ PDF", f"{title}.pdf", "PDF (*.pdf)")
+    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیرهٔ PDF", f"{title}.pdf", "PDF (*.pdf)")
     if not path:
         return
     if not path.lower().endswith(".pdf"):
@@ -633,7 +686,7 @@ def export_report_pdf(
         printer, title, headers, rows, footer,
         company_name=company_name, report_date=report_date, filters=filters, options=options,
     )
-    QMessageBox.information(parent_widget, "خروجیِ PDF", "فایلِ PDF با موفقیت ساخته شد.")
+    QMessageBox.information(parent_widget, "خروجی PDF", "فایل PDF با موفقیت ساخته شد.")
 
 
 def export_report_excel(
@@ -649,16 +702,16 @@ def export_report_excel(
     options: PrintOptions | None = None,
 ) -> None:
     if not rows:
-        QMessageBox.information(parent_widget, "Excel", "گزارشی برایِ خروجیِ Excel وجود ندارد.")
+        QMessageBox.information(parent_widget, "Excel", "گزارشی برای خروجی Excel وجود ندارد.")
         return
     try:
         import openpyxl
         from openpyxl.styles import Font
     except ImportError:
-        QMessageBox.warning(parent_widget, "خطا", "امکانِ ساختِ فایلِ Excel روی این سیستم فراهم نیست.")
+        QMessageBox.warning(parent_widget, "خطا", "امکان ساخت فایل Excel روی این سیستم فراهم نیست.")
         return
 
-    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیره‌یِ Excel", f"{title}.xlsx", "Excel (*.xlsx)")
+    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیرهٔ Excel", f"{title}.xlsx", "Excel (*.xlsx)")
     if not path:
         return
     if not path.lower().endswith(".xlsx"):
@@ -673,10 +726,17 @@ def export_report_excel(
     # طبقِ همان درخواستِ سربرگِ چاپ: نامِ شرکت + عنوان + تاریخ/فیلترها (یا
     # متنِ سفارشیِ کاربر) به‌عنوانِ چند سطرِ اول، پیش از جدولِ خودِ گزارش.
     header_text = options.header_text.strip() or _default_header_plain_text(title, company_name, report_date, filters)
-    for line in header_text.splitlines():
-        sheet.append([line])
-    sheet.cell(row=1, column=1).font = Font(bold=True, size=13)
+    header_lines = header_text.splitlines()
+    logo_data, logo_position = company_logo()
+    # R245: لوگو در گوشهٔ راست (ستونِ A در برگهٔ راست‌به‌چپ) یا چپ (آخرین ستون)؛ متنِ سربرگ در ستونِ کناری
+    text_column = 2 if logo_data and logo_position == "RIGHT" else 1
+    for line in header_lines:
+        sheet.append([None] * (text_column - 1) + [line])
+    sheet.cell(row=1, column=text_column).font = Font(bold=True, size=13)
     sheet.append([])
+    if logo_data:
+        _insert_excel_logo(sheet, logo_data, "A1" if logo_position == "RIGHT" else f"{_column_letter(max(len(headers), 2))}1",
+                           len(header_lines) + 1)
 
     header_row = sheet.max_row + 1
     sheet.append(headers)
@@ -706,7 +766,31 @@ def export_report_excel(
             sheet.column_dimensions[col_cells[0].column_letter].width = min(max(length + 2, 10), 40)
 
     workbook.save(path)
-    QMessageBox.information(parent_widget, "خروجیِ Excel", "فایلِ Excel با موفقیت ساخته شد.")
+    QMessageBox.information(parent_widget, "خروجی Excel", "فایل Excel با موفقیت ساخته شد.")
+
+
+def _column_letter(index: int) -> str:
+    from openpyxl.utils import get_column_letter
+
+    return get_column_letter(index)
+
+
+def _insert_excel_logo(sheet, data: bytes, anchor: str, rows: int) -> None:
+    """لوگو با ارتفاع سطرهای سربرگ در اکسل؛ اگر کتابخانهٔ تصویر نبود، بی‌صدا رد می‌شود."""
+    import io
+
+    try:
+        from openpyxl.drawing.image import Image as XlImage
+    except ImportError:
+        return
+    try:
+        picture = XlImage(io.BytesIO(data))
+    except Exception:  # noqa: BLE001
+        return
+    target_height = max(rows, 3) * 20
+    ratio = target_height / picture.height if picture.height else 1
+    picture.height, picture.width = target_height, int(picture.width * ratio)
+    sheet.add_image(picture, anchor)
 
 
 def export_plain_excel(
@@ -715,23 +799,23 @@ def export_plain_excel(
     headers: list[str],
     rows: list[list],
 ) -> str | None:
-    """خروجیِ اکسلِ «خام» — فقط ردیفِ عنوان‌ها + دیتا، بدونِ سربرگِ نامِ
-    شرکت/تاریخ که export_report_excel اضافه می‌کند. طبقِ درخواستِ صریح
-    («خروجیِ کدینگ/تفصیلی‌ها برایِ برگرداندن روی دیتابیسِ جدید»): چنین
-    فایلی باید بتواند مستقیماً با همان مکانیزمِ ایمپورتِ اکسلِ موجود
-    (excel_import.py) دوباره خوانده شود — سطرهایِ اضافیِ سربرگ این کار
-    را با جابه‌جاکردنِ ردیفِ عنوان‌هایِ واقعی خراب می‌کردند."""
+    """خروجی اکسل «خام» — فقط ردیف عنوان‌ها + دیتا، بدون سربرگ نام
+    شرکت/تاریخ که export_report_excel اضافه می‌کند. طبق درخواست صریح
+    («خروجی کدینگ/تفصیلی‌ها برای برگرداندن روی دیتابیس جدید»): چنین
+    فایلی باید بتواند مستقیماً با همان مکانیزم ورود اکسل موجود
+    (excel_import.py) دوباره خوانده شود — سطرهای اضافی سربرگ این کار
+    را با جابه‌جاکردن ردیف عنوان‌های واقعی خراب می‌کردند."""
     if not rows:
-        QMessageBox.information(parent_widget, "Excel", "چیزی برایِ خروجیِ Excel وجود ندارد.")
+        QMessageBox.information(parent_widget, "Excel", "چیزی برای خروجی Excel وجود ندارد.")
         return None
     try:
         import openpyxl
         from openpyxl.styles import Font
     except ImportError:
-        QMessageBox.warning(parent_widget, "خطا", "امکانِ ساختِ فایلِ Excel روی این سیستم فراهم نیست.")
+        QMessageBox.warning(parent_widget, "خطا", "امکان ساخت فایل Excel روی این سیستم فراهم نیست.")
         return None
 
-    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیره‌یِ Excel", f"{default_filename}.xlsx", "Excel (*.xlsx)")
+    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیرهٔ Excel", f"{default_filename}.xlsx", "Excel (*.xlsx)")
     if not path:
         return None
     if not path.lower().endswith(".xlsx"):
@@ -754,5 +838,5 @@ def export_plain_excel(
         sheet.column_dimensions[col_cells[0].column_letter].width = min(max(length + 2, 10), 40)
 
     workbook.save(path)
-    QMessageBox.information(parent_widget, "خروجیِ Excel", "فایلِ Excel با موفقیت ساخته شد.")
+    QMessageBox.information(parent_widget, "خروجی Excel", "فایل Excel با موفقیت ساخته شد.")
     return path

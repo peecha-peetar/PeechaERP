@@ -1,26 +1,26 @@
-"""موتورِ عمومیِ کارتابل (صفِ تاییدِ سراسری) — مستقل از نوعِ سند، برایِ
-استفاده‌یِ همه‌یِ ماژول‌هایِ ERP (حسابداری، خزانه‌داری، خرید، فروش، ...).
+"""موتور عمومی کارتابل (صف تایید سراسری) — مستقل از نوع سند، برای
+استفادهٔ همهٔ ماژول‌های ERP (حسابداری، خزانه‌داری، خرید، فروش، ...).
 
-طبقِ کشفِ حسابرسی: جدول‌هایِ این موتور (wf.*، در db/schema/004_workflow_cartable.sql
-و db/models/workflow.py) از همان روزِ اولِ پروژه با طراحیِ کامل و درست
-ساخته شده بودند — تاییدِ چندمرحله‌ای، مسیریابیِ شرطی (آستانه‌یِ مبلغ)،
-برگشت/تفویض/ارسالِ‌مجدد — ولی هیچ سرویسی هرگز از آن‌ها استفاده نکرده
-بود. این ماژول همان زیرساختِ ازپیش‌طراحی‌شده را فعال می‌کند.
+طبق کشف حسابرسی: جدول‌های این موتور (wf.*، در db/schema/004_workflow_cartable.sql
+و db/models/workflow.py) از همان روز اول پروژه با طراحی کامل و درست
+ساخته شده بودند — تایید چندمرحله‌ای، مسیریابی شرطی (آستانهٔ مبلغ)،
+برگشت/تفویض/ارسال‌مجدد — ولی هیچ سرویسی هرگز از آن‌ها استفاده نکرده
+بود. این ماژول همان زیرساخت ازپیش‌طراحی‌شده را فعال می‌کند.
 
-هر ماژولِ مصرف‌کننده (حسابداری، خزانه‌داری، ...) فقط با register_handler
-رویِ form_code (همان کدِ screen در nav_catalog.py، مثلِ "journal_entry")
-ثبت‌نام می‌کند — بدونِ جدول یا صفحه‌ی تازه.
+هر ماژول مصرف‌کننده (حسابداری، خزانه‌داری، ...) فقط با register_handler
+روی form_code (همان کد screen در nav_catalog.py، مثل "journal_entry")
+ثبت‌نام می‌کند — بدون جدول یا صفحهٔ تازه.
 
-اگر برایِ یک form هیچ ApprovalWorkflowِ فعالی تعریف نشده باشد،
-submit_for_approval هیچ آیتمِ کارتابلی نمی‌سازد (None برمی‌گرداند) —
-یعنی بدونِ پیکربندیِ صریحِ ادمین در «طراحیِ گردشِ کار»، رفتار دقیقاً مثلِ
-حالتِ بدونِ‌کارتابل می‌ماند (مسیرِ مستقیمِ قبلی که ماژولِ صدازننده باید
+اگر برای یک form هیچ ApprovalWorkflow فعالی تعریف نشده باشد،
+submit_for_approval هیچ آیتم کارتابلی نمی‌سازد (None برمی‌گرداند) —
+یعنی بدون پیکربندی صریح ادمین در «طراحی گردش کار»، رفتار دقیقاً مثل
+حالت بدون‌کارتابل می‌ماند (مسیر مستقیم قبلی که ماژول صدازننده باید
 خودش دنبال کند).
 
-دامنه‌یِ این نسخه: فقط نوعِ درخواستِ CREATE (تاییدِ ثبت/نهایی‌سازی) واقعاً
-سیم‌کشی شده؛ EDIT/DELETE و اقداماتِ RETURN/DELEGATE در جدول‌ها/enum ها
-از قبل جا دارند ولی منطقِ سرویسشان بعداً در دورهایِ جداگانه اضافه
-می‌شود (زیرساخت آماده است، بدونِ نیاز به migration تازه)."""
+دامنهٔ این نسخه: فقط نوع درخواست CREATE (تایید ثبت/نهایی‌سازی) واقعاً
+سیم‌کشی شده؛ EDIT/DELETE و اقدامات RETURN/DELEGATE در جدول‌ها/enum ها
+از قبل جا دارند ولی منطق سرویسشان بعداً در دورهای جداگانه اضافه
+می‌شود (زیرساخت آماده است، بدون نیاز به migration تازه)."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def register_handler(
 ) -> None:
     """on_approved(company_id, source_record_id, approved_by_user_id)
     on_rejected(company_id, source_record_id, rejected_by_user_id, reason)
-    describe(company_id, source_record_id) -> str (خلاصه‌یِ نمایشی برایِ کارتابل)"""
+    describe(company_id, source_record_id) -> str (خلاصهٔ نمایشی برای کارتابل)"""
     _HANDLERS[form_code] = _HandlerSpec(on_approved=on_approved, on_rejected=on_rejected, describe=describe)
 
 
@@ -80,21 +80,21 @@ def _form_id(session, form_code: str) -> int | None:
 def _request_type_id(session, code: str) -> int:
     row = session.scalar(select(CartableRequestType).where(CartableRequestType.code == code))
     if row is None:
-        raise ValueError(f"نوعِ درخواستِ کارتابلِ «{code}» در دیتابیس یافت نشد.")
+        raise ValueError(f"نوع درخواست کارتابل «{code}» در دیتابیس یافت نشد.")
     return row.request_type_id
 
 
 def _status_id(session, code: str) -> int:
     row = session.scalar(select(CartableStatus).where(CartableStatus.code == code))
     if row is None:
-        raise ValueError(f"وضعیتِ کارتابلِ «{code}» در دیتابیس یافت نشد.")
+        raise ValueError(f"وضعیت کارتابل «{code}» در دیتابیس یافت نشد.")
     return row.status_id
 
 
 def _action_type_id(session, code: str) -> int:
     row = session.scalar(select(CartableActionType).where(CartableActionType.code == code))
     if row is None:
-        raise ValueError(f"نوعِ اقدامِ کارتابلِ «{code}» در دیتابیس یافت نشد.")
+        raise ValueError(f"نوع اقدام کارتابل «{code}» در دیتابیس یافت نشد.")
     return row.action_type_id
 
 
@@ -116,9 +116,9 @@ def has_active_workflow(company_id: int, form_code: str) -> bool:
 
 
 def _evaluate_condition(condition_type_code: str, parameters: dict, amount: decimal.Decimal | None) -> bool:
-    """اگر نوعِ شرط ناشناخته یا قابلِ‌ارزیابی نبود، fail-closed به‌سمتِ
+    """اگر نوع شرط ناشناخته یا قابل‌ارزیابی نبود، fail-closed به‌سمت
     «شرط برقرار است» (یعنی مرحله را نگه می‌دارد، نه این‌که حذفش کند) —
-    برایِ یک گیت‌ِ تایید، محافظه‌کاری یعنی تاییدِ بیشتر لازم باشد، نه کمتر."""
+    برای یک گیت‌ تایید، محافظه‌کاری یعنی تایید بیشتر لازم باشد، نه کمتر."""
     if condition_type_code == "AMOUNT_THRESHOLD":
         if amount is None:
             return True
@@ -147,9 +147,9 @@ def submit_for_approval(
     *,
     amount: decimal.Decimal | None = None,
 ) -> int | None:
-    """اگر گردشِ کارِ فعالی برایِ این form تعریف نشده باشد، یا هیچ مرحله‌ای
-    برایِ این نوعِ درخواست نداشته باشد، یا هیچ مرحله‌ای شرطش برقرار نباشد
-    -> None (ماژولِ صدازننده باید مسیرِ مستقیمِ بدونِ‌کارتابل را دنبال کند).
+    """اگر گردش کار فعالی برای این form تعریف نشده باشد، یا هیچ مرحله‌ای
+    برای این نوع درخواست نداشته باشد، یا هیچ مرحله‌ای شرطش برقرار نباشد
+    -> None (ماژول صدازننده باید مسیر مستقیم بدون‌کارتابل را دنبال کند).
     وگرنه شناسه‌ی cartable_item ساخته‌شده را برمی‌گرداند."""
     with new_session() as session:
         form_id = _form_id(session, form_code)
@@ -312,18 +312,42 @@ def _ensure_can_act(session, item: CartableItem, user_id: int) -> None:
         )
         if has_role is not None:
             return
-    raise ValueError("شما مجاز به اقدام روی این موردِ کارتابل نیستید.")
+    raise ValueError("شما مجاز به اقدام روی این مورد کارتابل نیستید.")
+
+
+def _ensure_not_self(session, item: CartableItem, user_id: int) -> None:
+    """R291: تفکیک وظایف -- صادرکننده درخواست خودش را تایید/رد نمی‌کند مگر سیاست شرکت اجازه دهد."""
+    if item.submitted_by_user_id != user_id:
+        return
+    from peecha.services.workflow.common import settings as wf_settings
+
+    if not wf_settings(item.company_id).get("allow_self_approval"):
+        raise ValueError("صادرکنندهٔ درخواست نمی‌تواند درخواست خودش را تایید یا رد کند (تفکیک وظایف).")
+
+
+def _lock_pending(session, cartable_item_id: int) -> CartableItem:
+    # R291: قفل ردیف -- از دو تصمیم هم‌زمان فقط اولی ثبت می‌شود
+    item = session.scalar(select(CartableItem).where(CartableItem.cartable_item_id == cartable_item_id).with_for_update())
+    if item is None:
+        raise ValueError("مورد کارتابل نامعتبر است.")
+    if item.status_id != _status_id(session, "PENDING"):
+        raise ValueError("این مورد دیگر در انتظار تایید نیست (احتمالاً کاربر دیگری زودتر تصمیم گرفته است).")
+    return item
+
+
+def _audit(session, item: CartableItem, user_id: int, action: str, comment: str) -> None:
+    from peecha.services import audit as audit_service
+
+    audit_service.log_activity(session, company_id=item.company_id, user_id=user_id, entity_type="CartableItem",
+                               entity_id=item.cartable_item_id, action=action,
+                               changes={"step_no": item.current_step_no, "comment": comment or None})
 
 
 def approve_item(cartable_item_id: int, user_id: int, comment: str = "") -> None:
     with new_session() as session:
-        item = session.get(CartableItem, cartable_item_id)
-        if item is None:
-            raise ValueError("موردِ کارتابل نامعتبر است.")
-        pending_status_id = _status_id(session, "PENDING")
-        if item.status_id != pending_status_id:
-            raise ValueError("این مورد دیگر در انتظارِ تایید نیست.")
+        item = _lock_pending(session, cartable_item_id)
         _ensure_can_act(session, item, user_id)
+        _ensure_not_self(session, item, user_id)
 
         session.add(
             CartableAction(
@@ -355,25 +379,24 @@ def approve_item(cartable_item_id: int, user_id: int, comment: str = "") -> None
             item.current_approver_role_id = next_step.approver_role_id
             item.current_approver_user_id = None
         else:
+            # R291: اجرای سند پیش از ثبت «تایید نهایی»؛ اگر سرویس سند خطا بدهد، مورد در انتظار می‌ماند (نه نیمه‌کاره)
+            handler = _HANDLERS.get(form_code)
+            if handler is not None:
+                # R300: موردی که همهٔ مراحل کارتابل قبلی را گذرانده، با قفل فرایند تازه دوباره متوقف نمی‌شود
+                from peecha.services.workflow import model_events
+
+                with model_events.ungated():
+                    handler.on_approved(company_id, source_record_id, user_id)
             item.status_id = _status_id(session, "APPROVED")
-
+        _audit(session, item, user_id, "APPROVE", comment)
         session.commit()
-
-    if is_final:
-        handler = _HANDLERS.get(form_code)
-        if handler is not None:
-            handler.on_approved(company_id, source_record_id, user_id)
 
 
 def reject_item(cartable_item_id: int, user_id: int, reason: str) -> None:
     with new_session() as session:
-        item = session.get(CartableItem, cartable_item_id)
-        if item is None:
-            raise ValueError("موردِ کارتابل نامعتبر است.")
-        pending_status_id = _status_id(session, "PENDING")
-        if item.status_id != pending_status_id:
-            raise ValueError("این مورد دیگر در انتظارِ تایید نیست.")
+        item = _lock_pending(session, cartable_item_id)
         _ensure_can_act(session, item, user_id)
+        _ensure_not_self(session, item, user_id)
 
         session.add(
             CartableAction(
@@ -386,14 +409,11 @@ def reject_item(cartable_item_id: int, user_id: int, reason: str) -> None:
         )
         item.status_id = _status_id(session, "REJECTED")
         form = session.get(Form, item.form_id)
-        form_code = form.code
-        company_id = item.company_id
-        source_record_id = item.source_record_id
+        handler = _HANDLERS.get(form.code)
+        if handler is not None:
+            handler.on_rejected(item.company_id, item.source_record_id, user_id, reason)
+        _audit(session, item, user_id, "REJECT", reason)
         session.commit()
-
-    handler = _HANDLERS.get(form_code)
-    if handler is not None:
-        handler.on_rejected(company_id, source_record_id, user_id, reason)
 
 
 # --- ادمین: تعریف/ویرایشِ گردشِ کار (صفحه‌ی «طراحیِ گردشِ کار») ------------
@@ -406,7 +426,7 @@ class WorkflowStepOption:
 
 
 def get_workflow_steps(company_id: int, form_code: str) -> tuple[bool, list[WorkflowStepOption]]:
-    """برمی‌گرداند: (is_active، مراحلِ نوعِ درخواستِ CREATE به‌ترتیب)."""
+    """برمی‌گرداند: (is_active، مراحل نوع درخواست CREATE به‌ترتیب)."""
     with new_session() as session:
         form_id = _form_id(session, form_code)
         if form_id is None:
@@ -431,13 +451,13 @@ def get_workflow_steps(company_id: int, form_code: str) -> tuple[bool, list[Work
 
 
 def save_workflow_steps(company_id: int, form_code: str, is_active: bool, approver_role_ids: list[int]) -> None:
-    """approver_role_ids: نقشِ تاییدکننده‌یِ هر مرحله، به‌ترتیب (مرحله‌ی
-    اول = ایندکسِ ۰). لیستِ خالی یعنی گردشِ کار برایِ این form حذف شود
-    (برگشت به حالتِ بدونِ‌کارتابل)."""
+    """approver_role_ids: نقش تاییدکنندهٔ هر مرحله، به‌ترتیب (مرحله‌ی
+    اول = ایندکس ۰). لیست خالی یعنی گردش کار برای این form حذف شود
+    (برگشت به حالت بدون‌کارتابل)."""
     with new_session() as session:
         form_id = _form_id(session, form_code)
         if form_id is None:
-            raise ValueError("فرمِ نامعتبر است.")
+            raise ValueError("فرم نامعتبر است.")
         workflow = session.scalar(
             select(ApprovalWorkflow).where(ApprovalWorkflow.company_id == company_id, ApprovalWorkflow.form_id == form_id)
         )

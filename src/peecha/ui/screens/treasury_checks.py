@@ -1,7 +1,7 @@
-"""مدیریتِ چک‌هایِ دریافتی و پرداختی — طبقِ الگویِ نمونه‌یِ ارائه‌شده: فهرستی
-از مراحلِ چرخه‌یِ چک (رادیو)، جدولی چندانتخابی (چک‌باکس) از چک‌هایِ
-واجدِ شرایطِ همان مرحله، و یک دکمه‌یِ تاییدِ نهایی که همه‌یِ چک‌هایِ
-تیک‌خورده را یک‌جا پردازش می‌کند (services/treasury.py: توابعِ bulk)."""
+"""مدیریت چک‌های دریافتی و پرداختی — طبق الگوی نمونهٔ ارائه‌شده: فهرستی
+از مراحل چرخهٔ چک (رادیو)، جدولی چندانتخابی (چک‌باکس) از چک‌های
+واجد شرایط همان مرحله، و یک دکمهٔ تایید نهایی که همهٔ چک‌های
+تیک‌خورده را یک‌جا پردازش می‌کند (services/treasury.py: توابع bulk)."""
 
 from __future__ import annotations
 
@@ -32,21 +32,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.journal_entry import _make_searchable_combo
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer
 
 _RECEIVED_STATUS_LABELS = {
-    "IN_HAND": "نزدِ صندوق",
+    "IN_HAND": "نزد صندوق",
     "DEPOSITED": "واگذارشده به بانک",
     "CLEARED": "وصول‌شده",
     "BOUNCED": "برگشت‌خورده",
-    "ENDORSED": "خرج‌شده نزدِ شخصِ ثالث",
+    "ENDORSED": "خرج‌شده نزد شخص ثالث",
 }
 _ISSUED_STATUS_LABELS = {
-    "ISSUED": "صادر/نزدِ گیرنده",
+    "ISSUED": "صادر/نزد گیرنده",
     "CLEARED": "وصول‌شده",
     "BOUNCED": "برگشت‌خورده",
     "VOIDED": "ابطال‌شده",
@@ -65,60 +65,60 @@ class _StageConfig:
 
 _RECEIVED_STAGES: list[_StageConfig] = [
     _StageConfig(
-        "TRANSFER", "چک‌هایِ دریافتی جهتِ انتقال بینِ صندوق‌ها", ("IN_HAND",),
-        dimensions_service.CASH_BOX_CODE, "صندوقِ مقصد",
+        "TRANSFER", "چک‌های دریافتی جهت انتقال بین صندوق‌ها", ("IN_HAND",),
+        dimensions_service.CASH_BOX_CODE, "صندوق مقصد",
     ),
     _StageConfig(
-        "CASH_COLLECT", "چک‌هایِ نزدِ صندوق جهتِ وصولِ نقدی", ("IN_HAND",),
-        dimensions_service.CASH_BOX_CODE, "صندوقِ نقدیِ مقصد",
+        "CASH_COLLECT", "چک‌های نزد صندوق جهت وصول نقدی", ("IN_HAND",),
+        dimensions_service.CASH_BOX_CODE, "صندوق نقدی مقصد",
     ),
     _StageConfig(
-        "BANK_DEPOSIT", "چک‌هایِ نزدِ صندوق جهتِ واگذاری به بانک", ("IN_HAND",),
-        dimensions_service.BANK_ACCOUNT_CODE, "بانکِ مقصد",
+        "BANK_DEPOSIT", "چک‌های نزد صندوق جهت واگذاری به بانک", ("IN_HAND",),
+        dimensions_service.BANK_ACCOUNT_CODE, "بانک مقصد",
     ),
     _StageConfig(
-        "BANK_CLEAR", "چک‌هایِ دریافتیِ نزدِ بانک جهتِ اعلامِ وصول", ("DEPOSITED",),
+        "BANK_CLEAR", "چک‌های دریافتی نزد بانک جهت اعلام وصول", ("DEPOSITED",),
         None,
     ),
     _StageConfig(
-        "BANK_RETURN", "چک‌هایِ دریافتیِ نزدِ بانک جهتِ برگشت به صندوق", ("DEPOSITED",),
-        dimensions_service.CASH_BOX_CODE, "صندوقِ مقصد",
+        "BANK_RETURN", "چک‌های دریافتی نزد بانک جهت برگشت به صندوق", ("DEPOSITED",),
+        dimensions_service.CASH_BOX_CODE, "صندوق مقصد",
     ),
     _StageConfig(
-        "CUSTOMER_RETURN", "چک‌هایِ نزدِ صندوق جهتِ برگشت به طرفِ‌حساب", ("IN_HAND",),
-        None, confirm_message="این چک(ها) برگشت خورده‌اند؟ بدهیِ طرفِ‌حساب دوباره ثبت می‌شود.",
+        "CUSTOMER_RETURN", "چک‌های نزد صندوق جهت برگشت به طرف‌حساب", ("IN_HAND",),
+        None, confirm_message="این چک(ها) برگشت خورده‌اند؟ بدهی طرف‌حساب دوباره ثبت می‌شود.",
     ),
     _StageConfig(
-        "ENDORSED_RETURN", "چک‌هایِ خرجی جهتِ برگشت به صندوق", ("ENDORSED",),
-        dimensions_service.CASH_BOX_CODE, "صندوقِ مقصد",
+        "ENDORSED_RETURN", "چک‌های خرجی جهت برگشت به صندوق", ("ENDORSED",),
+        dimensions_service.CASH_BOX_CODE, "صندوق مقصد",
     ),
 ]
 
 _ISSUED_STAGES: list[_StageConfig] = [
     _StageConfig(
-        "BANK_CLEAR", "چک‌هایِ پرداختی جهتِ وصول از بانک", ("ISSUED",),
+        "BANK_CLEAR", "چک‌های پرداختی جهت وصول از بانک", ("ISSUED",),
         None,
     ),
     _StageConfig(
-        "RETURN_TO_FUND", "چک‌هایِ پرداختیِ وصول‌نشده جهتِ برگشت به صندوق", ("ISSUED", "BOUNCED"),
-        None, confirm_message="این چک(ها) به صندوق برگردانده شوند؟ بدهیِ ما به طرفِ‌حساب دوباره ثبت می‌شود.",
+        "RETURN_TO_FUND", "چک‌های پرداختی وصول‌نشده جهت برگشت به صندوق", ("ISSUED", "BOUNCED"),
+        None, confirm_message="این چک(ها) به صندوق برگردانده شوند؟ بدهی ما به طرف‌حساب دوباره ثبت می‌شود.",
     ),
 ]
 
 
 class _CheckHistoryDialog(QDialog):
-    """گزارشِ کاملِ چرخه‌یِ عمرِ یک چک — طبقِ درخواستِ صریح: «چک‌ها باید در
-    هر مرحله ثبت بشه و بتوان گزارش گرفت» — برایِ هر رویداد، شماره‌یِ سندِ
-    حسابداریِ همان مرحله نمایش داده می‌شود. طبقِ درخواستِ صریحِ بعدی («سندِ
-    مرحله‌یِ آخر حذف بشه تا چک برگرده به حالتِ اول»)، اگر آخرین رویداد هنوز
-    قابلِ‌برگشت باشد (سندش هنوز موقت است)، دکمه‌یِ «حذفِ آخرین سندِ مرحله»
+    """گزارش کامل چرخهٔ عمر یک چک — طبق درخواست صریح: «چک‌ها باید در
+    هر مرحله ثبت بشه و بتوان گزارش گرفت» — برای هر رویداد، شمارهٔ سند
+    حسابداری همان مرحله نمایش داده می‌شود. طبق درخواست صریح بعدی («سند
+    مرحلهٔ آخر حذف بشه تا چک برگرده به حالت اول»)، اگر آخرین رویداد هنوز
+    قابل‌برگشت باشد (سندش هنوز موقت است)، دکمهٔ «حذف آخرین سند مرحله»
     هم نمایش داده می‌شود."""
 
-    _COLUMNS = ["مرحله", "تاریخ", "از وضعیت", "به وضعیت", "شماره‌یِ سند"]
+    _COLUMNS = ["مرحله", "تاریخ", "از وضعیت", "به وضعیت", "شمارهٔ سند"]
 
     def __init__(self, check_kind: str, check_id: int, check_no: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"تاریخچه‌یِ چکِ شماره‌یِ {numerals.to_persian_digits(check_no)}")
+        self.setWindowTitle(f"تاریخچهٔ چک شمارهٔ {numerals.to_persian_digits(check_no)}")
         self.resize(720, 460)
         self._check_kind = check_kind
         self._check_id = check_id
@@ -128,7 +128,7 @@ class _CheckHistoryDialog(QDialog):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel(f"تاریخچه‌یِ چکِ شماره‌یِ {numerals.to_persian_digits(check_no)}")
+        title = QLabel(f"تاریخچهٔ چک شمارهٔ {numerals.to_persian_digits(check_no)}")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -165,7 +165,7 @@ class _CheckHistoryDialog(QDialog):
             for col_index, value in enumerate(values):
                 table.setItem(row_index, col_index, QTableWidgetItem(value))
         if not events:
-            layout.addWidget(QLabel("هیچ رویدادی برایِ این چک ثبت نشده است."))
+            layout.addWidget(QLabel("هیچ رویدادی برای این چک ثبت نشده است."))
 
         last_event = events[-1] if events else None
         can_undo = (
@@ -175,8 +175,8 @@ class _CheckHistoryDialog(QDialog):
         )
         if can_undo:
             hint = QLabel(
-                "با «حذفِ آخرین سندِ مرحله»، سندِ حسابداریِ همین مرحله (اگر هنوز موقت باشد) حذف می‌شود "
-                "و چک دقیقاً به وضعیت/محلِ پیش‌از‌آن برمی‌گردد."
+                "با «حذف آخرین سند مرحله»، سند حسابداری همین مرحله (اگر هنوز موقت باشد) حذف می‌شود "
+                "و چک دقیقاً به وضعیت/محل پیش‌از‌آن برمی‌گردد."
             )
             hint.setWordWrap(True)
             hint.setObjectName("sectionHint")
@@ -184,7 +184,7 @@ class _CheckHistoryDialog(QDialog):
             undo_button = QPushButton("↩️")
             undo_button.setObjectName("dangerIconButton")
             undo_button.setFixedWidth(44)
-            undo_button.setToolTip("حذفِ آخرین سندِ مرحله")
+            undo_button.setToolTip("حذف آخرین سند مرحله")
             undo_button.clicked.connect(self._undo_last_stage)
             layout.addWidget(undo_button)
 
@@ -194,8 +194,8 @@ class _CheckHistoryDialog(QDialog):
 
     def _undo_last_stage(self) -> None:
         confirm = QMessageBox.question(
-            self, "حذفِ آخرین سندِ مرحله",
-            "سندِ حسابداریِ آخرین مرحله حذف و چک به وضعیتِ پیش‌از‌آن برمی‌گردد. ادامه می‌دهید؟",
+            self, "حذف آخرین سند مرحله",
+            "سند حسابداری آخرین مرحله حذف و چک به وضعیت پیش‌از‌آن برمی‌گردد. ادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -213,8 +213,8 @@ class _CheckHistoryDialog(QDialog):
 
 
 class ReceivedChecksScreen(FieldHelpMixin, QWidget):
-    _COLUMNS = ["شماره‌یِ چک", "بانکِ صادرکننده", "نامِ صادرکننده", "مبلغ", "سررسید", "تاریخِ دریافت", "محلِ فعلی"]
-    _DATE_BASIS_OPTIONS = [("due_date", "سررسید"), ("received_date", "تاریخِ دریافت")]
+    _COLUMNS = ["شمارهٔ چک", "بانک صادرکننده", "نام صادرکننده", "مبلغ", "سررسید", "تاریخ دریافت", "محل فعلی"]
+    _DATE_BASIS_OPTIONS = [("due_date", "سررسید"), ("received_date", "تاریخ دریافت")]
 
     def __init__(self) -> None:
         super().__init__()
@@ -241,7 +241,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(24, 20, 24, 12)
         layout.setSpacing(10)
 
-        title = QLabel("چک‌هایِ دریافتی")
+        title = QLabel("چک‌های دریافتی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -263,7 +263,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         # طبقِ آیتمِ ۲: فیلترِ بازه‌یِ تاریخ (بر اساسِ سررسید یا تاریخِ
         # دریافت، به‌انتخابِ کاربر) + جست‌وجویِ طرفِ‌حساب (نامِ صادرکننده).
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("مبنایِ فیلترِ تاریخ:"))
+        filter_row.addWidget(QLabel("مبنای فیلتر تاریخ:"))
         self.date_basis_combo = QComboBox()
         for value, label in self._DATE_BASIS_OPTIONS:
             self.date_basis_combo.addItem(label, value)
@@ -280,9 +280,9 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         self.date_to_field = JalaliDateEdit()
         self.date_to_field.editingFinished.connect(self._apply_filters)
         filter_row.addWidget(self.date_to_field)
-        filter_row.addWidget(QLabel("طرفِ‌حساب:"))
+        filter_row.addWidget(QLabel("طرف‌حساب:"))
         self.counterparty_filter_field = QLineEdit()
-        self.counterparty_filter_field.setPlaceholderText("جست‌وجو در نامِ صادرکننده…")
+        self.counterparty_filter_field.setPlaceholderText("جست‌وجو در نام صادرکننده…")
         self.counterparty_filter_field.textChanged.connect(self._apply_filters)
         filter_row.addWidget(self.counterparty_filter_field, stretch=1)
         layout.addLayout(filter_row)
@@ -316,14 +316,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
 
         footer = QWidget()
         footer.setObjectName("formFooter")
-        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
-        # پایینِ فرم»): QBoxLayout.setDirection به‌تنهایی اثری ندارد — Qt
-        # جهتِ نمایشِ آن را از layoutDirection() خودِ ویجتِ فوتر می‌گیرد،
-        # نه از Direction enum؛ پس باید صریحاً LTR شود. دکمه‌ها قبل از
-        # target_label/target_combo اضافه می‌شوند تا همیشه چپ بنشینند —
-        # ایندکسِ پویایِ target_combo (پایین‌تر، برایِ جایگزینی‌اش) با
-        # ترتیبِ افزودن کاری ندارد، پس این تغییر امن است.
-        footer.setLayoutDirection(Qt.LeftToRight)
+        # R301: دکمه‌ها اول اضافه می‌شوند تا کنار هم سمت راست پایین فرم بنشینند
         self._action_row = QHBoxLayout(footer)
         self._action_row.setContentsMargins(18, 12, 18, 14)
         self._action_row.setSpacing(8)
@@ -336,13 +329,13 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
         self.delete_button.setFixedWidth(44)
-        self.delete_button.setToolTip("حذفِ چک")
+        self.delete_button.setToolTip("حذف چک")
         self.delete_button.clicked.connect(self._delete_check)
         self._action_row.addWidget(self.delete_button)
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
         self.confirm_button.setFixedWidth(44)
-        self.confirm_button.setToolTip("تاییدِ عملیات")
+        self.confirm_button.setToolTip("تایید عملیات")
         self.confirm_button.clicked.connect(self._apply_stage)
         self._action_row.addWidget(self.confirm_button)
         self._action_row.addStretch(1)
@@ -358,10 +351,13 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.set_field_help([
+            (self.date_basis_combo, "چک‌ها بر اساس کدام تاریخ فیلتر شوند — سررسید یا تاریخ دریافت/صدور."),
+            (self.date_filter_enabled, "فیلتر بازهٔ تاریخ بالا را فعال/غیرفعال می‌کند."),
+            (self.counterparty_filter_field, "جست‌وجو در نام صادرکننده/گیرندهٔ چک."),
             (
                 self.table,
-                "بالا مرحله‌یِ موردِنظر را انتخاب کنید — فهرست به چک‌هایِ واجدِ شرایطِ همان مرحله به‌روز می‌شود؛ "
-                "چک(ها) را تیک بزنید و «تاییدِ عملیات» را بزنید تا همه‌یِ چک‌هایِ تیک‌خورده یک‌جا پردازش شوند.",
+                "بالا مرحلهٔ مورد نظر را انتخاب کنید — فهرست به چک‌های واجد شرایط همان مرحله به‌روز می‌شود؛ "
+                "چک(ها) را تیک بزنید و «تایید عملیات» را بزنید تا همهٔ چک‌های تیک‌خورده یک‌جا پردازش شوند.",
             ),
         ])
 
@@ -407,9 +403,9 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         self._apply_filters()
 
     def _apply_filters(self) -> None:
-        """طبقِ آیتمِ ۲: فیلترِ بازه‌یِ تاریخ (بر مبنایِ سررسید یا تاریخِ
-        دریافت) + جست‌وجویِ طرفِ‌حساب — رویِ همان self._checksِ از قبل
-        واکشی‌شده، بدونِ کوئریِ تازه."""
+        """طبق آیتم ۲: فیلتر بازهٔ تاریخ (بر مبنای سررسید یا تاریخ
+        دریافت) + جست‌وجوی طرف‌حساب — روی همان self._checks از قبل
+        واکشی‌شده، بدون کوئری تازه."""
         query = self.counterparty_filter_field.text().strip().lower()
         use_date_filter = self.date_filter_enabled.isChecked()
         basis = self.date_basis_combo.currentData() or "due_date"
@@ -439,7 +435,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
                 c.check_no,
                 c.drawee_bank_name or "—",
                 c.drawer_name or "—",
-                numerals.format_money(c.amount, 0, None),
+                decimals.format_amount(c.amount),
                 numerals.format_jalali_date(c.due_date),
                 numerals.format_jalali_date(c.received_date),
                 c.current_location_label or "—",
@@ -449,18 +445,18 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         self._update_ras_label()
 
     def _update_ras_label(self) -> None:
-        """طبقِ آیتمِ ۶: «راسِ روز» — رویِ چک‌هایِ تیک‌خورده (اگر چیزی
-        تیک نخورده، رویِ همه‌ی چک‌هایِ فیلترشده‌یِ فعلی)."""
+        """طبق آیتم ۶: «راس روز» — روی چک‌های تیک‌خورده (اگر چیزی
+        تیک نخورده، روی همهٔ چک‌های فیلترشدهٔ فعلی)."""
         checked_ids = set(self._checked_check_ids())
         subset = [c for c in self._filtered_checks if c.received_check_id in checked_ids] if checked_ids else self._filtered_checks
         if not subset:
             self.ras_label.setText("")
             return
         ras_date, total = treasury_service.compute_check_ras([(c.amount, c.due_date) for c in subset])
-        scope_word = "چک‌هایِ تیک‌خورده" if checked_ids else "همه‌ی چک‌هایِ نمایش‌داده‌شده"
+        scope_word = "چک‌های تیک‌خورده" if checked_ids else "همهٔ چک‌های نمایش‌داده‌شده"
         self.ras_label.setText(
-            f"راسِ روز ({scope_word}): {numerals.format_jalali_date(ras_date)}    —    "
-            f"جمعِ مبلغ: {numerals.format_money(total, 0, None)}"
+            f"راس روز ({scope_word}): {numerals.format_jalali_date(ras_date)}    —    "
+            f"جمع مبلغ: {decimals.format_amount(total)}"
         )
 
     def _checked_check_ids(self) -> list[int]:
@@ -482,7 +478,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
             QMessageBox.warning(self, "خطا", f"ابتدا {stage.target_label or 'مقصد'} را انتخاب کنید.")
             return
         if stage.confirm_message:
-            confirm = QMessageBox.question(self, "تاییدِ عملیات", stage.confirm_message, QMessageBox.Yes | QMessageBox.No)
+            confirm = QMessageBox.question(self, "تایید عملیات", stage.confirm_message, QMessageBox.Yes | QMessageBox.No)
             if confirm != QMessageBox.Yes:
                 return
         user_id = session.current_user.user_id
@@ -507,19 +503,19 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         self.refresh()
 
     def _single_selected_check(self, action_title: str) -> "treasury_service.ReceivedCheckRow | None":
-        """طبقِ گزارشِ صریح: کاربر عادت دارد چک را با تیکِ کنارِ ردیف انتخاب
-        کند (همان مکانیزمِ «تاییدِ عملیات»)، نه حتماً با کلیک/هایلایتِ ردیف
+        """طبق گزارش صریح: کاربر عادت دارد چک را با تیک کنار ردیف انتخاب
+        کند (همان مکانیزم «تایید عملیات»)، نه حتماً با کلیک/هایلایت ردیف
         — پس این‌جا هم اول تیک‌خورده‌ها بررسی می‌شوند، و فقط اگر هیچ‌کدام
-        تیک نخورده بود، سراغِ ردیفِ هایلایت‌شده (currentRow) می‌رویم."""
+        تیک نخورده بود، سراغ ردیف هایلایت‌شده (currentRow) می‌رویم."""
         checked_ids = self._checked_check_ids()
         if len(checked_ids) > 1:
-            QMessageBox.information(self, action_title, "فقط یک چک را برایِ این عملیات تیک بزنید.")
+            QMessageBox.information(self, action_title, "فقط یک چک را برای این عملیات تیک بزنید.")
             return None
         if len(checked_ids) == 1:
             return next((c for c in self._checks if c.received_check_id == checked_ids[0]), None)
         row_index = self.table.currentRow()
         if row_index < 0 or row_index >= len(self._filtered_checks):
-            QMessageBox.information(self, action_title, "ابتدا یک چک را با تیکِ کنارِ ردیف یا کلیک انتخاب کنید.")
+            QMessageBox.information(self, action_title, "ابتدا یک چک را با تیک کنار ردیف یا کلیک انتخاب کنید.")
             return None
         return self._filtered_checks[row_index]
 
@@ -533,15 +529,15 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
             self.refresh()
 
     def _delete_check(self) -> None:
-        check = self._single_selected_check("حذفِ چک")
+        check = self._single_selected_check("حذف چک")
         if check is None:
             return
         company_id = self._company_id()
         if company_id is None or session.current_user is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ چک",
-            f"چکِ شماره‌ی {numerals.to_persian_digits(check.check_no)} به همراهِ سندِ ثبتِ اولیه‌اش کاملاً حذف شود؟",
+            self, "حذف چک",
+            f"چک شماره‌ی {numerals.to_persian_digits(check.check_no)} به همراه سند ثبت اولیه‌اش کاملاً حذف شود؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -555,8 +551,8 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
 
 
 class IssuedChecksScreen(FieldHelpMixin, QWidget):
-    _COLUMNS = ["شماره‌یِ چک", "حسابِ بانکی", "گیرنده", "مبلغ", "سررسید"]
-    _DATE_BASIS_OPTIONS = [("due_date", "سررسید"), ("issue_date", "تاریخِ صدور")]
+    _COLUMNS = ["شمارهٔ چک", "حساب بانکی", "گیرنده", "مبلغ", "سررسید"]
+    _DATE_BASIS_OPTIONS = [("due_date", "سررسید"), ("issue_date", "تاریخ صدور")]
 
     def __init__(self) -> None:
         super().__init__()
@@ -580,7 +576,7 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(24, 20, 24, 12)
         layout.setSpacing(10)
 
-        title = QLabel("چک‌هایِ پرداختی")
+        title = QLabel("چک‌های پرداختی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -599,7 +595,7 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         # طبقِ آیتمِ ۲: فیلترِ بازه‌یِ تاریخ (سررسید یا تاریخِ صدور) +
         # جست‌وجویِ طرفِ‌حساب (نامِ گیرنده).
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("مبنایِ فیلترِ تاریخ:"))
+        filter_row.addWidget(QLabel("مبنای فیلتر تاریخ:"))
         self.date_basis_combo = QComboBox()
         for value, label in self._DATE_BASIS_OPTIONS:
             self.date_basis_combo.addItem(label, value)
@@ -616,9 +612,9 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         self.date_to_field = JalaliDateEdit()
         self.date_to_field.editingFinished.connect(self._apply_filters)
         filter_row.addWidget(self.date_to_field)
-        filter_row.addWidget(QLabel("طرفِ‌حساب:"))
+        filter_row.addWidget(QLabel("طرف‌حساب:"))
         self.counterparty_filter_field = QLineEdit()
-        self.counterparty_filter_field.setPlaceholderText("جست‌وجو در نامِ گیرنده…")
+        self.counterparty_filter_field.setPlaceholderText("جست‌وجو در نام گیرنده…")
         self.counterparty_filter_field.textChanged.connect(self._apply_filters)
         filter_row.addWidget(self.counterparty_filter_field, stretch=1)
         layout.addLayout(filter_row)
@@ -658,12 +654,12 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
         self.delete_button.setFixedWidth(44)
-        self.delete_button.setToolTip("حذفِ چک")
+        self.delete_button.setToolTip("حذف چک")
         self.delete_button.clicked.connect(self._delete_check)
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
         self.confirm_button.setFixedWidth(44)
-        self.confirm_button.setToolTip("تاییدِ عملیات")
+        self.confirm_button.setToolTip("تایید عملیات")
         self.confirm_button.clicked.connect(self._apply_stage)
         footer = build_action_footer([self.history_button, self.delete_button, self.confirm_button])
         wrapper_layout.addWidget(footer)
@@ -674,10 +670,13 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.set_field_help([
+            (self.date_basis_combo, "چک‌ها بر اساس کدام تاریخ فیلتر شوند — سررسید یا تاریخ دریافت/صدور."),
+            (self.date_filter_enabled, "فیلتر بازهٔ تاریخ بالا را فعال/غیرفعال می‌کند."),
+            (self.counterparty_filter_field, "جست‌وجو در نام صادرکننده/گیرندهٔ چک."),
             (
                 self.table,
-                "بالا مرحله‌یِ موردِنظر را انتخاب کنید — فهرست به چک‌هایِ واجدِ شرایطِ همان مرحله به‌روز می‌شود؛ "
-                "چک(ها) را تیک بزنید و «تاییدِ عملیات» را بزنید تا همه‌یِ چک‌هایِ تیک‌خورده یک‌جا پردازش شوند.",
+                "بالا مرحلهٔ مورد نظر را انتخاب کنید — فهرست به چک‌های واجد شرایط همان مرحله به‌روز می‌شود؛ "
+                "چک(ها) را تیک بزنید و «تایید عملیات» را بزنید تا همهٔ چک‌های تیک‌خورده یک‌جا پردازش شوند.",
             ),
         ])
 
@@ -700,8 +699,8 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         self._apply_filters()
 
     def _apply_filters(self) -> None:
-        """طبقِ آیتمِ ۲: فیلترِ بازه‌یِ تاریخ (سررسید یا تاریخِ صدور) +
-        جست‌وجویِ طرفِ‌حساب — رویِ self._checksِ از قبل واکشی‌شده."""
+        """طبق آیتم ۲: فیلتر بازهٔ تاریخ (سررسید یا تاریخ صدور) +
+        جست‌وجوی طرف‌حساب — روی self._checks از قبل واکشی‌شده."""
         query = self.counterparty_filter_field.text().strip().lower()
         use_date_filter = self.date_filter_enabled.isChecked()
         basis = self.date_basis_combo.currentData() or "due_date"
@@ -731,7 +730,7 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
                 c.check_no,
                 c.bank_account_label or "—",
                 c.payee_name or "—",
-                numerals.format_money(c.amount, 0, None),
+                decimals.format_amount(c.amount),
                 numerals.format_jalali_date(c.due_date),
             ]
             for col_index, value in enumerate(values, start=1):
@@ -739,18 +738,18 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         self._update_ras_label()
 
     def _update_ras_label(self) -> None:
-        """طبقِ آیتمِ ۶: «راسِ روز» — رویِ چک‌هایِ تیک‌خورده (اگر چیزی
-        تیک نخورده، رویِ همه‌ی چک‌هایِ فیلترشده‌یِ فعلی)."""
+        """طبق آیتم ۶: «راس روز» — روی چک‌های تیک‌خورده (اگر چیزی
+        تیک نخورده، روی همهٔ چک‌های فیلترشدهٔ فعلی)."""
         checked_ids = set(self._checked_check_ids())
         subset = [c for c in self._filtered_checks if c.issued_check_id in checked_ids] if checked_ids else self._filtered_checks
         if not subset:
             self.ras_label.setText("")
             return
         ras_date, total = treasury_service.compute_check_ras([(c.amount, c.due_date) for c in subset])
-        scope_word = "چک‌هایِ تیک‌خورده" if checked_ids else "همه‌ی چک‌هایِ نمایش‌داده‌شده"
+        scope_word = "چک‌های تیک‌خورده" if checked_ids else "همهٔ چک‌های نمایش‌داده‌شده"
         self.ras_label.setText(
-            f"راسِ روز ({scope_word}): {numerals.format_jalali_date(ras_date)}    —    "
-            f"جمعِ مبلغ: {numerals.format_money(total, 0, None)}"
+            f"راس روز ({scope_word}): {numerals.format_jalali_date(ras_date)}    —    "
+            f"جمع مبلغ: {decimals.format_amount(total)}"
         )
 
     def _checked_check_ids(self) -> list[int]:
@@ -768,7 +767,7 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
             return
         stage = self._stage
         if stage.confirm_message:
-            confirm = QMessageBox.question(self, "تاییدِ عملیات", stage.confirm_message, QMessageBox.Yes | QMessageBox.No)
+            confirm = QMessageBox.question(self, "تایید عملیات", stage.confirm_message, QMessageBox.Yes | QMessageBox.No)
             if confirm != QMessageBox.Yes:
                 return
         user_id = session.current_user.user_id
@@ -783,19 +782,19 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         self.refresh()
 
     def _single_selected_check(self, action_title: str) -> "treasury_service.IssuedCheckRow | None":
-        """طبقِ گزارشِ صریح: کاربر عادت دارد چک را با تیکِ کنارِ ردیف انتخاب
-        کند (همان مکانیزمِ «تاییدِ عملیات»)، نه حتماً با کلیک/هایلایتِ ردیف
+        """طبق گزارش صریح: کاربر عادت دارد چک را با تیک کنار ردیف انتخاب
+        کند (همان مکانیزم «تایید عملیات»)، نه حتماً با کلیک/هایلایت ردیف
         — پس این‌جا هم اول تیک‌خورده‌ها بررسی می‌شوند، و فقط اگر هیچ‌کدام
-        تیک نخورده بود، سراغِ ردیفِ هایلایت‌شده (currentRow) می‌رویم."""
+        تیک نخورده بود، سراغ ردیف هایلایت‌شده (currentRow) می‌رویم."""
         checked_ids = self._checked_check_ids()
         if len(checked_ids) > 1:
-            QMessageBox.information(self, action_title, "فقط یک چک را برایِ این عملیات تیک بزنید.")
+            QMessageBox.information(self, action_title, "فقط یک چک را برای این عملیات تیک بزنید.")
             return None
         if len(checked_ids) == 1:
             return next((c for c in self._checks if c.issued_check_id == checked_ids[0]), None)
         row_index = self.table.currentRow()
         if row_index < 0 or row_index >= len(self._filtered_checks):
-            QMessageBox.information(self, action_title, "ابتدا یک چک را با تیکِ کنارِ ردیف یا کلیک انتخاب کنید.")
+            QMessageBox.information(self, action_title, "ابتدا یک چک را با تیک کنار ردیف یا کلیک انتخاب کنید.")
             return None
         return self._filtered_checks[row_index]
 
@@ -809,15 +808,15 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
             self.refresh()
 
     def _delete_check(self) -> None:
-        check = self._single_selected_check("حذفِ چک")
+        check = self._single_selected_check("حذف چک")
         if check is None:
             return
         company_id = self._company_id()
         if company_id is None or session.current_user is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ چک",
-            f"چکِ شماره‌ی {numerals.to_persian_digits(check.check_no)} به همراهِ سندِ ثبتِ اولیه‌اش کاملاً حذف شود؟",
+            self, "حذف چک",
+            f"چک شماره‌ی {numerals.to_persian_digits(check.check_no)} به همراه سند ثبت اولیه‌اش کاملاً حذف شود؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:

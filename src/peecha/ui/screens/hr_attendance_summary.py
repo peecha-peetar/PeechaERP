@@ -1,6 +1,6 @@
-"""فرمِ خلاصهٔ کارکردِ پرسنل — جمعِ روزهایِ حاضر و مجموعِ ساعتِ کارکردِ
-هر کارمند در یک دوره، بر پایهٔ رکوردهایِ تاییدشدهٔ حضوروغیاب
-(hr.attendance_records). طبقِ گزارشِ صریحِ کاربر: تا این نسخه چنین
+"""فرم خلاصهٔ کارکرد پرسنل — جمع روزهای حاضر و مجموع ساعت کارکرد
+هر کارمند در یک دوره، بر پایهٔ رکوردهای تاییدشدهٔ حضور و غیاب
+(hr.attendance_records). طبق گزارش صریح کاربر: تا این نسخه چنین
 گزارشی وجود نداشت."""
 
 from __future__ import annotations
@@ -28,8 +28,8 @@ from peecha.services import payroll as payroll_service
 from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
-_COLUMNS = ["مجموعِ ساعتِ کارکرد", "روزهایِ حاضر", "کارمند", "کد"]
-_REPORT_TITLE = "خلاصهٔ کارکردِ پرسنل"
+_COLUMNS = ["مجموع ساعت کارکرد", "روزهای حاضر", "کارمند", "کد"]
+_REPORT_TITLE = "خلاصهٔ کارکرد پرسنل"
 
 
 class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
@@ -49,7 +49,7 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("فقط رکوردهایِ حضوروغیابِ تاییدشده در این خلاصه محاسبه می‌شوند.")
+        hint = QLabel("فقط رکوردهای حضور و غیاب تاییدشده در این خلاصه محاسبه می‌شوند.")
         hint.setObjectName("sectionHint")
         layout.addWidget(hint)
 
@@ -80,10 +80,10 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
         print_button = QPushButton("🖨 چاپ")
         print_button.setObjectName("flatButton")
         print_button.clicked.connect(self._on_print)
-        pdf_button = QPushButton("📄 خروجیِ PDF")
+        pdf_button = QPushButton("📄 خروجی PDF")
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
-        excel_button = QPushButton("📊 خروجیِ Excel")
+        excel_button = QPushButton("📊 خروجی Excel")
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
 
@@ -91,7 +91,7 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
 
         self.set_field_help([
             (self.period_combo, "دوره‌ای که خلاصهٔ کارکرد برایش محاسبه شود."),
-            (self.employee_filter_combo, "محدودکردنِ خلاصه به یک کارمندِ مشخص؛ «— همه —» یعنی همه‌یِ کارکنان."),
+            (self.employee_filter_combo, "محدودکردن خلاصه به یک کارمند مشخص؛ «— همه —» یعنی همهٔ کارکنان."),
         ])
 
     def _company_id(self) -> int | None:
@@ -153,8 +153,8 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
         self.summary_label.setText(
             f"{numerals.to_persian_digits(str(len(self._rows)))} کارمند — "
-            f"جمعِ روزهایِ حاضر: {numerals.to_persian_digits(str(total_days))} — "
-            f"جمعِ ساعتِ کارکرد: {numerals.to_persian_digits(str(total_hours))}"
+            f"جمع روزهای حاضر: {numerals.to_persian_digits(str(total_days))} — "
+            f"جمع ساعت کارکرد: {numerals.to_persian_digits(str(total_hours))}"
         )
 
     def _export_rows(self) -> tuple[list[str], list[list], list]:
@@ -164,7 +164,7 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
         ]
         total_hours = sum((r.total_hours for r in self._rows), decimal.Decimal(0))
         total_days = sum(r.present_days for r in self._rows)
-        footer = [numerals.to_persian_digits(str(total_hours)), numerals.to_persian_digits(str(total_days)), "جمعِ کل", ""]
+        footer = [numerals.to_persian_digits(str(total_hours)), numerals.to_persian_digits(str(total_days)), "جمع کل", ""]
         return list(_COLUMNS), table_rows, footer
 
     def _export_kwargs(self) -> dict:

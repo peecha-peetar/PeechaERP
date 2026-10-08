@@ -1,0 +1,626 @@
+import { TokenStore } from "../storage/tokenStore";
+import {
+  ApprovalsResponse,
+  ChannelRow,
+  CustomerActivityRequest,
+  CustomerActivityRow,
+  CustomerApprovalResponse,
+  CustomerSegmentInfo,
+  CustomerStatement,
+  CustomerCreateRequest,
+  CustomerCreateResponse,
+  Customer360Response,
+  CustomerDetailResponse,
+  CustomerListRow,
+  DebtorRow,
+  DuplicateCustomerRow,
+  DeliveryConfirmationRequest,
+  DeliveryConfirmationResponse,
+  LoginResponse,
+  ManagerDashboardResponse,
+  MeResponse,
+  NewCustomerFormOptions,
+  NotificationRow,
+  PartyAddressRequest,
+  PartyAddressRow,
+  TodayCollectionRow,
+  OrderCreateRequest,
+  OrderCreateResponse,
+  PaymentCreateRequest,
+  PaymentCreateResponse,
+  PriceResolveRequest,
+  PriceResolveResponse,
+  PullResponse,
+  RouteRow,
+  SettlementMethodRow,
+  StartVisitRequest,
+  StartVisitResponse,
+  TodaySummaryResponse,
+  VehicleSettlementSubmitRequest,
+  VehicleSettlementSubmitResponse,
+  VehicleSettlementSummaryResponse,
+  WarehouseRow,
+  SalesMode,
+  BankRow,
+  CatalogResponse,
+  InvoicePrintData,
+  ItemLocationRow,
+  LocationDetail,
+  LocationSearchResult,
+  PutawaySuggestion,
+  StockTransferRequest,
+  WmsTask,
+  WmsTaskType,
+  WmsWave,
+  LocationCountSession,
+  LocationCountLine,
+  WarehouseMapNode,
+  WmsKpis,
+  LocationLabel,
+  PutawaySource,
+} from "./types";
+import {
+  Crm360Response,
+  CrmActivityCompleteRequest,
+  CrmActivityRequest,
+  CrmLeadRequest,
+  CrmLeadRow,
+  CrmLeadSource,
+  CrmTasksResponse,
+  CrmTicketRequest,
+} from "./crmTypes";
+import { Colleague, WorkDecideRequest, WorkDecideResponse, WorkInboxResponse, WorkTaskDetail } from "./workflowTypes";
+
+export type Fetcher = typeof fetch;
+
+// طبقِ باگِ واقعیِ «صفحه تا ابد رویِ چرخانِ بارگذاری می‌ماند»: بدونِ
+// این سقف، یک شبکهٔ واقعاً قطع‌شده (نه فقط کند) Promiseِ fetch را تا
+// ابد در حالتِ pending نگه می‌داشت.
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** خطایِ HTTP با کدِ وضعیت و پیامِ سرور -- برایِ نمایشِ پیامِ فارسیِ
+ * برگشتی از FastAPI (فیلدِ detail) مستقیماً در UI. */
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+/** کلاینتِ HTTPِ لایهٔ API (peecha_api) -- طبقِ طراحیِ R131: توکنِ
+ * دسترسی کوتاه‌مدت است، پس روی هر ۴۰۱ یک‌بار خودکار با رفرش‌توکن تمدید
+ * و درخواست تکرار می‌شود؛ اگر رفرش هم شکست بخورد، ApiError با status=401
+ * پرتاب می‌شود تا لایه‌یِ UI کاربر را به صفحه‌یِ ورود برگرداند. */
+export class ApiClient {
+  constructor(
+    private baseUrl: string,
+    private readonly tokenStore: TokenStore,
+    private readonly fetcher: Fetcher = fetch,
+  ) {}
+
+  /** طبقِ نیازِ واقعیِ اجرا رویِ دستگاهِ فیزیکی: هر مشتری آدرسِ سرورِ
+   * peecha_apiِ خودش را دارد (شبکه‌یِ محلی/دامنه‌یِ اختصاصی) -- این آدرس
+   * از صفحه‌یِ ورود قابلِ‌تغییر است، نه فقط یک مقدارِ ثابتِ زمانِ بیلد. */
+  setBaseUrl(baseUrl: string): void {
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  private async request<T>(
+    path: string,
+    options: { method?: string; body?: unknown; auth?: boolean; idempotencyKey?: string } = {},
+  ): Promise<T> {
+    const { method = "GET", body, auth = true, idempotencyKey } = options;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    if (auth) {
+      const token = await this.tokenStore.getAccessToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    }
+    // طبقِ باگِ واقعیِ کشف‌شده رویِ گوشیِ فیزیکیِ کاربر («در حالِ بررسیِ
+    // تنظیماتِ سفارش...» تا ابد آویزان می‌ماند): fetchِ خام هیچ Timeout
+    // ندارد -- اگر شبکه واقعاً قطع شود (نه یک ۴xx/۵xx تمیز)، Promise
+    // هیچ‌وقت resolve/reject نمی‌شود، پس catch()های صفحه هم هیچ‌وقت
+    // اجرا نمی‌شوند و مقدارِ state برایِ همیشه undefined می‌ماند.
+    const doFetch = () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      return this.fetcher(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+    };
+
+    let response = await doFetch();
+    if (response.status === 401 && auth) {
+      const refreshed = await this.tryRefresh();
+      if (refreshed) {
+        headers["Authorization"] = `Bearer ${await this.tokenStore.getAccessToken()}`;
+        response = await doFetch();
+      }
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, payload.detail ?? response.statusText);
+    }
+    if (response.status === 204) return undefined as unknown as T;
+    return (await response.json()) as T;
+  }
+
+  private async tryRefresh(): Promise<boolean> {
+    const refreshToken = await this.tokenStore.getRefreshToken();
+    if (!refreshToken) return false;
+    try {
+      const response = await this.fetcher(`${this.baseUrl}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!response.ok) return false;
+      const data = (await response.json()) as { access_token: string };
+      await this.tokenStore.setAccessToken(data.access_token);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** آزمونِ اتصال به سرور (بدونِ ورود). */
+  async checkHealth(): Promise<void> {
+    await this.request<unknown>("/health", { auth: false });
+  }
+
+  async login(username: string, password: string, deviceName?: string): Promise<LoginResponse> {
+    const data = await this.request<LoginResponse>("/auth/login", {
+      method: "POST",
+      auth: false,
+      body: { username, password, device_name: deviceName ?? null },
+    });
+    await this.tokenStore.setTokens(data.access_token, data.refresh_token);
+    return data;
+  }
+
+  /** طبقِ درخواستِ صریحِ کاربر («تعیینِ کانالِ مجزا برایِ پخشِ سرد و
+   * گرم»): بازکردنِ روزانهٔ اپ لاگینِ دوباره نمی‌زند (توکنِ ذخیره‌شده
+   * معتبر می‌ماند)، پس این مقدار باید هر بار جدا خوانده شود، نه فقط از
+   * پاسخِ login. */
+  async getMe(): Promise<MeResponse> {
+    return this.request<MeResponse>("/auth/me");
+  }
+
+  async logout(): Promise<void> {
+    const refreshToken = await this.tokenStore.getRefreshToken();
+    if (refreshToken) {
+      await this.request<void>("/auth/logout", { method: "POST", body: { refresh_token: refreshToken } }).catch(
+        () => undefined,
+      );
+    }
+    await this.tokenStore.clear();
+  }
+
+  async pullSync(): Promise<PullResponse> {
+    return this.request<PullResponse>("/sync/pull");
+  }
+
+  async getTodaySummary(mode?: SalesMode): Promise<TodaySummaryResponse> {
+    return this.request<TodaySummaryResponse>(`/dashboard/today${mode ? `?mode=${mode}` : ""}`);
+  }
+
+  async listCustomers(query?: string): Promise<CustomerListRow[]> {
+    const q = query ? `?q=${encodeURIComponent(query)}` : "";
+    return this.request<CustomerListRow[]>(`/customers${q}`);
+  }
+
+  async getCustomerDetail(detailAccountId: number, mode?: SalesMode): Promise<CustomerDetailResponse> {
+    return this.request<CustomerDetailResponse>(`/customers/${detailAccountId}${mode ? `?mode=${mode}` : ""}`);
+  }
+
+  /** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer 360):
+   * همه‌یِ ابعادِ مشتری از یک درخواستِ تکی. */
+  async getCustomer360(detailAccountId: number, mode?: SalesMode): Promise<Customer360Response> {
+    return this.request<Customer360Response>(`/customers/${detailAccountId}/360${mode ? `?mode=${mode}` : ""}`);
+  }
+
+  /** طبقِ بازخوردِ کاربر رویِ R220 («داشبوردِ مشتری را ندیدم»): همان
+   * محاسبه‌یِ سبک‌ترِ سگمنت -- بدونِ کشیدنِ کلِ ۳۶۰ -- برایِ نمایش در
+   * بالایِ خودِ فرمِ مشتری (CustomerDetailScreen)، نه فقط صفحه‌یِ ۳۶۰. */
+  async getCustomerSegment(detailAccountId: number): Promise<CustomerSegmentInfo> {
+    return this.request<CustomerSegmentInfo>(`/customers/${detailAccountId}/segment`);
+  }
+
+  /** طبقِ گزارشِ کاربر («معینِ حساب هم در داشبوردِ مشتری باشد»): همان
+   * دفترِ معینِ ازپیش‌موجودِ دسکتاپ، فقط برایِ همین مشتری. */
+  async getCustomerStatement(detailAccountId: number, fullHistory = false): Promise<CustomerStatement> {
+    return this.request<CustomerStatement>(`/customers/${detailAccountId}/statement${fullHistory ? "?full_history=true" : ""}`);
+  }
+
+  /** طبقِ بازخوردِ کاربر رویِ R220 («CRM کجاست؟»): فرمِ ثبت/بستنِ فعالیت
+   * که پیش‌تر فقط API/سرویس داشت، حالا از رویِ Customer360Screen قابلِ
+   * استفاده است. */
+  async listCustomerActivities(detailAccountId: number, openOnly = false): Promise<CustomerActivityRow[]> {
+    return this.request<CustomerActivityRow[]>(`/customers/${detailAccountId}/activities${openOnly ? "?open_only=true" : ""}`);
+  }
+
+  async createCustomerActivity(detailAccountId: number, payload: CustomerActivityRequest): Promise<{ activity_id: number }> {
+    return this.request<{ activity_id: number }>(`/customers/${detailAccountId}/activities`, { method: "POST", body: payload });
+  }
+
+  async closeCustomerActivity(detailAccountId: number, activityId: number, statusCode: string): Promise<void> {
+    await this.request<void>(`/customers/${detailAccountId}/activities/${activityId}/close`, {
+      method: "POST",
+      body: { status_code: statusCode },
+    });
+  }
+
+  async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {
+    return this.request<PaymentCreateResponse>("/payments", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  /** طبقِ Customer Acquisition: گزینه‌هایِ فرمِ مشتریِ جدید (کدِ پیشنهادی
+   * + گروه‌هایِ مشتری) -- فقط وقتی آنلاین هستیم؛ در آفلاین فرم بدونِ
+   * کدِ پیشنهادی و با گروهِ خالی نمایش داده می‌شود. */
+  async getNewCustomerFormOptions(): Promise<NewCustomerFormOptions> {
+    return this.request<NewCustomerFormOptions>("/customers/new-form-options");
+  }
+
+  /** طبقِ تشخیصِ مشتریِ تکراری (R216) -- فقط یک هشدارِ اختیاریِ پیش از
+   * ارسال؛ خطایِ شبکه/آفلاین باید بی‌صدا نادیده گرفته شود (فراخوان‌کننده). */
+  async checkDuplicateCustomers(params: { name?: string; mobile?: string; phone?: string }): Promise<DuplicateCustomerRow[]> {
+    const query = new URLSearchParams();
+    if (params.name) query.set("name", params.name);
+    if (params.mobile) query.set("mobile", params.mobile);
+    if (params.phone) query.set("phone", params.phone);
+    return this.request<DuplicateCustomerRow[]>(`/customers/duplicate-check?${query.toString()}`);
+  }
+
+  async createCustomer(payload: CustomerCreateRequest, idempotencyKey?: string): Promise<CustomerCreateResponse> {
+    return this.request<CustomerCreateResponse>("/customers", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async approveCustomer(detailAccountId: number): Promise<CustomerApprovalResponse> {
+    return this.request<CustomerApprovalResponse>(`/customers/${detailAccountId}/approve`, { method: "POST" });
+  }
+
+  async rejectCustomer(detailAccountId: number, reason: string): Promise<CustomerApprovalResponse> {
+    return this.request<CustomerApprovalResponse>(`/customers/${detailAccountId}/reject`, {
+      method: "POST",
+      body: { reason },
+    });
+  }
+
+  /** طبقِ گزارشِ آدیت («/approvals در بک‌اند آماده بود ولی هیچ صفحه‌یِ
+   * موبایلی صدایش نمی‌زد»): صندوقِ تاییدهایِ کارتابلِ عمومی (اسنادی که
+   * برایِ فرم‌شان گردشِ کارِ تایید فعال است) + مشتریانِ درانتظار. */
+  async listApprovals(): Promise<ApprovalsResponse> {
+    return this.request<ApprovalsResponse>("/approvals");
+  }
+
+  async approveCartableItem(cartableItemId: number, comment = ""): Promise<void> {
+    await this.request<void>(`/approvals/cartable/${cartableItemId}/approve`, { method: "POST", body: { comment } });
+  }
+
+  async rejectCartableItem(cartableItemId: number, comment = ""): Promise<void> {
+    await this.request<void>(`/approvals/cartable/${cartableItemId}/reject`, { method: "POST", body: { comment } });
+  }
+
+  async listCustomerAddresses(detailAccountId: number): Promise<PartyAddressRow[]> {
+    return this.request<PartyAddressRow[]>(`/customers/${detailAccountId}/addresses`);
+  }
+
+  async createCustomerAddress(detailAccountId: number, payload: PartyAddressRequest): Promise<{ address_id: number }> {
+    return this.request<{ address_id: number }>(`/customers/${detailAccountId}/addresses`, { method: "POST", body: payload });
+  }
+
+  async deleteCustomerAddress(detailAccountId: number, addressId: number): Promise<void> {
+    await this.request<void>(`/customers/${detailAccountId}/addresses/${addressId}`, { method: "DELETE" });
+  }
+
+  async listNotifications(unreadOnly = false): Promise<NotificationRow[]> {
+    return this.request<NotificationRow[]>(`/notifications${unreadOnly ? "?unread_only=true" : ""}`);
+  }
+
+  async markNotificationRead(notificationId: number): Promise<void> {
+    await this.request<void>(`/notifications/${notificationId}/read`, { method: "POST" });
+  }
+
+  async getManagerDashboard(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    visitorUserId?: number;
+    routeDetailAccountId?: number;
+  }): Promise<ManagerDashboardResponse> {
+    const query = new URLSearchParams();
+    if (params?.dateFrom) query.set("date_from", params.dateFrom);
+    if (params?.dateTo) query.set("date_to", params.dateTo);
+    if (params?.visitorUserId) query.set("visitor_user_id", String(params.visitorUserId));
+    if (params?.routeDetailAccountId) query.set("route_detail_account_id", String(params.routeDetailAccountId));
+    const qs = query.toString();
+    return this.request<ManagerDashboardResponse>(`/manager/dashboard${qs ? `?${qs}` : ""}`);
+  }
+
+  async listRoutes(): Promise<RouteRow[]> {
+    return this.request<RouteRow[]>("/manager/dashboard/routes");
+  }
+
+  async listDebtors(): Promise<DebtorRow[]> {
+    return this.request<DebtorRow[]>("/collection/debtors");
+  }
+
+  async listTodayCollections(): Promise<TodayCollectionRow[]> {
+    return this.request<TodayCollectionRow[]>("/collection/today");
+  }
+
+  async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {
+    return this.request<StartVisitResponse>("/visits/start", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async completeVisit(
+    customerVisitId: number, notes?: string, photoBase64?: string | null, signatureBase64?: string | null,
+  ): Promise<void> {
+    await this.request<void>(`/visits/${customerVisitId}/complete`, {
+      method: "POST",
+      body: { notes: notes ?? null, photo_base64: photoBase64 ?? null, signature_base64: signatureBase64 ?? null },
+    });
+  }
+
+  async skipVisit(customerVisitId: number, skipReason: string): Promise<void> {
+    await this.request<void>(`/visits/${customerVisitId}/skip`, {
+      method: "POST",
+      body: { skip_reason: skipReason },
+    });
+  }
+
+  async createOrder(payload: OrderCreateRequest, idempotencyKey?: string): Promise<OrderCreateResponse> {
+    return this.request<OrderCreateResponse>("/orders", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async createDeliveryConfirmation(
+    payload: DeliveryConfirmationRequest,
+    idempotencyKey?: string,
+  ): Promise<DeliveryConfirmationResponse> {
+    return this.request<DeliveryConfirmationResponse>("/delivery-confirmations", {
+      method: "POST",
+      body: payload,
+      idempotencyKey,
+    });
+  }
+
+  /** طبقِ R133: قیمتِ معتبر را از همان زنجیره‌یِ resolve_price می‌گیرد --
+   * فقط وقتی آنلاین هستیم صدا زده می‌شود؛ در آفلاین صفحه‌یِ سفارش باید
+   * به ورودیِ دستیِ قیمت برگردد (این متد اصلاً صدا زده نمی‌شود). */
+  async resolvePrice(params: PriceResolveRequest): Promise<PriceResolveResponse> {
+    const query = new URLSearchParams({
+      counterparty_detail_account_id: String(params.counterpartyDetailAccountId),
+      item_id: String(params.itemId),
+      uom_id: String(params.uomId),
+      quantity: params.quantity,
+      document_type_code: params.documentTypeCode,
+    });
+    if (params.warehouseId !== null && params.warehouseId !== undefined) {
+      query.set("warehouse_id", String(params.warehouseId));
+    }
+    if (params.channelCode !== null && params.channelCode !== undefined) {
+      query.set("channel_code", params.channelCode);
+    }
+    return this.request<PriceResolveResponse>(`/pricing/resolve?${query.toString()}`);
+  }
+
+  /** طبقِ باگِ واقعیِ کشف‌شده (R196): سفارش نباید مستقیم channel_type_code
+   * («VAN_SALES») را به‌جایِ یک channel_codeِ واقعیِ تعریف‌شده در همین
+   * شرکت بفرستد -- comm.channels.channel_code یک کلیدِ خارجیِ جداست. */
+  async listChannels(channelTypeCode?: string): Promise<ChannelRow[]> {
+    const q = channelTypeCode ? `?channel_type_code=${encodeURIComponent(channelTypeCode)}` : "";
+    return this.request<ChannelRow[]>(`/pricing/channels${q}`);
+  }
+
+  /** طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+   * انواعِ تسویه در دسکتاپ باشد»). */
+  async listSettlementMethods(): Promise<SettlementMethodRow[]> {
+    return this.request<SettlementMethodRow[]>("/pricing/settlement-methods");
+  }
+
+  async listBanks(): Promise<BankRow[]> {
+    return this.request<BankRow[]>("/pricing/banks");
+  }
+
+  /** کاتالوگِ کاملِ قابلِ‌فروش + موجودیِ انبارِ داده‌شده (در پخشِ گرم: انبارِ خودرو). */
+  async getCatalog(warehouseId: number | null): Promise<CatalogResponse> {
+    return this.request<CatalogResponse>(`/products/catalog${warehouseId !== null ? `?warehouse_id=${warehouseId}` : ""}`);
+  }
+
+  async getInvoicePrintData(documentId: number): Promise<InvoicePrintData> {
+    return this.request<InvoicePrintData>(`/orders/${documentId}/print-data`);
+  }
+
+  /** طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با R196): سفارش قبلاً
+   * warehouse_id=1 را هاردکد می‌فرستاد که در بسیاری از شرکت‌ها اصلاً
+   * وجود ندارد (شکستِ کلیدِ خارجی رویِ گوشیِ فیزیکیِ کاربر تایید شد). */
+  async listWarehouses(): Promise<WarehouseRow[]> {
+    return this.request<WarehouseRow[]>("/inventory/warehouses");
+  }
+
+  /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورت انتخابی به یک
+   * نفر از ۳ نقش واگذار بشه و به تاییدِ انبار و حسابداری برسه»): فقط
+   * کسی که در دسکتاپ به‌عنوانِ مسئولِ تسویه تعیین شده این‌ها را می‌بیند. */
+  async getVehicleSettlementTodaySummary(): Promise<VehicleSettlementSummaryResponse> {
+    return this.request<VehicleSettlementSummaryResponse>("/vehicle-settlement/today-summary");
+  }
+
+  async submitVehicleSettlement(
+    payload: VehicleSettlementSubmitRequest,
+    idempotencyKey?: string,
+  ): Promise<VehicleSettlementSubmitResponse> {
+    return this.request<VehicleSettlementSubmitResponse>("/vehicle-settlement", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  // --- R249: انبار (WMS) -- مسیرهایِ /locations ------------------------------
+  async searchLocations(query: string): Promise<LocationSearchResult> {
+    return this.request<LocationSearchResult>(`/locations/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async scanLocation(payload: string): Promise<LocationDetail> {
+    return this.request<LocationDetail>(`/locations/scan?payload=${encodeURIComponent(payload)}`);
+  }
+
+  async getLocation(locationId: number): Promise<LocationDetail> {
+    return this.request<LocationDetail>(`/locations/${locationId}`);
+  }
+
+  async getItemLocations(itemId: number): Promise<ItemLocationRow[]> {
+    return this.request<ItemLocationRow[]>(`/locations/items/${itemId}`);
+  }
+
+  async getPutawaySuggestions(warehouseId: number, itemId: number, quantity: string): Promise<PutawaySuggestion[]> {
+    const q = new URLSearchParams({ warehouse_id: String(warehouseId), item_id: String(itemId), quantity });
+    return this.request<PutawaySuggestion[]>(`/locations/putaway-suggestions?${q.toString()}`);
+  }
+
+  async listWmsTasks(taskType?: WmsTaskType): Promise<WmsTask[]> {
+    return this.request<WmsTask[]>(`/locations/tasks${taskType ? `?task_type=${taskType}` : ""}`);
+  }
+
+  async startWmsTask(taskId: number): Promise<void> {
+    await this.request<void>(`/locations/tasks/${taskId}/start`, { method: "POST" });
+  }
+
+  async confirmPutaway(taskId: number, toLocationId: number, idempotencyKey?: string): Promise<{ stock_document_id: number | null }> {
+    return this.request(`/locations/tasks/${taskId}/putaway`, { method: "POST", body: { to_location_id: toLocationId }, idempotencyKey });
+  }
+
+  async confirmPick(taskId: number, quantity: string, idempotencyKey?: string): Promise<{ status: string }> {
+    return this.request(`/locations/tasks/${taskId}/pick`, { method: "POST", body: { quantity }, idempotencyKey });
+  }
+
+  async confirmReplenish(taskId: number, quantity: string | null, idempotencyKey?: string): Promise<{ stock_document_id: number }> {
+    return this.request(`/locations/tasks/${taskId}/replenish`, { method: "POST", body: { quantity }, idempotencyKey });
+  }
+
+  async transferStock(payload: StockTransferRequest, idempotencyKey?: string): Promise<{ stock_document_id: number }> {
+    return this.request("/locations/transfer", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  // --- R250 -------------------------------------------------------------------
+  async listWaves(): Promise<WmsWave[]> {
+    return this.request<WmsWave[]>("/locations/waves");
+  }
+
+  async createWave(warehouseId: number): Promise<{ wave_id: number }> {
+    return this.request("/locations/waves", { method: "POST", body: { warehouse_id: warehouseId } });
+  }
+
+  async listLocationCounts(): Promise<LocationCountSession[]> {
+    return this.request<LocationCountSession[]>("/locations/counts");
+  }
+
+  async getLocationCountLines(sessionId: number): Promise<LocationCountLine[]> {
+    return this.request<LocationCountLine[]>(`/locations/counts/${sessionId}`);
+  }
+
+  async recordLocationCount(
+    sessionId: number, locationId: number, itemId: number, quantity: string, idempotencyKey?: string, batchNo?: string | null,
+  ): Promise<{ line_id: number }> {
+    const body: Record<string, unknown> = { location_id: locationId, item_id: itemId, quantity };
+    if (batchNo) body.batch_no = batchNo;
+    return this.request(`/locations/counts/${sessionId}/record`, { method: "POST", body, idempotencyKey });
+  }
+
+  async getWarehouseMap(warehouseId: number): Promise<WarehouseMapNode[]> {
+    return this.request<WarehouseMapNode[]>(`/locations/warehouses/${warehouseId}/map`);
+  }
+
+  // --- R251 -------------------------------------------------------------------
+  async getWmsKpis(days = 30): Promise<WmsKpis> {
+    return this.request<WmsKpis>(`/locations/kpis?days=${days}`);
+  }
+
+  async getLocationLabel(locationId: number): Promise<LocationLabel> {
+    return this.request<LocationLabel>(`/locations/${locationId}/label`);
+  }
+
+  // --- R252 -------------------------------------------------------------------
+  async createLocationCount(warehouseId: number, locationIds: number[], blind = true): Promise<{ session_id: number }> {
+    return this.request("/locations/counts", { method: "POST", body: { warehouse_id: warehouseId, location_ids: locationIds, blind } });
+  }
+
+  async recordSerialCount(sessionId: number, locationId: number, itemId: number, serialNos: string[], idempotencyKey?: string): Promise<{ line_id: number }> {
+    return this.request(`/locations/counts/${sessionId}/serials`, {
+      method: "POST", body: { location_id: locationId, item_id: itemId, serial_nos: serialNos }, idempotencyKey,
+    });
+  }
+
+  async listPutawaySources(): Promise<PutawaySource[]> {
+    return this.request<PutawaySource[]>("/locations/putaway-sources");
+  }
+
+  async generatePutawayTasks(documentId: number): Promise<{ task_ids: number[] }> {
+    return this.request("/locations/tasks/generate", { method: "POST", body: { document_id: documentId, task_type: "PUTAWAY" } });
+  }
+
+  async getLocationLabels(locationId: number): Promise<LocationLabel[]> {
+    return this.request<LocationLabel[]>(`/locations/${locationId}/labels`);
+  }
+
+  // --- CRM (R286) -------------------------------------------------------------
+  async getCrmTasks(): Promise<CrmTasksResponse> {
+    return this.request<CrmTasksResponse>("/crm/tasks");
+  }
+
+  // R297: گردش کار -- کارتابل یکپارچه، تصمیم، یادداشت و سپردن به همکار
+  async getWorkInbox(source?: string): Promise<WorkInboxResponse> {
+    return this.request<WorkInboxResponse>(source ? `/workflow/inbox?source=${encodeURIComponent(source)}` : "/workflow/inbox");
+  }
+
+  async getWorkTask(taskId: number): Promise<WorkTaskDetail> {
+    return this.request<WorkTaskDetail>(`/workflow/tasks/${taskId}`);
+  }
+
+  async decideWorkTask(taskId: number, body: WorkDecideRequest, idempotencyKey?: string): Promise<WorkDecideResponse> {
+    return this.request<WorkDecideResponse>(`/workflow/tasks/${taskId}/decide`, { method: "POST", body, idempotencyKey });
+  }
+
+  async commentWorkTask(taskId: number, text: string, idempotencyKey?: string): Promise<void> {
+    await this.request<void>(`/workflow/tasks/${taskId}/comment`, { method: "POST", body: { text }, idempotencyKey });
+  }
+
+  async delegateWorkTask(taskId: number, toUserId: number, comment: string, idempotencyKey?: string): Promise<void> {
+    await this.request<void>(`/workflow/tasks/${taskId}/delegate`, {
+      method: "POST", body: { to_user_id: toUserId, comment }, idempotencyKey,
+    });
+  }
+
+  async listColleagues(): Promise<Colleague[]> {
+    return this.request<Colleague[]>("/workflow/colleagues");
+  }
+
+  async getCrm360(detailAccountId: number): Promise<Crm360Response> {
+    return this.request<Crm360Response>(`/crm/customers/${detailAccountId}/360`);
+  }
+
+  async listCrmLeadSources(): Promise<CrmLeadSource[]> {
+    return this.request<CrmLeadSource[]>("/crm/lead-sources");
+  }
+
+  async listMyLeads(): Promise<CrmLeadRow[]> {
+    return this.request<CrmLeadRow[]>("/crm/leads?open_only=true&mine=true");
+  }
+
+  async createCrmLead(payload: CrmLeadRequest, idempotencyKey?: string): Promise<{ lead_id: number }> {
+    return this.request("/crm/leads", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async createCrmActivity(payload: CrmActivityRequest, idempotencyKey?: string): Promise<{ activity_id: number }> {
+    return this.request("/crm/activities", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async completeCrmActivity(activityId: number, payload: CrmActivityCompleteRequest, idempotencyKey?: string): Promise<{ follow_up_activity_id: number | null }> {
+    return this.request(`/crm/activities/${activityId}/complete`, { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async createCrmTicket(payload: CrmTicketRequest, idempotencyKey?: string): Promise<{ ticket_id: number }> {
+    return this.request("/crm/tickets", { method: "POST", body: payload, idempotencyKey });
+  }
+}

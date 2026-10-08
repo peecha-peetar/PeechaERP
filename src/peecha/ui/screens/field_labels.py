@@ -1,4 +1,4 @@
-"""عنوانِ فیلدها — معادلِ Qt برایِ field_labels.py/.kv در Kivy."""
+"""عنوان فیلدها — معادل Qt برای field_labels.py/.kv در Kivy."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ _FORM_CODES = [
     "roles",
 ]
 _FORM_LABELS = {
-    "chart_of_accounts": "کدینگِ حساب‌ها",
-    "journal_entry": "صدورِ سند",
+    "chart_of_accounts": "کدینگ حساب‌ها",
+    "journal_entry": "صدور سند",
     "languages": "زبان‌ها",
     "companies": "شرکت‌ها",
     "fiscal_years": "سال‌های مالی",
@@ -75,7 +75,7 @@ class FieldLabelsScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("عنوانِ فیلدها")
+        title = QLabel("عنوان فیلدها")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -104,11 +104,11 @@ class FieldLabelsScreen(FieldHelpMixin, QWidget):
         layout.addWidget(wrap_scrollable(rows_widget), stretch=1)
 
         self.set_field_help([
-            (self.form_combo, "فرمی که می‌خواهید نامِ فیلدهایش را تغییر دهید."),
+            (self.form_combo, "فرمی که می‌خواهید نام فیلدهایش را تغییر دهید."),
             (
                 self.language_combo,
-                "زبانی که این تغییرِ نام برایش اعمال می‌شود. هر زبان می‌تواند نامِ جداگانه‌ای برایِ همان فیلد داشته باشد؛ "
-                "این نام فقط جایِ نمایش را عوض می‌کند، خودِ فیلد در پایگاه‌داده تغییر نمی‌کند.",
+                "زبانی که این تغییر نام برایش اعمال می‌شود. هر زبان می‌تواند نام جداگانه‌ای برای همان فیلد داشته باشد؛ "
+                "این نام فقط جای نمایش را عوض می‌کند، خود فیلد در پایگاه‌داده تغییر نمی‌کند.",
             ),
         ])
 

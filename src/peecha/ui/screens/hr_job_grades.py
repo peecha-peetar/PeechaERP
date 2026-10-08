@@ -1,4 +1,4 @@
-"""رده‌هایِ شغلی — هستهٔ منابع انسانی، فازِ ۱."""
+"""رده‌های شغلی — هستهٔ منابع انسانی، فاز ۱."""
 
 from __future__ import annotations
 
@@ -28,13 +28,14 @@ from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
     FieldSpec,
+    FormDrawer,
     LayoutEditMixin,
     ZeroPaddedSpinBox,
     wrap_scrollable,
     wrap_scrollable_with_footer,
 )
 
-_COLUMNS = ["فعال", "حداکثرِ حقوقِ پایه", "حداقلِ حقوقِ پایه", "سطح", "عنوان", "کد"]
+_COLUMNS = ["فعال", "حداکثر حقوق پایه", "حداقل حقوق پایه", "سطح", "عنوان", "کد"]
 
 
 class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -47,14 +48,18 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="ردهٔ شغلی جدید")
 
         self.set_field_help([
-            (self.code_field, "کدِ یکتایِ این ردهٔ شغلی در سطحِ شرکت."),
-            (self.title_field, "عنوانِ رده، مثلاً «کارشناس» یا «سرپرست»."),
-            (self.level_field, "عددِ ترتیبِ رده — رده‌هایِ بالاتر عددِ بزرگ‌تر دارند."),
-            (self.min_salary_field, "کفِ پیشنهادیِ حقوقِ پایه برایِ این رده — فقط هشدارِ کنترلی، نه محدودیتِ سخت."),
-            (self.max_salary_field, "سقفِ پیشنهادیِ حقوقِ پایه برایِ این رده."),
+            (self.code_field, "کد یکتای این ردهٔ شغلی در سطح شرکت."),
+            (self.title_field, "عنوان رده، مثلاً «کارشناس» یا «سرپرست»."),
+            (self.level_field, "عدد ترتیب رده — رده‌های بالاتر عدد بزرگ‌تر دارند."),
+            (self.min_salary_field, "کف پیشنهادی حقوق پایه برای این رده — فقط هشدار کنترلی، نه محدودیت سخت."),
+            (self.max_salary_field, "سقف پیشنهادی حقوق پایه برای این رده."),
+            (self.is_active_checkbox, "رده‌های غیرفعال دیگر در فهرست انتخاب ردهٔ شغلی برای سمت/کارمند تازه نشان داده نمی‌شوند."),
         ])
         self.register_field_grids("hr_job_grades", [self.form_grid])
 
@@ -64,7 +69,7 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("رده‌هایِ شغلی")
+        title = QLabel("رده‌های شغلی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -84,7 +89,7 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("ردهٔ شغلیِ جدید")
+        self.form_title = QLabel("ردهٔ شغلی جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -101,8 +106,8 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("title", "عنوان", self.title_field, span=2),
             FieldSpec("level", "سطح", self.level_field, span=1),
-            FieldSpec("min_salary", "حداقلِ حقوقِ پایه", self.min_salary_field, span=1),
-            FieldSpec("max_salary", "حداکثرِ حقوقِ پایه", self.max_salary_field, span=1),
+            FieldSpec("min_salary", "حداقل حقوق پایه", self.min_salary_field, span=1),
+            FieldSpec("max_salary", "حداکثر حقوق پایه", self.max_salary_field, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
         layout.addWidget(self.form_grid)
@@ -146,8 +151,8 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for row_index, g in enumerate(self._rows):
             values = [
                 "بله" if g.is_active else "خیر",
-                numerals.format_amount(g.max_base_salary) if g.max_base_salary is not None else "—",
-                numerals.format_amount(g.min_base_salary) if g.min_base_salary is not None else "—",
+                numerals.format_company_amount(g.max_base_salary) if g.max_base_salary is not None else "—",
+                numerals.format_company_amount(g.min_base_salary) if g.min_base_salary is not None else "—",
                 numerals.to_persian_digits(str(g.grade_level)),
                 g.title,
                 g.code,
@@ -165,7 +170,7 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, grade: hr_service.JobGradeRow) -> None:
         self._editing_id = grade.job_grade_id
-        self.form_title.setText(f"ویرایشِ رده — {grade.title}")
+        self.form_title.setText(f"ویرایش رده — {grade.title}")
         self.status_label.setText("")
         self.code_field.setText(grade.code)
         self.code_field.setEnabled(False)
@@ -178,7 +183,7 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("ردهٔ شغلیِ جدید")
+        self.form_title.setText("ردهٔ شغلی جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -227,7 +232,7 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ ردهٔ شغلی", "این رده حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف ردهٔ شغلی", "این رده حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

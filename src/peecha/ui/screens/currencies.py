@@ -1,10 +1,10 @@
-"""مدیریتِ ارزها — معادلِ Qt برایِ currencies.py/.kv در Kivy.
+"""مدیریت ارزها — معادل Qt برای currencies.py/.kv در Kivy.
 
-طبقِ درخواستِ صریح («در جدولِ ارزها بتوان نرخِ تبدیل را هم دستی وارد کرد
-و هم اتوماتیک از صرافی/بانکِ مرکزی گرفت»)، علاوه‌بر فهرستِ سراسریِ ارزها
-(core.currencies)، برایِ ارزهایِ غیرِپایه یک بخشِ «فعال‌سازی برایِ این
-شرکت + تاریخچه‌یِ نرخِ روزانه» هم اضافه شده — چون نرخِ تبدیل، مفهومی
-مخصوصِ هر شرکت است (نه سراسری)."""
+طبق درخواست صریح («در جدول ارزها بتوان نرخ تبدیل را هم دستی وارد کرد
+و هم اتوماتیک از صرافی/بانک مرکزی گرفت»)، علاوه‌بر فهرست سراسری ارزها
+(core.currencies)، برای ارزهای غیرپایه یک بخش «فعال‌سازی برای این
+شرکت + تاریخچهٔ نرخ روزانه» هم اضافه شده — چون نرخ تبدیل، مفهومی
+مخصوص هر شرکت است (نه سراسری)."""
 
 from __future__ import annotations
 
@@ -32,10 +32,10 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, wrap_scrollable_with_footer
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, JalaliDateEdit, LayoutEditMixin, wrap_scrollable_with_footer
 
-_COLUMNS = ["فعال", "رقمِ اعشار", "نماد", "کدِ ارز"]
-_RATE_COLUMNS = ["تاریخ", "نرخ به ارزِ پایه"]
+_COLUMNS = ["فعال", "رقم اعشار", "نماد", "کد ارز"]
+_RATE_COLUMNS = ["تاریخ", "نرخ به ارز پایه"]
 
 # طبقِ درخواستِ صریح («نرخِ بازارِ آزاد یا دولتی انتخابی باشه»): navasan.tech
 # بینِ نرخِ بازارِ آزاد و دولتی/نیمایی تفکیک دارد؛ این دو گزینه فقط برایِ
@@ -43,9 +43,9 @@ _RATE_COLUMNS = ["تاریخ", "نرخ به ارزِ پایه"]
 # navasan.tech فرق دارد، پس گزینه‌ی «سفارشی» هم هست تا کاربر خودش کلیدِ
 # دقیق را از داشبوردِ حسابش وارد کند.
 _NAVASAN_RATE_TYPES = [
-    ("usd_sell", "بازارِ آزاد (پیش‌فرضِ حدسی: usd_sell)"),
-    ("usd_harat_naghdi", "دولتی/نیمایی (پیش‌فرضِ حدسی: usd_harat_naghdi)"),
-    ("", "سفارشی — کلیدِ آیتم را خودم وارد می‌کنم"),
+    ("usd_sell", "بازار آزاد (پیش‌فرض حدسی: usd_sell)"),
+    ("usd_harat_naghdi", "دولتی/نیمایی (پیش‌فرض حدسی: usd_harat_naghdi)"),
+    ("", "سفارشی — کلید آیتم را خودم وارد می‌کنم"),
 ]
 _RATE_SOURCE_GLOBAL = "GLOBAL"
 _RATE_SOURCE_NAVASAN = "NAVASAN"
@@ -63,26 +63,35 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=1)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=1)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="ارز جدید")
         outer.addWidget(self._build_rate_panel(), stretch=2)
 
         self.set_field_help([
             (
                 self.iso_code_field,
-                "کدِ استانداردِ سه‌حرفیِ ارز — مثلاً IRR برایِ ریال یا USD برایِ دلار. "
-                "همین کد در فهرستِ «ارزِ پایه»یِ هر شرکت و همه‌جایِ برنامه استفاده می‌شود.",
+                "کد استاندارد سه‌حرفی ارز — مثلاً IRR برای ریال یا USD برای دلار. "
+                "همین کد در فهرست «ارز پایه»ی هر شرکت و همه‌جای برنامه استفاده می‌شود.",
             ),
-            (self.symbol_field, "نمادِ نمایشیِ ارز، مثلاً ﷼ یا $. فقط ظاهری است و در محاسبات اثر ندارد."),
+            (self.symbol_field, "نماد نمایشی ارز، مثلاً ﷼ یا $. فقط ظاهری است و در محاسبات اثر ندارد."),
             (
                 self.decimal_places_field,
-                "چند رقمِ اعشار برایِ مبالغِ این ارز نشان داده شود. برایِ ریال معمولاً صفر است. "
-                "برایِ دلار معمولاً ۲. تغییرِ این عدد فقط نمایش را عوض می‌کند، نه مبالغِ ذخیره‌شده را.",
+                "چند رقم اعشار برای مبالغ این ارز نشان داده شود. برای ریال معمولاً صفر است. "
+                "برای دلار معمولاً ۲. تغییر این عدد فقط نمایش را عوض می‌کند، نه مبالغ ذخیره‌شده را.",
             ),
             (
                 self.is_active_checkbox,
-                "ارزهایِ غیرِفعال دیگر در فهرستِ «ارزِ پایه» هنگامِ ساختنِ شرکتِ تازه نشان داده نمی‌شوند. "
+                "ارزهای غیرفعال دیگر در فهرست «ارز پایه» هنگام ساختن شرکت تازه نشان داده نمی‌شوند. "
                 "شرکت‌هایی که از قبل با این ارز کار می‌کنند مشکلی پیدا نمی‌کنند.",
             ),
+            (self.enable_for_company_checkbox, "دریافت خودکار نرخ روز این ارز برای شرکت جاری فعال است."),
+            (self.rate_value_field, "نرخ دستی این ارز به ارز پایه، برای تاریخ کنارش — وقتی دریافت خودکار فعال نیست به‌کار می‌رود."),
+            (self.rate_source_combo, "منبعی که نرخ روز خودکار از آن خوانده می‌شود."),
+            (self.navasan_api_key_field, "کلید API حساب شما در navasan.tech."),
+            (self.navasan_rate_type_combo, "نوع نرخی که از navasan.tech خوانده می‌شود (مثلاً دلار بازار آزاد)."),
+            (self.navasan_custom_item_field, "کلید دقیق آیتم سفارشی در navasan.tech — فقط اگر نوع نرخ موردنظر در فهرست بالا نبود."),
         ])
 
     def _build_list_panel(self) -> QWidget:
@@ -112,7 +121,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("ارزِ جدید")
+        self.form_title = QLabel("ارز جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -127,9 +136,9 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.is_active_checkbox.setChecked(True)
 
         self.basic_grid = FieldGrid([
-            FieldSpec("iso_code", "کدِ ارز (مثلاً IRR)", self.iso_code_field, span=1),
+            FieldSpec("iso_code", "کد ارز (مثلاً IRR)", self.iso_code_field, span=1),
             FieldSpec("symbol", "نماد", self.symbol_field, span=1),
-            FieldSpec("decimal_places", "رقمِ اعشار", self.decimal_places_field, span=1),
+            FieldSpec("decimal_places", "رقم اعشار", self.decimal_places_field, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
         layout.addWidget(self.basic_grid)
@@ -169,11 +178,11 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.rate_panel_title = QLabel("نرخِ ارز")
+        self.rate_panel_title = QLabel("نرخ ارز")
         self.rate_panel_title.setObjectName("pageTitle")
         layout.addWidget(self.rate_panel_title)
 
-        self.rate_panel_hint = QLabel("یک ارزِ غیرِپایه از فهرستِ سمتِ راست انتخاب کنید.")
+        self.rate_panel_hint = QLabel("یک ارز غیرپایه از فهرست سمت راست انتخاب کنید.")
         self.rate_panel_hint.setObjectName("sectionHint")
         self.rate_panel_hint.setWordWrap(True)
         layout.addWidget(self.rate_panel_hint)
@@ -183,7 +192,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(8)
 
-        self.enable_for_company_checkbox = QCheckBox("فعال برایِ شرکتِ جاری")
+        self.enable_for_company_checkbox = QCheckBox("فعال برای شرکت جاری")
         self.enable_for_company_checkbox.toggled.connect(self._on_enable_for_company_toggled)
         content_layout.addWidget(self.enable_for_company_checkbox)
 
@@ -210,10 +219,10 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         content_layout.addLayout(new_rate_row)
 
         source_row = QHBoxLayout()
-        source_row.addWidget(QLabel("منبعِ نرخِ خودکار:"))
+        source_row.addWidget(QLabel("منبع نرخ خودکار:"))
         self.rate_source_combo = QComboBox()
-        self.rate_source_combo.addItem("سرویسِ عمومیِ جهانی (بدونِ کلید)", _RATE_SOURCE_GLOBAL)
-        self.rate_source_combo.addItem("navasan.tech (اختصاصیِ ریال — بازارِ آزاد/دولتی)", _RATE_SOURCE_NAVASAN)
+        self.rate_source_combo.addItem("سرویس عمومی جهانی (بدون کلید)", _RATE_SOURCE_GLOBAL)
+        self.rate_source_combo.addItem("navasan.tech (اختصاصی ریال — بازار آزاد/دولتی)", _RATE_SOURCE_NAVASAN)
         self.rate_source_combo.currentIndexChanged.connect(self._on_rate_source_changed)
         source_row.addWidget(self.rate_source_combo, stretch=1)
         content_layout.addLayout(source_row)
@@ -224,7 +233,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         navasan_layout.setSpacing(6)
 
         navasan_key_row = QHBoxLayout()
-        navasan_key_row.addWidget(QLabel("کلیدِ API:"))
+        navasan_key_row.addWidget(QLabel("کلید API:"))
         self.navasan_api_key_field = QLineEdit()
         self.navasan_api_key_field.setEchoMode(QLineEdit.Password)
         self.navasan_api_key_field.editingFinished.connect(self._on_navasan_api_key_changed)
@@ -232,7 +241,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         navasan_layout.addLayout(navasan_key_row)
 
         navasan_type_row = QHBoxLayout()
-        navasan_type_row.addWidget(QLabel("نوعِ نرخ:"))
+        navasan_type_row.addWidget(QLabel("نوع نرخ:"))
         self.navasan_rate_type_combo = QComboBox()
         for item_key, label in _NAVASAN_RATE_TYPES:
             self.navasan_rate_type_combo.addItem(label, item_key)
@@ -241,7 +250,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         navasan_layout.addLayout(navasan_type_row)
 
         self.navasan_custom_item_field = QLineEdit()
-        self.navasan_custom_item_field.setPlaceholderText("کلیدِ آیتمِ navasan.tech، مثلاً usd_sell")
+        self.navasan_custom_item_field.setPlaceholderText("کلید آیتم navasan.tech، مثلاً usd_sell")
         self.navasan_custom_item_field.editingFinished.connect(
             lambda: QSettings("Peecha", "PeechaERP").setValue(
                 "fx/navasan_custom_item", self.navasan_custom_item_field.text().strip()
@@ -250,8 +259,8 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         navasan_layout.addWidget(self.navasan_custom_item_field)
 
         navasan_hint = QLabel(
-            "نام‌هایِ پیش‌فرضِ «بازارِ آزاد»/«دولتی» حدسی‌اند (فقط برایِ دلار). اگر جواب نداد یا ارزِ دیگری "
-            "می‌خواهید، کلیدِ دقیقِ آیتم را از داشبوردِ حسابِ خودتان در navasan.tech بردارید و این‌جا "
+            "نام‌های پیش‌فرض «بازار آزاد»/«دولتی» حدسی‌اند (فقط برای دلار). اگر جواب نداد یا ارز دیگری "
+            "می‌خواهید، کلید دقیق آیتم را از داشبورد حساب خودتان در navasan.tech بردارید و این‌جا "
             "(«سفارشی») وارد کنید."
         )
         navasan_hint.setObjectName("sectionHint")
@@ -262,7 +271,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.navasan_panel.setVisible(False)
 
         fetch_row = QHBoxLayout()
-        fetch_button = QPushButton("🌐 دریافتِ خودکار")
+        fetch_button = QPushButton("🌐 دریافت خودکار")
         fetch_button.setObjectName("flatButton")
         fetch_button.clicked.connect(self._on_fetch_live_rate)
         fetch_row.addWidget(fetch_button)
@@ -283,7 +292,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         save_rate_button = QPushButton("➕")
         save_rate_button.setObjectName("primaryIconButton")
         save_rate_button.setFixedWidth(48)
-        save_rate_button.setToolTip("ثبتِ نرخ")
+        save_rate_button.setToolTip("ثبت نرخ")
         save_rate_button.clicked.connect(self._on_save_rate)
         content_layout.addWidget(save_rate_button)
 
@@ -316,7 +325,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, currency: currencies_service.CurrencyRow) -> None:
         self._editing_id = currency.currency_id
-        self.form_title.setText(f"ویرایشِ ارز — {currency.iso_code}")
+        self.form_title.setText(f"ویرایش ارز — {currency.iso_code}")
         self.status_label.setText("")
         self.iso_code_field.setText(currency.iso_code)
         self.symbol_field.setText(currency.symbol or "")
@@ -328,7 +337,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("ارزِ جدید")
+        self.form_title.setText("ارز جدید")
         self.status_label.setText("")
         self.iso_code_field.clear()
         self.symbol_field.clear()
@@ -353,17 +362,17 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if currency is None or company_id is None:
             self.rate_panel_content.setVisible(False)
             self.rate_panel_hint.setVisible(True)
-            self.rate_panel_hint.setText("یک ارزِ غیرِپایه از فهرستِ سمتِ راست انتخاب کنید.")
+            self.rate_panel_hint.setText("یک ارز غیرپایه از فهرست سمت راست انتخاب کنید.")
             return
         if is_base:
             self.rate_panel_content.setVisible(False)
             self.rate_panel_hint.setVisible(True)
-            self.rate_panel_hint.setText(f"«{currency.iso_code}» ارزِ پایه‌یِ شرکتِ جاری است — نرخ همیشه ۱ است.")
+            self.rate_panel_hint.setText(f"«{currency.iso_code}» ارز پایهٔ شرکت جاری است — نرخ همیشه ۱ است.")
             return
 
         self.rate_panel_hint.setVisible(False)
         self.rate_panel_content.setVisible(True)
-        self.rate_panel_title.setText(f"نرخِ ارز — {currency.iso_code}")
+        self.rate_panel_title.setText(f"نرخ ارز — {currency.iso_code}")
         self.rate_status_label.setText("")
 
         company_currencies = currencies_service.list_company_currencies(company_id)
@@ -412,13 +421,13 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _update_fetch_hint(self) -> None:
         if self.rate_source_combo.currentData() == _RATE_SOURCE_NAVASAN:
             self.fetch_hint.setText(
-                "navasan.tech نرخِ اختصاصیِ ریال می‌دهد و بینِ بازارِ آزاد/دولتی تفکیک دارد — نیازمندِ کلیدِ API "
-                "است (رایگان از سایتِ خودشان بگیرید). این یک عددِ پیشنهادی است؛ قبل از ثبت بررسی کنید."
+                "navasan.tech نرخ اختصاصی ریال می‌دهد و بین بازار آزاد/دولتی تفکیک دارد — نیازمند کلید API "
+                "است (رایگان از سایت خودشان بگیرید). این یک عدد پیشنهادی است؛ قبل از ثبت بررسی کنید."
             )
         else:
             self.fetch_hint.setText(
-                "نرخِ خودکار از یک سرویسِ عمومیِ نرخِ ارز گرفته می‌شود؛ برایِ ریال ممکن است در دسترس نباشد یا "
-                "با نرخِ بازارِ آزاد فرق داشته باشد — قبل از ثبت آن را بررسی کنید."
+                "نرخ خودکار از یک سرویس عمومی نرخ ارز گرفته می‌شود؛ برای ریال ممکن است در دسترس نباشد یا "
+                "با نرخ بازار آزاد فرق داشته باشد — قبل از ثبت آن را بررسی کنید."
             )
 
     def _on_rate_source_changed(self) -> None:
@@ -491,7 +500,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _save(self) -> None:
         iso_code = self.iso_code_field.text().strip()
         if not iso_code:
-            self.status_label.setText("کدِ ارز را وارد کنید.")
+            self.status_label.setText("کد ارز را وارد کنید.")
             return
         symbol = self.symbol_field.text().strip() or None
         decimal_places = self.decimal_places_field.value()
@@ -525,7 +534,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ ارز", "این ارز حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف ارز", "این ارز حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

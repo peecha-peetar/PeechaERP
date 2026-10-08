@@ -1,17 +1,17 @@
-"""پایه‌یِ مشترکِ صفحاتِ گزارش — نوارِ فیلترِ بازه‌یِ تاریخ + وضعیتِ سند +
-جستجویِ متنی + نوارِ خروجی (چاپ/PDF/Excel) + جدولِ نتایج (ستون‌هایِ
-تغییرپذیر، بدونِ واحدِ پول، با فونتِ درشت‌تر برایِ خوانایی). پیرو الگویِ
-کشف‌شده در journal_entries_list.py: بدونِ QScrollArea اضافه (خودِ
-QTableWidget اسکرول می‌کند)، هدر/نوارها ثابت در VBoxِ بیرونی.
+"""پایهٔ مشترک صفحات گزارش — نوار فیلتر بازهٔ تاریخ + وضعیت سند +
+جستجوی متنی + نوار خروجی (چاپ/PDF/Excel) + جدول نتایج (ستون‌های
+تغییرپذیر، بدون واحد پول، با فونت درشت‌تر برای خوانایی). پیرو الگوی
+کشف‌شده در journal_entries_list.py: بدون QScrollArea اضافه (خود
+QTableWidget اسکرول می‌کند)، هدر/نوارها ثابت در VBox بیرونی.
 
-طبقِ درخواستِ صریح:
-- واحدِ پول از همه‌یِ گزارش‌ها حذف شد (فقط عدد، بدونِ نمادِ ارز).
-- فونتِ جدول درشت‌تر شد.
-- ستون‌ها با کشیدنِ لبه قابلِ‌تغییرِ عرض‌اند (Interactive، به‌جایِ حالتِ
-  پیش‌فرضِ نامشخص).
-- فیلترِ وضعیتِ سند (موقت/قطعی) و جستجویِ متنیِ نتایج در همه‌یِ گزارش‌ها
-  (این پایه) وجود دارد؛ فیلترهایِ پیشرفته‌ترِ اختیاری (بازه‌یِ کدِ حساب،
-  مرکزِ هزینه/پروژه، شماره‌یِ سند) هرکدام با یک متدِ enable_* توسطِ
+طبق درخواست صریح:
+- واحد پول از همهٔ گزارش‌ها حذف شد (فقط عدد، بدون نماد ارز).
+- فونت جدول درشت‌تر شد.
+- ستون‌ها با کشیدن لبه قابل‌تغییر عرض‌اند (Interactive، به‌جای حالت
+  پیش‌فرض نامشخص).
+- فیلتر وضعیت سند (موقت/قطعی) و جستجوی متنی نتایج در همهٔ گزارش‌ها
+  (این پایه) وجود دارد؛ فیلترهای پیشرفته‌تر اختیاری (بازهٔ کد حساب،
+  مرکز هزینه/پروژه، شمارهٔ سند) هرکدام با یک متد enable_* توسط
   زیرکلاسی که به آن نیاز دارد فعال می‌شوند."""
 
 from __future__ import annotations
@@ -19,15 +19,19 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFileDialog,
+    QMenu,
     QComboBox,
     QCompleter,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -38,26 +42,29 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import report_templates as report_templates_service
 from peecha.services.reports import code_in_range
 from peecha.ui import report_export
+from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
+from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
 
 _ZERO = decimal.Decimal("0")
 
 _STATUS_OPTIONS = [
-    ("EXCLUDE_DRAFT", "بدونِ پیش‌نویس (پیش‌فرض)"),
-    ("ALL", "همه (شاملِ پیش‌نویس)"),
+    ("EXCLUDE_DRAFT", "بدون پیش‌نویس (پیش‌فرض)"),
+    ("ALL", "همه (شامل پیش‌نویس)"),
     ("DRAFT_ONLY", "فقط پیش‌نویس"),
     ("PERMANENT_ONLY", "فقط دائم"),
 ]
 
 
 class _LiveAccountCodeField(QComboBox):
-    """طبقِ درخواستِ صریح («در فیلدِ از‌کد‌تا‌حساب جستجویِ زنده باشه و
-    بتوان کد را انتخاب کرد»): کمبویِ ویرایش‌پذیری که با تایپِ کد یا نام،
-    فهرستِ حساب‌ها فیلتر می‌شود. سازگار با API قدیمیِ QLineEdit
+    """طبق درخواست صریح («در فیلد از‌کد‌تا‌حساب جستجوی زنده باشه و
+    بتوان کد را انتخاب کرد»): فهرست ویرایش‌پذیری که با تایپ کد یا نام،
+    فهرست حساب‌ها فیلتر می‌شود. سازگار با API قدیمی QLineEdit
     (فقط .text()، که بقیه‌ی reports_common.py/زیرکلاس‌هایش استفاده
-    می‌کنند) نگه داشته شده تا نیازی به تغییرِ جایِ دیگر نباشد."""
+    می‌کنند) نگه داشته شده تا نیازی به تغییر جای دیگر نباشد."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -88,24 +95,24 @@ class _LiveAccountCodeField(QComboBox):
 
 
 def dimension_label(code: str) -> str:
-    """برچسبِ فارسیِ یک نوع‌بُعدِ تفصیلی برایِ فیلترهایِ گزارش — PERSON
-    (که خودش شخص نیست، فقط بسترِ مشتری/تامین‌کننده/پرسنل است) جداگانه
-    برچسب می‌گیرد، بقیه از SPECIALIZED_DIMENSION_LABELS یا کدِ خودشان."""
+    """برچسب فارسی یک نوع‌بُعد تفصیلی برای فیلترهای گزارش — PERSON
+    (که خودش شخص نیست، فقط بستر مشتری/تامین‌کننده/پرسنل است) جداگانه
+    برچسب می‌گیرد، بقیه از SPECIALIZED_DIMENSION_LABELS یا کد خودشان."""
     if code == dimensions_service.PERSON_DIMENSION_CODE:
         return "اشخاص (مشتری/تامین‌کننده/پرسنل)"
     return dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(code, code)
 
 
 def net_split(debit: decimal.Decimal, credit: decimal.Decimal) -> tuple[decimal.Decimal, decimal.Decimal]:
-    """مانده‌یِ خالص را به‌صورتِ یک‌طرفه (فقط بدهکار یا فقط بستانکار) برمی‌گرداند
-    — قراردادِ استانداردِ نمایشِ «مانده» در تراز/دفترِ کل."""
+    """ماندهٔ خالص را به‌صورت یک‌طرفه (فقط بدهکار یا فقط بستانکار) برمی‌گرداند
+    — قرارداد استاندارد نمایش «مانده» در تراز/دفتر کل."""
     net = debit - credit
     return (net, _ZERO) if net >= 0 else (_ZERO, -net)
 
 
 class ReportScreenBase(FieldHelpMixin, QWidget):
     """زیرکلاس‌ها باید `load_report(company_id, date_from, date_to)` را
-    override کنند و (headers, rows, footer) برگردانند؛ فیلترهایِ اختصاصیِ
+    override کنند و (headers, rows, footer) برگردانند؛ فیلترهای اختصاصی
     خودشان را می‌توانند به `self.extra_filter_row` اضافه کنند و در
     `load_report` از `self.status_filter()`/`self.code_range()`/
     `self.cost_center_id()`/`self.document_no_range()` استفاده کنند."""
@@ -132,8 +139,9 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self._row_bold: list[bool] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 14, 20, 14)
-        layout.setSpacing(16)
+        # R275: سرِ گزارش فشرده‌تر تا ردیف‌هایِ بیشتری دیده شود
+        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setSpacing(8)
 
         header = QHBoxLayout()
         title_label = QLabel(title)
@@ -141,6 +149,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         header.addWidget(title_label)
         header.addStretch(1)
         layout.addLayout(header)
+        self.header_row = header
 
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("از تاریخ:"))
@@ -150,7 +159,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self.date_to = JalaliDateEdit()
         filter_row.addWidget(self.date_to)
 
-        filter_row.addWidget(QLabel("وضعیتِ سند:"))
+        filter_row.addWidget(QLabel("وضعیت سند:"))
         self.status_combo = QComboBox()
         for value, label in _STATUS_OPTIONS:
             self.status_combo.addItem(label, value)
@@ -162,7 +171,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         apply_button = QPushButton("🔍")
         apply_button.setObjectName("primaryIconButton")
         apply_button.setFixedWidth(48)
-        apply_button.setToolTip("اعمالِ فیلتر")
+        apply_button.setToolTip("اعمال فیلتر")
         apply_button.clicked.connect(self._reload)
         filter_row.addWidget(apply_button)
         filter_row.addStretch(1)
@@ -171,20 +180,20 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         # فیلترهایِ پیشرفته‌یِ اختیاری — پیش‌فرض مخفی، هر زیرکلاسی که لازم
         # دارد با enable_* نمایانشان می‌کند.
         advanced_row = QHBoxLayout()
-        self.code_from_label = QLabel("از کدِ حساب:")
+        self.code_from_label = QLabel("از کد حساب:")
         self.code_from_field = _LiveAccountCodeField()
         self.code_from_field.setMinimumWidth(260)
         self.code_from_field.setMaximumWidth(420)
-        self.code_to_label = QLabel("تا کدِ حساب:")
+        self.code_to_label = QLabel("تا کد حساب:")
         self.code_to_field = _LiveAccountCodeField()
         self.code_to_field.setMinimumWidth(260)
         self.code_to_field.setMaximumWidth(420)
-        self.cost_center_label = QLabel("مرکزِ هزینه/پروژه:")
+        self.cost_center_label = QLabel("مرکز هزینه/پروژه:")
         self.cost_center_combo = QComboBox()
-        self.document_no_label = QLabel("از شماره‌یِ سند:")
+        self.document_no_label = QLabel("از شمارهٔ سند:")
         self.document_no_field = PersianDigitLineEdit()
         self.document_no_field.setMaximumWidth(110)
-        self.document_no_to_label = QLabel("تا شماره‌یِ سند:")
+        self.document_no_to_label = QLabel("تا شمارهٔ سند:")
         self.document_no_to_field = PersianDigitLineEdit()
         self.document_no_to_field.setMaximumWidth(110)
         for widget in (
@@ -216,15 +225,46 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         print_button.clicked.connect(self._on_print)
         search_row.addWidget(print_button)
 
-        pdf_button = QPushButton("📄 خروجیِ PDF")
+        pdf_button = QPushButton("📄 خروجی PDF")
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
         search_row.addWidget(pdf_button)
 
-        excel_button = QPushButton("📊 خروجیِ Excel")
+        excel_button = QPushButton("📊 خروجی Excel")
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
         search_row.addWidget(excel_button)
+
+        # R239: CSV، کپی و انتخابِ ستون‌ها (ستون‌هایِ پنهان در چاپ/خروجی هم نمی‌آیند)
+        csv_button = QPushButton("CSV")
+        csv_button.setObjectName("flatButton")
+        csv_button.setToolTip("خروجی CSV (UTF-8، اعداد بدون جداکننده)")
+        csv_button.clicked.connect(self._on_export_csv)
+        search_row.addWidget(csv_button)
+        copy_button = QPushButton("کپی")
+        copy_button.setObjectName("flatButton")
+        copy_button.setToolTip("کپی ردیف‌های انتخاب‌شده (یا همه) برای چسباندن در اکسل")
+        copy_button.clicked.connect(self._on_copy)
+        search_row.addWidget(copy_button)
+        self.columns_button = QPushButton("ستون‌ها")
+        self.columns_button.setObjectName("flatButton")
+        self.columns_button.setToolTip("نمایش/پنهان‌کردن ستون‌ها — برای همین گزارش ذخیره می‌شود")
+        self.columns_button.clicked.connect(self._on_choose_columns)
+        search_row.addWidget(self.columns_button)
+
+        # طبقِ درخواستِ صریح («این قابلیت برایِ بقیه‌یِ گزارش‌ها هم باشد»):
+        # زیرکلاسی که چاپِ حرفه‌ای (Jasper) برایش آماده شده با
+        # enable_jasper_report(form_code) این دکمه را نمایان می‌کند --
+        # پیش‌فرض مخفی، چون هنوز همه‌یِ گزارش‌ها قالبِ jrxml ندارند.
+        self.jasper_form_code: str | None = None
+        self.jasper_report_button = QPushButton("📄 گزارش حرفه‌ای")
+        self.jasper_report_button.setToolTip(
+            "اجرای یکی از گزارش‌های حرفه‌ای تخصیص‌داده‌شده به این فرم -- "
+            "برای تعریف/ویرایش گزارش‌ها به «تنظیمات سیستم ›  گزارش‌های حرفه‌ای» مراجعه کنید."
+        )
+        self.jasper_report_button.clicked.connect(self._on_jasper_report)
+        self.jasper_report_button.setVisible(False)
+        search_row.addWidget(self.jasper_report_button)
         layout.addLayout(search_row)
 
         self.table = QTableWidget(0, 0)
@@ -251,36 +291,36 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         # اضافه می‌کنند، می‌توانند با self.add_field_help(...) موارد
         # بیشتری هم ثبت کنند.
         self.set_field_help([
-            (self.date_from, "ابتدایِ بازه‌یِ گزارش، به شمسی. یعنی از کجایِ زمان گزارش را می‌خواهید ببینید."),
-            (self.date_to, "انتهایِ بازه‌یِ گزارش، به شمسی. در گزارش‌هایِ ترازنامه‌ای، همین تاریخ برایِ گرفتنِ مانده استفاده می‌شود."),
+            (self.date_from, "ابتدای بازهٔ گزارش، به شمسی. یعنی از کجای زمان گزارش را می‌خواهید ببینید."),
+            (self.date_to, "انتهای بازهٔ گزارش، به شمسی. در گزارش‌های ترازنامه‌ای، همین تاریخ برای گرفتن مانده استفاده می‌شود."),
             (
                 self.status_combo,
-                "کدام اسناد در گزارش بیایند؟ «بدونِ پیش‌نویس» یعنی فقط اسنادِ قطعی — این پیش‌فرض است. "
-                "«همه» یعنی پیش‌نویس‌ها هم بیایند. «فقط پیش‌نویس» یعنی فقط سندهایِ هنوز ثبت‌نشده.",
+                "کدام اسناد در گزارش بیایند؟ «بدون پیش‌نویس» یعنی فقط اسناد قطعی — این پیش‌فرض است. "
+                "«همه» یعنی پیش‌نویس‌ها هم بیایند. «فقط پیش‌نویس» یعنی فقط سندهای هنوز ثبت‌نشده.",
             ),
             (
                 self.search_field,
-                "جستجویِ زنده در همین نتایج — رویِ کد، نام یا شرحِ هر ردیف. گزارش را دوباره اجرا نمی‌کند.",
+                "جستجوی زنده در همین نتایج — روی کد، نام یا شرح هر ردیف. گزارش را دوباره اجرا نمی‌کند.",
             ),
             (
                 self.code_from_field,
-                "کدِ حسابِ شروعِ بازه. با تایپِ کد یا نام، فهرستِ زنده‌ی حساب‌ها فیلتر می‌شود و می‌توانید انتخاب کنید؛ "
+                "کد حساب شروع بازه. با تایپ کد یا نام، فهرست زندهٔ حساب‌ها فیلتر می‌شود و می‌توانید انتخاب کنید؛ "
                 "دستی تایپ‌کردن هم جواب می‌دهد. اختیاری است؛ اگر خالی بماند، از ابتدا محدودیتی ندارد.",
             ),
             (
                 self.code_to_field,
-                "کدِ حسابِ پایانِ بازه — مثلِ فیلدِ «از کدِ حساب»، با جستجویِ زنده. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد.",
+                "کد حساب پایان بازه — مثل فیلد «از کد حساب»، با جستجوی زنده. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد.",
             ),
-            (self.cost_center_combo, "فقط اسنادِ همین مرکزِ هزینه یا پروژه نشان داده شوند. «همه» یعنی بدونِ این فیلتر."),
-            (self.document_no_field, "شماره‌یِ سندِ شروعِ بازه. اختیاری است؛ اگر خالی بماند، از ابتدا محدودیتی ندارد."),
-            (self.document_no_to_field, "شماره‌یِ سندِ پایانِ بازه. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد."),
+            (self.cost_center_combo, "فقط اسناد همین مرکز هزینه یا پروژه نشان داده شوند. «همه» یعنی بدون این فیلتر."),
+            (self.document_no_field, "شمارهٔ سند شروع بازه. اختیاری است؛ اگر خالی بماند، از ابتدا محدودیتی ندارد."),
+            (self.document_no_to_field, "شمارهٔ سند پایان بازه. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد."),
         ])
 
     def add_field_help(self, fields: list[tuple[QWidget, str]]) -> None:
-        """زیرکلاس‌هایی که فیلترهایِ اختصاصیِ خودشان را دارند، با این متد
-        (به‌جایِ صدازدنِ set_field_help که فهرستِ پایه را جایگزین می‌کند)
-        فیلدهایِ بیشتری به همان راهنمایِ مشترک اضافه می‌کنند."""
-        self._field_help_fields = [*self._field_help_fields, *fields]
+        """زیرکلاس‌هایی که فیلترهای اختصاصی خودشان را دارند، با این متد
+        (به‌جای صدازدن set_field_help که فهرست پایه را جایگزین می‌کند)
+        فیلدهای بیشتری به همان راهنمای مشترک اضافه می‌کنند."""
+        self.set_field_help(fields)
 
     # --- فعال‌سازیِ فیلترهایِ پیشرفته‌یِ اختیاری، توسطِ زیرکلاس -----------
     def enable_code_range_filter(self) -> None:
@@ -290,6 +330,38 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     def enable_cost_center_filter(self) -> None:
         self.cost_center_label.setVisible(True)
         self.cost_center_combo.setVisible(True)
+
+    def enable_jasper_report(self, form_code: str) -> None:
+        """زیرکلاسی که یک قالب jrxml برای خودش دارد (و
+        _build_jasper_rows_and_params را override کرده) این را در
+        __init__ صدا می‌زند تا دکمهٔ «📄 گزارش حرفه‌ای» نمایان شود."""
+        self.jasper_form_code = form_code
+        self.jasper_report_button.setVisible(True)
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        """زیرکلاس‌هایی که enable_jasper_report را صدا می‌زنند این را
+        override می‌کنند: self._rows/self._footer همین فعلاً روی صفحه
+        (بعد فیلتر/جستجو) را به دیکشنری‌های هم‌نام فیلدهای قالب jrxml
+        تبدیل می‌کند. اگر حالت فعلی فیلترها را پشتیبانی نمی‌کند، خودش
+        پیام راهنما نشان می‌دهد و None برمی‌گرداند."""
+        raise NotImplementedError
+
+    def _on_jasper_report(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self.jasper_form_code is None:
+            return
+        built = self._build_jasper_rows_and_params()
+        if built is None:
+            return
+        print_rows, params = built
+
+        template_row = pick_report_template(self, company_id, self.jasper_form_code)
+        if template_row is None:
+            return
+        jrxml_path = report_templates_service.get_template_path(template_row.report_template_id, company_id)
+
+        dialog = JasperReportPreviewDialog(self, jrxml_path, print_rows, params, self._title, title=self._title)
+        dialog.exec()
 
     def enable_document_no_filter(self) -> None:
         self.document_no_label.setVisible(True)
@@ -316,18 +388,18 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                 )
 
     def code_range_account_level(self) -> int | None:
-        """زیرکلاس‌هایی که کمبویِ «سطح» (گروه/کل/معین/تفصیلی) دارند این را
-        override می‌کنند تا طبقِ درخواستِ صریح، فهرستِ زنده‌ی کدِ حساب فقط
-        به همان سطحِ انتخاب‌شده محدود بماند (نه همه‌ی سطوح با هم). مقدارِ
-        پیش‌فرض None یعنی بدونِ محدودیت (گزارش‌هایی که سطح ندارند)."""
+        """زیرکلاس‌هایی که فهرست «سطح» (گروه/کل/معین/تفصیلی) دارند این را
+        override می‌کنند تا طبق درخواست صریح، فهرست زندهٔ کد حساب فقط
+        به همان سطح انتخاب‌شده محدود بماند (نه همهٔ سطوح با هم). مقدار
+        پیش‌فرض None یعنی بدون محدودیت (گزارش‌هایی که سطح ندارند)."""
         return None
 
     def code_range_detail_options(self) -> list[tuple[str, str]] | None:
-        """زیرکلاس‌هایی که سطحِ تفصیلی (۴) را هم در کمبویِ «سطح» دارند، این
-        را override می‌کنند تا وقتی code_range_account_level() برابرِ ۴
-        است، فهرستِ زنده‌ی بازه‌یِ کد از رویِ حساب‌هایِ تفصیلیِ همان نوع‌بُعدِ
-        انتخاب‌شده ساخته شود (نه از رویِ حساب‌هایِ کدینگیِ گروه/کل/معین).
-        None یعنی این گزارش سطحِ تفصیلی ندارد."""
+        """زیرکلاس‌هایی که سطح تفصیلی (۴) را هم در فهرست «سطح» دارند، این
+        را override می‌کنند تا وقتی code_range_account_level() برابر ۴
+        است، فهرست زندهٔ بازهٔ کد از روی حساب‌های تفصیلی همان نوع‌بُعد
+        انتخاب‌شده ساخته شود (نه از روی حساب‌های کدینگی گروه/کل/معین).
+        None یعنی این گزارش سطح تفصیلی ندارد."""
         return None
 
     def _reload_code_range_options(self) -> None:
@@ -443,6 +515,21 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                 item.setFont(font)
                 self.table.setItem(footer_row, col_index, item)
         self.table.resizeColumnsToContents()
+        hidden = self.hidden_columns()
+        for col_index, header in enumerate(headers):
+            self.table.setColumnHidden(col_index, header in hidden)
+        self._fill_table_width()
+
+    def _fill_table_width(self) -> None:
+        """R275: فضای خالی کنار جدول به نسبت عرض ستون‌ها پخش می‌شود تا جدول کل عرض را بگیرد."""
+        columns = [c for c in range(self.table.columnCount()) if not self.table.isColumnHidden(c)]
+        used = sum(self.table.columnWidth(c) for c in columns)
+        extra = self.table.viewport().width() - used
+        if not columns or used <= 0 or extra <= 0:
+            return
+        for c in columns:
+            width = self.table.columnWidth(c)
+            self.table.setColumnWidth(c, width + extra * width // used)
 
     def load_report(
         self, company_id: int, date_from: datetime.date, date_to: datetime.date
@@ -451,8 +538,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
 
     # --- سربرگِ چاپ/PDF/Excel: نامِ شرکت + تاریخِ گزارش + فیلترها --------
     def extra_filters_summary(self) -> list[tuple[str, str]]:
-        """زیرکلاس‌هایی که فیلترِ اختصاصیِ خودشان را دارند (extra_filter_row)
-        این متد را override می‌کنند تا همان فیلترها هم در سربرگِ چاپ/PDF/
+        """زیرکلاس‌هایی که فیلتر اختصاصی خودشان را دارند (extra_filter_row)
+        این متد را override می‌کنند تا همان فیلترها هم در سربرگ چاپ/PDF/
         Excel، به همان ترتیبی که در فرم دیده می‌شوند، ظاهر شوند."""
         return []
 
@@ -464,24 +551,112 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         parts: list[tuple[str, str]] = [
             ("از تاریخ", numerals.format_jalali_date(self.date_from.date())),
             ("تا تاریخ", numerals.format_jalali_date(self.date_to.date())),
-            ("وضعیتِ سند", self.status_combo.currentText()),
+            ("وضعیت سند", self.status_combo.currentText()),
         ]
         if self.code_from_field.isVisibleTo(self) and (
             self.code_from_field.text().strip() or self.code_to_field.text().strip()
         ):
-            parts.append(("بازه‌یِ کد", f"{self.code_from_field.text().strip()} تا {self.code_to_field.text().strip()}"))
+            parts.append(("بازهٔ کد", f"{self.code_from_field.text().strip()} تا {self.code_to_field.text().strip()}"))
         if self.cost_center_combo.isVisibleTo(self) and self.cost_center_combo.currentData() is not None:
-            parts.append(("مرکزِ هزینه/پروژه", self.cost_center_combo.currentText()))
+            parts.append(("مرکز هزینه/پروژه", self.cost_center_combo.currentText()))
         if self.document_no_field.isVisibleTo(self) and (
             self.document_no_field.text().strip() or self.document_no_to_field.text().strip()
         ):
             parts.append(
-                ("شماره‌یِ سند", f"{self.document_no_field.text().strip()} تا {self.document_no_to_field.text().strip()}")
+                ("شمارهٔ سند", f"{self.document_no_field.text().strip()} تا {self.document_no_to_field.text().strip()}")
             )
         parts.extend(self.extra_filters_summary())
         if self.search_field.text().strip():
             parts.append(("جستجو در نتایج", self.search_field.text().strip()))
         return parts
+
+    # --- R239: ستون‌هایِ پنهان، CSV و کپی ------------------------------------
+    def _columns_key(self) -> str:
+        return f"reportColumns/{self._title}"
+
+    def hidden_columns(self) -> set[str]:
+        value = QSettings("Peecha", "PeechaERP").value(self._columns_key(), [])
+        return set([value] if isinstance(value, str) else (value or []))
+
+    def set_hidden_columns(self, headers: set[str]) -> None:
+        QSettings("Peecha", "PeechaERP").setValue(self._columns_key(), sorted(headers))
+        for col_index, header in enumerate(self._headers):
+            self.table.setColumnHidden(col_index, header in headers)
+
+    def _on_choose_columns(self) -> None:
+        menu = QMenu(self)
+        hidden = self.hidden_columns()
+        for header in self._headers:
+            action = menu.addAction(header)
+            action.setCheckable(True)
+            action.setChecked(header not in hidden)
+            action.toggled.connect(lambda checked, h=header: self._toggle_column(h, checked))
+        menu.addSeparator()
+        menu.addAction("نمایش همهٔ ستون‌ها").triggered.connect(lambda: self.set_hidden_columns(set()))
+        menu.exec(self.columns_button.mapToGlobal(self.columns_button.rect().bottomLeft()))
+
+    def _toggle_column(self, header: str, visible: bool) -> None:
+        hidden = self.hidden_columns()
+        if visible:
+            hidden.discard(header)
+        elif len([h for h in self._headers if h not in hidden]) > 1:
+            hidden.add(header)
+        self.set_hidden_columns(hidden)
+
+    def _export_data(self) -> tuple[list[str], list[list], list | None]:
+        """دادهٔ چاپ/خروجی = ردیف‌های فعلی روی صفحه، بدون ستون‌های پنهان."""
+        hidden = self.hidden_columns()
+        keep = [i for i, h in enumerate(self._headers) if h not in hidden]
+        if len(keep) == len(self._headers):
+            return self._headers, self._rows, self._footer
+        pick = lambda row: [row[i] if i < len(row) else "" for i in keep]  # noqa: E731
+        footer = pick(self._footer) if self._footer else None
+        if footer and self._footer and keep and keep[0] != 0 and not str(footer[0]).strip():
+            footer[0] = self._footer[0]
+        return [self._headers[i] for i in keep], [pick(r) for r in self._rows], footer
+
+    @staticmethod
+    def _plain(value) -> str:
+        """عدد نمایشی (ارقام فارسی/جداکننده) → عدد ساده برای CSV؛ متن دست‌نخورده."""
+        text = numerals.to_ascii_digits(str(value)).strip()
+        candidate = text.replace(",", "").replace("٬", "").replace("٫", ".").rstrip("٪%").strip()
+        try:
+            decimal.Decimal(candidate)
+        except (decimal.InvalidOperation, ValueError):
+            return numerals.to_ascii_digits(str(value)) if "/" in text and text.replace("/", "").isdigit() else str(value)
+        return candidate
+
+    def csv_text(self) -> str:
+        import csv
+        import io
+
+        headers, rows, footer = self._export_data()
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+        for row in rows + ([footer] if footer else []):
+            writer.writerow([self._plain(v) for v in row])
+        return buffer.getvalue()
+
+    def _on_export_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "خروجی CSV", f"{self._title}.csv", "CSV (*.csv)")
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8-sig", newline="") as handle:
+            handle.write(self.csv_text())
+
+    def copy_text(self) -> str:
+        headers, rows, footer = self._export_data()
+        offset = getattr(self, "_page_offset", 0)  # R247: صفحه‌بندیِ جدول
+        selected = sorted({i.row() + offset for i in self.table.selectedIndexes()})
+        if selected and len(self._rows) == len(rows):
+            rows = [rows[i] for i in selected if i < len(rows)]
+            footer = None
+        lines = ["\t".join(headers)] + ["\t".join(str(v) for v in row) for row in rows + ([footer] if footer else [])]
+        return "\n".join(lines)
+
+    def _on_copy(self) -> None:
+        QGuiApplication.clipboard().setText(self.copy_text())
 
     def _export_kwargs(self) -> dict:
         return {
@@ -491,15 +666,15 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         }
 
     def _prompt_print_options(self) -> "report_export.PrintOptions | None":
-        """طبقِ درخواستِ صریح («تنظیماتِ هر گزارش ذخیره بشه، هر بار تغییر
-        نکنه»): پیش از هر چاپ/PDF/اکسل، فرمِ تنظیماتِ چاپ (اندازه‌یِ
-        فونت، عرضِ ستون‌ها، متنِ هدر/فوتر، ردیف‌درصفحه) باز می‌شود؛
-        انتخابِ کاربر با QSettings رویِ دیسک (نه فقط در حافظه‌ی همین
-        اجرا) ذخیره می‌شود — یعنی حتی بعدِ بستن‌وبازکردنِ برنامه هم
-        همان تنظیماتِ قبلی به‌عنوانِ پیش‌فرض می‌آید."""
+        """طبق درخواست صریح («تنظیمات هر گزارش ذخیره بشه، هر بار تغییر
+        نکنه»): پیش از هر چاپ/PDF/اکسل، فرم تنظیمات چاپ (اندازهٔ
+        فونت، عرض ستون‌ها، متن هدر/فوتر، ردیف‌درصفحه) باز می‌شود؛
+        انتخاب کاربر با QSettings روی دیسک (نه فقط در حافظهٔ همین
+        اجرا) ذخیره می‌شود — یعنی حتی بعد بستن‌وبازکردن برنامه هم
+        همان تنظیمات قبلی به‌عنوان پیش‌فرض می‌آید."""
         defaults = getattr(self, "_last_print_options", None) or report_export.load_print_options(self._title)
         options = report_export.prompt_print_options(
-            self, self._title, self._headers, defaults, **self._export_kwargs()
+            self, self._title, self._export_data()[0], defaults, **self._export_kwargs()
         )
         if options is not None:
             self._last_print_options = options
@@ -508,33 +683,27 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
 
     def _on_print(self) -> None:
         if not self._rows:
-            report_export.print_report(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            report_export.print_report(self, self._title, *self._export_data(), **self._export_kwargs())
             return
         options = self._prompt_print_options()
         if options is None:
             return
-        report_export.print_report(
-            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
-        )
+        report_export.print_report(self, self._title, *self._export_data(), options=options, **self._export_kwargs())
 
     def _on_export_pdf(self) -> None:
         if not self._rows:
-            report_export.export_report_pdf(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            report_export.export_report_pdf(self, self._title, *self._export_data(), **self._export_kwargs())
             return
         options = self._prompt_print_options()
         if options is None:
             return
-        report_export.export_report_pdf(
-            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
-        )
+        report_export.export_report_pdf(self, self._title, *self._export_data(), options=options, **self._export_kwargs())
 
     def _on_export_excel(self) -> None:
         if not self._rows:
-            report_export.export_report_excel(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            report_export.export_report_excel(self, self._title, *self._export_data(), **self._export_kwargs())
             return
         options = self._prompt_print_options()
         if options is None:
             return
-        report_export.export_report_excel(
-            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
-        )
+        report_export.export_report_excel(self, self._title, *self._export_data(), options=options, **self._export_kwargs())

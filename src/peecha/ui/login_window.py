@@ -1,14 +1,14 @@
-"""پنجره‌ی ورود + تنظیماتِ اتصال به دیتابیس + راه‌اندازیِ اولیه‌ی سیستم.
+"""پنجرهٔ ورود + تنظیمات اتصال به دیتابیس + راه‌اندازی اولیهٔ سیستم.
 
-سه صفحه‌ی این فایل معادلِ Qt برایِ login.py/connection_settings.py/
-admin_bootstrap.py در نسخه‌ی Kivی هستند — که در حذفِ کاملِ Kivی
+سه صفحهٔ این فایل معادل Qt برای login.py/connection_settings.py/
+admin_bootstrap.py در نسخه‌ی Kivی هستند — که در حذف کامل Kivی
 (commit 3afe0bb) پاک شدند ولی هرگز به Qt6 منتقل نشدند؛ نبودشان یعنی وقتی
-دیتابیس وجود ندارد/خالی است، کاربر هیچ راهی برایِ تنظیمِ اتصال یا ساختِ
-اولین کاربر/شرکت نداشت (فقط یک فرمِ ورودِ ساده که در نبودِ دیتابیس، بدونِ
+دیتابیس وجود ندارد/خالی است، کاربر هیچ راهی برای تنظیم اتصال یا ساخت
+اولین کاربر/شرکت نداشت (فقط یک فرم ورود ساده که در نبود دیتابیس، بدون
 هیچ پیغامی شکست می‌خورد).
 
-هیچ shape()/reshape/bidi دستی لازم نیست: Qt خودش موتورِ متنِ کاملِ
-bidi/شکل‌دهیِ عربی/فارسی دارد (بر خلافِ Kivی)."""
+هیچ shape()/reshape/bidi دستی لازم نیست: Qt خودش موتور متن کامل
+bidi/شکل‌دهی عربی/فارسی دارد (بر خلاف Kivی)."""
 
 from __future__ import annotations
 
@@ -47,12 +47,12 @@ from peecha.ui import theme
 # فیلدها و دکمه با objectNameهایِ شناخته‌شده از QSS سراسری (theme.GLOBAL_QSS)
 # استفاده می‌کنند تا هم‌شکلِ بقیه‌ی برنامه باشند.
 def _build_style() -> str:
-    """طبقِ باگِ واقعیِ کشف‌شده (سوییچِ روشن/تیره): این قبلاً یک ثابتِ
-    سطحِ ماژول بود که فقط یک‌بار، در لحظه‌یِ importِ فایل، رنگ‌هایِ
-    theme.* را می‌خواند — یعنی بعدِ سوییچِ تم و logout (که یک
-    LoginWindowِ تازه می‌سازد)، همچنان رنگِ همانِ تمی را نشان می‌داد که
-    برنامه اولین‌بار با آن اجرا شده بود. حالا در هر بارِ ساختِ پنجره
-    (`__init__`) دوباره صدا زده می‌شود تا رنگِ تازه‌یِ تم را بخواند."""
+    """طبق باگ واقعی کشف‌شده (سوییچ روشن/تیره): این قبلاً یک ثابت
+    سطح ماژول بود که فقط یک‌بار، در لحظهٔ import فایل، رنگ‌های
+    theme.* را می‌خواند — یعنی بعد سوییچ تم و logout (که یک
+    LoginWindow تازه می‌سازد)، همچنان رنگ همان تمی را نشان می‌داد که
+    برنامه اولین‌بار با آن اجرا شده بود. حالا در هر بار ساخت پنجره
+    (`__init__`) دوباره صدا زده می‌شود تا رنگ تازهٔ تم را بخواند."""
     return f"""
 QLabel#brandTitle {{
     font-size: 26px;
@@ -142,7 +142,7 @@ class LoginWindow(QStackedWidget):
         card_layout.addWidget(login_button)
 
         # طبقِ رفتارِ نسخه‌ی Kivی: فقط وقتی sec.users خالی است نمایان می‌شود.
-        self.bootstrap_button = QPushButton("راه‌اندازیِ اولیه‌ی سیستم")
+        self.bootstrap_button = QPushButton("راه‌اندازی اولیهٔ سیستم")
         self.bootstrap_button.setObjectName("flatButton")
         self.bootstrap_button.setCursor(Qt.PointingHandCursor)
         self.bootstrap_button.clicked.connect(self._open_bootstrap)
@@ -151,7 +151,7 @@ class LoginWindow(QStackedWidget):
 
         # همیشه در دسترس (نه فقط وقتی اتصال شکست می‌خورد) — تا کاربر هر
         # وقت لازم شد بتواند دیتابیسِ دیگری را هدف بگیرد.
-        connection_button = QPushButton("تنظیماتِ اتصال به دیتابیس")
+        connection_button = QPushButton("تنظیمات اتصال به دیتابیس")
         connection_button.setObjectName("flatButton")
         connection_button.setCursor(Qt.PointingHandCursor)
         connection_button.clicked.connect(self._open_connection_settings)
@@ -181,7 +181,7 @@ class LoginWindow(QStackedWidget):
             self.bootstrap_button.setVisible(True)
             self.status_label.setObjectName("sectionHint")
             self.status_label.setStyleSheet("")
-            self.status_label.setText("هنوز کاربری ثبت نشده — از دکمه‌ی زیر شروع کنید.")
+            self.status_label.setText("هنوز کاربری ثبت نشده — از دکمهٔ زیر شروع کنید.")
         self.username_field.setFocus()
 
     def _attempt_login(self) -> None:
@@ -247,7 +247,7 @@ class LoginWindow(QStackedWidget):
         card_layout = QVBoxLayout()
         card = _card(card_layout)
 
-        heading = QLabel("تنظیماتِ اتصال به دیتابیس")
+        heading = QLabel("تنظیمات اتصال به دیتابیس")
         heading.setObjectName("heading")
         card_layout.addWidget(heading)
 
@@ -263,7 +263,7 @@ class LoginWindow(QStackedWidget):
         self.conn_port_field.setRange(1, 65535)
         grid.addWidget(self.conn_port_field, 1, 1)
 
-        grid.addWidget(QLabel("نامِ دیتابیس"), 2, 0)
+        grid.addWidget(QLabel("نام دیتابیس"), 2, 0)
         self.conn_name_field = QLineEdit()
         grid.addWidget(self.conn_name_field, 2, 1)
 
@@ -271,7 +271,7 @@ class LoginWindow(QStackedWidget):
         self.conn_user_field = QLineEdit()
         grid.addWidget(self.conn_user_field, 3, 1)
 
-        grid.addWidget(QLabel("رمزِ عبور"), 4, 0)
+        grid.addWidget(QLabel("رمز عبور"), 4, 0)
         self.conn_password_field = QLineEdit()
         self.conn_password_field.setEchoMode(QLineEdit.Password)
         grid.addWidget(self.conn_password_field, 4, 1)
@@ -283,7 +283,7 @@ class LoginWindow(QStackedWidget):
         self.connection_status_label.setWordWrap(True)
         card_layout.addWidget(self.connection_status_label)
 
-        test_button = QPushButton("تستِ اتصال")
+        test_button = QPushButton("تست اتصال")
         test_button.setObjectName("flatButton")
         test_button.clicked.connect(self._test_connection)
         card_layout.addWidget(test_button)
@@ -292,12 +292,12 @@ class LoginWindow(QStackedWidget):
         # بود: «ساختِ جدول‌ها» فقط داخلِ یک دیتابیسِ از-قبل-موجود کار
         # می‌کند؛ این دکمه خودِ دیتابیس را (اگر نبود) با اتصال به دیتابیسِ
         # نگهداریِ postgres می‌سازد.
-        create_database_button = QPushButton("ساختِ دیتابیس (اگر وجود ندارد)")
+        create_database_button = QPushButton("ساخت دیتابیس (اگر وجود ندارد)")
         create_database_button.setObjectName("flatButton")
         create_database_button.clicked.connect(self._create_database)
         card_layout.addWidget(create_database_button)
 
-        create_tables_button = QPushButton("ساخت/به‌روزرسانیِ جدول‌های دیتابیس")
+        create_tables_button = QPushButton("ساخت/به‌روزرسانی جدول‌های دیتابیس")
         create_tables_button.setObjectName("flatButton")
         create_tables_button.clicked.connect(self._create_tables)
         card_layout.addWidget(create_tables_button)
@@ -344,29 +344,29 @@ class LoginWindow(QStackedWidget):
         self.connection_status_label.setText(message)
 
     def _test_connection(self) -> None:
-        self._set_connection_status("در حالِ بررسیِ اتصال...", ok=True)
+        self._set_connection_status("در حال بررسی اتصال...", ok=True)
         ok, message = test_connection(self._current_connection_config())
         self._set_connection_status("اتصال موفق بود." if ok else f"اتصال ناموفق: {message}", ok=ok)
 
     def _create_database(self) -> None:
-        self._set_connection_status("در حالِ بررسی/ساختِ دیتابیس...", ok=True)
+        self._set_connection_status("در حال بررسی/ساخت دیتابیس...", ok=True)
         ok, message = create_database_if_missing(self._current_connection_config())
         self._set_connection_status(message, ok=ok)
 
     def _create_tables(self) -> None:
         from sqlalchemy import create_engine
 
-        self._set_connection_status("در حالِ بررسی/ساختِ جدول‌ها...", ok=True)
+        self._set_connection_status("در حال بررسی/ساخت جدول‌ها...", ok=True)
         config = self._current_connection_config()
         engine = create_engine(config.sqlalchemy_url, future=True)
         try:
             applied = apply_pending_schema_files(engine)
             if applied:
-                self._set_connection_status("جدول‌هایِ دیتابیس با موفقیت ساخته/به‌روزرسانی شدند.", ok=True)
+                self._set_connection_status("جدول‌های دیتابیس با موفقیت ساخته/به‌روزرسانی شدند.", ok=True)
             else:
                 self._set_connection_status("جدول‌ها از قبل ساخته شده‌اند؛ کاری لازم نبود.", ok=True)
         except SQLAlchemyError as exc:
-            self._set_connection_status(f"ساختِ جدول‌ها ناموفق بود: {exc.__cause__ or exc}", ok=False)
+            self._set_connection_status(f"ساخت جدول‌ها ناموفق بود: {exc.__cause__ or exc}", ok=False)
         finally:
             engine.dispose()
 
@@ -390,34 +390,34 @@ class LoginWindow(QStackedWidget):
         card_layout = QVBoxLayout()
         card = _card(card_layout)
 
-        heading = QLabel("راه‌اندازیِ اولیه‌ی سیستم")
+        heading = QLabel("راه‌اندازی اولیهٔ سیستم")
         heading.setObjectName("heading")
         card_layout.addWidget(heading)
 
-        hint = QLabel("اولین شرکت و اولین کاربرِ مدیرِ سیستم را یک‌جا بسازید.")
+        hint = QLabel("اولین شرکت و اولین کاربر مدیر سیستم را یک‌جا بسازید.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         card_layout.addWidget(hint)
 
         self.bootstrap_company_field = QLineEdit()
-        self.bootstrap_company_field.setPlaceholderText("نامِ شرکت")
+        self.bootstrap_company_field.setPlaceholderText("نام شرکت")
         card_layout.addWidget(self.bootstrap_company_field)
 
         self.bootstrap_username_field = QLineEdit()
-        self.bootstrap_username_field.setPlaceholderText("نامِ کاربری")
+        self.bootstrap_username_field.setPlaceholderText("نام کاربری")
         card_layout.addWidget(self.bootstrap_username_field)
 
         self.bootstrap_full_name_field = QLineEdit()
-        self.bootstrap_full_name_field.setPlaceholderText("نامِ کامل")
+        self.bootstrap_full_name_field.setPlaceholderText("نام کامل")
         card_layout.addWidget(self.bootstrap_full_name_field)
 
         self.bootstrap_password_field = QLineEdit()
-        self.bootstrap_password_field.setPlaceholderText("رمزِ عبور (حداقل ۶ کاراکتر)")
+        self.bootstrap_password_field.setPlaceholderText("رمز عبور (حداقل ۶ کاراکتر)")
         self.bootstrap_password_field.setEchoMode(QLineEdit.Password)
         card_layout.addWidget(self.bootstrap_password_field)
 
         self.bootstrap_confirm_password_field = QLineEdit()
-        self.bootstrap_confirm_password_field.setPlaceholderText("تکرارِ رمزِ عبور")
+        self.bootstrap_confirm_password_field.setPlaceholderText("تکرار رمز عبور")
         self.bootstrap_confirm_password_field.setEchoMode(QLineEdit.Password)
         card_layout.addWidget(self.bootstrap_confirm_password_field)
 
@@ -453,13 +453,13 @@ class LoginWindow(QStackedWidget):
         confirm = self.bootstrap_confirm_password_field.text()
 
         if not username or not full_name or not company_name:
-            self.bootstrap_status_label.setText("همه‌ی فیلدها را پر کنید.")
+            self.bootstrap_status_label.setText("همهٔ فیلدها را پر کنید.")
             return
         if len(password) < 6:
-            self.bootstrap_status_label.setText("رمزِ عبور باید حداقل ۶ کاراکتر باشد.")
+            self.bootstrap_status_label.setText("رمز عبور باید حداقل ۶ کاراکتر باشد.")
             return
         if password != confirm:
-            self.bootstrap_status_label.setText("تکرارِ رمزِ عبور مطابقت ندارد.")
+            self.bootstrap_status_label.setText("تکرار رمز عبور مطابقت ندارد.")
             return
 
         try:

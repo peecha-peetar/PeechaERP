@@ -1,13 +1,13 @@
-"""فهرستِ واحدِ همه‌ی تفصیلی‌ها — معادلِ Qt برایِ detail_accounts_list.py/.kv
-در Kivy. کلیک روی هر ردیف بسته به نوعِ گروهش، صفحه‌ی درست را باز می‌کند.
+"""فهرست واحد همهٔ تفصیلی‌ها — معادل Qt برای detail_accounts_list.py/.kv
+در Kivy. کلیک روی هر ردیف بسته به نوع گروهش، صفحهٔ درست را باز می‌کند.
 
-طبقِ بازخوردِ صریح: این فهرست حالا یک نمایِ درختی است — هر گروهِ تفصیلی
-(کالا/بانک/صندوق/... و مشتری/تامین‌کننده/پرسنل/گروه‌هایِ ساده) یک گرهِ
-سرگروه دارد که با رنگِ اختصاصیِ همان گروه (اگر تنظیم شده) رنگ‌آمیزی
-می‌شود؛ به‌طورِ پیش‌فرض فقط برگ‌ها (پایین‌ترین سطحِ هر گروه) زیرِ همان
-گره نشان داده می‌شوند — چون در سلسله‌مراتبِ چندسطحی معمولاً فقط برگ‌ها
-در عمل قابل‌انتخاب‌اند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح» کاربر را به سلسله‌مراتبِ
-کاملِ والد/فرزند سوییچ می‌دهد."""
+طبق بازخورد صریح: این فهرست حالا یک نمای درختی است — هر گروه تفصیلی
+(کالا/بانک/صندوق/... و مشتری/تامین‌کننده/پرسنل/گروه‌های ساده) یک گرهٔ
+سرگروه دارد که با رنگ اختصاصی همان گروه (اگر تنظیم شده) رنگ‌آمیزی
+می‌شود؛ به‌طور پیش‌فرض فقط برگ‌ها (پایین‌ترین سطح هر گروه) زیر همان
+گره نشان داده می‌شوند — چون در سلسله‌مراتب چندسطحی معمولاً فقط برگ‌ها
+در عمل قابل‌انتخاب‌اند؛ چک‌باکس «نمایش همهٔ سطوح» کاربر را به سلسله‌مراتب
+کامل والد/فرزند سوییچ می‌دهد."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -31,21 +32,23 @@ from PySide6.QtWidgets import (
 import datetime
 
 from peecha import numerals, session
+from peecha.services import detail_deletion
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import inventory_catalog as catalog_service
 from peecha.ui import report_export
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, edit_delete_actions
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها؛ چونی که
 # QTreeWidget زیرِ RTL هم مثلِ QTableWidget، ستونِ اندیسِ ۰ در لبه‌یِ
 # فیزیکیِ راست ظاهر می‌شود، پس «کد» باید ستونِ اول باشد نه «نام».
-_COLUMNS = ["کد", "نام", "سطح", "وضعیت"]
+_COLUMNS = ["کد", "نام", "سطح", "وضعیت", "عملیات"]
 
 
 def _group_label(group_name: str) -> str:
-    """گروه‌هایِ اشخاص از قبل با نامِ فارسی (مثلِ «مشتری») ذخیره شده‌اند؛
-    گروه‌هایِ عمومی با کدِ خام (مثلِ «CASH_BOX») که این‌جا به برچسبِ فارسی
-    ترجمه می‌شود — کدِ خام برایِ مسیریابی دست‌نخورده می‌ماند."""
+    """گروه‌های اشخاص از قبل با نام فارسی (مثل «مشتری») ذخیره شده‌اند؛
+    گروه‌های عمومی با کد خام (مثل «CASH_BOX») که این‌جا به برچسب فارسی
+    ترجمه می‌شود — کد خام برای مسیریابی دست‌نخورده می‌ماند."""
     return dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(group_name, group_name)
 
 
@@ -71,7 +74,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self.new_entry_button = QPushButton("➕")
         self.new_entry_button.setObjectName("primaryIconButton")
         self.new_entry_button.setFixedWidth(48)
-        self.new_entry_button.setToolTip("تفصیلیِ جدید")
+        self.new_entry_button.setToolTip("تفصیلی جدید")
         self.new_entry_button.clicked.connect(self._show_new_entry_menu)
         header_row.addWidget(self.new_entry_button)
 
@@ -86,15 +89,15 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
         header_row.addWidget(pdf_button)
-        excel_button = QPushButton("📊 خروجیِ اکسل")
+        excel_button = QPushButton("📊 خروجی اکسل")
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
         header_row.addWidget(excel_button)
         layout.addLayout(header_row)
 
         hint = QLabel(
-            "همه‌ی مشتریان/تامین‌کنندگان/پرسنل/مراکزِ هزینه/پروژه‌ها و گروه‌های دیگرِ تفصیلی، یک‌جا — "
-            "کلیک روی هر ردیف فرمِ مربوطه را باز می‌کند."
+            "همهٔ مشتریان/تامین‌کنندگان/پرسنل/مراکز هزینه/پروژه‌ها و گروه‌های دیگر تفصیلی، یک‌جا — "
+            "کلیک روی هر ردیف فرم مربوطه را باز می‌کند؛ با دکمه‌های کنار هر ردیف هم می‌توانید آن را ویرایش یا حذف کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -102,13 +105,13 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
 
         filter_row = QHBoxLayout()
         self.search_field = QLineEdit()
-        self.search_field.setPlaceholderText("جستجو در نوعِ تفصیلی، کد یا نام")
+        self.search_field.setPlaceholderText("جستجو در نوع تفصیلی، کد یا نام")
         self.search_field.textChanged.connect(self._apply_filter)
         filter_row.addWidget(self.search_field, stretch=1)
 
         # طبقِ درخواستِ صریح: به‌طورِ پیش‌فرض فقط سطوحِ آخر (برگ‌ها) نمایش
         # داده می‌شوند؛ با این چک‌باکس می‌توان کلِ سلسله‌مراتب را دید.
-        self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox = QCheckBox("نمایش همهٔ سطوح")
         self.show_all_levels_checkbox.toggled.connect(self._apply_filter)
         filter_row.addWidget(self.show_all_levels_checkbox)
         layout.addLayout(filter_row)
@@ -122,22 +125,34 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.search_field,
-                "جستجو در نوعِ گروه، کد یا نام، رویِ همه‌یِ تفصیلی‌ها با هم — کالا، بانک، مشتری و بقیه.",
+                "جستجو در نوع گروه، کد یا نام، روی همهٔ تفصیلی‌ها با هم — کالا، بانک، مشتری و بقیه.",
             ),
             (
                 self.show_all_levels_checkbox,
-                "به‌طورِ پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کلِ درختِ والد و فرزندِ هر گروه را می‌بینید.",
+                "به‌طور پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کل درخت والد و فرزند هر گروه را می‌بینید.",
             ),
         ])
 
     def refresh(self) -> None:
         company_id = session.current_company.company_id if session.current_company else None
         self._entries = dimensions_service.list_all_detail_accounts(company_id) if company_id is not None else []
+        if company_id is not None:
+            # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی
+            # نشوند»): این فهرست همه‌یِ تفصیلی‌هایِ همه‌یِ گروه‌ها را با هم
+            # نشان می‌دهد -- تفصیلیِ فنیِ زیرینِ هر متغیر هم این‌جا استثنا
+            # نیست.
+            variant_detail_ids = {
+                r.item_detail_account_id
+                for r in catalog_service.list_items(company_id)
+                if r.variant_parent_item_id is not None
+            }
+            if variant_detail_ids:
+                self._entries = [e for e in self._entries if e.detail_account_id not in variant_detail_ids]
         self._apply_filter()
 
     # --- خروجیِ اکسل/چاپ (طبقِ درخواستِ صریح: بکاپ/انتقالِ تفصیلی‌ها به
     # دیتابیسِ جدید) ------------------------------------------------------
-    _EXPORT_HEADERS = ["کدِ کاملِ حساب", "کد", "نام", "سطح", "وضعیت", "گروهِ تفصیلی", "کدِ کاملِ والد"]
+    _EXPORT_HEADERS = ["کد کامل حساب", "کد", "نام", "سطح", "وضعیت", "گروه تفصیلی", "کد کامل والد"]
 
     def _export_rows(self) -> tuple[list[str], list[list], list]:
         full_code_by_id = {e.detail_account_id: e.full_code for e in self._entries}
@@ -199,7 +214,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
             self.tree.resizeColumnToContents(i)
 
     def _make_group_item(self, group_name: str, color: str | None) -> QTreeWidgetItem:
-        item = QTreeWidgetItem([_group_label(group_name), "", "", ""])
+        item = QTreeWidgetItem([_group_label(group_name), "", "", "", ""])
         font = item.font(0)
         font.setBold(True)
         item.setFont(0, font)
@@ -213,13 +228,17 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self, parent: QTreeWidgetItem, e: dimensions_service.UnifiedDetailAccountRow, color: str | None
     ) -> QTreeWidgetItem:
         item = QTreeWidgetItem(
-            [e.full_code, e.name or "—", str(e.level_no), "فعال" if e.is_active else "غیرفعال"]
+            [e.full_code, e.name or "—", str(e.level_no), "فعال" if e.is_active else "غیرفعال", ""]
         )
         item.setData(0, Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code, e.group_name))
         if color:
             for col in range(len(_COLUMNS)):
                 item.setForeground(col, QBrush(QColor(color)))
         parent.addChild(item)
+        # R301: ویرایش و حذف مستقیم از همین ردیف
+        self.tree.setItemWidget(item, len(_COLUMNS) - 1, edit_delete_actions(
+            lambda e=e: self.open_entry(e.dimension_type_id, e.detail_account_id, e.person_group_code),
+            lambda e=e: self.delete_entry(e)))
         return item
 
     def _add_group_leaves(
@@ -273,6 +292,22 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         dimension_type_id, detail_account_id, person_group_code, _group_name = data
         self.open_entry(dimension_type_id, detail_account_id, person_group_code)
 
+    def delete_entry(self, e: dimensions_service.UnifiedDetailAccountRow) -> bool:
+        """R301: حذف مستقیم از فهرست؛ همان مسیر فرم تعریف تفصیلی (کالای اصلی همراه متغیرها، با پیام دقیق)."""
+        company_id = session.current_company.company_id if session.current_company else None
+        if company_id is None:
+            return False
+        plan = detail_deletion.plan(company_id, e.detail_account_id, f"{e.full_code} — {e.name or ''}".strip(" —"))
+        if QMessageBox.question(self, "حذف", plan.confirm_text, QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return False
+        try:
+            detail_deletion.delete(company_id, e.detail_account_id, person_group_code=e.person_group_code)
+        except ValueError as exc:
+            QMessageBox.warning(self, "حذف ممکن نیست", str(exc))
+            return False
+        self.refresh()
+        return True
+
     def open_entry(self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None) -> None:
         # طبقِ درخواستِ صریح («تعریفِ تفصیلی‌ها همه در یک فرم باشد»): همه‌ی
         # انواع (اشخاص و ۷ نوعِ خاص و گروه‌هایِ ساده) حالا از همینِ یک فرمِ
@@ -284,8 +319,8 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
 
     # --- دکمه‌ی «تفصیلیِ جدید» ------------------------------------------------
     def _new_entry_actions(self, company_id: int) -> list[tuple[str, Callable[[], None]]]:
-        """فهرستِ (برچسب، تابعِ ناوبری) برایِ منویِ «تفصیلیِ جدید» — جدا از
-        خودِ QMenu تا بدونِ نیاز به exec (که مودال/بلاک‌کننده است) قابلِ‌تست باشد."""
+        """فهرست (برچسب، تابع ناوبری) برای منوی «تفصیلی جدید» — جدا از
+        خود QMenu تا بدون نیاز به exec (که مودال/بلاک‌کننده است) قابل‌تست باشد."""
         actions: list[tuple[str, Callable[[], None]]] = []
         for group in dimensions_service.list_person_groups(company_id):
             combo_data = ("person", group.code)

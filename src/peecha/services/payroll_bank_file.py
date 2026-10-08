@@ -1,13 +1,13 @@
-"""سرویسِ تولیدِ فایلِ بانکیِ پرداختِ گروهیِ حقوق (فصلِ ۱۵).
+"""سرویس تولید فایل بانکی پرداخت گروهی حقوق (فصل ۱۵).
 
-⚠ ساده‌سازیِ آگاهانه (هم‌راستا با یادداشتِ خودِ db/schema/046): چون
-مشخصاتِ رسمیِ فایلِ هیچ بانکِ ایرانی‌ای در دسترس نیست، خروجی یک CSV
-عمومی است (نه قالبِ اختصاصیِ بانک)؛ افزودنِ قالب‌هایِ رسمی در آینده
-بدونِ تغییرِ هستهٔ این سرویس ممکن است.
+⚠ ساده‌سازی آگاهانه (هم‌راستا با یادداشت خود db/schema/046): چون
+مشخصات رسمی فایل هیچ بانک ایرانی‌ای در دسترس نیست، خروجی یک CSV
+عمومی است (نه قالب اختصاصی بانک)؛ افزودن قالب‌های رسمی در آینده
+بدون تغییر هستهٔ این سرویس ممکن است.
 
-⚠ ساده‌سازیِ دوم: چون hr.employees (فازِ ۱ از هستهٔ منابعِ انسانی)
-فیلدِ bank_id ندارد، اعتبارسنجیِ «متعلق‌بودن به همان بانک» طبقِ سند
-انجام نمی‌شود — فقط وجودِ شماره‌حساب/شبا برایِ کارمند بررسی می‌شود."""
+⚠ ساده‌سازی دوم: چون hr.employees (فاز ۱ از هستهٔ منابع انسانی)
+فیلد bank_id ندارد، اعتبارسنجی «متعلق‌بودن به همان بانک» طبق سند
+انجام نمی‌شود — فقط وجود شماره‌حساب/شبا برای کارمند بررسی می‌شود."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def create_bank_batch(run_id: int, bank_id: int) -> BankBatchResult:
         if run is None:
             raise ValueError("این اجرا یافت نشد.")
         if run.status not in ("APPROVED", "POSTED", "LOCKED"):
-            raise ValueError("فقط اجرایِ تاییدشده (یا بالاتر) قابلِ تولیدِ فایلِ بانکی است.")
+            raise ValueError("فقط اجرای تاییدشده (یا بالاتر) قابل تولید فایل بانکی است.")
 
         rows = session.execute(select(Payslip, Employee).join(Employee, Employee.employee_id == Payslip.employee_id).where(Payslip.run_id == run_id)).all()
         already_batched_employee_ids = {
@@ -62,17 +62,17 @@ def create_bank_batch(run_id: int, bank_id: int) -> BankBatchResult:
         for payslip, employee in rows:
             full_name = f"{employee.first_name} {employee.last_name}"
             if employee.employee_id in already_batched_employee_ids:
-                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "قبلاً در batchِ دیگری برایِ همین اجرا گنجانده شده است."))
+                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "قبلاً در batch دیگری برای همین اجرا گنجانده شده است."))
                 continue
             if payslip.net_pay <= 0:
-                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "خالصِ پرداختنی صفر یا منفی است."))
+                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "خالص پرداختنی صفر یا منفی است."))
                 continue
             account_no = (employee.bank_iban or employee.bank_account_no or "").strip()
             if not account_no:
-                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "بدونِ شماره‌حساب/شبایِ معتبر."))
+                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "بدون شماره‌حساب/شبای معتبر."))
                 continue
             if employee.bank_iban and not (employee.bank_iban.upper().startswith("IR") and len(employee.bank_iban) == 26):
-                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "فرمتِ شبا نامعتبر است."))
+                exceptions.append(BankExceptionRow(employee.employee_id, full_name, payslip.net_pay, "قالب شمارهٔ شبا نامعتبر است."))
                 continue
             included.append((payslip, employee))
 
@@ -88,7 +88,7 @@ def create_bank_batch(run_id: int, bank_id: int) -> BankBatchResult:
                     bank_account_no=account_no, amount=payslip.net_pay, line_status="PENDING",
                 )
             )
-        assert sum((p.net_pay for p, _ in included), decimal.Decimal(0)) == total_amount, "جمعِ مبالغِ batch باید دقیقاً برابرِ جمعِ net_pay فیش‌هایِ شامل‌شده باشد."
+        assert sum((p.net_pay for p, _ in included), decimal.Decimal(0)) == total_amount, "جمع مبالغ batch باید دقیقاً برابر جمع net_pay فیش‌های شامل‌شده باشد."
         session.commit()
         return BankBatchResult(batch.batch_id, total_amount, len(included), exceptions)
 
@@ -136,7 +136,7 @@ def mark_batch_sent(batch_id: int) -> None:
         if batch is None:
             raise ValueError("این batch یافت نشد.")
         if batch.status != "DRAFT":
-            raise ValueError("فقط batchِ پیش‌نویس قابلِ ارسال است.")
+            raise ValueError("فقط batch پیش‌نویس قابل ارسال است.")
         batch.status = "SENT"
         for line in session.scalars(select(BankPaymentLine).where(BankPaymentLine.batch_id == batch_id)):
             line.line_status = "SENT"
@@ -149,7 +149,7 @@ def confirm_batch_line(line_id: int) -> None:
         if line is None:
             raise ValueError("این ردیف یافت نشد.")
         if line.line_status != "SENT":
-            raise ValueError("فقط ردیفِ ارسال‌شده قابلِ تاییدِ واریز است.")
+            raise ValueError("فقط ردیف ارسال‌شده قابل تایید واریز است.")
         line.line_status = "CONFIRMED"
         session.commit()
         batch = session.get(BankPaymentBatch, line.batch_id)
@@ -165,13 +165,13 @@ def fail_batch_line(line_id: int) -> None:
         if line is None:
             raise ValueError("این ردیف یافت نشد.")
         if line.line_status != "SENT":
-            raise ValueError("فقط ردیفِ ارسال‌شده قابلِ ثبتِ برگشت است.")
+            raise ValueError("فقط ردیف ارسال‌شده قابل ثبت برگشت است.")
         line.line_status = "FAILED"
         session.commit()
 
 
 def create_correction_batch_for_failed(original_batch_id: int, bank_id: int) -> BankBatchResult:
-    """فقط ردیف‌هایِ FAILEDِ batchِ اصلی را در یک batchِ اصلاحیِ تازه می‌گذارد."""
+    """فقط ردیف‌های FAILED batch اصلی را در یک batch اصلاحی تازه می‌گذارد."""
     with new_session() as session:
         original = session.get(BankPaymentBatch, original_batch_id)
         if original is None:
@@ -182,7 +182,7 @@ def create_correction_batch_for_failed(original_batch_id: int, bank_id: int) -> 
             .where(BankPaymentLine.batch_id == original_batch_id, BankPaymentLine.line_status == "FAILED")
         ).all()
         if not failed_lines:
-            raise ValueError("هیچ ردیفِ برگشت‌خورده‌ای برایِ اصلاح وجود ندارد.")
+            raise ValueError("هیچ ردیف برگشت‌خورده‌ای برای اصلاح وجود ندارد.")
         total_amount = sum((l.amount for l, _ in failed_lines), decimal.Decimal(0))
         batch = BankPaymentBatch(run_id=original.run_id, bank_id=bank_id, total_amount=total_amount, status="DRAFT")
         session.add(batch)
@@ -202,7 +202,7 @@ def export_bank_batch_csv(batch_id: int) -> str:
     lines = list_bank_batch_lines(batch_id)
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["ردیف", "کدِ پرسنلی", "نامِ کارمند", "شمارهحساب/شبا", "مبلغ"])
+    writer.writerow(["ردیف", "کد پرسنلی", "نام کارمند", "شمارهحساب/شبا", "مبلغ"])
     for idx, line in enumerate(lines, start=1):
         writer.writerow([idx, line.employee_code, line.employee_name, line.bank_account_no, str(line.amount)])
     return buffer.getvalue()

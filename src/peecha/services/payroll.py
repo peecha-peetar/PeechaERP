@@ -1,10 +1,10 @@
-"""سرویسِ اطلاعاتِ پایه و قوانینِ حقوق و دستمزد (payroll.*) — فازِ ۲ از
-ماژولِ حقوق و دستمزد (فصلِ ۴ و ۵ از سندِ طراحی).
+"""سرویس اطلاعات پایه و قوانین حقوق و دستمزد (payroll.*) — فاز ۲ از
+ماژول حقوق و دستمزد (فصل ۴ و ۵ از سند طراحی).
 
-الگویِ نسخه‌بندی: هر ردیفِ حداقل‌دستمزد/قانون یک بازه‌یِ effective_from/to
-دارد؛ company_id می‌تواند NULL باشد یعنی «پیش‌فرضِ سراسری». resolve_policy
-دقیقاً همان الگویِ عمومیِ فصلِ ۱۸ است — تنظیمِ تازه در آینده فقط یک ردیفِ
-policy_code تازه لازم دارد، نه تغییرِ ساختاری."""
+الگوی نسخه‌بندی: هر ردیف حداقل‌دستمزد/قانون یک بازهٔ effective_from/to
+دارد؛ company_id می‌تواند NULL باشد یعنی «پیش‌فرض سراسری». resolve_policy
+دقیقاً همان الگوی عمومی فصل ۱۸ است — تنظیم تازه در آینده فقط یک ردیف
+policy_code تازه لازم دارد، نه تغییر ساختاری."""
 
 from __future__ import annotations
 
@@ -35,22 +35,22 @@ from peecha.services import payroll_formula
 # فهرستِ ثابتِ کدهایِ قانونِ کارِ ایران (فصلِ ۵) — کد، برچسبِ فارسی، مقدارِ
 # پیش‌فرض (که در db/schema/044_payroll_core.sql به‌صورتِ سراسری seed شده).
 POLICY_DEFINITIONS: list[tuple[str, str]] = [
-    ("DAILY_WORKING_HOURS_MAX", "حداکثر ساعتِ کاریِ روزانه"),
-    ("WEEKLY_WORKING_HOURS_MAX", "حداکثر ساعتِ کاریِ هفتگی"),
-    ("PROBATION_PERIOD_MAX_MONTHS_UNSKILLED", "حداکثر دورهٔ آزمایشی — کارگرِ ساده (ماه)"),
+    ("DAILY_WORKING_HOURS_MAX", "حداکثر ساعت کاری روزانه"),
+    ("WEEKLY_WORKING_HOURS_MAX", "حداکثر ساعت کاری هفتگی"),
+    ("PROBATION_PERIOD_MAX_MONTHS_UNSKILLED", "حداکثر دورهٔ آزمایشی — کارگر ساده (ماه)"),
     ("PROBATION_PERIOD_MAX_MONTHS_SKILLED", "حداکثر دورهٔ آزمایشی — متخصص (ماه)"),
-    ("RESIGNATION_NOTICE_PERIOD_DAYS", "مهلتِ اطلاعِ قبلیِ استعفا (روز)"),
-    ("ANNUAL_LEAVE_ACCRUAL_DAYS_PER_MONTH", "نرخِ تعلقِ مرخصیِ استحقاقی (روز/ماه)"),
-    ("ANNUAL_LEAVE_CARRY_OVER_MAX_DAYS", "سقفِ انتقالِ مرخصی به سالِ بعد (روز)"),
-    ("SEVERANCE_MONTHS_SALARY_PER_YEAR", "سنوات — ماه‌حقوق به‌ازایِ هر سال"),
-    ("YEAR_END_BONUS_MIN_DAYS_OF_MIN_WAGE", "کفِ عیدی (روزِ حداقل‌دستمزد)"),
-    ("YEAR_END_BONUS_MAX_DAYS_OF_MIN_WAGE", "سقفِ عیدی (روزِ حداقل‌دستمزد)"),
-    ("RETIREMENT_AGE_YEARS_MALE", "سنِ بازنشستگی — مرد (سال)"),
-    ("RETIREMENT_AGE_YEARS_FEMALE", "سنِ بازنشستگی — زن (سال)"),
-    ("RETIREMENT_MIN_INSURANCE_YEARS", "حداقلِ سابقهٔ بیمه برایِ بازنشستگی (سال)"),
-    ("SALARY_PAYMENT_DEADLINE_DAYS", "مهلتِ قانونیِ پرداختِ حقوق (روز)"),
-    ("TERMINATION_NOTICE_PERIOD_DAYS", "مهلتِ اخطارِ اخراج (روز)"),
-    ("INSURANCE_WAGE_CEILING_MULTIPLE_OF_MIN_WAGE", "سقفِ مزدِ مشمولِ بیمه (چندبرابرِ حداقل‌دستمزد)"),
+    ("RESIGNATION_NOTICE_PERIOD_DAYS", "مهلت اطلاع قبلی استعفا (روز)"),
+    ("ANNUAL_LEAVE_ACCRUAL_DAYS_PER_MONTH", "نرخ تعلق مرخصی استحقاقی (روز/ماه)"),
+    ("ANNUAL_LEAVE_CARRY_OVER_MAX_DAYS", "سقف انتقال مرخصی به سال بعد (روز)"),
+    ("SEVERANCE_MONTHS_SALARY_PER_YEAR", "سنوات — ماه‌حقوق به‌ازای هر سال"),
+    ("YEAR_END_BONUS_MIN_DAYS_OF_MIN_WAGE", "کف عیدی (روز حداقل‌دستمزد)"),
+    ("YEAR_END_BONUS_MAX_DAYS_OF_MIN_WAGE", "سقف عیدی (روز حداقل‌دستمزد)"),
+    ("RETIREMENT_AGE_YEARS_MALE", "سن بازنشستگی — مرد (سال)"),
+    ("RETIREMENT_AGE_YEARS_FEMALE", "سن بازنشستگی — زن (سال)"),
+    ("RETIREMENT_MIN_INSURANCE_YEARS", "حداقل سابقهٔ بیمه برای بازنشستگی (سال)"),
+    ("SALARY_PAYMENT_DEADLINE_DAYS", "مهلت قانونی پرداخت حقوق (روز)"),
+    ("TERMINATION_NOTICE_PERIOD_DAYS", "مهلت اخطار اخراج (روز)"),
+    ("INSURANCE_WAGE_CEILING_MULTIPLE_OF_MIN_WAGE", "سقف مزد مشمول بیمه (چندبرابر حداقل‌دستمزد)"),
 ]
 
 _CALCULATION_BASIS_CHOICES = ("DAILY", "HOURLY")
@@ -58,7 +58,7 @@ _ROUNDING_RULE_CHOICES = ("NONE", "ROUND_1000", "ROUND_100", "TRUNCATE")
 
 
 def apply_rounding_rule(amount: decimal.Decimal, rounding_rule: str) -> decimal.Decimal:
-    """طبقِ rounding_rule تنظیماتِ شرکت (فصلِ ۴) گردکردنِ یک مبلغ."""
+    """طبق rounding_rule تنظیمات شرکت (فصل ۴) گردکردن یک مبلغ."""
     if rounding_rule == "ROUND_1000":
         unit = decimal.Decimal(1000)
         return (amount / unit).to_integral_value(rounding=decimal.ROUND_HALF_UP) * unit
@@ -112,7 +112,7 @@ def _check_minimum_wage_overlap(
         if exclude_id is not None and row.minimum_wage_rate_id == exclude_id:
             continue
         if _overlaps(effective_from, effective_to, row.effective_from, row.effective_to):
-            raise ValueError("این بازه با یک دورهٔ حداقل‌دستمزدِ دیگر هم‌پوشانی دارد.")
+            raise ValueError("این بازه با یک دورهٔ حداقل‌دستمزد دیگر هم‌پوشانی دارد.")
 
 
 def create_minimum_wage_rate(
@@ -124,9 +124,9 @@ def create_minimum_wage_rate(
     hourly_amount: decimal.Decimal | None,
 ) -> int:
     if effective_to is not None and effective_to < effective_from:
-        raise ValueError("تاریخِ پایان نمی‌تواند قبل از تاریخِ شروع باشد.")
+        raise ValueError("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.")
     if monthly_amount <= 0:
-        raise ValueError("مبلغِ ماهانه باید مثبت باشد.")
+        raise ValueError("مبلغ ماهانه باید مثبت باشد.")
     with new_session() as session:
         _check_minimum_wage_overlap(session, company_id, effective_from, effective_to, None)
         row = MinimumWageRate(
@@ -152,9 +152,9 @@ def update_minimum_wage_rate(
     hourly_amount: decimal.Decimal | None,
 ) -> None:
     if effective_to is not None and effective_to < effective_from:
-        raise ValueError("تاریخِ پایان نمی‌تواند قبل از تاریخِ شروع باشد.")
+        raise ValueError("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.")
     if monthly_amount <= 0:
-        raise ValueError("مبلغِ ماهانه باید مثبت باشد.")
+        raise ValueError("مبلغ ماهانه باید مثبت باشد.")
     with new_session() as session:
         row = session.get(MinimumWageRate, minimum_wage_rate_id)
         if row is None:
@@ -177,8 +177,8 @@ def delete_minimum_wage_rate(minimum_wage_rate_id: int) -> None:
 
 
 def get_current_minimum_wage(company_id: int, as_of_date: datetime.date) -> MinimumWageRateRow | None:
-    """اول تفاوتِ اختصاصیِ همان شرکت را برایِ این تاریخ می‌جوید؛ اگر
-    نبود، به مقدارِ سراسری (company_id IS NULL) برمی‌گردد."""
+    """اول تفاوت اختصاصی همان شرکت را برای این تاریخ می‌جوید؛ اگر
+    نبود، به مقدار سراسری (company_id IS NULL) برمی‌گردد."""
     with new_session() as session:
         for target_company_id in (company_id, None):
             row = session.scalar(
@@ -234,17 +234,17 @@ def save_company_settings(
     salary_payable_detail_account_id: int | None = _UNSET,
 ) -> None:
     """⚠ salary_payable_gl_account_id/salary_payable_detail_account_id
-    فقط وقتی صریحاً پاس داده شوند تغییر می‌کنند (پیش‌فرضِ سنتینلِ
-    _UNSET) — چامهایِ قدیمی‌ترِ این تابع این پارامترها را نمی‌شناسند و
-    نباید مقدارِ ازقبل‌تنظیم‌شده را با None پاک کنند."""
+    فقط وقتی صریحاً پاس داده شوند تغییر می‌کنند (پیش‌فرض سنتینل
+    _UNSET) — چامهای قدیمی‌تر این تابع این پارامترها را نمی‌شناسند و
+    نباید مقدار ازقبل‌تنظیم‌شده را با None پاک کنند."""
     if standard_month_days <= 0:
-        raise ValueError("تعدادِ روزهایِ استانداردِ ماه باید مثبت باشد.")
+        raise ValueError("تعداد روزهای استاندارد ماه باید مثبت باشد.")
     if calculation_basis not in _CALCULATION_BASIS_CHOICES:
-        raise ValueError("مبنایِ محاسبه نامعتبر است.")
+        raise ValueError("مبنای محاسبه نامعتبر است.")
     if rounding_rule not in _ROUNDING_RULE_CHOICES:
         raise ValueError("قاعدهٔ گردکردن نامعتبر است.")
     if default_pay_day is not None and not (1 <= default_pay_day <= 31):
-        raise ValueError("روزِ پرداخت باید بینِ ۱ تا ۳۱ باشد.")
+        raise ValueError("روز پرداخت باید بین ۱ تا ۳۱ باشد.")
     with new_session() as session:
         row = session.get(CompanyPayrollSettings, company_id)
         if row is None:
@@ -276,8 +276,8 @@ class PolicyRow:
 
 
 def resolve_policy(company_id: int, policy_code: str, as_of_date: datetime.date) -> PayrollPolicy | None:
-    """الگویِ عمومیِ فصلِ ۱۸: اول override اختصاصیِ همان شرکت برایِ این
-    تاریخ، وگرنه مقدارِ سراسری (company_id IS NULL)."""
+    """الگوی عمومی فصل ۱۸: اول override اختصاصی همان شرکت برای این
+    تاریخ، وگرنه مقدار سراسری (company_id IS NULL)."""
     with new_session() as session:
         for target_company_id in (company_id, None):
             row = session.scalar(
@@ -337,11 +337,11 @@ def set_policy(
     value_numeric: decimal.Decimal | None,
     value_text: str | None = None,
 ) -> None:
-    """یک ردیفِ تازه برایِ (company_id, policy_code) ثبت می‌کند — طبقِ
-    سندِ طراحی (فصلِ ۱۸): «ردیفِ قبلی با effective_to بسته و دست‌نخورده
-    باقی می‌ماند» تا محاسبهٔ دوره‌هایِ گذشته درست بماند."""
+    """یک ردیف تازه برای (company_id, policy_code) ثبت می‌کند — طبق
+    سند طراحی (فصل ۱۸): «ردیف قبلی با effective_to بسته و دست‌نخورده
+    باقی می‌ماند» تا محاسبهٔ دوره‌های گذشته درست بماند."""
     if value_numeric is None and value_text is None:
-        raise ValueError("مقداری برایِ این قانون وارد کنید.")
+        raise ValueError("مقداری برای این قانون وارد کنید.")
     with new_session() as session:
         open_row = session.scalar(
             select(PayrollPolicy).where(
@@ -352,7 +352,7 @@ def set_policy(
         )
         if open_row is not None:
             if open_row.effective_from >= effective_from:
-                raise ValueError("تاریخِ اجرا باید بعد از تاریخِ اجرایِ نسخهٔ فعلی باشد.")
+                raise ValueError("تاریخ اجرا باید بعد از تاریخ اجرای نسخهٔ فعلی باشد.")
             open_row.effective_to = effective_from - datetime.timedelta(days=1)
         session.add(
             PayrollPolicy(
@@ -445,7 +445,7 @@ def _validate_pay_item_formula(company_id: int, formula_expression: str | None, 
     node = payroll_formula.parse_formula(formula_expression)
     referenced = payroll_formula.extract_item_refs(node)
     if own_code is not None and own_code in referenced:
-        raise ValueError("فرمول نمی‌تواند به خودِ همین آیتم ارجاع بدهد.")
+        raise ValueError("فرمول نمی‌تواند به خود همین آیتم ارجاع بدهد.")
     if not referenced:
         return
     with new_session() as session:
@@ -457,7 +457,7 @@ def _validate_pay_item_formula(company_id: int, formula_expression: str | None, 
         }
     missing = referenced - existing_codes
     if missing:
-        raise ValueError(f"آیتم‌هایِ ارجاع‌داده‌شده در فرمول تعریف نشده‌اند: {', '.join(sorted(missing))}")
+        raise ValueError(f"آیتم‌های ارجاع‌داده‌شده در فرمول تعریف نشده‌اند: {', '.join(sorted(missing))}")
 
 
 def _validate_pay_item_fields(
@@ -468,13 +468,13 @@ def _validate_pay_item_fields(
     eligibility_condition: str | None,
 ) -> None:
     if item_type not in _ITEM_TYPE_CHOICES:
-        raise ValueError("نوعِ آیتم نامعتبر است.")
+        raise ValueError("نوع آیتم نامعتبر است.")
     if calculation_method not in _CALCULATION_METHOD_CHOICES:
-        raise ValueError("روشِ محاسبه نامعتبر است.")
+        raise ValueError("روش محاسبه نامعتبر است.")
     if calculation_phase not in _CALCULATION_PHASE_CHOICES:
-        raise ValueError("فازِ محاسبه نامعتبر است.")
+        raise ValueError("فاز محاسبه نامعتبر است.")
     if calculation_method == "FORMULA" and not formula_expression:
-        raise ValueError("برایِ روشِ فرمول، عبارتِ فرمول الزامی است.")
+        raise ValueError("برای روش فرمول، عبارت فرمول الزامی است.")
     if eligibility_condition:
         payroll_formula.parse_condition(eligibility_condition)
 
@@ -526,7 +526,7 @@ def create_pay_item(
                 )
             )
             if base_exists is not None:
-                raise ValueError("فقط یک آیتمِ «حقوقِ پایه از قرارداد» در هر شرکت مجاز است.")
+                raise ValueError("فقط یک آیتم «حقوق پایه از قرارداد» در هر شرکت مجاز است.")
         item = PayItemDefinition(
             company_id=company_id, code=code, name=name, item_type=item_type,
             calculation_method=calculation_method, formula_expression=formula_expression,
@@ -577,7 +577,7 @@ def update_pay_item(
     with new_session() as session:
         item = session.get(PayItemDefinition, pay_item_id)
         if item is None:
-            raise ValueError("این آیتمِ حقوقی یافت نشد.")
+            raise ValueError("این آیتم حقوقی یافت نشد.")
         _validate_pay_item_fields(item_type, calculation_method, calculation_phase, formula_expression, eligibility_condition)
         _validate_pay_item_formula(item.company_id, formula_expression, item.code)
         if calculation_method == "BASE_SALARY_FROM_CONTRACT" and item.calculation_method != "BASE_SALARY_FROM_CONTRACT":
@@ -588,7 +588,7 @@ def update_pay_item(
                 )
             )
             if base_exists is not None:
-                raise ValueError("فقط یک آیتمِ «حقوقِ پایه از قرارداد» در هر شرکت مجاز است.")
+                raise ValueError("فقط یک آیتم «حقوق پایه از قرارداد» در هر شرکت مجاز است.")
         item.name = name
         item.item_type = item_type
         item.calculation_method = calculation_method
@@ -622,7 +622,7 @@ def delete_pay_item(pay_item_id: int) -> None:
             return
         used_in_payslip = session.scalar(select(PayslipLine).where(PayslipLine.pay_item_id == pay_item_id))
         if used_in_payslip is not None:
-            raise ValueError("این آیتم در فیش‌هایِ محاسبه‌شده استفاده شده و قابلِ حذف نیست.")
+            raise ValueError("این آیتم در فیش‌های محاسبه‌شده استفاده شده و قابل حذف نیست.")
         referencing = [
             other
             for other in session.scalars(
@@ -633,7 +633,7 @@ def delete_pay_item(pay_item_id: int) -> None:
         ]
         if referencing:
             codes = ", ".join(o.code for o in referencing)
-            raise ValueError(f"این آیتم در فرمولِ آیتم‌هایِ دیگر استفاده شده است: {codes}")
+            raise ValueError(f"این آیتم در فرمول آیتم‌های دیگر استفاده شده است: {codes}")
         session.execute(
             EmployeePayComponent.__table__.delete().where(EmployeePayComponent.pay_item_id == pay_item_id)
         )
@@ -680,7 +680,7 @@ def set_employee_pay_component(
     effective_to: datetime.date | None,
 ) -> int:
     if effective_to is not None and effective_to < effective_from:
-        raise ValueError("تاریخِ پایان نمی‌تواند قبل از تاریخِ شروع باشد.")
+        raise ValueError("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.")
     with new_session() as session:
         component = EmployeePayComponent(
             employee_id=employee_id, pay_item_id=pay_item_id, amount=amount,
@@ -734,13 +734,13 @@ def create_deduction_entry(
     employee_id: int, pay_item_id: int, period_id: int, amount: decimal.Decimal, reason: str | None
 ) -> int:
     if amount <= 0:
-        raise ValueError("مبلغِ کسر باید مثبت باشد.")
+        raise ValueError("مبلغ کسر باید مثبت باشد.")
     with new_session() as session:
         pay_item = session.get(PayItemDefinition, pay_item_id)
         if pay_item is None or pay_item.item_type != "DEDUCTION":
-            raise ValueError("این آیتم از نوعِ کسورات نیست.")
+            raise ValueError("این آیتم از نوع کسورات نیست.")
         if pay_item.is_court_order and not (reason and reason.strip()):
-            raise ValueError("برایِ کسرِ حکمِ دادگاه، دلیل/توضیح الزامی است.")
+            raise ValueError("برای کسر حکم دادگاه، دلیل/توضیح الزامی است.")
         entry = DeductionEntry(
             employee_id=employee_id, pay_item_id=pay_item_id, period_id=period_id,
             amount=amount, reason=reason, status="PENDING",
@@ -752,11 +752,11 @@ def create_deduction_entry(
 
 def set_deduction_entry_status(deduction_entry_id: int, status: str) -> None:
     if status not in ("PENDING", "APPROVED", "APPLIED", "DEFERRED", "CANCELLED"):
-        raise ValueError("وضعیتِ نامعتبر.")
+        raise ValueError("وضعیت نامعتبر.")
     with new_session() as session:
         entry = session.get(DeductionEntry, deduction_entry_id)
         if entry is None:
-            raise ValueError("این کسرِ موردی یافت نشد.")
+            raise ValueError("این کسر موردی یافت نشد.")
         entry.status = status
         session.commit()
 
@@ -831,14 +831,14 @@ def create_insurance_config(
 ) -> int:
     for rate in (employee_rate, employer_rate, unemployment_rate):
         if rate < 0 or rate > 1:
-            raise ValueError("نرخ‌هایِ بیمه باید بینِ ۰ تا ۱۰۰٪ باشند.")
+            raise ValueError("نرخ‌های بیمه باید بین ۰ تا ۱۰۰٪ باشند.")
     if effective_to is not None and effective_to < effective_from:
-        raise ValueError("تاریخِ پایان نمی‌تواند قبل از تاریخِ شروع باشد.")
+        raise ValueError("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.")
     with new_session() as session:
         existing = session.scalars(select(InsuranceConfig).where(InsuranceConfig.company_id == company_id)).all()
         for row in existing:
             if _overlaps(effective_from, effective_to, row.effective_from, row.effective_to):
-                raise ValueError("این بازه با یک تنظیمِ بیمهٔ دیگر هم‌پوشانی دارد.")
+                raise ValueError("این بازه با یک تنظیم بیمهٔ دیگر هم‌پوشانی دارد.")
         config = InsuranceConfig(
             company_id=company_id, effective_from=effective_from, effective_to=effective_to,
             employee_rate=employee_rate, employer_rate=employer_rate, unemployment_rate=unemployment_rate,
@@ -861,11 +861,11 @@ def delete_insurance_config(insurance_config_id: int) -> None:
 
 
 def compute_insurance(company_id: int, as_of_date: datetime.date, insurable_wage_total: decimal.Decimal) -> InsuranceResult:
-    """طبقِ فرمولِ فصلِ ۹: مزد_مشمول = min(max(جمعِ آیتم‌هایِ مشمول, کف), سقف).
-    سهمِ کارمند/کارفرما از رویِ همان مزدِ مشمول (نه جمعِ خام) محاسبه می‌شود."""
+    """طبق فرمول فصل ۹: مزد_مشمول = min(max(جمع آیتم‌های مشمول, کف), سقف).
+    سهم کارمند/کارفرما از روی همان مزد مشمول (نه جمع خام) محاسبه می‌شود."""
     config = get_insurance_config(company_id, as_of_date)
     if config is None:
-        raise ValueError("هیچ تنظیماتِ بیمه‌ای برایِ این تاریخ تعریف نشده است.")
+        raise ValueError("هیچ تنظیمات بیمه‌ای برای این تاریخ تعریف نشده است.")
     floor = config.insurable_wage_floor
     if floor is None:
         min_wage = get_current_minimum_wage(company_id, as_of_date)
@@ -906,9 +906,9 @@ class AnnualTaxLedgerRow:
 
 
 def get_tax_brackets(company_id: int, as_of_date: datetime.date) -> list[TaxBracketRow]:
-    """اولویت با پلکان‌هایِ اختصاصیِ همان شرکت برایِ این تاریخ؛ اگر
-    نبود، پلکان‌هایِ سراسری. تنها یکی از این دو مجموعه برگردانده می‌شود
-    (بدونِ ترکیب)."""
+    """اولویت با پلکان‌های اختصاصی همان شرکت برای این تاریخ؛ اگر
+    نبود، پلکان‌های سراسری. تنها یکی از این دو مجموعه برگردانده می‌شود
+    (بدون ترکیب)."""
     with new_session() as session:
         for target_company_id in (company_id, None):
             rows = session.scalars(
@@ -927,18 +927,18 @@ def get_tax_brackets(company_id: int, as_of_date: datetime.date) -> list[TaxBrac
 
 def _validate_tax_brackets(brackets: list[tuple[decimal.Decimal, decimal.Decimal | None, decimal.Decimal]]) -> None:
     if not brackets:
-        raise ValueError("دستِ‌کم یک پلکان لازم است.")
+        raise ValueError("دست‌کم یک پلکان لازم است.")
     previous_to = decimal.Decimal(0)
     previous_rate = decimal.Decimal(-1)
     for i, (from_amount, to_amount, rate) in enumerate(brackets):
         if from_amount != previous_to:
-            raise ValueError("پلکان‌ها باید پیوسته باشند (بدونِ شکاف/هم‌پوشانی).")
+            raise ValueError("پلکان‌ها باید پیوسته باشند (بدون شکاف/هم‌پوشانی).")
         if to_amount is not None and to_amount <= from_amount:
-            raise ValueError("سقفِ هر پلکان باید بزرگ‌تر از کفِ آن باشد.")
+            raise ValueError("سقف هر پلکان باید بزرگ‌تر از کف آن باشد.")
         if rate < previous_rate:
-            raise ValueError("نرخِ پلکان‌ها باید صعودی باشد.")
+            raise ValueError("نرخ پلکان‌ها باید صعودی باشد.")
         if to_amount is None and i != len(brackets) - 1:
-            raise ValueError("فقط آخرین پلکان می‌تواند بدونِ سقف باشد.")
+            raise ValueError("فقط آخرین پلکان می‌تواند بدون سقف باشد.")
         previous_rate = rate
         if to_amount is not None:
             previous_to = to_amount
@@ -949,9 +949,9 @@ def set_tax_brackets(
     effective_from: datetime.date,
     brackets: list[tuple[decimal.Decimal, decimal.Decimal | None, decimal.Decimal]],
 ) -> None:
-    """کلِ مجموعه‌یِ پلکان‌هایِ یک شرکت را از یک تاریخ به‌بعد جایگزین
-    می‌کند (نه ردیف‌به‌ردیف) — چون پیوستگیِ پلکان‌ها یک قاعده‌یِ سطحِ
-    مجموعه است، نه سطحِ تک‌ردیف. نسخهٔ قبلی (اگر بازه‌ی بازی داشت) با
+    """کل مجموعهٔ پلکان‌های یک شرکت را از یک تاریخ به‌بعد جایگزین
+    می‌کند (نه ردیف‌به‌ردیف) — چون پیوستگی پلکان‌ها یک قاعدهٔ سطح
+    مجموعه است، نه سطح تک‌ردیف. نسخهٔ قبلی (اگر بازهٔ بازی داشت) با
     همان effective_from بسته و دست‌نخورده باقی می‌ماند."""
     _validate_tax_brackets(brackets)
     with new_session() as session:
@@ -960,7 +960,7 @@ def set_tax_brackets(
         ).all()
         for row in open_rows:
             if row.effective_from >= effective_from:
-                raise ValueError("تاریخِ اجرا باید بعد از تاریخِ اجرایِ نسخهٔ فعلی باشد.")
+                raise ValueError("تاریخ اجرا باید بعد از تاریخ اجرای نسخهٔ فعلی باشد.")
             row.effective_to = effective_from - datetime.timedelta(days=1)
         for order, (from_amount, to_amount, rate) in enumerate(brackets, start=1):
             session.add(
@@ -973,8 +973,8 @@ def set_tax_brackets(
 
 
 def apply_tax_brackets(brackets: list[TaxBracketRow], taxable_base: decimal.Decimal) -> decimal.Decimal:
-    """مالیاتِ تجمعیِ محاسبه‌شده رویِ یک پایهٔ مشمولِ تجمعی — جمعِ
-    مالیاتِ هر پلکان تا جایی که پایه اجازه می‌دهد (فرمولِ گام ۵ فصلِ ۱۰)."""
+    """مالیات تجمعی محاسبه‌شده روی یک پایهٔ مشمول تجمعی — جمع
+    مالیات هر پلکان تا جایی که پایه اجازه می‌دهد (فرمول گام ۵ فصل ۱۰)."""
     if taxable_base <= 0:
         return decimal.Decimal(0)
     total = decimal.Decimal(0)
@@ -1006,14 +1006,14 @@ def get_tax_exemption(company_id: int, as_of_date: datetime.date) -> decimal.Dec
 
 def set_tax_exemption(company_id: int, effective_from: datetime.date, annual_exemption_amount: decimal.Decimal) -> None:
     if annual_exemption_amount < 0:
-        raise ValueError("سقفِ معافیت نمی‌تواند منفی باشد.")
+        raise ValueError("سقف معافیت نمی‌تواند منفی باشد.")
     with new_session() as session:
         open_row = session.scalar(
             select(TaxExemption).where(TaxExemption.company_id == company_id, TaxExemption.effective_to.is_(None))
         )
         if open_row is not None:
             if open_row.effective_from >= effective_from:
-                raise ValueError("تاریخِ اجرا باید بعد از تاریخِ اجرایِ نسخهٔ فعلی باشد.")
+                raise ValueError("تاریخ اجرا باید بعد از تاریخ اجرای نسخهٔ فعلی باشد.")
             open_row.effective_to = effective_from - datetime.timedelta(days=1)
         session.add(TaxExemption(company_id=company_id, effective_from=effective_from, annual_exemption_amount=annual_exemption_amount))
         session.commit()
@@ -1041,12 +1041,12 @@ def compute_monthly_tax(
     taxable_income_this_month: decimal.Decimal,
     as_of_date: datetime.date,
 ) -> decimal.Decimal:
-    """الگوریتمِ گام‌به‌گامِ فصلِ ۱۰ — مالیاتِ این ماه را محاسبه و
-    employee_annual_tax_ledger را به‌روزرسانی می‌کند؛ مالیاتِ منفی صفر
-    در نظر گرفته می‌شود (طبقِ یادداشتِ سند)."""
+    """الگوریتم گام‌به‌گام فصل ۱۰ — مالیات این ماه را محاسبه و
+    employee_annual_tax_ledger را به‌روزرسانی می‌کند؛ مالیات منفی صفر
+    در نظر گرفته می‌شود (طبق یادداشت سند)."""
     brackets = get_tax_brackets(company_id, as_of_date)
     if not brackets:
-        raise ValueError("هیچ پلکانِ مالیاتی‌ای برایِ این تاریخ تعریف نشده است.")
+        raise ValueError("هیچ پلکان مالیاتی‌ای برای این تاریخ تعریف نشده است.")
     annual_exemption = get_tax_exemption(company_id, as_of_date) or decimal.Decimal(0)
 
     with new_session() as session:
@@ -1102,9 +1102,9 @@ def create_period(
     company_id: int, jalali_year: int, jalali_month: int, period_start_date: datetime.date, period_end_date: datetime.date
 ) -> int:
     if not (1 <= jalali_month <= 12):
-        raise ValueError("ماه باید بینِ ۱ تا ۱۲ باشد.")
+        raise ValueError("ماه باید بین ۱ تا ۱۲ باشد.")
     if period_end_date < period_start_date:
-        raise ValueError("تاریخِ پایان نمی‌تواند قبل از تاریخِ شروع باشد.")
+        raise ValueError("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.")
     with new_session() as session:
         exists = session.scalar(
             select(PayrollPeriod).where(
@@ -1132,7 +1132,7 @@ def create_period(
 # description_template روی خودِ آن ردیف (payroll_journal.py) خوانده
 # می‌شود، نه از این جدول.
 PAYROLL_DESCRIPTION_KEYS = ("PAYROLL_PAYABLE", "PAYROLL_INSURANCE_EMPLOYER")
-DEFAULT_PAYROLL_DESCRIPTION = "سندِ حقوق و دستمزد — دورهٔ {دوره} — اجرایِ شمارهٔ {اجرا}"
+DEFAULT_PAYROLL_DESCRIPTION = "سند حقوق و دستمزد — دورهٔ {دوره} — اجرای شمارهٔ {اجرا}"
 
 
 def get_payroll_description_template(company_id: int, template_key: str) -> str:
@@ -1145,7 +1145,7 @@ def get_payroll_description_template(company_id: int, template_key: str) -> str:
 
 def set_payroll_description_template(company_id: int, template_key: str, template_text: str) -> None:
     if template_key not in PAYROLL_DESCRIPTION_KEYS:
-        raise ValueError("کلیدِ قالبِ شرح نامعتبر است.")
+        raise ValueError("کلید قالب شرح نامعتبر است.")
     with new_session() as session:
         existing = session.get(PayrollDescriptionTemplate, (company_id, template_key))
         if existing is None:
@@ -1161,9 +1161,9 @@ class _SafeFormatDict(dict):
 
 
 def render_payroll_description(template_text: str, context: dict[str, str]) -> str:
-    """جایگذاریِ امنِ جای‌گذارها — کلیدِ ناشناخته/نبود به‌جایِ خطا، رشتهٔ
-    خالی می‌شود؛ فرمتِ نامعتبر هم به‌جایِ کرش، همان متنِ خام را
-    برمی‌گرداند (تایپوی کاربر در قالب نباید صدورِ سند را خراب کند)."""
+    """جایگذاری امن جای‌گذارها — کلید ناشناخته/نبود به‌جای خطا، رشتهٔ
+    خالی می‌شود؛ قالب نامعتبر هم به‌جای کرش، همان متن خام را
+    برمی‌گرداند (تایپوی کاربر در قالب نباید صدور سند را خراب کند)."""
     try:
         return template_text.format_map(_SafeFormatDict(context)).strip()
     except (ValueError, IndexError, KeyError):

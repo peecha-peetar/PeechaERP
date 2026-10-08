@@ -1,13 +1,13 @@
-"""سرویسِ تولید/قطعی‌سازیِ فیشِ حقوقی (فصلِ ۱۴).
+"""سرویس تولید/قطعی‌سازی فیش حقوقی (فصل ۱۴).
 
-گردشِ کار: DRAFT (هم‌زمان با run=CALCULATED) → FINALIZED (پس از
-APPROVED شدنِ run، غیرقابل‌ویرایش) → DELIVERED → (در صورتِ خطا) یک
-فیشِ CORRECTED تازه ساخته می‌شود؛ اصل هرگز حذف/ویرایش نمی‌شود.
+گردش کار: DRAFT (هم‌زمان با run=CALCULATED) → FINALIZED (پس از
+APPROVED شدن run، غیرقابل‌ویرایش) → DELIVERED → (در صورت خطا) یک
+فیش CORRECTED تازه ساخته می‌شود؛ اصل هرگز حذف/ویرایش نمی‌شود.
 
-قطعی‌سازی، تسویه‌حسابِ واقعیِ اقساطِ وام را هم انجام می‌دهد: تا این
-لحظه (در حینِ محاسبه) وضعیتِ قسط‌ها دست‌نخورده مانده تا بازاجرا (پیش از
-APPROVED) idempotent بماند؛ resolve_deductions با همان ورودی‌هایِ
-ثبت‌شده (gross_amount و مبالغِ بیمه/مالیاتِ ذخیره‌شده) دقیقاً همان
+قطعی‌سازی، تسویه‌حساب واقعی اقساط وام را هم انجام می‌دهد: تا این
+لحظه (در حین محاسبه) وضعیت قسط‌ها دست‌نخورده مانده تا بازاجرا (پیش از
+APPROVED) idempotent بماند؛ resolve_deductions با همان ورودی‌های
+ثبت‌شده (gross_amount و مبالغ بیمه/مالیات ذخیره‌شده) دقیقاً همان
 نتیجهٔ محاسبه را بازتولید و روی هر قسط DEDUCTED یا DEFERRED اعمال
 می‌کند."""
 
@@ -39,7 +39,7 @@ def finalize_payslips_for_run(run_id: int) -> FinalizationResult:
         if run is None:
             raise ValueError("این اجرا یافت نشد.")
         if run.status != "APPROVED":
-            raise ValueError("فقط اجرایِ تاییدشده قابلِ قطعی‌سازیِ فیش است.")
+            raise ValueError("فقط اجرای تاییدشده قابل قطعی‌سازی فیش است.")
         period = session.get(PayrollPeriod, run.period_id)
         company_id = period.company_id
         period_id = period.period_id
@@ -87,7 +87,7 @@ def deliver_payslip(payslip_id: int) -> None:
         if payslip is None:
             raise ValueError("این فیش یافت نشد.")
         if payslip.status != "FINALIZED":
-            raise ValueError("فقط فیشِ نهایی‌شده قابلِ ارسال/تحویل است.")
+            raise ValueError("فقط فیش نهایی‌شده قابل ارسال/تحویل است.")
         payslip.status = "DELIVERED"
         session.commit()
 
@@ -99,14 +99,14 @@ def create_correction_payslip(
     net_pay: decimal.Decimal,
     lines: list[tuple[int, str, str, decimal.Decimal, str]],
 ) -> int:
-    """فیشِ اصلاحی: اصل هرگز ویرایش نمی‌شود، فقط به CORRECTED می‌رود و
+    """فیش اصلاحی: اصل هرگز ویرایش نمی‌شود، فقط به CORRECTED می‌رود و
     correction_of_payslip_id به آن اشاره می‌کند."""
     with new_session() as session:
         original = session.get(Payslip, original_payslip_id)
         if original is None:
-            raise ValueError("فیشِ اصلی یافت نشد.")
+            raise ValueError("فیش اصلی یافت نشد.")
         if original.status not in ("FINALIZED", "DELIVERED"):
-            raise ValueError("فقط فیشِ نهایی‌شده قابلِ اصلاح است.")
+            raise ValueError("فقط فیش نهایی‌شده قابل اصلاح است.")
         correction = Payslip(
             run_id=original.run_id, employee_id=original.employee_id, contract_id=original.contract_id,
             period_id=original.period_id, gross_amount=gross_amount, total_deductions=total_deductions,
@@ -150,7 +150,7 @@ class PrintablePayslip:
 
 
 def get_printable_payslip(payslip_id: int) -> PrintablePayslip:
-    """استفادهٔ مستقیم از همین داده برایِ report_export.py — بدونِ موتورِ چاپِ تازه (طبقِ سند)."""
+    """استفادهٔ مستقیم از همین داده برای report_export.py — بدون موتور چاپ تازه (طبق سند)."""
     with new_session() as session:
         payslip = session.get(Payslip, payslip_id)
         if payslip is None:
