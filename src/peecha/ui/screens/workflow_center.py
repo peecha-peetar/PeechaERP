@@ -108,7 +108,7 @@ def open_entity(main_window, entity_type: str | None, entity_id: int | None) -> 
     adapter = registry.get_adapter(entity_type)
     if adapter is None or not adapter.open_nav:
         return False
-    main_window.open_screen(adapter.open_nav, then=lambda s: getattr(s, "edit_document", lambda _i: None)(entity_id))
+    main_window.open_screen(adapter.open_nav, then=lambda s: getattr(s, adapter.open_method, lambda _i: None)(entity_id))
     return True
 
 
@@ -1143,3 +1143,14 @@ class WorkflowSettingsScreen(QWidget):
 
     def refresh(self) -> None:
         self.panels[self.tabs.currentIndex()].refresh()
+
+
+def _open_fa_request(main_window, event_id: int) -> None:
+    """R295: درخواست عملیات دارایی ← همان دارایی در فهرست دارایی‌ها."""
+    from peecha.services.workflow.adapters import fixed_assets as wf_fa
+
+    asset_id = wf_fa.request_context(company_id(), int(event_id))["asset_id"]
+    main_window.open_screen("FA_ASSETS", then=lambda s: getattr(s, "open_asset", lambda _i: None)(asset_id))
+
+
+register_entity_opener("FA_REQUEST", _open_fa_request)

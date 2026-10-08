@@ -78,13 +78,20 @@ def _execute(operation: str, company_id: int, user_id: int, asset_id: int, param
     raise ValueError("عملیات نامعتبر.")
 
 
-def needs_approval(company_id: int, operation: str, amount: decimal.Decimal | None = None) -> bool:
+def needs_approval(company_id: int, operation: str, amount: decimal.Decimal | None = None, asset_id: int | None = None) -> bool:
     form = OPERATIONS[operation][0]
     if operation == "IMPROVE":
         threshold = c.get_settings(company_id).large_improvement_approval_min
         if threshold is None or (amount or 0) < threshold:
             return False
-    return cartable.has_active_workflow(company_id, form)
+    return cartable.has_active_workflow(company_id, form) or _workflow_engine(company_id, operation, amount, asset_id)
+
+
+def _workflow_engine(company_id: int, operation: str, amount, asset_id: int | None) -> bool:
+    """R295: فرایند فعال «درخواست عملیات دارایی» در موتور گردش کار."""
+    from peecha.services.workflow.adapters import fixed_assets as wf_fa
+
+    return wf_fa.engine_governs(company_id, operation, amount, asset_id)
 
 
 def request(company_id: int, user_id: int, operation: str, asset_id: int, approval_amount: decimal.Decimal | None = None,
@@ -94,7 +101,7 @@ def request(company_id: int, user_id: int, operation: str, asset_id: int, approv
         raise ValueError("عملیات نامعتبر.")
     form, event_type, label = OPERATIONS[operation]
     amount = approval_amount if approval_amount is not None else params.get("amount") or params.get("price")
-    if not needs_approval(company_id, operation, amount):
+    if not needs_approval(company_id, operation, amount, asset_id):
         return _execute(operation, company_id, user_id, asset_id, params, None)
     with new_session() as session:
         asset = c.lock_asset(session, asset_id, company_id)
@@ -112,9 +119,11 @@ def request(company_id: int, user_id: int, operation: str, asset_id: int, approv
         c.audit(session, company_id, user_id, asset_id, "REQUEST", {"operation": operation, "event_id": ev.event_id})
         session.commit()
         event_id = ev.event_id
-    item = cartable.submit_for_approval(company_id, form, event_id, "CREATE", user_id, amount=amount)
-    if item is None:  # گردشِ کار برایِ این مبلغ مرحله‌ای ندارد → اجرایِ مستقیم
-        return _approve(company_id, event_id, user_id)
+    # R295: بدون کارتابل قدیمی، همین «در انتظار تایید» را موتور گردش کار برمی‌دارد
+    if cartable.has_active_workflow(company_id, form):
+        item = cartable.submit_for_approval(company_id, form, event_id, "CREATE", user_id, amount=amount)
+        if item is None:  # گردشِ کار برایِ این مبلغ مرحله‌ای ندارد → اجرایِ مستقیم
+            return _approve(company_id, event_id, user_id)
     with new_session() as session:
         ev = session.get(AssetEvent, event_id)
         session.expunge(ev)

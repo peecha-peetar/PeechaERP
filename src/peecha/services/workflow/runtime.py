@@ -357,9 +357,10 @@ def _step_once(instance_id: int):
             step = _open_step(session, inst, node, "RUNNING", attempt=int(token.get("visit", 1)))
             token.update(state="RUNNING", since=now().isoformat(), step_id=step.step_id)
             _save(inst, tokens=tokens, variables=variables)
-            run_as = _run_as(inst, node, variables)
+            run_as = _run_as(inst, node, variables, session)
             pending = {"company_id": inst.company_id, "node": node, "visit": int(token.get("visit", 1)),
-                       "entity_type": inst.entity_type, "entity_id": inst.entity_id, "context": dict(inst.context or {}),
+                       "entity_type": inst.entity_type, "entity_id": inst.entity_id,
+                       "context": {**dict(inst.context or {}), "last_comment": variables.get("last_comment")},
                        "run_as": run_as, "token_id": token["id"]}
             session.commit()
             return pending
@@ -381,13 +382,17 @@ def _step_once(instance_id: int):
         return "CONTINUE"
 
 
-def _run_as(inst: WfInstance, node: dict, variables: dict) -> int | None:
+def _run_as(inst: WfInstance, node: dict, variables: dict, session=None) -> int | None:
     mode = (node.get("run_as") or "APPROVER").upper()
     if mode == "STARTER":
         return inst.started_by_user_id
     if mode == "USER" and node.get("run_as_user_id"):
         return int(node["run_as_user_id"])
-    return variables.get("last_decider") or variables.get("last_actor") or inst.started_by_user_id
+    actor = variables.get("last_decider") or variables.get("last_actor") or inst.started_by_user_id
+    if actor is None and session is not None:  # فرایند خودکار (بررسی دوره‌ای/زمان‌بندی): به نام سازندهٔ فرایند
+        d = session.get(WfDefinition, inst.definition_id)
+        actor = d.created_by_user_id if d else None
+    return actor
 
 
 def _complete_action(instance_id: int, token_id: str, outcome: actions.ActionOutcome) -> None:
@@ -452,6 +457,8 @@ def resume(company_id: int, instance_id: int, *, node_id: str | None = None, tok
         step = session.get(WfInstanceStep, token.get("step_id")) if token.get("step_id") else None
         if actor_user_id:
             variables["last_decider"] = actor_user_id
+        if (detail or {}).get("comment"):
+            variables["last_comment"] = str(detail["comment"])[:500]
         if vars_patch:
             variables["vars"] = {**variables.get("vars", {}), **plain(vars_patch)}
         for hook in LEAVE_HOOKS:

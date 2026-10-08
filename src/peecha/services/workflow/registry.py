@@ -70,7 +70,11 @@ class EntityAdapter:
     owner: Callable[[int, int], int | None] | None = None
     approval_context: Callable[[int, int], list[tuple[str, str]]] | None = None
     open_nav: str | None = None  # کد منو برای بازکردن سند از کارتابل
+    open_method: str = "edit_document"  # متد صفحهٔ همان منو که سند را باز می‌کند
     submitter_field: str | None = None  # کلید context که صادرکننده را نشان می‌دهد (برای منع خودتاییدی)
+    gate_statuses: tuple[str, ...] = ()  # وضعیت‌هایی که «دروازهٔ تایید» فقط از مسیر فرایند اجازه می‌دهد
+    gate_label: str = ""  # متن ساده برای طراح: «تا تایید فرایند، سند قابل ... نیست»
+    form_gate_statuses: tuple[str, ...] = ()  # عملیات چندمرحله‌ای: فقط فرم پیش از شروع بررسی می‌کند
 
     def field_map(self) -> dict[str, FieldSpec]:
         return {f.key: f for f in self.fields}
@@ -115,6 +119,10 @@ _LOADED = False
 
 def register_adapter(adapter: EntityAdapter) -> EntityAdapter:
     _ADAPTERS[adapter.entity_type] = adapter
+    if adapter.gate_statuses or adapter.form_gate_statuses:
+        from peecha.services.workflow import model_events
+
+        model_events.gate_statuses(adapter.entity_type, adapter.gate_statuses, adapter.form_gate_statuses)
     return adapter
 
 
@@ -141,10 +149,7 @@ def ensure_loaded() -> None:
         return
     _LOADED = True
     from peecha.services.workflow import actions  # noqa: F401 -- اقدام‌های داخلی
-    try:
-        from peecha.services.workflow import adapters  # noqa: F401 -- اتصال ماژول‌ها (R295)
-    except ImportError:
-        pass
+    from peecha.services.workflow import adapters  # noqa: F401 -- اتصال ماژول‌ها (R295)
 
 
 def adapters() -> list[EntityAdapter]:

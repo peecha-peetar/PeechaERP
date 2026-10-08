@@ -2700,6 +2700,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         header_grid.setColumnStretch(3, 1)
         header_grid.setColumnStretch(4, 1)
         self.body_layout.addWidget(header_card)
+        # R295: نوار گردش کار (فقط وقتی برای این نوع سند فرایندی فعال است دیده می‌شود)
+        from peecha.ui.screens.workflow_bar import WorkflowBar
+
+        self.workflow_bar = WorkflowBar(self.document_type_code)
+        self.workflow_bar.on_started = self._load_document
+        self.body_layout.addWidget(self.workflow_bar)
 
         # طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند... کنارِ مشتری: آخرین
         # خرید، میانگینِ خرید، اعتبار، بدهی، امتیازِ مشتری») -- فقط برایِ
@@ -3364,6 +3370,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             return
         self._status_code = doc.status_code
+        self._refresh_workflow_bar()
         self._warehouse_approved = doc.warehouse_approved_at is not None
         self._locked_line_ids = documents_service.get_quantity_locked_line_ids(self._document_id, company_id)
         self._corrects_document_id = doc.corrects_document_id
@@ -4526,6 +4533,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = "DRAFT"
         self._corrects_document_id = None
         self._lines = []
+        self._refresh_workflow_bar()
         self._clear_cross_sell_box()
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]} جدید")
         self.document_no_field.setText("—")
@@ -5219,6 +5227,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label, "فاکتور به‌عنوان نسیه ثبت شد؛ در انتظار ثبت نهایی مدیر است.", ok=True,
         )
 
+    def _refresh_workflow_bar(self) -> None:
+        bar = getattr(self, "workflow_bar", None)
+        if bar is not None:
+            bar.set_entity(self.document_type_code, self._document_id)
+
     def _approve(self) -> None:
         if self._document_id is None:
             return
@@ -5246,6 +5259,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _post(self, ask: bool = True) -> None:
         if self._document_id is None:
+            return
+        if not self.workflow_bar.guard("POSTED", self._status_code, "ثبت نهایی"):
             return
         company_id = self._company_id()
         # طبقِ گزارشِ صریحِ کاربر («سفارش هم دو مرحله‌ای باشه، تاییدِ

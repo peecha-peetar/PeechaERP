@@ -876,6 +876,11 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self.date_field.editingFinished.connect(self._refresh_next_number_preview)
 
         outer.addWidget(header_card)
+        # R295: نوار گردش کار تایید سند (فقط وقتی فرایندی فعال است)
+        from peecha.ui.screens.workflow_bar import WorkflowBar
+
+        self.workflow_bar = WorkflowBar()
+        outer.addWidget(self.workflow_bar)
 
         # طبقِ درخواستِ صریح: نوارِ خلاصه‌یِ عناوینِ انتخاب‌شده (بدونِ کد) —
         # حساب/تفصیلی/مرکزِ هزینه/پروژه‌یِ ردیفِ جاری (آخرین ردیفی که فوکوس
@@ -1133,6 +1138,8 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
 
     def _reset_form(self) -> None:
         self._editing_journal_entry_id = None
+        if getattr(self, "workflow_bar", None) is not None:
+            self.workflow_bar.set_entity(None, None)
         self._editing_registration_at = None
         self.form_title.setText(f"صدور {self._document_noun} جدید")
         self.date_field.setDate(datetime.date.today())
@@ -1847,6 +1854,10 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self._sync_header_currency_from_lines(lines)
         self.update_balance()
         self._update_footer_for_mode()
+        if summary is not None:
+            from peecha.services.workflow.adapters.finance import KINDS
+
+            self.workflow_bar.set_entity(KINDS.get(summary.entry_type_code, (None,))[0], journal_entry_id)
 
     def _sync_header_currency_from_lines(self, lines: list) -> None:
         """طبق درخواست صریح، ارز سر سند فقط یک ارز کلی برای کل سند

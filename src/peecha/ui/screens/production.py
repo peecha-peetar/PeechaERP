@@ -429,6 +429,12 @@ class OrdersScreen(QWidget):
         self.header = QLabel("")
         self.header.setObjectName("pageTitle")
         dl.addWidget(self.header)
+        # R295: نوار گردش کار تایید صدور (فقط وقتی فرایندی فعال است)
+        from peecha.ui.screens.workflow_bar import WorkflowBar
+
+        self.workflow_bar = WorkflowBar("PRODUCTION_ORDER")
+        self.workflow_bar.on_started = lambda: self.workflow_bar.entity_id and self.load_order(self.workflow_bar.entity_id)
+        dl.addWidget(self.workflow_bar)
         cards_box, self.cards = ms.summary([
             ("product", "محصول", "neutral", "🏷️"), ("status", "وضعیت", "info", "📌"), ("planned", "برنامه", "neutral", "🎯"),
             ("produced", "تولیدشده", "success", "✅"), ("scrapped", "ضایعات", "danger", "♻️"), ("dates", "شروع / پایان", "neutral", "📅"),
@@ -514,6 +520,7 @@ class OrdersScreen(QWidget):
         cid = company_id()
         self.view = v = po.order_view(cid, order_id)
         o = v.order
+        self.workflow_bar.set_entity("PRODUCTION_ORDER", order_id)
         show_cost = can("prd_cost_view", "VIEW")
         self.header.setText(P(f"دستور تولید {o.order_code}"))
         values = {"product": o.item_label, "status": "● " + o.status_label + (f" ({o.hold_reason})" if o.hold_reason else ""),

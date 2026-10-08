@@ -765,6 +765,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         header_card_layout.addLayout(header_row2)
         self.body_layout.addWidget(header_card)
+        # R295: نوار گردش کار (اصلاح موجودی و انتقال؛ فقط وقتی فرایندی فعال است)
+        from peecha.services.workflow.adapters.inventory import STOCK_KINDS
+        from peecha.ui.screens.workflow_bar import WorkflowBar
+
+        self._wf_entity = STOCK_KINDS.get(self.document_type_code, (None,))[0]
+        self.workflow_bar = WorkflowBar(self._wf_entity)
+        self.workflow_bar.on_started = self.refresh
+        self.body_layout.addWidget(self.workflow_bar)
 
         # طبقِ گزارشِ صریحِ کاربر («فرمِ سندِ انبار هم مثلِ فرمِ خرید/فروش
         # یک ردیفِ ورودیِ همیشه‌حاضر داشته باشد»): دکمهٔ ➕ که یک دیالوگِ
@@ -1071,6 +1079,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             return
         self._status_code = doc.status_code
+        if getattr(self, "workflow_bar", None) is not None:
+            self.workflow_bar.set_entity(self._wf_entity, self._document_id)
         self._origin_label = doc.origin_label
         self.page_title.setText(f"سند {DOC_TYPE_TITLES[self.document_type_code]} #{doc.document_no}")
         self.date_field.setDate(doc.document_date)
@@ -1412,6 +1422,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
         self._status_code = "DRAFT"
+        if getattr(self, "workflow_bar", None) is not None:
+            self.workflow_bar.set_entity(self._wf_entity, None)
         self._lines = []
         self.page_title.setText(f"سند {DOC_TYPE_TITLES[self.document_type_code]} جدید")
         self.status_label.setText("")
@@ -1604,6 +1616,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _post(self) -> None:
         if self._document_id is None:
+            return
+        if not self.workflow_bar.guard("POSTED", self._status_code, "ثبت نهایی"):
             return
         confirm = QMessageBox.question(
             self, "ثبت نهایی", "این سند ثبت نهایی شود؟ پس این کار، سند دیگر قابل‌ویرایش/حذف نیست.",

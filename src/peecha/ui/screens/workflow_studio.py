@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha.services import roles as roles_service
 from peecha.services.workflow import builder, conditions, definitions as defs, registry, routing, simulate, sla
+from peecha.services.workflow import templates as wf_templates
 from peecha.services.workflow.common import DEFINITION_STATUS, NODE_TYPES, OUTCOMES
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.fixed_assets import P, combo, company_id, fill, num_field, set_combo, table, user_id
@@ -34,7 +35,8 @@ ms.ICONS.update({
     "اجرای آزمایشی": ("▶️", "primary"), "مرحلهٔ قبل": ("▶️", ""), "مرحلهٔ بعد": ("◀️", "primary"),
     "ساخت فرایند": ("✅", "primary"), "افزودن مرحلهٔ تایید": ("➕", ""), "بالا بردن": ("🔼", ""), "پایین بردن": ("🔽", ""),
     "افزودن گیرنده": ("➕", ""), "حذف گیرنده": ("➖", "danger"), "افزودن خانه": ("➕", ""), "حذف خانه": ("➖", "danger"),
-    "تنظیم شروع فرایند": ("🚀", ""),
+    "تنظیم شروع فرایند": ("🚀", ""), "ساخت از قالب": ("📚", "primary"), "انتقال از کارتابل قبلی": ("📥", ""),
+    "نصب قالب": ("✅", "primary"),
 })
 
 NODE_ICONS = {"START": "🚀", "CONDITION": "🔀", "APPROVAL": "🖊️", "TASK": "📋", "ACTION": "⚙️", "NOTIFY": "🔔", "WAIT": "⏳",
@@ -1192,6 +1194,12 @@ class DesignerScreen(QWidget):
         rb = RuleBuilder(self.entity_type)
         rb.set_rule(trigger.get("condition"))
         self._row("condition", "شرط شروع", rb)
+        adapter = registry.get_adapter(self.entity_type)
+        if adapter is not None and (adapter.gate_statuses or adapter.form_gate_statuses):
+            gate = QCheckBox(adapter.gate_label or "تا تایید فرایند، مرحلهٔ حساس سند انجام نشود")
+            gate.setChecked(bool(trigger.get("gate")))
+            gate.setToolTip("اگر روشن باشد، کار حساس سند (مثل تصویب یا ثبت نهایی) فقط پس از تایید همین فرایند ممکن است.")
+            self._row("gate", "قفل تایید", gate)
 
     def apply_properties(self) -> bool:
         w = getattr(self, "w", {})
@@ -1213,9 +1221,14 @@ class DesignerScreen(QWidget):
             elif t == "SCHEDULE":
                 trigger.update(every=w["every"].currentData(), at=numerals.to_ascii_digits(w["at"].text().strip() or "08:00"))
             elif t == "SCAN":
-                trigger.update(scan=w["scan"].currentData(), every_minutes=60)
+                old = self.graph.get("trigger") or {}
+                trigger.update(scan=w["scan"].currentData(), every_minutes=old.get("every_minutes") or 60)
+                if old.get("params") and old.get("scan") == trigger["scan"]:
+                    trigger["params"] = old["params"]
             if w["condition"].rule():
                 trigger["condition"] = w["condition"].rule()
+            if "gate" in w and w["gate"].isChecked() and t in ("EVENT", "MANUAL"):
+                trigger["gate"] = True
             self.graph["trigger"] = trigger
             return self._changed()
         node = defs.nodes_by_id(self.graph).get(self.selected_node or "")
@@ -1450,6 +1463,61 @@ class VersionsDialog(QDialog):
 # فهرست فرایندها
 # =========================================================================================================
 @ms.styled
+class TemplateDialog(QDialog):
+    """فهرست قالب‌های آماده؛ نصب یعنی ساخت پیش‌نویس که پس از بازبینی منتشر می‌شود."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ساخت از قالب")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(820, 520)
+        self.created_id: int | None = None
+        layout = QVBoxLayout(self)
+        hint = QLabel("قالب را انتخاب کنید؛ یک پیش‌نویس ساخته می‌شود تا تاییدکننده‌ها و سقف‌ها را ببینید و بعد منتشر کنید.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        installed = wf_templates.installed_codes(company_id()) if company_id() else set()
+        labels = {a.entity_type: a.label for a in registry.adapters()}
+        self.codes = [t.code for t in wf_templates.TEMPLATES]
+        self.table = table(["گروه", "قالب", "نوع سند", "ساخته شده؟"])
+        fill(self.table, [[t.group, t.name, labels.get(t.entity_type, "عمومی"), "بله" if t.code in installed else ""]
+                          for t in wf_templates.TEMPLATES], self.codes)
+        self.table.itemSelectionChanged.connect(self._describe)
+        self.table.cellDoubleClicked.connect(lambda _r, _c: self.install())
+        layout.addWidget(self.table, stretch=1)
+        self.description = QLabel("")
+        self.description.setWordWrap(True)
+        layout.addWidget(self.description)
+        self.install_button = _btn("نصب قالب", self.install)
+        layout.addWidget(ms.footer([[self.install_button]]))
+
+    def select(self, code: str) -> bool:
+        if code not in self.codes:
+            return False
+        self.table.setCurrentCell(self.codes.index(code), 0)
+        return True
+
+    def _code(self) -> str | None:
+        items = self.table.selectedItems()
+        return self.table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
+
+    def _describe(self) -> None:
+        code = self._code()
+        self.description.setText(wf_templates.get(code).description if code else "")
+
+    def install(self) -> int | None:
+        code = self._code()
+        if code is None:
+            _warn(self, "ساخت از قالب", "یک قالب را انتخاب کنید.")
+            return None
+        did, ok = _run(self, "ساخت از قالب", wf_templates.install, company_id(), user_id(), code)
+        if ok:
+            self.created_id = did
+            self.accept()
+        return did if ok else None
+
+
 class ProcessListScreen(QWidget):
     scroll_in_mdi = True
 
@@ -1481,8 +1549,10 @@ class ProcessListScreen(QWidget):
             ("wizard", "ساخت با ویزارد"), ("blank", "فرایند خالی"), ("design", "ویرایش در طراح"), ("test", "آزمون و اجرای آزمایشی"),
             ("publish", "انتشار"), ("activate", "فعال‌سازی"), ("pause", "توقف"), ("archive", "بایگانی"),
             ("unarchive", "بازگردانی از بایگانی"), ("copy", "کپی فرایند"), ("versions", "نسخه‌ها"), ("delete", "حذف فرایند"),
-            ("refresh", "تازه‌سازی"))}
+            ("refresh", "تازه‌سازی"), ("template", "ساخت از قالب"), ("legacy", "انتقال از کارتابل قبلی"))}
         B = self.buttons
+        B["template"].clicked.connect(lambda: self.new_from_template())
+        B["legacy"].clicked.connect(lambda: self.import_legacy())
         B["wizard"].clicked.connect(lambda: self.new_with_wizard())
         B["blank"].clicked.connect(lambda: self.new_blank())
         B["design"].clicked.connect(lambda: self.open_designer())
@@ -1496,7 +1566,7 @@ class ProcessListScreen(QWidget):
         B["versions"].clicked.connect(lambda: self.versions())
         B["delete"].clicked.connect(lambda: self.delete())
         B["refresh"].clicked.connect(lambda: self.reload())
-        outer.addWidget(ms.footer([[B["wizard"], B["blank"], B["design"], B["test"]],
+        outer.addWidget(ms.footer([[B["template"], B["wizard"], B["blank"], B["legacy"], B["design"], B["test"]],
                                    [B["publish"], B["activate"], B["pause"], B["archive"], B["unarchive"]],
                                    [B["copy"], B["versions"], B["delete"], B["refresh"]]]))
 
@@ -1544,6 +1614,40 @@ class ProcessListScreen(QWidget):
             dlg.exec()
         self.reload()
         return dlg.created_id
+
+    def new_from_template(self, code: str | None = None) -> int | None:
+        dlg = TemplateDialog(self)
+        if code is not None:
+            dlg.select(code)
+            did = dlg.install()
+        else:
+            if self.dialog_runner is not None:
+                self.dialog_runner(dlg)
+            else:
+                dlg.exec()
+            did = dlg.created_id
+        self.reload()
+        if did:
+            self.select_definition(did)
+        return did
+
+    def import_legacy(self, form_code: str | None = None) -> int | None:
+        if form_code is None:
+            flows = wf_templates.legacy_workflows(company_id())
+            if not flows:
+                _warn(self, "انتقال از کارتابل قبلی", "گردش کار کارتابلی برای انتقال پیدا نشد.")
+                return None
+            values = _ask(self, "انتقال از کارتابل قبلی", [("form", "گردش کار", combo(
+                [(f"{label} — {P(steps)} مرحله" + ("" if active else " (غیرفعال)"), form) for form, label, steps, active in flows]))],
+                "مراحل همان کارتابل به یک پیش‌نویس فرایند تبدیل می‌شود؛ کارتابل قبلی تا انتشار فرایند تازه مثل قبل کار می‌کند.")
+            if values is None:
+                return None
+            form_code = values["form"]
+        did, ok = _run(self, "انتقال از کارتابل قبلی", wf_templates.import_legacy, company_id(), user_id(), form_code)
+        if ok:
+            self.reload()
+            self.select_definition(did)
+        return did if ok else None
 
     def new_blank(self, values: dict | None = None) -> int | None:
         if values is None:

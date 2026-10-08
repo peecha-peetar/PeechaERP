@@ -10,7 +10,7 @@ import decimal
 
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, SmallInteger, String, Time, func
+from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Numeric, SmallInteger, String, Time, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -170,3 +170,26 @@ class AttendanceImportTemplate(Base):
     time_format: Mapped[str] = mapped_column(String(30), default="%H:%M")
     column_mapping: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class LeaveRequest(Base):
+    """R295: درخواست مرخصی (برای گردش کار تایید)."""
+
+    __tablename__ = "leave_requests"
+    __table_args__ = {"schema": "hr"}
+
+    leave_request_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    leave_type: Mapped[str] = mapped_column(String(10), default="ANNUAL")
+    from_date: Mapped[datetime.date] = mapped_column(Date)
+    to_date: Mapped[datetime.date] = mapped_column(Date)
+    hours: Mapped[decimal.Decimal | None] = mapped_column(Numeric(6, 2))
+    days: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=0)
+    reason: Mapped[str | None] = mapped_column(String(1000))
+    status_code: Mapped[str] = mapped_column(String(10), default="DRAFT")
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_at: Mapped[datetime.datetime | None]
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

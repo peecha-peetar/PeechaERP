@@ -183,6 +183,12 @@ class PurchaseRequestScreen(QWidget):
         self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         ed.addWidget(self.lines_table, stretch=1)
+        # R295: نوار گردش کار تایید (فقط وقتی فرایندی فعال است)
+        from peecha.ui.screens.workflow_bar import WorkflowBar
+
+        self.workflow_bar = WorkflowBar("PURCHASE_REQUEST")
+        self.workflow_bar.on_started = lambda: self._request_id and self.edit_document(self._request_id)
+        ed.addWidget(self.workflow_bar)
 
         footer = QHBoxLayout()
         self.status_label = QLabel("")
@@ -291,6 +297,7 @@ class PurchaseRequestScreen(QWidget):
         self.status_label.setText("")
         self._render_lines()
         self._update_buttons()
+        self.workflow_bar.set_entity("PURCHASE_REQUEST", None)
 
     def edit_document(self, request_id: int) -> None:
         company_id = self._company_id()
@@ -320,6 +327,7 @@ class PurchaseRequestScreen(QWidget):
         self.info_label.setText("   |   ".join(info))
         self._render_lines()
         self._update_buttons()
+        self.workflow_bar.set_entity("PURCHASE_REQUEST", request_id)
 
     def _render_lines(self) -> None:
         ordered = pr_service.ordered_quantities([ln.line_id for ln in self._lines])

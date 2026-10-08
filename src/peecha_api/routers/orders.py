@@ -29,6 +29,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import roles as roles_service
 from peecha.services import treasury as treasury_service
+from peecha.services.workflow import model_events
 from peecha.services import unit_conversion as uc
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
@@ -205,7 +206,9 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
                 for line in payload.settlement_lines
             ]
             settlements_service.auto_approve_settlement_plan(document_id, ctx.company_id, ctx.user_id, settlement_lines)
-        documents_service.post_document(document_id, ctx.company_id, ctx.user_id, from_field_sales=True)
+        # فروش واقعی (کالا تحویل شده) هرگز با قفل تایید گردش کار رد نمی‌شود
+        with model_events.ungated():
+            documents_service.post_document(document_id, ctx.company_id, ctx.user_id, from_field_sales=True)
         # طبقِ باگِ واقعیِ کشف‌شده («سقفِ اعتبار فقط برایِ SALES_ORDER بررسی
         # می‌شود، هرگز برایِ فاکتور»): بعدِ ثبتِ‌نهایی (نه پیش از آن -- بنگرید
         # توضیحِ check_settlement_credit_exposure) -- کالا فیزیکاً تحویل

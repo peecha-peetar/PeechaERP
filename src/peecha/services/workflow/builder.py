@@ -28,6 +28,7 @@ class ApprovalLevel:
     only_if: dict | None = None  # فقط وقتی این شرط برقرار است (مثلاً مبلغ بیش از ۵۰۰ میلیون)
     allow_changes: bool = False
     instructions: str = ""
+    fallback: list[dict] | None = None  # اگر کسی پیدا نشد (مثلاً مدیر مستقیم تعریف نشده)
 
 
 @dataclass
@@ -43,6 +44,7 @@ class WizardSpec:
     notify_on_approve: bool = True
     notify_on_reject: bool = True
     notify_extra: list[dict] = field(default_factory=list)  # گیرندگان بیشتر خبر پایان
+    reject_actions: list[str] = field(default_factory=list)  # اقدام‌ها پس از رد (مثلاً «رد درخواست» در خود سند)
 
 
 def build_graph(spec: WizardSpec) -> dict:
@@ -62,6 +64,7 @@ def build_graph(spec: WizardSpec) -> dict:
         tail.clear()
 
     reject_needed = False
+    reject_target = "rja1" if spec.reject_actions else ("rej_note" if spec.notify_on_reject else "end_no")
     for i, level in enumerate(spec.levels, start=1):
         if not level.approvers:
             raise WorkflowError(f"برای مرحلهٔ «{level.label or i}» تاییدکننده تعیین نشده است.")
@@ -83,8 +86,10 @@ def build_graph(spec: WizardSpec) -> dict:
             node["sla_policy_id"] = int(level.sla_policy_id)
         if level.instructions:
             node["instructions"] = level.instructions
+        if level.fallback:
+            node["fallback"] = copy.deepcopy(level.fallback)
         nodes.append(node)
-        edges.append({"from": ap, "to": "rej_note" if spec.notify_on_reject else "end_no", "when": "rejected"})
+        edges.append({"from": ap, "to": reject_target, "when": "rejected"})
         reject_needed = True
         if level.allow_changes:
             fix = f"fix{i}"
@@ -110,6 +115,14 @@ def build_graph(spec: WizardSpec) -> dict:
     nodes.append({"id": "end_ok", "type": "END", "label": "تایید نهایی", "outcome": "APPROVED" if spec.levels else "DONE"})
     attach("end_ok")
     if reject_needed:
+        after_reject = "rej_note" if spec.notify_on_reject else "end_no"
+        for k, code in enumerate(spec.reject_actions, start=1):
+            action = registry.find_action(spec.entity_type, code)
+            if action is None:
+                raise WorkflowError(f"اقدام «{code}» شناخته نشده است.")
+            nodes.append({"id": f"rja{k}", "type": "ACTION", "label": action.label, "action": code,
+                          "retry": {"max": 3, "backoff_minutes": 5}})
+            edges.append({"from": f"rja{k}", "to": f"rja{k + 1}" if k < len(spec.reject_actions) else after_reject})
         if spec.notify_on_reject:
             nodes.append({"id": "rej_note", "type": "NOTIFY", "label": "خبر رد", "to": [{"kind": "STARTER"}],
                           "title": "«{عنوان}» رد شد"})

@@ -803,6 +803,12 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
             self._normalizing = False
 
 
+def _leave_screen(main_window):
+    from peecha.ui.screens.hr_leave_requests import LeaveRequestsScreen
+
+    return LeaveRequestsScreen(main_window)
+
+
 class _LazyScreens(dict):
     """نام ← صفحه؛ صفحهٔ ثبت‌شده با factory در اولین دسترسی ساخته می‌شود. values() فقط ساخته‌شده‌ها."""
 
@@ -985,6 +991,10 @@ class MainWindow(QMainWindow):
         self._workflow_timer.setInterval(60_000)
         self._workflow_timer.timeout.connect(self._tick_workflow)
         self._workflow_timer.start()
+        # R295: اتصال ماژول‌ها به گردش کار (رویداد خودکار از تغییر اسناد و قفل تایید)
+        from peecha.services.workflow import registry as wf_registry
+
+        wf_registry.ensure_loaded()
 
         self._screens: _LazyScreens = _LazyScreens(theme.apply_card_shadows)
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
@@ -1928,6 +1938,7 @@ class MainWindow(QMainWindow):
         self.register_screen("payroll_run", lambda: PayrollRunScreen())
         self.register_screen("payroll_loans", lambda: PayrollLoansScreen())
         self.register_screen("payroll_overtime_entries", lambda: PayrollOvertimeEntriesScreen())
+        self.register_screen("hr_leave_requests", lambda: _leave_screen(self))  # R295
         self.register_screen("hr_attendance_entries", lambda: HrAttendanceEntriesScreen())
         self.register_screen("hr_attendance_summary", lambda: HrAttendanceSummaryScreen())
         self.register_screen("inventory_warehouses", lambda: InventoryWarehousesScreen())

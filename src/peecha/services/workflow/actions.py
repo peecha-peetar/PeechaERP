@@ -92,8 +92,18 @@ def execute(company_id: int, *, instance_id: int | None, node: dict, visit: int,
     ctx = ActionContext(company_id=company_id, user_id=run_as, entity_type=entity_type, entity_id=entity_id,
                         instance_id=instance_id, context=context, params=dict(node.get("params") or {}),
                         idempotency_key=key)
+    from peecha.services.workflow import model_events
+
+    depth = 0
+    if instance_id:
+        with new_session() as session:
+            from peecha.db.models.workflow import WfInstance
+
+            inst = session.get(WfInstance, instance_id)
+            depth = inst.depth if inst else 0
     try:
-        result = spec.func(ctx) or {}
+        with model_events.acting(instance_id, depth):  # دروازهٔ تایید برای اقدام خود فرایند باز است
+            result = spec.func(ctx) or {}
     except Exception as exc:  # noqa: BLE001
         friendly, technical = friendly_error(exc)
         retry = node.get("retry") or {}

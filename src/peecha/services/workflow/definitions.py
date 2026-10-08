@@ -439,11 +439,12 @@ def _sync_triggers(session, d: WfDefinition) -> None:
     trigger = (v.graph or {}).get("trigger") or {}
     active = d.status_code in RUNNABLE_STATUSES
     ttype = trigger.get("type") or "MANUAL"
+    gate = {"gate": True} if trigger.get("gate") else {}
     if ttype == "EVENT":
         for ev in trigger.get("events") or []:
             session.add(WfDefinitionTrigger(company_id=d.company_id, definition_id=d.definition_id, version_id=v.version_id,
                                             trigger_type="EVENT", event_type=ev, entity_type=d.entity_type,
-                                            config={}, is_active=active))
+                                            config=gate, is_active=active))
     elif ttype == "SCAN":
         session.add(WfDefinitionTrigger(company_id=d.company_id, definition_id=d.definition_id, version_id=v.version_id,
                                         trigger_type="SCAN", event_type=f"SCAN:{trigger.get('scan')}",
@@ -452,7 +453,8 @@ def _sync_triggers(session, d: WfDefinition) -> None:
     else:
         session.add(WfDefinitionTrigger(company_id=d.company_id, definition_id=d.definition_id, version_id=v.version_id,
                                         trigger_type=ttype, event_type=None, entity_type=d.entity_type,
-                                        config={k: trigger.get(k) for k in ("every", "at", "weekday")}, is_active=active))
+                                        config={**{k: trigger.get(k) for k in ("every", "at", "weekday")}, **gate},
+                                        is_active=active))
 
 
 def set_status(company_id: int, user_id: int | None, definition_id: int, status_code: str) -> None:

@@ -98,6 +98,12 @@ class StockCountScreen(QWidget):
         self.finalize_button.setObjectName("primaryButton")
         self.finalize_button.clicked.connect(self._finalize)
         layout.addWidget(self.finalize_button)
+        # R295: نوار گردش کار تایید انبارگردانی (فقط وقتی فرایندی فعال است)
+        from peecha.ui.screens.workflow_bar import WorkflowBar
+
+        self.workflow_bar = WorkflowBar("INVENTORY_COUNT")
+        self.workflow_bar.on_started = self._load_session
+        layout.addWidget(self.workflow_bar)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
@@ -122,6 +128,10 @@ class StockCountScreen(QWidget):
         self.item_combo.setCurrentIndex(-1)
         self.item_combo.blockSignals(False)
         self._reload_sessions()
+
+    def open_session(self, session_id: int) -> None:
+        """بازکردن یک انبارگردانی مشخص (از کارتابل گردش کار)."""
+        self._reload_sessions(session_id)
 
     def _reload_sessions(self, select_session_id: int | None = None) -> None:
         company_id = self._company_id()
@@ -186,6 +196,7 @@ class StockCountScreen(QWidget):
         company_id = self._company_id()
         session_id = self.session_combo.currentData()
         self.table.setRowCount(0)
+        self.workflow_bar.set_entity("INVENTORY_COUNT", session_id)
         if company_id is None or session_id is None:
             self.finalize_button.setEnabled(False)
             self.record_button.setEnabled(False)
@@ -243,6 +254,8 @@ class StockCountScreen(QWidget):
         company_id = self._company_id()
         session_id = self.session_combo.currentData()
         if company_id is None or session_id is None:
+            return
+        if not self.workflow_bar.guard("POSTED", None, "ثبت نهایی"):
             return
         if QMessageBox.question(self, "ثبت نهایی", "اختلاف‌ها با سند اصلاح موجودی ثبت شوند؟", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return

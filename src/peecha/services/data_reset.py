@@ -147,6 +147,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM sec.notifications WHERE company_id = :company_id",
     "DELETE FROM sec.api_idempotency_keys WHERE company_id = :company_id",
     "DELETE FROM hr.attendance_records WHERE company_id = :company_id",
+    "DELETE FROM hr.leave_requests WHERE company_id = :company_id",  # R295
     "DELETE FROM payroll.periods WHERE company_id = :company_id",
     "DELETE FROM inv.warehouse_tasks WHERE company_id = :company_id",
     "DELETE FROM inv.pick_waves WHERE company_id = :company_id",
