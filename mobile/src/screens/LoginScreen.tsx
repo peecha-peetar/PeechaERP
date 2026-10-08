@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
-import { ApiClient, ApiError } from "../api/client";
+import { ApiClient } from "../api/client";
 import { Button } from "../components";
 import { useTheme } from "../theme/ThemeProvider";
 import { LoginResponse } from "../api/types";
 import { KeyValueStore } from "../storage/keyValueStore";
+import { describeConnectionError, normalizeServerUrl, serverUrlWarning } from "../serverUrl";
 
 interface Props {
   apiClient: ApiClient;
   kvStore: KeyValueStore;
-  onLoggedIn: (data: LoginResponse) => void;
+  onLoggedIn: (data: LoginResponse) => void | Promise<void>;
 }
 
 const SERVER_URL_KEY = "peecha.server_base_url";
@@ -28,33 +29,53 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     kvStore.getItem(SERVER_URL_KEY).then((stored) => {
       if (stored) {
-        setServerUrl(stored);
-        apiClient.setBaseUrl(stored);
+        const url = normalizeServerUrl(stored) || stored;
+        setServerUrl(url);
+        apiClient.setBaseUrl(url);
       }
     });
   }, [apiClient, kvStore]);
 
   const saveServerUrl = async () => {
-    const trimmed = serverUrl.trim();
-    if (!trimmed) return;
-    apiClient.setBaseUrl(trimmed);
-    await kvStore.setItem(SERVER_URL_KEY, trimmed);
+    const url = normalizeServerUrl(serverUrl);
+    if (!url) return;
+    setServerUrl(url);
+    apiClient.setBaseUrl(url);
+    await kvStore.setItem(SERVER_URL_KEY, url);
     setShowServerField(false);
+    setError(null);
+    setInfo("در حال بررسی اتصال…");
+    try {
+      await apiClient.checkHealth();
+      setInfo("اتصال به سرور برقرار است.");
+    } catch (err) {
+      setInfo(null);
+      setError(describeConnectionError(err, url));
+    }
   };
 
   const handleLogin = async () => {
     setError(null);
+    setInfo(null);
     setLoading(true);
+    let data: LoginResponse;
     try {
-      const data = await apiClient.login(username.trim(), password);
-      onLoggedIn(data);
+      data = await apiClient.login(username.trim(), password);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "اتصال به سرور برقرار نشد.");
+      setError(describeConnectionError(err, apiClient.getBaseUrl()));
+      setLoading(false);
+      return;
+    }
+    try {
+      await onLoggedIn(data);
+    } catch (err) {
+      setError(`ورود انجام شد ولی دریافت اطلاعات از سرور ناموفق بود. ${describeConnectionError(err, apiClient.getBaseUrl())}`);
     } finally {
       setLoading(false);
     }
@@ -95,6 +116,7 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
         secureTextEntry
       />
       {error !== null ? <Text style={[typography.caption, { color: colors.danger, marginBottom: spacing.md }]}>{error}</Text> : null}
+      {info !== null ? <Text style={[typography.caption, { color: colors.success, marginBottom: spacing.md }]}>{info}</Text> : null}
       <Button label="ورود" onPress={handleLogin} loading={loading} disabled={!username || !password} />
 
       {showServerField ? (
@@ -118,6 +140,11 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
           آدرس سرور: {serverUrl}  (تغییر)
         </Text>
       )}
+      {!showServerField && serverUrlWarning(serverUrl) ? (
+        <Text style={[typography.caption, { color: colors.warning, textAlign: "center", marginTop: spacing.sm }]}>
+          {serverUrlWarning(serverUrl)}
+        </Text>
+      ) : null}
     </View>
   );
 }

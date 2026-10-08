@@ -169,6 +169,11 @@ export class ApiClient {
     }
   }
 
+  /** آزمونِ اتصال به سرور (بدونِ ورود). */
+  async checkHealth(): Promise<void> {
+    await this.request<unknown>("/health", { auth: false });
+  }
+
   async login(username: string, password: string, deviceName?: string): Promise<LoginResponse> {
     const data = await this.request<LoginResponse>("/auth/login", {
       method: "POST",
