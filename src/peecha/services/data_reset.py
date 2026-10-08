@@ -138,6 +138,8 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM wf.cartable_items WHERE company_id = :company_id",
     # R291: اجرای فرایندهای گردش کار (تعریف‌ها جزو تنظیمات‌اند)
     "DELETE FROM wf.timers WHERE company_id = :company_id",
+    "DELETE FROM wf.tasks WHERE company_id = :company_id",
+    "DELETE FROM wf.delegations WHERE company_id = :company_id",
     "DELETE FROM wf.exceptions WHERE company_id = :company_id",
     "DELETE FROM wf.action_executions WHERE company_id = :company_id",
     "DELETE FROM wf.instances WHERE company_id = :company_id",

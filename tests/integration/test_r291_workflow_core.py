@@ -236,7 +236,7 @@ d_appr = make("approve_flow", manual([{**APPROVE_NODE}, {"id": "x", "type": "ACT
                                      [{"from": "start", "to": "ap"}, {"from": "ap", "to": "x", "when": "approved"},
                                       {"from": "ap", "to": "rej", "when": "rejected"}, {"from": "x", "to": "end"}]))
 ia = runtime.start_instance(company_id, d_appr, "TEST_DOC", 2, started_by=uid)
-check(runtime.get_instance(company_id, ia).status_code in ("WAITING", "FAILED"), "approval node waits (or needs R292)")
+check(runtime.get_instance(company_id, ia).status_code == "WAITING", "approval node waits for a human decision")
 
 # ===== ۹) محافظت از حلقه =====
 d_loop = make("loop", {"trigger": {"type": "MANUAL"}, "settings": {"max_steps": 12},
@@ -343,7 +343,7 @@ check({("CartableItem", "APPROVE"), ("WfInstance", "START"), ("WfInstance", "COM
 
 # ===== ۱۳) زمان‌بند کامل و اجرای دوره‌ای =====
 counts = scheduler.run_due(company_id)
-check(set(counts) == {"recovered", "timers", "schedules", "scans", "events"}, f"scheduler tick ({counts})")
+check(set(counts) >= {"recovered", "timers", "schedules", "scans", "events"}, f"scheduler tick ({counts})")
 d_sched = make("daily", {"trigger": {"type": "SCHEDULE", "every": "DAY", "at": "00:00"}, "nodes": [NOTE("n"), END],
                          "edges": [{"from": "start", "to": "n"}, {"from": "n", "to": "end"}]}, entity=None)
 scheduler.run_schedules(company_id)

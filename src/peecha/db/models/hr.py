@@ -108,6 +108,7 @@ class Employee(Base):
     hire_date: Mapped[datetime.date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     notes: Mapped[str | None] = mapped_column(String(1000))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
 
 
 class EmploymentContract(Base):

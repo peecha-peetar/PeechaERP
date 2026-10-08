@@ -333,3 +333,84 @@ class WfSettings(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class WfTask(Base):
+    __tablename__ = "tasks"
+    __table_args__ = _WF
+
+    task_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    instance_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("wf.instances.instance_id"))
+    node_id: Mapped[str | None] = mapped_column(String(60))
+    token_id: Mapped[str | None] = mapped_column(String(30))
+    visit: Mapped[int] = mapped_column(default=1)
+    kind: Mapped[str] = mapped_column(String(10))
+    title: Mapped[str] = mapped_column(String(300))
+    instructions: Mapped[str | None] = mapped_column(String(2000))
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    entity_id: Mapped[int | None] = mapped_column(BigInteger)
+    mode: Mapped[str] = mapped_column(String(12), default="ANY")
+    required_percent: Mapped[int | None] = mapped_column(SmallInteger)
+    options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    form_fields: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    status_code: Mapped[str] = mapped_column(String(10), default="OPEN")
+    priority_code: Mapped[str] = mapped_column(String(10), default="NORMAL")
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    due_at: Mapped[datetime.datetime | None]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    closed_at: Mapped[datetime.datetime | None]
+    closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    resumed_at: Mapped[datetime.datetime | None]
+    row_version: Mapped[int] = mapped_column(default=1)
+
+
+class WfTaskAssignee(Base):
+    __tablename__ = "task_assignees"
+    __table_args__ = _WF
+
+    assignee_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("wf.tasks.task_id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    seq: Mapped[int] = mapped_column(SmallInteger, default=1)
+    status_code: Mapped[str] = mapped_column(String(10), default="ACTIVE")
+    decision: Mapped[str | None] = mapped_column(String(10))
+    original_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    delegation_id: Mapped[int | None]
+    activated_at: Mapped[datetime.datetime | None]
+    decided_at: Mapped[datetime.datetime | None]
+
+
+class WfTaskDecision(Base):
+    __tablename__ = "task_decisions"
+    __table_args__ = _WF
+
+    decision_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("wf.tasks.task_id", ondelete="CASCADE"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    on_behalf_of_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decision: Mapped[str] = mapped_column(String(10))
+    comment: Mapped[str | None] = mapped_column(String(2000))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    client_ref: Mapped[str | None] = mapped_column(String(80))
+    channel: Mapped[str] = mapped_column(String(10), default="DESKTOP")
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class WfDelegation(Base):
+    __tablename__ = "delegations"
+    __table_args__ = _WF
+
+    delegation_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    from_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    to_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    starts_on: Mapped[datetime.date]
+    ends_on: Mapped[datetime.date]
+    definition_id: Mapped[int | None] = mapped_column(ForeignKey("wf.definitions.definition_id", ondelete="CASCADE"))
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    reason: Mapped[str | None] = mapped_column(String(500))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

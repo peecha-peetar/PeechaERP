@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import datetime
+
 from sqlalchemy import select
 
 from peecha.db.base import new_session
@@ -37,7 +39,7 @@ def role_users(session, company_id: int, role_id: int) -> list[int]:
 
 def role_names(session, role_ids) -> dict[int, str]:
     ids = {r for r in role_ids if r}
-    return dict(session.execute(select(Role.role_id, Role.code).where(Role.role_id.in_(ids)))) if ids else {}
+    return dict(session.execute(select(Role.role_id, Role.code).where(Role.role_id.in_(ids))).all()) if ids else {}
 
 
 def describe_spec(spec: dict, role_label: dict[int, str] | None = None, user_label: dict[int, str] | None = None) -> str:
@@ -113,9 +115,77 @@ def resolve(company_id: int, specs: list[dict], *, context: dict | None = None, 
     return out
 
 
-# R292: مسیریاب‌های سازمانی (مدیر واحد، مدیر مستقیم، انبار) اینجا ثبت می‌شوند
 _EXTRA_KINDS: dict = {}
 
 
 def register_kind(kind: str, func) -> None:
     _EXTRA_KINDS[kind] = func
+
+
+# --- مسیریاب‌های سازمانی -----------------------------------------------------------------------------------
+def _employee_unit(session, company_id: int, user_id: int | None) -> int | None:
+    from peecha.db.models.hr import Employee, EmploymentContract
+
+    if not user_id:
+        return None
+    emp = session.scalar(select(Employee).where(Employee.company_id == company_id, Employee.user_id == user_id))
+    if emp is None:
+        return None
+    today = datetime.date.today()
+    contract = session.scalar(select(EmploymentContract).where(
+        EmploymentContract.employee_id == emp.employee_id, EmploymentContract.status == "ACTIVE",
+        EmploymentContract.start_date <= today,
+        (EmploymentContract.end_date.is_(None)) | (EmploymentContract.end_date >= today))
+        .order_by(EmploymentContract.start_date.desc()))
+    return contract.org_unit_id if contract else None
+
+
+def _unit_manager(session, org_unit_id: int | None, exclude: int | None = None) -> int | None:
+    """کاربر مدیر واحد؛ اگر خالی یا خود شخص بود، مدیر واحد بالاتر."""
+    from peecha.db.models.hr import Employee, OrganizationalUnit
+
+    seen = set()
+    while org_unit_id and org_unit_id not in seen:
+        seen.add(org_unit_id)
+        unit = session.get(OrganizationalUnit, org_unit_id)
+        if unit is None:
+            return None
+        manager = session.get(Employee, unit.manager_employee_id) if unit.manager_employee_id else None
+        if manager is not None and manager.user_id and manager.user_id != exclude:
+            return manager.user_id
+        org_unit_id = unit.parent_org_unit_id
+    return None
+
+
+def _reporting_manager(session, company_id, spec, context, starter, entity_type, entity_id) -> list[int]:
+    subject = conditions.get_path(context, spec["field"]) if spec.get("field") else starter
+    try:
+        subject = int(subject) if subject else None
+    except (TypeError, ValueError):
+        subject = None
+    manager = _unit_manager(session, _employee_unit(session, company_id, subject), exclude=subject)
+    return [manager] if manager else []
+
+
+def _org_manager(session, company_id, spec, context, starter, entity_type, entity_id) -> list[int]:
+    unit = spec.get("org_unit_id") or (conditions.get_path(context, spec["field"]) if spec.get("field") else None)
+    manager = _unit_manager(session, int(unit)) if unit else None
+    return [manager] if manager else []
+
+
+def _warehouse_users(session, company_id, spec, context, starter, entity_type, entity_id) -> list[int]:
+    from peecha.db.models.inventory import WarehouseUserAccess
+
+    wid = spec.get("warehouse_id") or conditions.get_path(context, spec.get("field") or "warehouse_id")
+    if not wid:
+        return []
+    q = select(WarehouseUserAccess.user_id).where(WarehouseUserAccess.warehouse_id == int(wid))
+    flag = spec.get("can")  # can_post_receipt | can_post_issue | can_adjust
+    if flag in ("can_post_receipt", "can_post_issue", "can_adjust", "can_view_balance"):
+        q = q.where(getattr(WarehouseUserAccess, flag).is_(True))
+    return sorted(session.scalars(q))
+
+
+register_kind("REPORTING_MANAGER", _reporting_manager)
+register_kind("ORG_MANAGER", _org_manager)
+register_kind("WAREHOUSE", _warehouse_users)

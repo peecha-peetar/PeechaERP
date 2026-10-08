@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import Callable
 
+from sqlalchemy import event as sa_event
+from sqlalchemy.orm import Session
+
 from peecha.services import notifications as notifications_service
 
 TYPES = {
@@ -36,3 +39,23 @@ def send(company_id: int, user_ids, type_code: str, title: str, body: str = "", 
                 pass
         sent += 1
     return sent
+
+
+def later(session, company_id: int, user_ids, type_code: str, title: str, body: str = "",
+          entity_type: str | None = "WfInstance", entity_id: int | None = None) -> None:
+    """اعلان پس از commit همین تراکنش (اگر تراکنش برگشت بخورد اعلانی هم نمی‌رود)."""
+    session.info.setdefault("wf_notes", []).append((company_id, list(user_ids), type_code, title, body, entity_type, entity_id))
+
+
+@sa_event.listens_for(Session, "after_commit")
+def _send_later(session) -> None:
+    for args in session.info.pop("wf_notes", None) or []:
+        try:
+            send(*args)
+        except Exception:  # noqa: BLE001 -- خطای اعلان نباید تصمیم ثبت‌شده را خراب کند
+            pass
+
+
+@sa_event.listens_for(Session, "after_rollback")
+def _drop_later(session) -> None:
+    session.info.pop("wf_notes", None)

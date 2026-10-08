@@ -29,8 +29,8 @@ from peecha.services.workflow.common import (
 START = "start"
 NODE_EDGE_LABELS = {
     "CONDITION": {"yes": "بله", "no": "خیر"},
-    "APPROVAL": {"approved": "تایید شد", "rejected": "رد شد", "changes": "نیاز به اصلاح"},
-    "TASK": {"done": "انجام شد"},
+    "APPROVAL": {"approved": "تایید شد", "rejected": "رد شد", "changes": "نیاز به اصلاح", "timeout": "پایان مهلت"},
+    "TASK": {"done": "انجام شد", "timeout": "پایان مهلت"},
     "WAIT": {None: "پس از انتظار", "timeout": "پایان مهلت"},
     "ACTION": {None: "پس از اجرا", "failed": "در صورت شکست"},
 }
@@ -209,6 +209,8 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
                 issues.append(Issue("error", f"«{name}» باید هر دو مسیر «تایید شد» و «رد شد» را داشته باشد.", nid))
             if node.get("mode") == "PERCENT" and not 0 < int(node.get("percent") or 0) <= 100:
                 issues.append(Issue("error", f"درصد لازم برای «{name}» باید بین ۱ تا ۱۰۰ باشد.", nid))
+            if (node.get("mode") or "ANY") not in ("SINGLE", "ANY", "ALL", "PERCENT", "SEQUENTIAL"):
+                issues.append(Issue("error", f"شیوهٔ تایید «{name}» نامعتبر است.", nid))
             for a in node.get("approvers") or []:
                 if a.get("kind") == "ROLE":
                     role_ids.add(a.get("role_id"))
@@ -219,6 +221,13 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
         elif ntype == "TASK":
             if not node.get("assignees"):
                 issues.append(Issue("error", f"برای کار «{name}» مسئولی تعیین نشده است.", nid))
+            if "done" not in whens and None not in whens:
+                issues.append(Issue("error", f"کار «{name}» مسیر «انجام شد» ندارد.", nid))
+            keys = [f.get("key") for f in node.get("fields") or []]
+            if any(not k or not (f.get("label") or "").strip() for k, f in zip(keys, node.get("fields") or [])):
+                issues.append(Issue("error", f"هر خانهٔ فرم کار «{name}» باید کلید و عنوان داشته باشد.", nid))
+            if len(keys) != len(set(keys)):
+                issues.append(Issue("error", f"کلید تکراری در فرم کار «{name}».", nid))
             for a in node.get("assignees") or []:
                 if a.get("kind") == "ROLE":
                     role_ids.add(a.get("role_id"))

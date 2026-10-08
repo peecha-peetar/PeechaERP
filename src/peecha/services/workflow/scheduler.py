@@ -14,14 +14,22 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from peecha.db.base import new_session
 from peecha.db.models.workflow import WfDefinition, WfDefinitionTrigger, WfTimer
-from peecha.services.workflow import events, registry, runtime
-from peecha.services.workflow.common import RUNNABLE_STATUSES, friendly_error, now
 
+# پیش از import زمان‌اجرا تعریف می‌شوند تا ماژول‌هایی که هنگام import ثبت‌نام می‌کنند (tasks) در import دوری هم کار کنند
 TIMER_HANDLERS: dict[str, Callable[[WfTimer], None]] = {}
+TICK_HOOKS: dict[str, Callable[[int | None], int]] = {}  # کارهای دوره‌ای ماژول‌های موتور (مثلاً ادامهٔ کارهای بسته‌شده)
+
+
+def register_tick(name: str, func: Callable[[int | None], int]) -> None:
+    TICK_HOOKS[name] = func
 
 
 def register_timer(kind: str, handler: Callable[[WfTimer], None]) -> None:
     TIMER_HANDLERS[kind] = handler
+
+
+from peecha.services.workflow import events, registry, runtime  # noqa: E402
+from peecha.services.workflow.common import RUNNABLE_STATUSES, friendly_error, now  # noqa: E402
 
 
 def _wait_timer(timer: WfTimer) -> None:
@@ -164,6 +172,11 @@ def run_due(company_id: int | None = None, at: datetime.datetime | None = None) 
     counts["schedules"] = run_schedules(company_id, at)
     counts["scans"] = run_scans(company_id, at)
     counts["events"] = events.dispatch_pending(company_id)
+    for name, func in TICK_HOOKS.items():
+        try:
+            counts[name] = func(company_id)
+        except Exception:  # noqa: BLE001
+            counts[name] = 0
     return counts
 
 

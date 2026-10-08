@@ -139,6 +139,35 @@ def update_org_unit(
         session.commit()
 
 
+def set_org_unit_manager(company_id: int, org_unit_id: int, manager_employee_id: int | None) -> None:
+    """مدیر واحد سازمانی (برای مسیر تایید «مدیر واحد» و «مدیر مستقیم» در گردش کار)."""
+    with new_session() as session:
+        unit = session.get(OrganizationalUnit, org_unit_id)
+        if unit is None or unit.company_id != company_id:
+            raise ValueError("واحد سازمانی یافت نشد.")
+        if manager_employee_id is not None:
+            emp = session.get(Employee, manager_employee_id)
+            if emp is None or emp.company_id != company_id:
+                raise ValueError("کارمند انتخاب‌شده یافت نشد.")
+        unit.manager_employee_id = manager_employee_id
+        session.commit()
+
+
+def set_employee_user(company_id: int, employee_id: int, user_id: int | None) -> None:
+    """کاربر سامانهٔ کارمند (هر کاربر حداکثر به یک کارمند در هر شرکت)."""
+    with new_session() as session:
+        emp = session.get(Employee, employee_id)
+        if emp is None or emp.company_id != company_id:
+            raise ValueError("کارمند یافت نشد.")
+        if user_id is not None:
+            taken = session.scalar(select(Employee).where(Employee.company_id == company_id, Employee.user_id == user_id,
+                                                          Employee.employee_id != employee_id))
+            if taken is not None:
+                raise ValueError(f"این کاربر قبلاً به کارمند «{taken.first_name} {taken.last_name}» وصل شده است.")
+        emp.user_id = user_id
+        session.commit()
+
+
 def delete_org_unit(org_unit_id: int) -> None:
     with new_session() as session:
         unit = session.get(OrganizationalUnit, org_unit_id)

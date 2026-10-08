@@ -78,6 +78,7 @@ class Run:
 NODE_HANDLERS: dict[str, Callable[[Run], NodeResult]] = {}
 CLOSE_HOOKS: list[Callable] = []  # (session, instance, status) -- مثلاً لغو کارهای باز (R292)
 TIMELINE_PROVIDERS: list[Callable] = []  # (session, instance) -> [TimelineRow]
+LEAVE_HOOKS: list[Callable] = []  # (session, instance, token, when) -- نشانهٔ منتظر از هر راهی ادامه یافت
 
 
 def register_node(node_type: str, handler: Callable[[Run], NodeResult]) -> None:
@@ -86,6 +87,10 @@ def register_node(node_type: str, handler: Callable[[Run], NodeResult]) -> None:
 
 def on_close(hook: Callable) -> None:
     CLOSE_HOOKS.append(hook)
+
+
+def on_leave(hook: Callable) -> None:
+    LEAVE_HOOKS.append(hook)
 
 
 def load_context(company_id: int, entity_type: str | None, entity_id: int | None) -> dict:
@@ -430,8 +435,8 @@ def _complete_action(instance_id: int, token_id: str, outcome: actions.ActionOut
 
 def resume(company_id: int, instance_id: int, *, node_id: str | None = None, token_id: str | None = None,
            when: str | None = None, actor_user_id: int | None = None, detail: dict | None = None,
-           states: tuple[str, ...] = ("WAITING",), run: bool = True) -> bool:
-    """ادامهٔ نشانهٔ منتظر (پس از تایید، پایان کار، زمان‌سنج یا رویداد)."""
+           states: tuple[str, ...] = ("WAITING",), run: bool = True, vars_patch: dict | None = None) -> bool:
+    """ادامهٔ نشانهٔ منتظر (پس از تایید، پایان کار، زمان‌سنج یا رویداد). vars_patch: دادهٔ واردشده در کار."""
     with new_session() as session:
         inst = session.scalar(select(WfInstance).where(WfInstance.instance_id == instance_id).with_for_update())
         if inst is None or inst.company_id != company_id or inst.status_code not in ("RUNNING", "WAITING"):
@@ -447,6 +452,10 @@ def resume(company_id: int, instance_id: int, *, node_id: str | None = None, tok
         step = session.get(WfInstanceStep, token.get("step_id")) if token.get("step_id") else None
         if actor_user_id:
             variables["last_decider"] = actor_user_id
+        if vars_patch:
+            variables["vars"] = {**variables.get("vars", {}), **plain(vars_patch)}
+        for hook in LEAVE_HOOKS:
+            hook(session, inst, token, when)
         _apply(session, inst, graph, node, token, tokens, variables,
                NodeResult("NEXT", when=when, detail=detail or {}, actor_user_id=actor_user_id), step)
         session.commit()
@@ -745,3 +754,6 @@ def status_path(company_id: int, instance_id: int) -> list[tuple[str, str]]:
         edges = _next_edges(graph, node, taken.get(nid, default)) if nid in nodes or nid == START else []
         nid = edges[0]["to"] if edges else None
     return path
+
+
+from peecha.services.workflow import tasks as _tasks  # noqa: E402,F401 -- گره‌های تایید و کار انسانی
