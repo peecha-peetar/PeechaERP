@@ -1920,4 +1920,8 @@ WAREHOUSE_REPORTS += PRODUCTION_REPORTS
 from peecha.services.crm.reports import CRM_REPORTS  # noqa: E402
 
 WAREHOUSE_REPORTS += CRM_REPORTS
+# R296: گزارش‌های گردش کار و تایید
+from peecha.services.workflow.monitor import WF_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += WF_REPORTS
 WAREHOUSE_REPORTS_BY_CODE = {r.code: r for r in WAREHOUSE_REPORTS}

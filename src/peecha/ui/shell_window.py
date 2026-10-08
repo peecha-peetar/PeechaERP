@@ -803,6 +803,12 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
             self._normalizing = False
 
 
+def _wf_monitor_screen(main_window):
+    from peecha.ui.screens.workflow_monitor import WorkflowMonitorScreen
+
+    return WorkflowMonitorScreen(main_window)
+
+
 def _leave_screen(main_window):
     from peecha.ui.screens.hr_leave_requests import LeaveRequestsScreen
 
@@ -2065,6 +2071,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens import workflow_studio as wf_studio
 
         self.register_screen("wf_processes", lambda: wf_studio.ProcessListScreen(self))
+        self.register_screen("wf_monitor", lambda: _wf_monitor_screen(self))  # R296
         self.register_screen("wf_designer", lambda: wf_studio.DesignerScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 

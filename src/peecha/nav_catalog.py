@@ -270,6 +270,15 @@ CRM_REPORT_MENU = [
     ]),
 ]
 
+# R296: «گزارش‌ها ‹ گردش کار» -- services/workflow/monitor.WF_REPORTS (همان موتور/صفحهٔ گزارش)
+WF_REPORT_MENU = [
+    ("WF_REP", "گردش کار و تایید", [
+        ("WF_RUNS", "اجرای فرایندها"), ("WF_SUMMARY", "خلاصهٔ فرایندها"), ("WF_BOTTLENECKS", "گلوگاه‌ها (مراحل کند)"),
+        ("WF_SLA", "پایبندی به مهلت"), ("WF_APPROVERS", "عملکرد تاییدکنندگان"), ("WF_FAILURES", "خطاهای اقدام‌ها"),
+        ("WF_EXCEPTIONS", "موارد نیازمند بررسی"), ("WF_ESCALATIONS", "ارجاع‌ها به سطح بالاتر"),
+    ]),
+]
+
 # R270: «گزارش‌ها ‹ تولید» -- services/production/reports.PRODUCTION_REPORTS
 PRD_REPORT_MENU = [
     ("PRD", "تولید", [
@@ -557,6 +566,9 @@ NAV_ITEMS = [
             {"code": "WF_DELEGATIONS", "label": "تفویض اختیار", "screen": "wf_delegations"},
             # R294: طراحی فرایند بدون کدنویسی
             {"code": "WF_PROCESSES", "label": "فرایندها و طراحی", "screen": "wf_processes"},
+            # R296: پایش و گزارش‌ها
+            {"code": "WF_MONITOR", "label": "پایش فرایندها", "screen": "wf_monitor"},
+            {"code": "WF_REPORTS", "label": "گزارش‌ها", "children": _report_menu("WF_RPT", "warehouse_report_", WF_REPORT_MENU)},
             {"code": "WF_DESIGNER", "label": "طراح فرایند", "screen": "wf_designer", "hidden_from_sidebar": True},
             {"code": "WF_SETTINGS", "label": "تنظیمات گردش کار", "screen": "wf_settings", "hidden_from_sidebar": True},
         ],
@@ -633,6 +645,7 @@ NAV_ITEMS = [
             {"code": "REPORTS_FA", "label": "دارایی‌های ثابت", "children": _report_menu("INV_RPT", "warehouse_report_", FA_REPORT_MENU)},
             {"code": "REPORTS_PRD", "label": "تولید", "children": _report_menu("INV_RPT", "warehouse_report_", PRD_REPORT_MENU)},
             {"code": "REPORTS_CRM", "label": "ارتباط با مشتری", "children": _report_menu("INV_RPT", "warehouse_report_", CRM_REPORT_MENU)},
+            {"code": "REPORTS_WF", "label": "گردش کار و تایید", "children": _report_menu("INV_RPT", "warehouse_report_", WF_REPORT_MENU)},
             # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
             {"code": "REPORTS_PURCHASE", "label": "گزارشات خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
             {"code": "REPORTS_SALES", "label": "گزارشات فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
@@ -824,6 +837,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("WF_NOTIFICATIONS", "🔔"),
         ("WF_DELEGATIONS", "🤝"),
         ("WF_PROCESSES", "🔀"),
+        ("WF_MONITOR", "📊"),
     ],
     "SETTINGS": [],
 }
