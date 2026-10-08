@@ -65,6 +65,8 @@ class OrgUnitRow:
     parent_name: str | None
     cost_center_detail_account_id: int | None
     is_active: bool
+    manager_employee_id: int | None = None
+    manager_name: str = ""
 
 
 def list_org_units(company_id: int) -> list[OrgUnitRow]:
@@ -73,6 +75,8 @@ def list_org_units(company_id: int) -> list[OrgUnitRow]:
             select(OrganizationalUnit).where(OrganizationalUnit.company_id == company_id).order_by(OrganizationalUnit.code)
         ).all()
         names = {u.org_unit_id: u.name for u in units}
+        managers = {e.employee_id: f"{e.first_name} {e.last_name}".strip() for e in session.scalars(
+            select(Employee).where(Employee.employee_id.in_({u.manager_employee_id for u in units if u.manager_employee_id})))}
         return [
             OrgUnitRow(
                 org_unit_id=u.org_unit_id,
@@ -82,6 +86,8 @@ def list_org_units(company_id: int) -> list[OrgUnitRow]:
                 parent_name=names.get(u.parent_org_unit_id) if u.parent_org_unit_id else None,
                 cost_center_detail_account_id=u.cost_center_detail_account_id,
                 is_active=u.is_active,
+                manager_employee_id=u.manager_employee_id,
+                manager_name=managers.get(u.manager_employee_id, ""),
             )
             for u in units
         ]

@@ -31,7 +31,11 @@ EXCEPTION_STATUS = {"OPEN": "باز", "RETRYING": "در حال تلاش دوبا
 STEP_STATUS = {"RUNNING": "در حال اجرا", "DONE": "انجام شد", "WAITING": "در انتظار", "FAILED": "ناموفق", "SKIPPED": "رد شد"}
 TRIGGER_TYPES = {"EVENT": "با رویداد", "MANUAL": "دستی (ارسال کاربر)", "SCHEDULE": "زمان‌بندی‌شده", "SCAN": "بررسی دوره‌ای"}
 
-DEFAULT_SETTINGS = {"allow_self_approval": False, "max_steps": 200, "max_event_depth": 5, "api_allowlist": []}
+# روزهای کاری به شمارهٔ روز هفتهٔ پایتون (دوشنبه=۰ ... شنبه=۵، یکشنبه=۶)؛ جمعه (۴) تعطیل، پنجشنبه نیمه‌وقت
+DEFAULT_WORK_HOURS = {"5": ["08:00", "16:00"], "6": ["08:00", "16:00"], "0": ["08:00", "16:00"], "1": ["08:00", "16:00"],
+                      "2": ["08:00", "16:00"], "3": ["08:00", "12:00"]}
+DEFAULT_SETTINGS = {"allow_self_approval": False, "max_steps": 200, "max_event_depth": 5, "api_allowlist": [],
+                    "notify_starter_on_end": True, "work_hours": DEFAULT_WORK_HOURS, "notification_defaults": {}}
 _AUDIT_ACTIONS = {"CREATE", "UPDATE", "DELETE", "APPROVE", "REVERSE", "MERGE", "SUBMIT", "REJECT", "DELEGATE", "ESCALATE",
                   "EXECUTE", "PUBLISH", "CANCEL", "RETRY", "RESOLVE", "COMMENT", "START", "COMPLETE"}
 

@@ -23,7 +23,7 @@ from peecha import session as app_session
 from peecha.services import hr as hr_service
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, wrap_scrollable, wrap_scrollable_with_footer
 
-_COLUMNS = ["فعال", "والد", "نام", "کد"]
+_COLUMNS = ["فعال", "مدیر واحد", "والد", "نام", "کد"]
 
 
 class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -46,6 +46,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.name_field, "نام واحد سازمانی، مثلاً «فناوری اطلاعات»."),
             (self.parent_combo, "واحد سازمانی بالادست — اگر این واحد زیرمجموعهٔ واحد دیگری است."),
             (self.is_active_checkbox, "واحد غیرفعال دیگر در انتخاب واحد سازمانی برای پست/قرارداد نشان داده نمی‌شود."),
+            (self.manager_combo, "کارمندی که درخواست‌های کارکنان این واحد برای تایید به او می‌رسد (گردش کار)."),
         ])
         self.register_field_grids("hr_org_units", [self.form_grid])
 
@@ -64,7 +65,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table)
         return wrap_scrollable(panel)
@@ -82,6 +83,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.code_field = QLineEdit()
         self.name_field = QLineEdit()
         self.parent_combo = QComboBox()
+        self.manager_combo = QComboBox()
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
 
@@ -89,6 +91,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("name", "نام", self.name_field, span=2),
             FieldSpec("parent", "والد", self.parent_combo, span=3),
+            FieldSpec("manager", "مدیر واحد", self.manager_combo, span=3),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
         layout.addWidget(self.form_grid)
@@ -135,11 +138,16 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for u in self._rows:
             self.parent_combo.addItem(f"{u.code} — {u.name}", u.org_unit_id)
         self.parent_combo.blockSignals(False)
+        self.manager_combo.clear()
+        self.manager_combo.addItem("(تعیین نشده)", None)
+        for e in hr_service.list_employees(company_id):
+            self.manager_combo.addItem(f"{e.employee_code} — {e.full_name}", e.employee_id)
 
         self.table.setRowCount(len(self._rows))
         for row_index, u in enumerate(self._rows):
             values = [
                 "بله" if u.is_active else "خیر",
+                u.manager_name or "—",
                 u.parent_name or "—",
                 u.name,
                 u.code,
@@ -165,6 +173,8 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         index = self.parent_combo.findData(unit.parent_org_unit_id)
         self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
         self.is_active_checkbox.setChecked(unit.is_active)
+        index = self.manager_combo.findData(unit.manager_employee_id)
+        self.manager_combo.setCurrentIndex(index if index >= 0 else 0)
         self.delete_button.setVisible(True)
 
     def _reset_form(self) -> None:
@@ -175,6 +185,7 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.code_field.setEnabled(True)
         self.name_field.clear()
         self.parent_combo.setCurrentIndex(0)
+        self.manager_combo.setCurrentIndex(0)
         self.is_active_checkbox.setChecked(True)
         self.delete_button.setVisible(False)
         self.table.clearSelection()
@@ -194,12 +205,14 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 hr_service.update_org_unit(
                     self._editing_id, name, parent_id, None, self.is_active_checkbox.isChecked()
                 )
+                unit_id = self._editing_id
             else:
                 code = self.code_field.text().strip()
                 if not code:
                     self.status_label.setText("کد را وارد کنید.")
                     return
-                hr_service.create_org_unit(company_id, code, name, parent_id, None)
+                unit_id = hr_service.create_org_unit(company_id, code, name, parent_id, None)
+            hr_service.set_org_unit_manager(company_id, unit_id, self.manager_combo.currentData())
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return

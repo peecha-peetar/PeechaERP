@@ -546,6 +546,18 @@ NAV_ITEMS = [
             {"code": "CRM_SETTINGS", "label": "تنظیمات ارتباط با مشتری", "screen": "crm_settings", "hidden_from_sidebar": True},
         ],
     },
+    # R293: گردش کار و تایید -- کارهای من، مرکز تایید، اعلان‌ها و تفویض (docs/workflow-engine-architecture-audit.md)
+    {
+        "code": "WF",
+        "label": "گردش کار و تایید",
+        "children": [
+            {"code": "WF_MY_WORK", "label": "کارهای من", "screen": "wf_my_work"},
+            {"code": "WF_APPROVALS", "label": "مرکز تایید", "screen": "wf_approvals"},
+            {"code": "WF_NOTIFICATIONS", "label": "اعلان‌ها", "screen": "wf_notifications"},
+            {"code": "WF_DELEGATIONS", "label": "تفویض اختیار", "screen": "wf_delegations"},
+            {"code": "WF_SETTINGS", "label": "تنظیمات گردش کار", "screen": "wf_settings", "hidden_from_sidebar": True},
+        ],
+    },
     {
         "code": "PURCH",
         "label": "خرید و تدارکات",
@@ -800,6 +812,13 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("CRM_AUTOMATION", "🤖"),
         ("CRM_RPT_CRM_PERFORMANCE", "🏆"),
         ("CRM_RPT_CRM_FORECAST", "🔮"),
+    ],
+    # R293: ریبون گردش کار
+    "WF": [
+        ("WF_MY_WORK", "📥"),
+        ("WF_APPROVALS", "🖊️"),
+        ("WF_NOTIFICATIONS", "🔔"),
+        ("WF_DELEGATIONS", "🤝"),
     ],
     "SETTINGS": [],
 }

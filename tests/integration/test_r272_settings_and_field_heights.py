@@ -129,7 +129,7 @@ check(not tabs and not scr_.no_access_label.isHidden(), "no grants -> no setting
 scr_.select_tab(11)
 check(not scr_.tabs.isVisible() or not scr_.tabs.isTabVisible(11), "gear cannot open a hidden tab")
 _, tabs = visible_tabs(make_user("all_settings", ["system_settings"]))
-check(len(tabs) == 13, "whole system_settings permission keeps every tab")  # R289: + ارتباط با مشتری
+check(len(tabs) == 14, "whole system_settings permission keeps every tab")  # R289: + ارتباط با مشتری، R293: + گردش کار
 mgr = roles_setup.ensure_role_templates(company_id)["PRD_MANAGER"]
 u = make_user("prd_mgr", [])
 roles_service.set_user_role(u.user_id, mgr, company_id, True)
@@ -137,7 +137,7 @@ _, tabs = visible_tabs(u)
 check("تولید" in tabs and "دارایی‌های ثابت" not in tabs, "production manager template reaches production settings")
 sess.current_user = admin_user
 _, tabs = visible_tabs(admin_user)
-check(len(tabs) == 13, "admin sees all tabs")
+check(len(tabs) == 14, "admin sees all tabs")
 
 fx.finish()
 sys.stdout.flush()

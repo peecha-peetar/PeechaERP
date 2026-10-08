@@ -249,6 +249,25 @@ class Notification(Base):
     entity_id: Mapped[int | None]
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    priority_code: Mapped[str] = mapped_column(String(10), default="NORMAL")
+    read_at: Mapped[datetime.datetime | None]
+    channels: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class NotificationPreference(Base):
+    """R293: کانال‌های دلخواه هر کاربر برای هر نوع اعلان ('*' = همهٔ انواع)."""
+
+    __tablename__ = "notification_preferences"
+    __table_args__ = {"schema": "sec"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
+    type_code: Mapped[str] = mapped_column(String(30), primary_key=True)
+    in_app: Mapped[bool] = mapped_column(Boolean, default=True)
+    desktop: Mapped[bool] = mapped_column(Boolean, default=True)
+    sms: Mapped[bool] = mapped_column(Boolean, default=False)
+    email: Mapped[bool] = mapped_column(Boolean, default=False)
+    push: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 # --- جدول‌های تاریخچه (Core Table؛ فقط خواندنی از دید اپلیکیشن) ---------

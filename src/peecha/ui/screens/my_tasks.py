@@ -81,6 +81,31 @@ _TYPE_TO_NAV_CODE = {
 }
 
 
+def open_cartable_source(main_window, form_code: str, source_record_id: int) -> bool:
+    """R293: همان بازکردن سند مبدا کارتابل، قابل استفاده از «کارهای من»."""
+    opener = _OPEN_HANDLERS.get(form_code)
+    if opener is None or main_window is None:
+        return False
+    opener(main_window, source_record_id)
+    return True
+
+
+def open_operational_task(main_window, kind: str, document_type_code: str, document_id: int) -> bool:
+    if main_window is None:
+        return False
+    if kind == "GOODS_RECEIPT":
+        main_window.open_screen("PURCH_GOODS_RECEIPT")
+        return True
+    if kind == "INVENTORY_RESIDUAL":
+        main_window.open_screen("INV_RESIDUAL_ADJUST")
+        return True
+    nav_code = _TYPE_TO_NAV_CODE.get(document_type_code)
+    if nav_code is None:
+        return False
+    main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
+    return True
+
+
 class MyTasksScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
@@ -204,25 +229,13 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         if row < 0 or row >= len(self._op_tasks) or self._main_window is None:
             return
         task = self._op_tasks[row]
-        if task.kind == "GOODS_RECEIPT":
-            self._main_window.open_screen("PURCH_GOODS_RECEIPT")
-            return
-        if task.kind == "INVENTORY_RESIDUAL":
-            self._main_window.open_screen("INV_RESIDUAL_ADJUST")
-            return
-        nav_code = _TYPE_TO_NAV_CODE.get(task.document_type_code)
-        if nav_code is None:
-            return
-        document_id = task.document_id
-        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
+        open_operational_task(self._main_window, task.kind, task.document_type_code, task.document_id)
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
         task = next((t for t in self._tasks if t.cartable_item_id == self.table.item(row, 0).data(Qt.UserRole)), None)
         if task is None:
             return
-        opener = _OPEN_HANDLERS.get(task.form_code)
-        if opener is not None:
-            opener(self._main_window, task.source_record_id)
+        open_cartable_source(self._main_window, task.form_code, task.source_record_id)
 
     def _approve_selected(self) -> None:
         task = self._selected_task()

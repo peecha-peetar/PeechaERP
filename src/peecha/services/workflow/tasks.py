@@ -29,10 +29,12 @@ TASK_STATUS = {"OPEN": "در انتظار", "APPROVED": "تاییدشده", "REJ
 MODES = {"SINGLE": "یک نفر", "ANY": "اولین تصمیم کافی است", "ALL": "همه باید تایید کنند",
          "PERCENT": "درصدی از گیرندگان", "SEQUENTIAL": "به ترتیب، یکی پس از دیگری"}
 DECISIONS = {"APPROVE": "تایید", "REJECT": "رد", "CHANGES": "برگشت برای اصلاح", "DONE": "انجام شد", "COMMENT": "یادداشت",
-             "DELEGATE": "واگذاری", "REASSIGN": "ارجاع دوباره", "CANCEL": "لغو"}
+             "DELEGATE": "واگذاری", "REASSIGN": "ارجاع دوباره", "CANCEL": "لغو", "ESCALATE": "ارجاع به سطح بالاتر"}
 SEAT_STATUS = {"QUEUED": "در نوبت", "ACTIVE": "منتظر تصمیم", "DECIDED": "تصمیم گرفت", "SKIPPED": "نیازی نشد",
                "DELEGATED": "واگذار کرد", "CANCELLED": "لغو شد"}
 FIELD_KINDS = {"text": "متن", "number": "عدد", "date": "تاریخ", "bool": "بله/خیر", "choice": "انتخاب از فهرست"}
+SLA_STATUS = {"NONE": "", "ON_TRACK": "در مهلت", "AT_RISK": "نزدیک موعد", "BREACHED": "گذشته از مهلت",
+              "MET": "به‌موقع انجام شد"}
 _OUTCOME = {"APPROVED": "approved", "REJECTED": "rejected", "CHANGES": "changes", "DONE": "done", "EXPIRED": "timeout"}
 _LIVE = ("ACTIVE", "QUEUED")
 
@@ -53,7 +55,9 @@ def due_at(node: dict, start: datetime.datetime | None = None) -> datetime.datet
     return (start or now()) + datetime.timedelta(hours=hours) if hours > 0 else None
 
 
-DUE_CALCULATOR = due_at  # نقطهٔ جایگزینی (company_id, node, start) در R293
+DUE_CALCULATOR = due_at
+TASK_CREATED_HOOKS: list = []  # (session, task, node) -- مثلاً تعهد زمانی و یادآوری (sla.py)
+TASK_CLOSED_HOOKS: list = []  # (session, task)
 
 
 def _active_delegation(session, company_id: int, user_id: int, definition_id: int | None, entity_type: str | None,
@@ -158,6 +162,8 @@ def _human_node(run: runtime.Run) -> runtime.NodeResult:
             "هیچ کاربر فعالی با تنظیمات این مرحله منطبق نیست (یا تنها گزینه خود درخواست‌کننده است). "
             "کار را از «مرکز تایید» به فرد مناسب ارجاع دهید.", None)
     _notify_seats(session, task, active)
+    for hook in TASK_CREATED_HOOKS:
+        hook(session, task, node)
     if node.get("timeout_hours") and "timeout" in whens:
         session.add(WfTimer(company_id=inst.company_id, kind="WAIT", instance_id=inst.instance_id, node_id=node["id"],
                             task_id=task.task_id, payload={"token_id": run.token["id"], "when": "timeout"},
@@ -177,6 +183,8 @@ def _close_open_tasks(session, instance_id: int, *, token_id: str | None = None,
     for task in session.scalars(q.with_for_update()):
         task.status_code, task.closed_at, task.resumed_at = status, now(), now()
         task.row_version += 1
+        for hook in TASK_CLOSED_HOOKS:
+            hook(session, task)
         session.execute(update(WfTaskAssignee).where(WfTaskAssignee.task_id == task.task_id,
                                                      WfTaskAssignee.status_code.in_(_LIVE)).values(status_code="CANCELLED"))
 
@@ -333,6 +341,8 @@ def decide(company_id: int, task_id: int, user_id: int, decision: str, comment: 
                 task.result = plain(values)
             session.execute(update(WfTaskAssignee).where(WfTaskAssignee.task_id == task_id,
                                                          WfTaskAssignee.status_code.in_(_LIVE)).values(status_code="SKIPPED"))
+            for hook in TASK_CLOSED_HOOKS:
+                hook(session, task)
         audit(session, company_id, user_id, "Task", task_id,
               {"APPROVE": "APPROVE", "REJECT": "REJECT", "CHANGES": "REJECT", "DONE": "COMPLETE"}[decision],
               {"decision": decision, "comment": comment, "result": closing, "on_behalf_of": seat.original_user_id,
@@ -625,6 +635,9 @@ class TaskRow:
     on_behalf_of: str
     row_version: int
     open_nav: str | None
+    sla_status: str = "NONE"
+    sla_label: str = ""
+    escalation_level: int = 0
 
 
 def _rows(session, tasks: list[WfTask], user_id: int | None = None) -> list[TaskRow]:
@@ -653,7 +666,8 @@ def _rows(session, tasks: list[WfTask], user_id: int | None = None) -> list[Task
             TASK_STATUS.get(t.status_code, t.status_code), t.priority_code, PRIORITIES.get(t.priority_code, t.priority_code),
             MODES.get(t.mode, t.mode) if t.kind == "APPROVAL" else "", seat.status_code if seat else "",
             names.get(seat.original_user_id, "") if seat and seat.original_user_id else "", t.row_version,
-            adapter.open_nav if adapter else None))
+            adapter.open_nav if adapter else None, t.sla_status or "NONE", SLA_STATUS.get(t.sla_status or "NONE", ""),
+            t.escalation_level or 0))
     return out
 
 
@@ -760,3 +774,6 @@ def _timeline(session, inst: WfInstance) -> list:
 
 
 runtime.TIMELINE_PROVIDERS.append(_timeline)
+
+
+from peecha.services.workflow import sla as _sla  # noqa: E402,F401 -- تعهد زمانی، یادآوری و ارجاع خودکار

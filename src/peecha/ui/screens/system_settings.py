@@ -76,6 +76,7 @@ _TAB_FORMS: dict[str, tuple[str, ...]] = {
     "دارایی‌های ثابت": ("fa_setup",),
     "تولید": ("prd_settings",),
     "ارتباط با مشتری": ("crm_settings",),
+    "گردش کار": ("wf_settings",),
 }
 _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
     ("کدینگ حسابداری", "تعداد رقم سطوح تفصیلی"): ("detail_level_digits",),
@@ -178,6 +179,8 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self._add_outer_tab("تولید", self._build_production_tab())
         # R289: تنظیمات ارتباط با مشتری (چرخ‌دندهٔ کنار منوی «مدیریت ارتباط با مشتری»)
         self._add_outer_tab("ارتباط با مشتری", self._build_crm_tab())
+        # R293: قواعد، تقویم کاری، تعهد زمانی، اعلان‌ها و مدیران (چرخ‌دندهٔ کنار منوی «گردش کار و تایید»)
+        self._add_outer_tab("گردش کار", self._build_workflow_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
         self.no_access_label = QLabel("به هیچ بخشی از تنظیمات دسترسی ندارید؛ از مدیر سیستم بخواهید در «نقش‌ها و دسترسی‌ها» فعال کند.")
@@ -418,6 +421,11 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
             ("الگوهای پیام", crm.TemplatesPanel()),
             ("تحلیل مشتری", crm.AnalyticsSettingsPanel()),
         ])
+
+    def _build_workflow_tab(self):
+        from peecha.ui.screens import workflow_center as wf
+
+        return self._sub_tabs([(label, cls()) for label, cls in wf.SETTINGS_PANELS])
 
     def apply_permissions(self) -> None:
         cache: dict[str, bool] = {}

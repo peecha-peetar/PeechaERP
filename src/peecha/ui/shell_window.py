@@ -75,6 +75,7 @@ _NAV_ICONS = {
     "PRD": "🔩",
     "SALES": "🛒",
     "CRM": "🤝",
+    "WF": "🔀",
     "PURCH": "🧺",
     "HR": "👥",
     "INVOICES": "🧾",
@@ -83,7 +84,8 @@ _NAV_ICONS = {
 }
 
 # R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11, "CRM": 12}
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11, "CRM": 12,
+                               "WF": 13}
 # زیرتبِ مقصد برایِ ماژول‌هایی که تنظیماتشان درونِ تبِ ماژولِ دیگری است
 _SETTINGS_SUBTAB_BY_GROUP_CODE = {"COSTING": (7, "قیمت‌گذاری")}
 
@@ -1127,6 +1129,67 @@ class MainWindow(QMainWindow):
         from peecha.services.workflow import scheduler as wf_scheduler
 
         wf_scheduler.tick(session.current_company.company_id)
+        self.update_notification_badge()
+        self._show_new_notifications()
+
+    # --- R293: زنگولهٔ اعلان‌ها و پیام کوتاه روی صفحه -------------------------------------------------
+    def update_notification_badge(self) -> int:
+        button = getattr(self, "notification_button", None)
+        if button is None or session.current_company is None or session.current_user is None:
+            return 0
+        try:
+            from peecha.services.workflow import notify
+
+            count = notify.unread_count(session.current_company.company_id, session.current_user.user_id)
+        except Exception:  # noqa: BLE001
+            return 0
+        button.setText(f"🔔 {numerals.to_persian_digits(str(count))}" if count else "🔔")
+        button.setToolTip(f"{numerals.to_persian_digits(str(count))} اعلان خوانده‌نشده" if count else "اعلان‌ها")
+        return count
+
+    def _show_new_notifications(self) -> list:
+        if session.current_company is None or session.current_user is None:
+            return []
+        from peecha.services.workflow import notify
+
+        cid, uid = session.current_company.company_id, session.current_user.user_id
+        key = (cid, uid)
+        if getattr(self, "_note_cursor_key", None) != key:
+            self._note_cursor_key, self._note_cursor = key, notify.latest_id(cid, uid)
+            return []
+        try:
+            rows = notify.desktop_popups(cid, uid, self._note_cursor)
+        except Exception:  # noqa: BLE001
+            return []
+        if rows:
+            self._note_cursor = max(r.notification_id for r in rows)
+            self._show_toast(rows)
+        return rows
+
+    def _show_toast(self, rows) -> None:
+        toast = getattr(self, "_toast", None)
+        if toast is None:
+            toast = QFrame(self)
+            toast.setObjectName("card")
+            toast.setFixedWidth(340)
+            lay = QVBoxLayout(toast)
+            lay.setContentsMargins(12, 8, 12, 8)
+            toast.title_label, toast.body_label = QLabel(), QLabel()
+            toast.title_label.setStyleSheet("font-weight: bold;")
+            for lbl in (toast.title_label, toast.body_label):
+                lbl.setWordWrap(True)
+                lay.addWidget(lbl)
+            toast.mousePressEvent = lambda _e: (toast.hide(), self.open_screen("WF_NOTIFICATIONS"))
+            self._toast = toast
+        first = rows[-1]
+        more = f" (و {numerals.to_persian_digits(str(len(rows) - 1))} اعلان دیگر)" if len(rows) > 1 else ""
+        toast.title_label.setText(f"🔔 {first.title}{more}")
+        toast.body_label.setText(first.body or first.type_label)
+        toast.adjustSize()
+        toast.move(16, max(self.height() - toast.height() - 24, 0))
+        toast.show()
+        toast.raise_()
+        QTimer.singleShot(8000, toast.hide)
 
     def _tick_sms_campaigns(self) -> None:
         """پشتیبان تایمر کمپین پیامک — کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
@@ -1406,6 +1469,15 @@ class MainWindow(QMainWindow):
         user_font.setBold(True)
         self.user_label.setFont(user_font)
         layout.addWidget(self.user_label)
+
+        # R293: زنگولهٔ اعلان‌ها با شمار خوانده‌نشده‌ها
+        self.notification_button = QToolButton()
+        self.notification_button.setObjectName("fieldHelpToggle")
+        self.notification_button.setText("🔔")
+        self.notification_button.setToolTip("اعلان‌ها")
+        self.notification_button.setCursor(Qt.PointingHandCursor)
+        self.notification_button.clicked.connect(lambda: self.open_screen("WF_NOTIFICATIONS"))
+        layout.addWidget(self.notification_button)
 
         self.open_windows_button = QToolButton()
         self.open_windows_button.setObjectName("fieldHelpToggle")
@@ -1971,6 +2043,14 @@ class MainWindow(QMainWindow):
         self.register_screen("crm_automation", lambda: crm_screens.AutomationScreen(self))  # R287
         self.register_screen("crm_dashboard", lambda: crm_screens.CrmDashboardScreen(self))  # R288
         self.register_screen("crm_settings", lambda: crm_screens.CrmSettingsScreen(self))
+        # R293: گردش کار و تایید
+        from peecha.ui.screens import workflow_center as wf_screens
+
+        self.register_screen("wf_my_work", lambda: wf_screens.MyWorkScreen(self))
+        self.register_screen("wf_approvals", lambda: wf_screens.ApprovalCenterScreen(self))
+        self.register_screen("wf_notifications", lambda: wf_screens.NotificationCenterScreen(self))
+        self.register_screen("wf_delegations", lambda: wf_screens.DelegationsScreen(self))
+        self.register_screen("wf_settings", lambda: wf_screens.WorkflowSettingsScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())
@@ -2214,6 +2294,7 @@ class MainWindow(QMainWindow):
             session.current_company = companies_service.get_company_model(first.company_id) if first else None
 
         self.user_label.setText(session.current_user.full_name)
+        self.update_notification_badge()
         initial = session.current_user.full_name.strip()[:1] or "؟"
         self.avatar_badge.setText(initial)
         avatar_color = theme.avatar_color_for(session.current_user.full_name)

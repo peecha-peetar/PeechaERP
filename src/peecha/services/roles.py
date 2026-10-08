@@ -51,6 +51,7 @@ _MODULES = [
     ("FA", "دارایی‌های ثابت", "office-building-cog-outline", 12),
     ("PRD", "تولید", "factory", 13),
     ("CRM", "مدیریت ارتباط با مشتری", "account-heart-outline", 14),
+    ("WF", "گردش کار و تایید", "sitemap-outline", 15),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()

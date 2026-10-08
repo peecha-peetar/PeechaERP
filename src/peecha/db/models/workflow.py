@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import datetime
+import decimal
 
 from typing import Any
 
-from sqlalchemy import BigInteger, ForeignKey, ForeignKeyConstraint, SmallInteger, String, func
+from sqlalchemy import BigInteger, ForeignKey, ForeignKeyConstraint, Numeric, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -364,6 +365,11 @@ class WfTask(Base):
     closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     resumed_at: Mapped[datetime.datetime | None]
     row_version: Mapped[int] = mapped_column(default=1)
+    sla_policy_id: Mapped[int | None] = mapped_column(ForeignKey("wf.sla_policies.policy_id"))
+    warn_at: Mapped[datetime.datetime | None]
+    escalate_at: Mapped[datetime.datetime | None]
+    escalation_level: Mapped[int] = mapped_column(SmallInteger, default=0)
+    sla_status: Mapped[str] = mapped_column(String(10), default="NONE")
 
 
 class WfTaskAssignee(Base):
@@ -414,3 +420,31 @@ class WfDelegation(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class WfSlaPolicy(Base):
+    __tablename__ = "sla_policies"
+    __table_args__ = _WF
+
+    policy_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    due_hours: Mapped[decimal.Decimal] = mapped_column(Numeric(8, 2))
+    warn_before_hours: Mapped[decimal.Decimal | None] = mapped_column(Numeric(8, 2))
+    escalate_after_hours: Mapped[decimal.Decimal | None] = mapped_column(Numeric(8, 2))
+    escalate_to: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    repeat_every_hours: Mapped[decimal.Decimal | None] = mapped_column(Numeric(8, 2))
+    max_escalations: Mapped[int] = mapped_column(SmallInteger, default=2)
+    business_hours: Mapped[bool] = mapped_column(default=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class WfHoliday(Base):
+    __tablename__ = "holidays"
+    __table_args__ = _WF
+
+    holiday_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    holiday_date: Mapped[datetime.date]
+    title: Mapped[str] = mapped_column(String(150))
