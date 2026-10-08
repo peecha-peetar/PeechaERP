@@ -978,6 +978,11 @@ class MainWindow(QMainWindow):
         self._crm_automation_timer.setInterval(600_000)
         self._crm_automation_timer.timeout.connect(self._tick_crm_automation)
         self._crm_automation_timer.start()
+        # R291: زمان‌بند گردش کار (انتظارها، تلاش دوباره، مهلت‌ها، بررسی‌های دوره‌ای) -- هر دقیقه، بی‌صدا
+        self._workflow_timer = QTimer(self)
+        self._workflow_timer.setInterval(60_000)
+        self._workflow_timer.timeout.connect(self._tick_workflow)
+        self._workflow_timer.start()
 
         self._screens: _LazyScreens = _LazyScreens(theme.apply_card_shadows)
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
@@ -1115,6 +1120,13 @@ class MainWindow(QMainWindow):
             crm_automation.run_all(session.current_company.company_id)
         except Exception:  # noqa: BLE001 -- تیک پس‌زمینه نباید برنامه را متوقف کند
             pass
+
+    def _tick_workflow(self) -> None:
+        if session.current_company is None:
+            return
+        from peecha.services.workflow import scheduler as wf_scheduler
+
+        wf_scheduler.tick(session.current_company.company_id)
 
     def _tick_sms_campaigns(self) -> None:
         """پشتیبان تایمر کمپین پیامک — کاملاً بی‌صدا اجرا می‌شود، هم‌الگو

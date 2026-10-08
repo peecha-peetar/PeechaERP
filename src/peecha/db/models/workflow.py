@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, SmallInteger, String, func
+from typing import Any
+
+from sqlalchemy import BigInteger, ForeignKey, ForeignKeyConstraint, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -136,3 +138,198 @@ class CartableAction(Base):
     action_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     cartable_item: Mapped[CartableItem] = relationship(back_populates="actions")
+
+
+# =========================================================================================================
+# R291+: موتور گردش کار و اتوماسیون (db/schema/210_wf_engine_core.sql)
+_WF = {"schema": "wf"}
+
+
+class WfDefinition(Base):
+    __tablename__ = "definitions"
+    __table_args__ = _WF
+
+    definition_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(50))
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(1000))
+    module_code: Mapped[str | None] = mapped_column(String(20))
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    category: Mapped[str | None] = mapped_column(String(30))
+    template_code: Mapped[str | None] = mapped_column(String(60))
+    status_code: Mapped[str] = mapped_column(String(12), default="DRAFT")
+    active_version_id: Mapped[int | None] = mapped_column(ForeignKey("wf.definition_versions.version_id", use_alter=True))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class WfDefinitionVersion(Base):
+    __tablename__ = "definition_versions"
+    __table_args__ = _WF
+
+    version_id: Mapped[int] = mapped_column(primary_key=True)
+    definition_id: Mapped[int] = mapped_column(ForeignKey("wf.definitions.definition_id", ondelete="CASCADE"))
+    version_no: Mapped[int]
+    graph: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    checksum: Mapped[str | None] = mapped_column(String(64))
+    status_code: Mapped[str] = mapped_column(String(12), default="DRAFT")
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    published_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    published_at: Mapped[datetime.datetime | None]
+
+
+class WfDefinitionTrigger(Base):
+    __tablename__ = "definition_triggers"
+    __table_args__ = _WF
+
+    trigger_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    definition_id: Mapped[int] = mapped_column(ForeignKey("wf.definitions.definition_id", ondelete="CASCADE"))
+    version_id: Mapped[int] = mapped_column(ForeignKey("wf.definition_versions.version_id", ondelete="CASCADE"))
+    trigger_type: Mapped[str] = mapped_column(String(12))
+    event_type: Mapped[str | None] = mapped_column(String(80))
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class WfEvent(Base):
+    __tablename__ = "events"
+    __table_args__ = _WF
+
+    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    event_type: Mapped[str] = mapped_column(String(80))
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    entity_id: Mapped[int | None] = mapped_column(BigInteger)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    dedupe_key: Mapped[str | None] = mapped_column(String(200))
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    causation_instance_id: Mapped[int | None] = mapped_column(BigInteger)
+    depth: Mapped[int] = mapped_column(SmallInteger, default=0)
+    status_code: Mapped[str] = mapped_column(String(10), default="PENDING")
+    attempts: Mapped[int] = mapped_column(SmallInteger, default=0)
+    last_error: Mapped[str | None]
+    locked_until: Mapped[datetime.datetime | None]
+    occurred_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    processed_at: Mapped[datetime.datetime | None]
+
+
+class WfInstance(Base):
+    __tablename__ = "instances"
+    __table_args__ = _WF
+
+    instance_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    definition_id: Mapped[int] = mapped_column(ForeignKey("wf.definitions.definition_id"))
+    version_id: Mapped[int] = mapped_column(ForeignKey("wf.definition_versions.version_id"))
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    entity_id: Mapped[int | None] = mapped_column(BigInteger)
+    title: Mapped[str | None] = mapped_column(String(300))
+    status_code: Mapped[str] = mapped_column(String(12), default="RUNNING")
+    outcome_code: Mapped[str | None] = mapped_column(String(20))
+    tokens: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    variables: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    correlation_key: Mapped[str | None] = mapped_column(String(200))
+    trigger_event_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("wf.events.event_id"))
+    started_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    started_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    ended_at: Mapped[datetime.datetime | None]
+    row_version: Mapped[int] = mapped_column(default=1)
+    step_count: Mapped[int] = mapped_column(default=0)
+    depth: Mapped[int] = mapped_column(SmallInteger, default=0)
+    last_error: Mapped[str | None]
+
+
+class WfInstanceStep(Base):
+    __tablename__ = "instance_steps"
+    __table_args__ = _WF
+
+    step_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    instance_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("wf.instances.instance_id", ondelete="CASCADE"))
+    node_id: Mapped[str] = mapped_column(String(40))
+    node_type: Mapped[str] = mapped_column(String(20))
+    label: Mapped[str | None] = mapped_column(String(200))
+    status_code: Mapped[str] = mapped_column(String(10), default="RUNNING")
+    outcome: Mapped[str | None] = mapped_column(String(30))
+    attempt: Mapped[int] = mapped_column(SmallInteger, default=1)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    error: Mapped[str | None]
+    started_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    ended_at: Mapped[datetime.datetime | None]
+    duration_ms: Mapped[int | None]
+
+
+class WfActionExecution(Base):
+    __tablename__ = "action_executions"
+    __table_args__ = _WF
+
+    execution_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    instance_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("wf.instances.instance_id", ondelete="CASCADE"))
+    node_id: Mapped[str | None] = mapped_column(String(40))
+    idempotency_key: Mapped[str] = mapped_column(String(200))
+    action_code: Mapped[str] = mapped_column(String(80))
+    status_code: Mapped[str] = mapped_column(String(10), default="PENDING")
+    attempts: Mapped[int] = mapped_column(SmallInteger, default=0)
+    next_retry_at: Mapped[datetime.datetime | None]
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    last_error: Mapped[str | None]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class WfException(Base):
+    __tablename__ = "exceptions"
+    __table_args__ = _WF
+
+    exception_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    instance_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("wf.instances.instance_id", ondelete="CASCADE"))
+    node_id: Mapped[str | None] = mapped_column(String(40))
+    execution_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("wf.action_executions.execution_id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(300))
+    reason: Mapped[str]
+    technical_detail: Mapped[str | None]
+    priority_code: Mapped[str] = mapped_column(String(10), default="HIGH")
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    owner_role_id: Mapped[int | None] = mapped_column(ForeignKey("sec.roles.role_id"))
+    status_code: Mapped[str] = mapped_column(String(10), default="OPEN")
+    resolution_note: Mapped[str | None] = mapped_column(String(1000))
+    resolved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    resolved_at: Mapped[datetime.datetime | None]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class WfTimer(Base):
+    __tablename__ = "timers"
+    __table_args__ = _WF
+
+    timer_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    kind: Mapped[str] = mapped_column(String(12))
+    instance_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("wf.instances.instance_id", ondelete="CASCADE"))
+    task_id: Mapped[int | None] = mapped_column(BigInteger)
+    node_id: Mapped[str | None] = mapped_column(String(40))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    due_at: Mapped[datetime.datetime]
+    status_code: Mapped[str] = mapped_column(String(10), default="PENDING")
+    locked_until: Mapped[datetime.datetime | None]
+    attempts: Mapped[int] = mapped_column(SmallInteger, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    fired_at: Mapped[datetime.datetime | None]
+
+
+class WfSettings(Base):
+    __tablename__ = "settings"
+    __table_args__ = _WF
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

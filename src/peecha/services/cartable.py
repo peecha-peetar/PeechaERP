@@ -315,15 +315,39 @@ def _ensure_can_act(session, item: CartableItem, user_id: int) -> None:
     raise ValueError("شما مجاز به اقدام روی این مورد کارتابل نیستید.")
 
 
+def _ensure_not_self(session, item: CartableItem, user_id: int) -> None:
+    """R291: تفکیک وظایف -- صادرکننده درخواست خودش را تایید/رد نمی‌کند مگر سیاست شرکت اجازه دهد."""
+    if item.submitted_by_user_id != user_id:
+        return
+    from peecha.services.workflow.common import settings as wf_settings
+
+    if not wf_settings(item.company_id).get("allow_self_approval"):
+        raise ValueError("صادرکنندهٔ درخواست نمی‌تواند درخواست خودش را تایید یا رد کند (تفکیک وظایف).")
+
+
+def _lock_pending(session, cartable_item_id: int) -> CartableItem:
+    # R291: قفل ردیف -- از دو تصمیم هم‌زمان فقط اولی ثبت می‌شود
+    item = session.scalar(select(CartableItem).where(CartableItem.cartable_item_id == cartable_item_id).with_for_update())
+    if item is None:
+        raise ValueError("مورد کارتابل نامعتبر است.")
+    if item.status_id != _status_id(session, "PENDING"):
+        raise ValueError("این مورد دیگر در انتظار تایید نیست (احتمالاً کاربر دیگری زودتر تصمیم گرفته است).")
+    return item
+
+
+def _audit(session, item: CartableItem, user_id: int, action: str, comment: str) -> None:
+    from peecha.services import audit as audit_service
+
+    audit_service.log_activity(session, company_id=item.company_id, user_id=user_id, entity_type="CartableItem",
+                               entity_id=item.cartable_item_id, action=action,
+                               changes={"step_no": item.current_step_no, "comment": comment or None})
+
+
 def approve_item(cartable_item_id: int, user_id: int, comment: str = "") -> None:
     with new_session() as session:
-        item = session.get(CartableItem, cartable_item_id)
-        if item is None:
-            raise ValueError("مورد کارتابل نامعتبر است.")
-        pending_status_id = _status_id(session, "PENDING")
-        if item.status_id != pending_status_id:
-            raise ValueError("این مورد دیگر در انتظار تایید نیست.")
+        item = _lock_pending(session, cartable_item_id)
         _ensure_can_act(session, item, user_id)
+        _ensure_not_self(session, item, user_id)
 
         session.add(
             CartableAction(
@@ -355,25 +379,20 @@ def approve_item(cartable_item_id: int, user_id: int, comment: str = "") -> None
             item.current_approver_role_id = next_step.approver_role_id
             item.current_approver_user_id = None
         else:
+            # R291: اجرای سند پیش از ثبت «تایید نهایی»؛ اگر سرویس سند خطا بدهد، مورد در انتظار می‌ماند (نه نیمه‌کاره)
+            handler = _HANDLERS.get(form_code)
+            if handler is not None:
+                handler.on_approved(company_id, source_record_id, user_id)
             item.status_id = _status_id(session, "APPROVED")
-
+        _audit(session, item, user_id, "APPROVE", comment)
         session.commit()
-
-    if is_final:
-        handler = _HANDLERS.get(form_code)
-        if handler is not None:
-            handler.on_approved(company_id, source_record_id, user_id)
 
 
 def reject_item(cartable_item_id: int, user_id: int, reason: str) -> None:
     with new_session() as session:
-        item = session.get(CartableItem, cartable_item_id)
-        if item is None:
-            raise ValueError("مورد کارتابل نامعتبر است.")
-        pending_status_id = _status_id(session, "PENDING")
-        if item.status_id != pending_status_id:
-            raise ValueError("این مورد دیگر در انتظار تایید نیست.")
+        item = _lock_pending(session, cartable_item_id)
         _ensure_can_act(session, item, user_id)
+        _ensure_not_self(session, item, user_id)
 
         session.add(
             CartableAction(
@@ -386,14 +405,11 @@ def reject_item(cartable_item_id: int, user_id: int, reason: str) -> None:
         )
         item.status_id = _status_id(session, "REJECTED")
         form = session.get(Form, item.form_id)
-        form_code = form.code
-        company_id = item.company_id
-        source_record_id = item.source_record_id
+        handler = _HANDLERS.get(form.code)
+        if handler is not None:
+            handler.on_rejected(item.company_id, item.source_record_id, user_id, reason)
+        _audit(session, item, user_id, "REJECT", reason)
         session.commit()
-
-    handler = _HANDLERS.get(form_code)
-    if handler is not None:
-        handler.on_rejected(company_id, source_record_id, user_id, reason)
 
 
 # --- ادمین: تعریف/ویرایشِ گردشِ کار (صفحه‌ی «طراحیِ گردشِ کار») ------------
