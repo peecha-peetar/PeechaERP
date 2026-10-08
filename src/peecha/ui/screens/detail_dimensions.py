@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
+    QTreeWidgetItemIterator,
     QVBoxLayout,
     QWidget,
 )
@@ -58,6 +59,7 @@ from peecha import session
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import detail_deletion
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import hr as hr_service
 from peecha.services import inventory_catalog as catalog_service
@@ -75,13 +77,14 @@ from peecha.ui.widgets import (
     JalaliDateEdit,
     PersianDigitLineEdit,
     build_action_footer,
-    build_page_header,
     build_section_layout,
+    edit_delete_actions,
 )
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها.
 _COLUMNS = ["کد کامل", "نام", "سطح", "وضعیت"]
+_ACTIONS_HEADER = "عملیات"
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: فهرستِ کارمندان
 # (که قبلاً در صفحه‌یِ جداگانه‌یِ «تعریفِ کارکنان» این ستون‌ها را داشت)
 # باید همین‌جا هم دیده شود، پس فقط برایِ گروهِ PERSONNEL این ۴ ستونِ
@@ -401,8 +404,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._selected_contract_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(20, 14, 20, 14)
-        outer.setSpacing(16)
+        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setSpacing(8)
         # طبقِ درخواستِ صریحِ کاربر («لیستِ تفصیلی حذف بشه و فقط ورودِ
         # تفصیلیِ جدید باشه، تا تبِ تعریفِ تفصیلی (مثلاً فرمِ کالا) فضایِ
         # بهتری داشته باشد»): فهرستِ همیشه-نمایانِ حساب‌ها (که قبلاً یک
@@ -494,13 +497,18 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         layout = build_section_layout(panel)
 
+        # R301: فضای هدر کم شد -- عنوان فرم و سطح حساب در یک ردیف
+        layout.setSpacing(6)
         self.account_form_title = QLabel("حساب تفصیلی جدید")
-        self.account_form_title.setObjectName("pageTitle")
-        layout.addWidget(self.account_form_title)
+        self.account_form_title.setObjectName("sectionTitle")
         # R276: سطحِ حسابِ درحالِ ثبت/ویرایش و جایگاهش در ساختارِ گروه.
         self.level_info_label = QLabel("")
         self.level_info_label.setObjectName("sectionHint")
-        layout.addWidget(self.level_info_label)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.addWidget(self.account_form_title)
+        title_row.addWidget(self.level_info_label, stretch=1)
+        layout.addLayout(title_row)
 
         # طبقِ درخواستِ صریح («بشه از تفضیلی‌هایِ دیگر کپی کرد و تفصیلیِ
         # جدید ایجاد نمود»): وقتی در حالِ ساختنِ رکوردِ تازه هستیم، انتخابِ
@@ -568,16 +576,18 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.customer_score_label.setVisible(False)
         layout.addWidget(self.customer_score_label)
         self.person_fields_grid = QGridLayout()
-        person_fields_widget = QWidget()
-        person_fields_widget.setLayout(self.person_fields_grid)
-        layout.addWidget(person_fields_widget)
+        self.person_fields_grid.setContentsMargins(0, 0, 0, 0)
+        self._person_fields_widget = QWidget()
+        self._person_fields_widget.setLayout(self.person_fields_grid)
+        layout.addWidget(self._person_fields_widget)
 
         self.extra_fields_label = QLabel("فیلدهای اختصاصی تعریف‌شده")
         layout.addWidget(self.extra_fields_label)
         self.extra_fields_container = QVBoxLayout()
-        extra_widget = QWidget()
-        extra_widget.setLayout(self.extra_fields_container)
-        layout.addWidget(extra_widget)
+        self.extra_fields_container.setContentsMargins(0, 0, 0, 0)
+        self._extra_fields_widget = QWidget()
+        self._extra_fields_widget.setLayout(self.extra_fields_container)
+        layout.addWidget(self._extra_fields_widget)
 
         # طبقِ ادغامِ فرمِ «کالا و خدمت»: پنلِ اختصاصیِ ۱۱‌تبیِ کالا فقط در
         # سطحِ‌آخرِ گروهِ INVENTORY_ITEM نمایان می‌شود — هم‌الگو با پنلِ
@@ -665,16 +675,21 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ درخواستِ صریح: کمبویِ گروه باید همیشه (حتی پیش از انتخابِ
         # هیچ گروهی) فعال بماند تا اصلاً بشود گروه را انتخاب کرد -- پس
         # این هدر بیرونِ wrapperِ غیرِفعال‌شدنی قرار می‌گیرد، نه داخلش.
-        header = build_page_header(
-            "تعریف حساب‌های تفصیلی",
-            "ساخت گروه تازه و تنظیم تعداد رقم/بازه/فیلد اختصاصی در «پیکربندی گروه‌های تفصیلی» انجام می‌شود.",
-        )
-        header_layout = header.layout()
-
-        group_row = QHBoxLayout()
+        # R301: هدر یک‌ردیفه (عنوان، گروه، جستجو) تا جای فرم برای اطلاعات بماند؛ راهنما در تول‌تیپ عنوان
+        header = QWidget()
+        header.setObjectName("card")
+        group_row = QHBoxLayout(header)
+        group_row.setContentsMargins(10, 6, 10, 6)
+        group_row.setSpacing(8)
+        page_title = QLabel("تعریف حساب‌های تفصیلی")
+        page_title.setObjectName("pageTitle")
+        page_title.setToolTip("ساخت گروه تازه و تنظیم تعداد رقم/بازه/فیلد اختصاصی در «پیکربندی گروه‌های تفصیلی» انجام می‌شود.")
+        group_row.addWidget(page_title)
+        group_row.addSpacing(12)
         group_row.addWidget(QLabel("گروه"))
         self.group_combo = QComboBox()
         self.group_combo.currentIndexChanged.connect(self._on_group_changed)
+        self.group_combo.setMinimumWidth(260)
         group_row.addWidget(self.group_combo, stretch=1)
         open_picker_button = QPushButton("🔍")
         open_picker_button.setObjectName("iconButton")
@@ -682,12 +697,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         open_picker_button.setToolTip("بازکردن حساب تفصیلی موجود برای ویرایش")
         open_picker_button.clicked.connect(self._open_account_picker)
         group_row.addWidget(open_picker_button)
-        header_layout.addLayout(group_row)
+        group_row.addStretch(2)
 
         combined = QWidget()
         combined_layout = QVBoxLayout(combined)
         combined_layout.setContentsMargins(0, 0, 0, 0)
-        combined_layout.setSpacing(12)
+        combined_layout.setSpacing(8)
         combined_layout.addWidget(header)
         combined_layout.addWidget(wrapper, stretch=1)
         return combined
@@ -927,7 +942,6 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.pay_component_status_label)
 
         pc_button_cluster = QWidget()
-        pc_button_cluster.setLayoutDirection(Qt.LeftToRight)
         pc_buttons = QHBoxLayout(pc_button_cluster)
         pc_buttons.setContentsMargins(0, 0, 0, 0)
         add_button = QPushButton("➕")
@@ -1115,7 +1129,6 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.address_status_label)
 
         addr_button_cluster = QWidget()
-        addr_button_cluster.setLayoutDirection(Qt.LeftToRight)
         addr_buttons = QHBoxLayout(addr_button_cluster)
         addr_buttons.setContentsMargins(0, 0, 0, 0)
         add_address_button = QPushButton("➕")
@@ -1850,6 +1863,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             columns = _COLUMNS + _ITEM_EXTRA_COLUMNS
         else:
             columns = _COLUMNS
+        columns = columns + [_ACTIONS_HEADER]
         self.accounts_table.setColumnCount(len(columns))
         self.accounts_table.setHeaderLabels(columns)
 
@@ -1958,9 +1972,30 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             leaves = [row for row in rows if row[0] not in parent_ids]
             for row in sorted(leaves, key=lambda row: row[2]):
                 self.accounts_table.addTopLevelItem(make_item(row))
-
+        self._add_row_actions(len(columns) - 1)
         for col in range(len(columns)):
             self.accounts_table.resizeColumnToContents(col)
+
+    def _add_row_actions(self, column: int) -> None:
+        """R301: «ویرایش» و «حذف» روی هر ردیف، بدون نیاز به بازکردن فرم برای حذف."""
+        iterator = QTreeWidgetItemIterator(self.accounts_table)
+        while iterator.value():
+            item = iterator.value()
+            detail_account_id = item.data(0, Qt.UserRole)
+            if detail_account_id is not None:
+                name = f"{item.text(0)} — {item.text(1)}"
+                self.accounts_table.setItemWidget(item, column, edit_delete_actions(
+                    lambda d=detail_account_id: self._edit_from_picker(d),
+                    lambda d=detail_account_id, n=name: self._delete_detail(d, n)))
+            iterator += 1
+
+    def _edit_from_picker(self, detail_account_id: int) -> None:
+        self._account_picker_dialog.accept()
+        try:
+            self.edit_detail_account(detail_account_id)
+        except Exception:
+            traceback.print_exc()
+            self.account_status_label.setText("بارگذاری این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید.")
 
     def _on_parent_combo_changed(self, _index: int) -> None:
         if self._editing_account_id is not None:
@@ -2028,6 +2063,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._person_field_widgets = {}
         is_person = self._is_person()
         self.person_fields_label.setVisible(is_person)
+        self._person_fields_widget.setVisible(is_person)
         if not is_person:
             return
         company_id = self._company_id()
@@ -2102,11 +2138,14 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # می‌شود (_current_level_no در برابرِ _current_max_level_no) این‌جا
         # هم به‌کار می‌رود.
         is_leaf_level = self._current_level_no() >= self._current_max_level_no
-        self.extra_fields_label.setVisible(is_leaf_level)
-        if not is_leaf_level:
+        field_defs = dimensions_service.list_group_fields(self._dimension_type_id(), self._person_group_id()) if is_leaf_level else []
+        # R301: بخش خالی جا نگیرد
+        self.extra_fields_label.setVisible(bool(field_defs))
+        self._extra_fields_widget.setVisible(bool(field_defs))
+        if not field_defs:
             return
         company_id = self._company_id()
-        for field_def in dimensions_service.list_group_fields(self._dimension_type_id(), self._person_group_id()):
+        for field_def in field_defs:
             row = QWidget()
             row_layout = QHBoxLayout(row)
             row_layout.setContentsMargins(0, 0, 0, 0)
@@ -2466,51 +2505,36 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _delete_account(self) -> None:
         if self._editing_account_id is None or self._selected is None:
             return
+        self._delete_detail(self._editing_account_id, self.account_name_field.text().strip())
+
+    def _delete_detail(self, detail_account_id: int, name: str = "") -> bool:
+        """R301: حذف از فرم یا مستقیم از ردیف؛ کالای اصلی همراه متغیرهایش، با پیام دقیق اگر جایی استفاده شده."""
         company_id = self._company_id()
-        if company_id is None:
-            return
-        if self._is_inventory_item_group():
-            existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
-            if existing is not None and existing.variant_parent_item_id is not None:
-                self.account_status_label.setText(
-                    "این یک متغیر است؛ فقط از تب «ویژگی‌ها و متغیرها»ی کالای اصلی قابل‌حذف است."
-                )
-                return
-        confirm = QMessageBox.question(
-            self, "حذف", "این حساب حذف شود؟ این کار قابل بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
-        )
-        if confirm != QMessageBox.Yes:
-            return
+        if company_id is None or self._selected is None:
+            return False
+        plan = detail_deletion.plan(company_id, detail_account_id, name)
+        if QMessageBox.question(self, "حذف", plan.confirm_text, QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return False
         try:
-            if self._is_person():
-                self._person_meta()["delete_fn"](self._editing_account_id, company_id)
-            elif self._is_inventory_item_group():
-                item = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
-                if item is not None:
-                    catalog_service.delete_item(item.item_id, company_id)
-                else:
-                    dimensions_service.delete_detail_account(self._editing_account_id, company_id)
-            else:
-                dimensions_service.delete_detail_account(self._editing_account_id, company_id)
+            detail_deletion.delete(company_id, detail_account_id,
+                                   person_group_code=self._selected[1] if self._is_person() else None)
         except ValueError as exc:
             self.account_status_label.setText(str(exc))
-            return
+            QMessageBox.warning(self, "حذف ممکن نیست", str(exc))
+            return False
         except Exception:
-            # طبقِ رفعِ باگِ واقعیِ کشف‌شده («حذف نمی‌شود و هیچ پیامی هم
-            # نشان داده نمی‌شود»): اگر سرویس به هر دلیلِ پیش‌بینی‌نشده‌ای
-            # (مثلاً نقضِ کلیدِ خارجیِ یک زیرجدولِ فراموش‌شده) یک استثنایِ
-            # غیرِ ValueError پرتاب کند، این استثنا در یک اسلاتِ Qt هیچ‌گاه
-            # نباید بی‌صدا بلعیده شود -- حداقل یک پیامِ عمومی به کاربر
-            # نشان داده می‌شود تا بداند حذف انجام نشده.
-            self.account_status_label.setText(
-                "حذف با خطا مواجه شد؛ احتمالاً این حساب در جای دیگری استفاده شده است."
-            )
-            return
-
+            # استثنای پیش‌بینی‌نشده در اسلات Qt نباید بی‌صدا بلعیده شود
+            traceback.print_exc()
+            self.account_status_label.setText("حذف با خطا مواجه شد؛ احتمالاً این حساب در جای دیگری استفاده شده است.")
+            return False
         selected = self._selected
-        self._cancel_account_edit()
+        if self._editing_account_id == detail_account_id:
+            self._cancel_account_edit()
         self.refresh()
         self._select(selected)
+        if self._account_picker_dialog.isVisible():
+            self._rebuild_accounts_tree()
+        return True
 
     # --- برایِ ناوبری از فهرستِ واحدِ تفصیلی‌ها -----------------------------
     def select_type_and_edit(self, combo_data: tuple[str, int | str], detail_account_id: int) -> None:

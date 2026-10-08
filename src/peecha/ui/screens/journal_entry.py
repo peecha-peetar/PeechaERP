@@ -81,6 +81,7 @@ from peecha.ui.widgets import (
     SectionStepper,
     SummaryCard,
     SummaryCardBar,
+    persist_column_widths,
 )
 
 _COL_ROW_NO = 0
@@ -183,7 +184,7 @@ def _clear_if_unmatched(combo: QComboBox) -> None:
     مهم‌تر است) دیده نمی‌شود.
 
     طبق درخواست صریح، بعد انتخاب واقعی فقط نام حساب/تفصیلی (بدون کد)
-    نمایش داده می‌شود (`_show_name_only_after_selection`) — پس اینجا باید
+    نمایش داده می‌شد (نسخه‌های قبل) — پس اینجا باید
     این حالت را هم «تغییرنکرده» بشناسد، وگرنه با هر بار خارج‌شدن از فیلد
     (بدون تایپ چیزی)، چون متن نمایشی («نام») با برچسب کامل آیتم
     («کد — نام») یکی نیست، انتخاب معتبر به‌غلط پاک می‌شد."""
@@ -197,13 +198,12 @@ def _clear_if_unmatched(combo: QComboBox) -> None:
     combo.lineEdit().setCursorPosition(0)
 
 
-def _show_name_only_after_selection(combo: QComboBox) -> None:
-    """طبق درخواست صریح: بعد انتخاب حساب/تفصیلی، دیگر نیازی به نمایش
-    کد در فیلد نیست — فقط نام کافی است (کد همچنان در فهرست جستجو/کشویی
-    برای تشخیص باقی می‌ماند). دادهٔ واقعی (itemData) دست‌نخورده می‌ماند."""
+def _show_label_after_selection(combo: QComboBox) -> None:
+    """R301: مثل بقیهٔ فرم‌ها (فاکتور، دریافت و پرداخت، گزارش‌ها) پس از انتخاب «کد — نام» در فیلد می‌ماند
+    (قبلاً فقط در این فرم کد حذف می‌شد)؛ ابتدای متن دیده شود. نام تنها در نوار خلاصهٔ بالای جدول است."""
     if combo.currentIndex() < 0:
         return
-    combo.lineEdit().setText(_display_name_only(combo.itemText(combo.currentIndex())))
+    combo.setToolTip(combo.itemText(combo.currentIndex()))
     combo.lineEdit().setCursorPosition(0)
 
 
@@ -486,20 +486,20 @@ class _LineRow:
 
     def _on_account_changed(self, _index: int) -> None:
         self.account_id = self.account_combo.currentData()
-        _show_name_only_after_selection(self.account_combo)
+        _show_label_after_selection(self.account_combo)
         self._refresh_dimension_ui()
         self._screen._refresh_preview_strip()
 
     def _on_detail_changed(self, _index: int) -> None:
-        _show_name_only_after_selection(self.detail_combo)
+        _show_label_after_selection(self.detail_combo)
         self._screen._refresh_preview_strip()
 
     def _on_cost_center_changed(self, _index: int) -> None:
-        _show_name_only_after_selection(self.cost_center_combo)
+        _show_label_after_selection(self.cost_center_combo)
         self._screen._refresh_preview_strip()
 
     def _on_project_changed(self, _index: int) -> None:
-        _show_name_only_after_selection(self.project_combo)
+        _show_label_after_selection(self.project_combo)
         self._screen._refresh_preview_strip()
 
     def _on_account_return(self) -> None:
@@ -786,25 +786,68 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         })
         outer.addWidget(self.summary_cards)
 
+        # R301: هدر با برچسب بالای هر فیلد (هم‌شکل فاکتور و بقیهٔ فرم‌ها) و عرض متناسب با محتوای هر فیلد
         header_card = QWidget()
         header_card.setObjectName("card")
-        header_layout = QGridLayout(header_card)
+        header_layout = QVBoxLayout(header_card)
         header_layout.setContentsMargins(10, 6, 10, 6)
         header_layout.setSpacing(4)
 
+        title_row = QHBoxLayout()
         self.form_title = QLabel(f"صدور {self._document_noun} جدید")
         self.form_title.setObjectName("pageTitle")
-        header_layout.addWidget(self.form_title, 0, 0, 1, 4)
-
+        title_row.addWidget(self.form_title)
+        title_row.addStretch(1)
         self.registration_label = QLabel("")
         self.registration_label.setObjectName("sectionHint")
-        header_layout.addWidget(self.registration_label, 0, 3, 1, 1, Qt.AlignLeft)
+        title_row.addWidget(self.registration_label)
+        header_layout.addLayout(title_row)
 
-        header_layout.addWidget(QLabel("تاریخ سند"), 1, 0)
+        fields = QGridLayout()
+        fields.setContentsMargins(0, 0, 0, 0)
+        fields.setHorizontalSpacing(12)
+        fields.setVerticalSpacing(2)
+
         self.date_field = JalaliDateEdit("تاریخ سند (۱۴۰۳/۰۴/۲۸)")
-        header_layout.addWidget(self.date_field, 1, 1)
+        self.date_field.setMinimumWidth(150)
+        self.date_field.setMaximumWidth(170)
+        fields.addWidget(QLabel("تاریخ سند"), 0, 0)
+        fields.addWidget(self.date_field, 1, 0)
 
-        header_layout.addWidget(QLabel("شرح سند"), 1, 2)
+        self.alt_number_field = PersianDigitLineEdit()
+        self.alt_number_field.setFixedWidth(130)
+        fields.addWidget(QLabel("شمارهٔ عطف"), 0, 1)
+        fields.addWidget(self.alt_number_field, 1, 1)
+
+        # طبقِ درخواستِ صریح: ارزِ کلِ سند از بالایِ فرم انتخاب می‌شود — همه‌ی
+        # ردیف‌ها با همین ارز/نرخ ثبت می‌شوند (نه هرکدام جدا). اگر ارزِ پایه
+        # انتخاب شود، فیلدِ نرخ لازم نیست (نرخ همیشه ۱ است).
+        self.header_currency_combo = QComboBox()
+        self.header_currency_combo.setMinimumWidth(150)
+        self.header_currency_combo.setMaximumWidth(200)
+        self.header_currency_combo.currentIndexChanged.connect(self._on_header_currency_changed)
+        fields.addWidget(QLabel("ارز سند"), 0, 2)
+        fields.addWidget(self.header_currency_combo, 1, 2)
+
+        self.header_rate_label = QLabel("نرخ به ارز پایه")
+        fields.addWidget(self.header_rate_label, 0, 3)
+        rate_row = QHBoxLayout()
+        rate_row.setSpacing(4)
+        self.header_rate_field = QLineEdit()
+        self.header_rate_field.setFixedWidth(120)
+        self.header_rate_field.editingFinished.connect(self._on_header_rate_changed)
+        rate_row.addWidget(self.header_rate_field)
+        self.header_rate_fetch_button = QPushButton("🌐")
+        self.header_rate_fetch_button.setObjectName("iconButton")
+        self.header_rate_fetch_button.setFixedWidth(44)
+        self.header_rate_fetch_button.setToolTip("دریافت خودکار نرخ ارز")
+        self.header_rate_fetch_button.clicked.connect(self._on_fetch_header_rate)
+        rate_row.addWidget(self.header_rate_fetch_button)
+        fields.addLayout(rate_row, 1, 3)
+        self.header_rate_label.setVisible(False)
+        self.header_rate_field.setVisible(False)
+        self.header_rate_fetch_button.setVisible(False)
+
         self.description_field = QLineEdit()
         self.description_field.setMinimumWidth(280)
         # طبقِ درخواستِ صریح: شرح‌هایِ قبلاً واردشده برایِ «شرحِ سند» هم مثلِ
@@ -814,54 +857,23 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self._entry_description_completer.setCaseSensitivity(Qt.CaseInsensitive)
         self._entry_description_completer.setFilterMode(Qt.MatchContains)
         self.description_field.setCompleter(self._entry_description_completer)
-        header_layout.addWidget(self.description_field, 1, 3)
+        fields.addWidget(QLabel("شرح سند"), 0, 4)
+        fields.addWidget(self.description_field, 1, 4)
+        # فقط شرح سند فضای اضافه را می‌گیرد؛ بقیه به اندازهٔ محتوای خودشان
+        fields.setColumnStretch(4, 1)
+        header_layout.addLayout(fields)
 
-        header_layout.addWidget(QLabel("شمارهٔ عطف"), 2, 0)
-        self.alt_number_field = PersianDigitLineEdit()
-        self.alt_number_field.setMaximumWidth(140)
-        header_layout.addWidget(self.alt_number_field, 2, 1)
-
+        options_row = QHBoxLayout()
+        options_row.setSpacing(16)
         self.draft_checkbox = QCheckBox("پیش‌نویس (غیرتراز هم قابل‌ذخیره)")
-        header_layout.addWidget(self.draft_checkbox, 2, 3)
-
-        # طبقِ درخواستِ صریح: ارزِ کلِ سند از بالایِ فرم انتخاب می‌شود — همه‌ی
-        # ردیف‌ها با همین ارز/نرخ ثبت می‌شوند (نه هرکدام جدا). اگر ارزِ پایه
-        # انتخاب شود، فیلدِ نرخ لازم نیست (نرخ همیشه ۱ است).
-        header_layout.addWidget(QLabel("ارز سند"), 3, 0)
-        self.header_currency_combo = QComboBox()
-        self.header_currency_combo.currentIndexChanged.connect(self._on_header_currency_changed)
-        header_layout.addWidget(self.header_currency_combo, 3, 1)
-
-        self.header_rate_label = QLabel("نرخ به ارز پایه")
-        header_layout.addWidget(self.header_rate_label, 3, 2)
-        rate_row = QHBoxLayout()
-        self.header_rate_field = QLineEdit()
-        self.header_rate_field.setMaximumWidth(120)
-        self.header_rate_field.editingFinished.connect(self._on_header_rate_changed)
-        rate_row.addWidget(self.header_rate_field)
-        self.header_rate_fetch_button = QPushButton("🌐")
-        self.header_rate_fetch_button.setObjectName("iconButton")
-        self.header_rate_fetch_button.setFixedWidth(44)
-        self.header_rate_fetch_button.setToolTip("دریافت خودکار نرخ ارز")
-        self.header_rate_fetch_button.clicked.connect(self._on_fetch_header_rate)
-        rate_row.addWidget(self.header_rate_fetch_button)
-        header_layout.addLayout(rate_row, 3, 3)
-        self.header_rate_label.setVisible(False)
-        self.header_rate_field.setVisible(False)
-        self.header_rate_fetch_button.setVisible(False)
-
+        options_row.addWidget(self.draft_checkbox)
         # طبقِ درخواستِ صریح: تیکِ «چاپِ سند پس از ثبت» — اگر فعال باشد،
         # بلافاصله پس از ثبتِ موفقِ سند، انتخابِ فرمت (چاپ/PDF/اکسل) پرسیده
         # می‌شود و همان سندِ تازه‌ثبت‌شده صادر می‌شود.
         self.print_after_save_checkbox = QCheckBox("چاپ سند پس از ثبت")
-        header_layout.addWidget(self.print_after_save_checkbox, 2, 2)
-
-        # ستونِ شرحِ سند (۳) بیشترینِ فضایِ اضافه را می‌گیرد — طبقِ بازخورد،
-        # تاریخ/شماره‌یِ عطف (ستونِ ۱) عرضِ کوچکِ ثابت کافی است.
-        header_layout.setColumnStretch(0, 0)
-        header_layout.setColumnStretch(1, 0)
-        header_layout.setColumnStretch(2, 0)
-        header_layout.setColumnStretch(3, 1)
+        options_row.addWidget(self.print_after_save_checkbox)
+        options_row.addStretch(1)
+        header_layout.addLayout(options_row)
 
         # زنجیره‌ی Enter در هدر: تاریخ -> شرحِ سند -> شماره‌ی عطف -> ردیفِ اول.
         self.date_field.returnPressed.connect(lambda: self.description_field.setFocus())
@@ -968,6 +980,8 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self.table.setColumnWidth(_COL_DEBIT, 140)
         self.table.setColumnWidth(_COL_CREDIT, 140)
         self.table.setColumnWidth(_COL_REMOVE, 40)
+        # R301: عرضی که کاربر دستی برای ستون‌ها می‌گذارد ذخیره و دفعهٔ بعد اعمال می‌شود
+        persist_column_widths(self.table, "journalEntry/lines", skip_columns=(_COL_ROW_NO, _COL_DESC, _COL_REMOVE))
         table_card_layout.addWidget(self.table)
 
         # طبقِ آیتمِ ۱: جدول دیگر در یک QScrollAreaِ تودرتویِ جداگانه
@@ -988,12 +1002,8 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
 
         footer = self.footer_layout
 
-        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
-        # پایینِ فرم»): دکمه‌ها همیشه اول اضافه می‌شوند (پس فیزیکی چپ
-        # می‌نشینند)، بعد یک stretch، و برچسب‌هایِ وضعیت/موجودی در باقیِ
-        # فضا سمتِ راست. پیش‌تر برچسب‌ها قبل از دکمه‌ها اضافه می‌شدند که
-        # با جهتِ چپ‌به‌راستِ تازه‌یِ فوتر، دکمه‌ها را به‌جایِ چپ به راست
-        # می‌راند — همین‌جا اصلاح شد.
+        # دکمه‌ها همیشه اول اضافه می‌شوند (R301: سمت راست پایین فرم)، بعد یک
+        # stretch، و برچسب‌های وضعیت/موجودی در باقی فضا.
         new_button = QPushButton("🆕")
         new_button.setObjectName("iconButton")
         new_button.setFixedWidth(44)

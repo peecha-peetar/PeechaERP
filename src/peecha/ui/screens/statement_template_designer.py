@@ -357,7 +357,6 @@ class _RowEditorDialog(QDialog):
         layout.addWidget(self.error_label)
 
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         buttons_row = QHBoxLayout(button_cluster)
         buttons_row.setContentsMargins(0, 0, 0, 0)
         cancel_button = QPushButton("↩️")

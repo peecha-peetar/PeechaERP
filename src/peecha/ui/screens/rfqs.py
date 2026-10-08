@@ -18,6 +18,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import purchase_requests as pr_service
 from peecha.services import rfqs as rfq_service
 from peecha.services import unit_conversion as uc
+from peecha.ui.screens import module_style as ms
 from peecha.ui import theme
 from peecha.ui.screens.purchase_requests import _editable_combo, _labeled, _searchable
 from peecha.ui.widgets import JalaliDateEdit
@@ -188,15 +189,13 @@ class RfqScreen(QWidget):
 
         footer = QHBoxLayout()
         self.status_label = QLabel("")
-        footer.addWidget(self.status_label, stretch=1)
-        for key, text, slot in (("new", "جدید", self.new_rfq), ("save", "ذخیره", self.save_header), ("send", "ارسال", self.send),
+        for key, text, slot in (("save", "ذخیره", self.save_header), ("new", "جدید", self.new_rfq), ("send", "ارسال", self.send),
                                 ("cancel", "لغو", self.cancel)):
-            button = QPushButton(text)
-            if key == "save":
-                button.setObjectName("primaryButton")
+            button = ms.style_button(QPushButton(text))
             button.clicked.connect(lambda _c=False, s=slot: s())
             footer.addWidget(button)
             self.buttons[key] = button
+        footer.addWidget(self.status_label, stretch=1)
         ed.addLayout(footer)
         splitter.addWidget(editor)
         splitter.setSizes([220, 560])

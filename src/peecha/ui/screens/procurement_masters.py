@@ -13,6 +13,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.db.models.commercial import Branch, CancellationReason, PurchaseType
 from peecha.services import procurement_masters as masters_service
+from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import confirm_and_delete, delete_button
 
 
@@ -66,17 +67,20 @@ class _CodeNameTab(QWidget):
         if with_emergency:
             form.addWidget(self.emergency_check)
         form.addWidget(self.active_check)
-        new_button, save_button = QPushButton("جدید"), QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        form.addStretch(1)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        save_button, new_button = ms.style_button(QPushButton("ذخیره")), ms.style_button(QPushButton("جدید"))
         new_button.clicked.connect(self.clear_form)
         save_button.clicked.connect(self.save)
-        form.addWidget(new_button)
-        form.addWidget(save_button)
+        buttons.addWidget(save_button)
+        buttons.addWidget(new_button)
         # R276: حذفِ ردیفِ انتخاب‌شده (اگر استفاده شده باشد غیرفعال می‌شود)
         remove = delete_button()
         remove.clicked.connect(self.delete)
-        form.addWidget(remove)
-        layout.addLayout(form)
+        buttons.addWidget(remove)
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
 
     MODEL = None
 
@@ -260,13 +264,11 @@ class _ReorderPoliciesTab(QWidget):
         form.addWidget(self.active_check)
         layout.addLayout(form)
         buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        for text, slot, primary in (("جدید", self.clear_form, False), ("حذف", self.delete, False), ("ذخیره", self.save, True)):
-            button = QPushButton(text)
-            if primary:
-                button.setObjectName("primaryButton")
+        for text, slot in (("ذخیره", self.save), ("جدید", self.clear_form), ("حذف", self.delete)):
+            button = ms.style_button(QPushButton(text))
             button.clicked.connect(slot)
             buttons.addWidget(button)
+        buttons.addStretch(1)
         layout.addLayout(buttons)
 
     def refresh(self) -> None:
@@ -388,13 +390,11 @@ class _BudgetsTab(QWidget):
         form.addWidget(self.active_check)
         layout.addLayout(form)
         buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        for text, slot, primary in (("جدید", self.clear_form, False), ("حذف", self.delete, False), ("ذخیره", self.save, True)):
-            button = QPushButton(text)
-            if primary:
-                button.setObjectName("primaryButton")
+        for text, slot in (("ذخیره", self.save), ("جدید", self.clear_form), ("حذف", self.delete)):
+            button = ms.style_button(QPushButton(text))
             button.clicked.connect(slot)
             buttons.addWidget(button)
+        buttons.addStretch(1)
         layout.addLayout(buttons)
 
     def refresh(self) -> None:

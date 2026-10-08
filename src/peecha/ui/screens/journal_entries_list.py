@@ -106,7 +106,6 @@ class _TransferDialog(QDialog):
         layout.addWidget(self.warning_label)
 
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         button_row = QHBoxLayout(button_cluster)
         button_row.setContentsMargins(0, 0, 0, 0)
         self.confirm_button = QPushButton("✅")
@@ -292,8 +291,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         delete_button.setToolTip("حذف سند انتخاب‌شده (موقت/پیش‌نویس)")
         delete_button.clicked.connect(self._delete_selected)
 
-        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
-        # پایینِ فرم»): همه‌یِ ۷ دکمه یک گروهِ واحد در چپِ نوارِ اقدامات‌اند.
+        # همهٔ ۷ دکمه یک گروه واحد، کنار هم سمت راست پایین فرم.
         layout.addWidget(build_action_footer([
             copy_button, reverse_copy_button, approve_button,
             reverse_button, merge_button, transfer_button, delete_button,

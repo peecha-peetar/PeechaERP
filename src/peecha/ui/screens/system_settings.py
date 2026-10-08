@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QCompleter, QFrame, QHBoxLayout, QLabel, QScrollArea, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox, QCompleter, QFrame, QHBoxLayout, QLabel, QListWidget, QScrollArea, QTabWidget, QVBoxLayout, QWidget,
+)
 
 from peecha.ui.screens.accounting_coding import AccountingCodingSettingsScreen, DetailLevelDigitSettingsScreen
 from peecha.ui.screens.audit_log import AuditLogScreen
@@ -92,6 +94,37 @@ _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
 }
 
 
+class _LazyPage(QScrollArea):
+    """R301: زیرتب تنظیمات در اولین نمایش ساخته می‌شود، نه همهٔ ~۵۰ صفحه هنگام بازشدن تنظیمات (چند ثانیه کندی)."""
+
+    def __init__(self, factory, on_built) -> None:
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        if getattr(factory, "manages_own_scroll", False):
+            # صفحه‌ای که خودش اسکرول و نوار ثابت دکمه دارد دوباره اسکرول نخورد (نوار دکمه زیر تسک‌بار نرود)
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._factory, self._on_built, self._page = factory, on_built, None
+
+    def page(self) -> QWidget:
+        if self._page is None:
+            self._page = self._factory()
+            super().setWidget(self._page)
+            self._on_built(self._page)
+        return self._page
+
+    def widget(self) -> QWidget:
+        return self.page()
+
+    def is_built(self) -> bool:
+        return self._page is not None
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        self.page()
+        super().showEvent(event)
+
+
 def _user_can_view(form_codes: tuple[str, ...], cache: dict[str, bool]) -> bool:
     from peecha import session as app_session
     from peecha.services import roles as roles_service
@@ -132,14 +165,15 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self._search_targets: list[tuple[int, QTabWidget | None, int | None]] = []
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 14, 20, 14)
-        outer.setSpacing(12)
+        outer.setContentsMargins(14, 10, 14, 10)
+        outer.setSpacing(8)
 
+        # R301: عنوان و جستجو در یک ردیف
         title = QLabel("تنظیمات سیستم")
         title.setObjectName("pageTitle")
-        outer.addWidget(title)
-
         search_row = QHBoxLayout()
+        search_row.addWidget(title)
+        search_row.addSpacing(16)
         search_row.addWidget(QLabel("جستجو در تنظیمات:"))
         self.settings_search = QComboBox()
         self.settings_search.setEditable(True)
@@ -182,7 +216,22 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # R293: قواعد، تقویم کاری، تعهد زمانی، اعلان‌ها و مدیران (چرخ‌دندهٔ کنار منوی «گردش کار و تایید»)
         self._add_outer_tab("گردش کار", self._build_workflow_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
-        outer.addWidget(self.tabs, stretch=1)
+        # R301: ۱۴ بخش در نوار تب جا نمی‌شدند (فلش اسکرول)؛ فهرست بخش‌ها ستونی کنار صفحه است
+        self.section_list = QListWidget()
+        self.section_list.setObjectName("settingsSections")
+        self.section_list.setFixedWidth(190)
+        self.section_list.setSpacing(1)
+        for i in range(self.tabs.count()):
+            self.section_list.addItem(self.tabs.tabText(i))
+        self.section_list.setCurrentRow(self.tabs.currentIndex())
+        self.section_list.currentRowChanged.connect(lambda row: row >= 0 and self.tabs.setCurrentIndex(row))
+        self.tabs.currentChanged.connect(self._sync_section_list)
+        self.tabs.tabBar().hide()
+        body = QHBoxLayout()
+        body.setSpacing(8)
+        body.addWidget(self.section_list)
+        body.addWidget(self.tabs, stretch=1)
+        outer.addLayout(body, stretch=1)
         self.no_access_label = QLabel("به هیچ بخشی از تنظیمات دسترسی ندارید؛ از مدیر سیستم بخواهید در «نقش‌ها و دسترسی‌ها» فعال کند.")
         self.no_access_label.setObjectName("sectionHint")
         self.no_access_label.setWordWrap(True)
@@ -216,6 +265,12 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         else:
             self.settings_search.addItem(label, (outer_index, None, None))
             self._search_targets.append((outer_index, None, None))
+
+    def _sync_section_list(self, index: int) -> None:
+        if self.section_list.currentRow() != index:
+            self.section_list.blockSignals(True)
+            self.section_list.setCurrentRow(index)
+            self.section_list.blockSignals(False)
 
     def _on_outer_tab_changed(self, index: int) -> None:
         if 0 <= index < len(self._outer_tab_refreshers):
@@ -253,82 +308,72 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # در یک صفحه‌ی اسکرول‌شونده.
         return self._sub_tabs(
             [
-                ("کدینگ حساب‌ها", AccountingCodingSettingsScreen()),
-                ("تعداد رقم سطوح تفصیلی", DetailLevelDigitSettingsScreen()),
-                ("تنظیمات صورت‌های مالی", FinancialStatementMappingScreen()),
+                ("کدینگ حساب‌ها", AccountingCodingSettingsScreen),
+                ("تعداد رقم سطوح تفصیلی", DetailLevelDigitSettingsScreen),
+                ("تنظیمات صورت‌های مالی", FinancialStatementMappingScreen),
             ]
         )
 
     def _build_treasury_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("انواع سند دریافت/پرداخت", TreasuryCounterpartySettingsScreen()),
-                ("بانک‌ها", TreasuryBanksScreen()),
+                ("انواع سند دریافت/پرداخت", TreasuryCounterpartySettingsScreen),
+                ("بانک‌ها", TreasuryBanksScreen),
                 # طبقِ درخواستِ صریح («تمامیِ تنظیماتِ POS از منوها برداشته
                 # شود و در تنظیماتِ اصلی، زیرِ خزانه‌داری بیاید»).
-                ("ترمینال‌ها، شیفت‌ها و تنظیمات تک‌فروشی", CommercialPosSessionsScreen()),
+                ("ترمینال‌ها، شیفت‌ها و تنظیمات تک‌فروشی", CommercialPosSessionsScreen),
             ]
         )
 
-    def _sub_tabs(self, pages: list[tuple[str, QWidget]]):
-        # طبقِ گزارشِ صریح («فرم‌هایِ تنظیماتِ سیستم اصلاً اسکرول ندارند»):
-        # وقتی این زیرپنجره کوچک می‌شود، محتوایِ زیرتب‌ها (که هرکدام یک
-        # صفحه‌یِ کاملِ مستقل‌اند، با حداقل‌ارتفاعِ خودشان) به‌سادگی از
-        # دیدرس خارج می‌شد و هیچ راهی برایِ رسیدن به فیلدها/دکمه‌هایِ
-        # پایینی نبود — همان الگویِ QScrollArea که در dimension_group_config.py
-        # برایِ همین مشکل استفاده شده، این‌جا هم به‌کار می‌رود.
+    def _sub_tabs(self, pages: list[tuple[str, "callable"]]):
+        # هر زیرتب در QScrollArea (برای پنجرهٔ کوچک) و R301: با سازنده، تا فقط هنگام دیده‌شدن ساخته شود
         inner = QTabWidget()
         inner.setDocumentMode(True)
-        widgets: list[QWidget] = []
-        for label, widget in pages:
-            self._sub_screens.append(widget)
-            widgets.append(widget)
-            # باگِ واقعیِ گزارش‌شده («پایینِ همه‌یِ فرم‌ها زیرِ تسک‌بار
-            # می‌ماند»): صفحه‌هایی که خودشان اسکرول+نوارِ ثابتِ دکمه دارند
-            # (manages_own_scroll) نباید دوباره در این QScrollAreaِ بیرونی
-            # بپیچند — وگرنه دقیقاً همان نوارِ دکمه‌یِ «ثابت»شان هم دوباره
-            # قابلِ‌اسکرول‌شدن و گم‌شدن می‌شود.
-            if getattr(widget, "manages_own_scroll", False):
-                inner.addTab(widget, label)
-                continue
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
-            scroll.setFrameShape(QFrame.NoFrame)
-            scroll.setWidget(widget)
-            inner.addTab(scroll, label)
+        lazy: list[_LazyPage] = []
+        for label, factory in pages:
+            holder = _LazyPage(factory, self._sub_screens.append)
+            lazy.append(holder)
+            inner.addTab(holder, label)
 
         def refresh_current(index: int | None = None) -> None:
             idx = inner.currentIndex() if index is None else index
-            if 0 <= idx < len(widgets) and hasattr(widgets[idx], "refresh"):
-                widgets[idx].refresh()
+            if 0 <= idx < len(lazy):
+                page = lazy[idx].page()
+                if hasattr(page, "refresh"):
+                    page.refresh()
 
         inner.currentChanged.connect(refresh_current)
         return inner, refresh_current
 
+    def ensure_all_built(self) -> None:
+        """همهٔ زیرتب‌ها را می‌سازد (برای بررسی‌های سراسری مثل راهنمای فیلدها)."""
+        for holder in self.findChildren(_LazyPage):
+            holder.page()
+
     def _build_general_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("شرکت‌ها", CompaniesScreen()),
-                ("زبان‌ها", LanguagesScreen()),
-                ("ارزها", CurrenciesScreen()),
-                ("سال‌های مالی", FiscalYearsScreen()),
+                ("شرکت‌ها", CompaniesScreen),
+                ("زبان‌ها", LanguagesScreen),
+                ("ارزها", CurrenciesScreen),
+                ("سال‌های مالی", FiscalYearsScreen),
             ]
         )
 
     def _build_users_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("کاربران", UsersScreen()),
-                ("نقش‌ها و دسترسی‌ها", RolesScreen()),
-                ("طراحی گردش کار", WorkflowDesignerScreen()),
+                ("کاربران", UsersScreen),
+                ("نقش‌ها و دسترسی‌ها", RolesScreen),
+                ("طراحی گردش کار", WorkflowDesignerScreen),
             ]
         )
 
     def _build_accounting_data_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("عنوان فیلدها", FieldLabelsScreen()),
-                ("ترجمه‌ها", TranslationsScreen()),
+                ("عنوان فیلدها", FieldLabelsScreen),
+                ("ترجمه‌ها", TranslationsScreen),
             ]
         )
 
@@ -345,51 +390,51 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
     def _build_inventory_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("واحدهای اندازه‌گیری", _UomTab()),
-                ("مدیریت بارکد", _BarcodeManagerTab()),
-                ("برند و تولیدکننده", _BrandManufacturerTab()),
-                ("دسته‌بندی کالا", _CategoriesTab()),
-                ("قیمت‌گذاری", _CostingSettingsTab()),
-                ("نگاشت حساب‌ها", _AccountMappingsTab()),
-                ("دلیل‌های اصلاح/برگشت", _ReasonCodesTab()),
-                ("قابلیت‌های فعال", _InventoryFeatureToggleTab()),
+                ("واحدهای اندازه‌گیری", _UomTab),
+                ("مدیریت بارکد", _BarcodeManagerTab),
+                ("برند و تولیدکننده", _BrandManufacturerTab),
+                ("دسته‌بندی کالا", _CategoriesTab),
+                ("قیمت‌گذاری", _CostingSettingsTab),
+                ("نگاشت حساب‌ها", _AccountMappingsTab),
+                ("دلیل‌های اصلاح/برگشت", _ReasonCodesTab),
+                ("قابلیت‌های فعال", _InventoryFeatureToggleTab),
             ]
         )
 
     def _build_payroll_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("تنظیمات کلی", _GeneralSettingsTab()),
-                ("حداقل دستمزد", _MinimumWageTab()),
-                ("قوانین حقوق و دستمزد", _PoliciesTab()),
-                ("آیتم‌های حقوقی", _PayItemsTab()),
-                ("بیمه", _InsuranceTab()),
-                ("مالیات", _TaxTab()),
-                ("قوانین اضافه‌کاری", _OvertimeRulesTab()),
-                ("الگوهای ورود حضور و غیاب", _AttendanceTemplatesTab()),
+                ("تنظیمات کلی", _GeneralSettingsTab),
+                ("حداقل دستمزد", _MinimumWageTab),
+                ("قوانین حقوق و دستمزد", _PoliciesTab),
+                ("آیتم‌های حقوقی", _PayItemsTab),
+                ("بیمه", _InsuranceTab),
+                ("مالیات", _TaxTab),
+                ("قوانین اضافه‌کاری", _OvertimeRulesTab),
+                ("الگوهای ورود حضور و غیاب", _AttendanceTemplatesTab),
             ]
         )
 
     def _build_commercial_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("نگاشت حساب‌ها", _CommercialAccountMappingsTab()),
-                ("قابلیت‌های فعال", _FeatureToggleTab()),
-                ("نمایهٔ صنعتی", _IndustryProfileTab()),
-                ("شماره‌گذاری اسناد", _NumberingSequencesTab()),
-                ("کانال‌ها", _CommercialChannelsTab()),
-                ("انواع تسویهٔ پخش", _DistributionSettlementTypesTab()),
-                ("روش‌های تسویهٔ موبایل", _MobileSettlementMethodsTab()),
-                ("هشدار موعد تسویه", _SettlementAlarmTab()),
-                ("حاشیهٔ سود و پیشنهاد قیمت", _PricingPolicyTab()),
-                ("سانترال / وویپ", _VoipSettingsTab()),
-                ("درگاه پیامک", _SmsGatewaySettingsTab()),
+                ("نگاشت حساب‌ها", _CommercialAccountMappingsTab),
+                ("قابلیت‌های فعال", _FeatureToggleTab),
+                ("نمایهٔ صنعتی", _IndustryProfileTab),
+                ("شماره‌گذاری اسناد", _NumberingSequencesTab),
+                ("کانال‌ها", _CommercialChannelsTab),
+                ("انواع تسویهٔ پخش", _DistributionSettlementTypesTab),
+                ("روش‌های تسویهٔ موبایل", _MobileSettlementMethodsTab),
+                ("هشدار موعد تسویه", _SettlementAlarmTab),
+                ("حاشیهٔ سود و پیشنهاد قیمت", _PricingPolicyTab),
+                ("سانترال / وویپ", _VoipSettingsTab),
+                ("درگاه پیامک", _SmsGatewaySettingsTab),
                 # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط
                 # سفارش‌هایِ فروشِ مشتری بیاید، و تنظیمات به تبِ تنظیماتِ
                 # فروشِ اینترنتی برود»): اتصالات/نگاشتِ کالا-مشتری/سینکِ
                 # خودکار/مسیریابیِ سفارش -- همان صفحه‌ای که قبلاً خودش یک
                 # آیتمِ مستقلِ ناوبری بود، حالا این‌جاست.
-                ("تنظیمات فروش اینترنتی", CommercialEcommerceScreen()),
+                ("تنظیمات فروش اینترنتی", CommercialEcommerceScreen),
             ]
         )
 
@@ -397,35 +442,34 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # R245: لوگو و سربرگِ گزارش‌ها + قالب‌هایِ گزارشِ حرفه‌ای
         from peecha.ui.screens.report_branding import ReportBrandingScreen
 
-        self.report_branding = ReportBrandingScreen()
-        return self._sub_tabs([("لوگو و سربرگ", self.report_branding), ("قالب‌های حرفه‌ای (Jasper)", _ReportTemplatesTab())])
+        return self._sub_tabs([("لوگو و سربرگ", ReportBrandingScreen), ("قالب‌های حرفه‌ای (Jasper)", _ReportTemplatesTab)])
 
     def _build_fixed_assets_tab(self):
         from peecha.ui.screens.fixed_assets import SetupScreen
 
-        return self._sub_tabs([("طبقه‌ها، حساب‌ها، محل‌ها و سیاست‌ها", SetupScreen())])
+        return self._sub_tabs([("طبقه‌ها، حساب‌ها، محل‌ها و سیاست‌ها", SetupScreen)])
 
     def _build_production_tab(self):
         from peecha.ui.screens.production import PrdSettingsScreen
 
-        return self._sub_tabs([("تنظیمات کلی تولید", PrdSettingsScreen())])
+        return self._sub_tabs([("تنظیمات کلی تولید", PrdSettingsScreen)])
 
     def _build_crm_tab(self):
         from peecha.ui.screens import crm
 
         return self._sub_tabs([
-            ("قیف فروش و منابع سرنخ", crm.CrmSettingsScreen()),
-            ("باشگاه مشتریان", crm.LoyaltyRulesPanel()),
-            ("امتیازدهی سرنخ", crm.LeadScoringPanel()),
-            ("تعهد زمانی تیکت‌ها", crm.SlaPoliciesPanel()),
-            ("الگوهای پیام", crm.TemplatesPanel()),
-            ("تحلیل مشتری", crm.AnalyticsSettingsPanel()),
+            ("قیف فروش و منابع سرنخ", crm.CrmSettingsScreen),
+            ("باشگاه مشتریان", crm.LoyaltyRulesPanel),
+            ("امتیازدهی سرنخ", crm.LeadScoringPanel),
+            ("تعهد زمانی تیکت‌ها", crm.SlaPoliciesPanel),
+            ("الگوهای پیام", crm.TemplatesPanel),
+            ("تحلیل مشتری", crm.AnalyticsSettingsPanel),
         ])
 
     def _build_workflow_tab(self):
         from peecha.ui.screens import workflow_center as wf
 
-        return self._sub_tabs([(label, cls()) for label, cls in wf.SETTINGS_PANELS])
+        return self._sub_tabs(list(wf.SETTINGS_PANELS))
 
     def apply_permissions(self) -> None:
         cache: dict[str, bool] = {}
@@ -446,10 +490,13 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
             else:
                 visible = _user_can_view(outer_forms, cache)
             self.tabs.setTabVisible(outer_index, visible)
+            self.section_list.item(outer_index).setHidden(not visible)
             any_visible = any_visible or visible
         if any_visible and not self.tabs.isTabVisible(self.tabs.currentIndex()):
             self.tabs.setCurrentIndex(next(i for i in range(self.tabs.count()) if self.tabs.isTabVisible(i)))
         self.tabs.setVisible(any_visible)
+        self.section_list.setVisible(any_visible)
+        self._sync_section_list(self.tabs.currentIndex())
         self.no_access_label.setVisible(not any_visible)
 
     def _target_visible(self, outer_index: int, inner_widget, inner_index) -> bool:

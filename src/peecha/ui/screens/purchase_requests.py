@@ -20,6 +20,7 @@ from peecha.services import purchase_requests as pr_service
 from peecha.services import roles as roles_service
 from peecha.services import unit_conversion as uc
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import JalaliDateEdit
 
 
@@ -190,21 +191,20 @@ class PurchaseRequestScreen(QWidget):
         self.workflow_bar.on_started = lambda: self._request_id and self.edit_document(self._request_id)
         ed.addWidget(self.workflow_bar)
 
+        # R301: دکمه‌های آیکونی، کنار هم سمت راست پایین فرم
         footer = QHBoxLayout()
         self.status_label = QLabel("")
-        footer.addWidget(self.status_label, stretch=1)
         self.buttons: dict[str, QPushButton] = {}
         for key, text, slot in (
-            ("new", "جدید", self.new_request), ("save", "ذخیره", self.save_header), ("submit", "ارسال برای تصویب", self.submit),
+            ("save", "ذخیره", self.save_header), ("new", "جدید", self.new_request), ("submit", "ارسال برای تصویب", self.submit),
             ("approve", "تصویب", self.approve), ("reject", "رد", self.reject), ("cancel", "لغو", self.cancel),
             ("convert", "تبدیل به سفارش خرید", self.convert),
         ):
-            button = QPushButton(text)
-            if key in ("save", "convert"):
-                button.setObjectName("primaryButton")
+            button = ms.style_button(QPushButton(text))
             button.clicked.connect(slot)
             footer.addWidget(button)
             self.buttons[key] = button
+        footer.addWidget(self.status_label, stretch=1)
         ed.addLayout(footer)
         splitter.addWidget(editor)
         splitter.setSizes([260, 520])

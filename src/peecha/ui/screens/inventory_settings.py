@@ -184,7 +184,6 @@ class _UomTab(QWidget):
         layout.addWidget(self.table)
 
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         buttons = QHBoxLayout(button_cluster)
         buttons.setContentsMargins(0, 0, 0, 0)
         edit_button = QPushButton("✏️")
@@ -511,7 +510,7 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
             if code not in NOT_YET_AVAILABLE:
                 self.method_combo.addItem(label, code)
 
-        self.allow_override_checkbox = QCheckBox("اجازهٔ override در سطح کالا")
+        self.allow_override_checkbox = QCheckBox("اجازهٔ روش جداگانه برای هر کالا")
         self.allow_override_checkbox.setChecked(True)
         # R257: رفتارِ موجودیِ منفی
         self.negative_combo = QComboBox()
@@ -907,7 +906,6 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         panel_layout.addWidget(self.table)
 
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         buttons = QHBoxLayout(button_cluster)
         buttons.setContentsMargins(0, 0, 0, 0)
         edit_button = QPushButton("✏️")

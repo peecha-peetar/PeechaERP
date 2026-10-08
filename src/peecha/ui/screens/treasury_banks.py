@@ -55,11 +55,8 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.name_field.returnPressed.connect(self._save)
         add_row.addWidget(self.name_field, stretch=1)
 
-        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها: دکمه‌ها باید کنارِ هم و به‌ترتیبِ
-        # چپ‌به‌راست بمانند، بدونِ اینکه جهتِ فیلدهایِ کد/نامِ همین ردیف تغییر کند —
-        # پس فقط خوشه‌یِ دکمه‌ها در یک زیرویجتِ LTR جداگانه قرار می‌گیرد.
+        # دکمه‌ها کنار هم در یک خوشه (R301: هم‌جهت با برنامه، راست‌به‌چپ)
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         button_cluster_layout = QHBoxLayout(button_cluster)
         button_cluster_layout.setContentsMargins(0, 0, 0, 0)
         button_cluster_layout.setSpacing(8)

@@ -310,26 +310,32 @@ class PurchaseReportScreen(ReportScreenBase):
         # R247: صفحه‌بندیِ نمایش (چاپ/خروجی همیشه همهٔ ردیف‌ها را دارد)
         self._page, self._page_offset, self._page_total = 0, 0, -1
         self._generation, self._workers = 0, []
+        # R301: کنترل‌های صفحه‌بندی سمت راست (هم‌جهت با بقیهٔ فرم‌ها) و دکمه‌ها آیکونی
         pager = QHBoxLayout()
         self.busy_label = QLabel("")
         self.busy_label.setObjectName("sectionHint")
-        pager.addWidget(self.busy_label)
-        pager.addStretch(1)
+        self.prev_page_button = QPushButton("→")
+        self.prev_page_button.setObjectName("iconButton")
+        self.prev_page_button.setFixedWidth(40)
+        self.prev_page_button.setToolTip("صفحهٔ قبل")
+        self.prev_page_button.clicked.connect(lambda: self._go_page(self._page - 1))
+        self.page_label = QLabel("")
+        self.next_page_button = QPushButton("←")
+        self.next_page_button.setObjectName("iconButton")
+        self.next_page_button.setFixedWidth(40)
+        self.next_page_button.setToolTip("صفحهٔ بعد")
+        self.next_page_button.clicked.connect(lambda: self._go_page(self._page + 1))
+        for w in (self.prev_page_button, self.page_label, self.next_page_button):
+            pager.addWidget(w)
+        pager.addSpacing(12)
         pager.addWidget(QLabel("ردیف در صفحه:"))
         self.page_size_combo = QComboBox()
         for size, text in PAGE_SIZES:
             self.page_size_combo.addItem(text, size)
         self.page_size_combo.currentIndexChanged.connect(lambda _i: self._go_page(0))
         pager.addWidget(self.page_size_combo)
-        self.prev_page_button = QPushButton("‹ قبلی")
-        self.prev_page_button.setObjectName("flatButton")
-        self.prev_page_button.clicked.connect(lambda: self._go_page(self._page - 1))
-        self.page_label = QLabel("")
-        self.next_page_button = QPushButton("بعدی ›")
-        self.next_page_button.setObjectName("flatButton")
-        self.next_page_button.clicked.connect(lambda: self._go_page(self._page + 1))
-        for w in (self.prev_page_button, self.page_label, self.next_page_button):
-            pager.addWidget(w)
+        pager.addStretch(1)
+        pager.addWidget(self.busy_label)
         self.layout().insertLayout(self.layout().indexOf(self.table) + 1, pager)
 
         header = self.table.horizontalHeader()

@@ -16,34 +16,18 @@ from typing import Any
 from sqlalchemy import delete, func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import PriceListItem, PriceListItemPriceHistory
+from peecha.db.models.commercial import PriceListItem
 from peecha.db.models.core import Company
 from peecha.db.models.inventory import (
-    AssetDepreciationEntry,
-    AssetDetail,
-    Batch,
-    BomHeader,
-    BomLine,
     Brand,
     CostingMethod,
-    CostLayer,
-    CycleCountLine,
     Item,
     ItemCategory,
-    ItemMedia,
-    ItemSupplier,
-    ItemSupplierCode,
     ItemUomConversion,
     ItemVariant,
-    ItemVariantValue,
     Manufacturer,
-    ReorderPolicy,
-    ReorderSuggestionAcknowledgement,
     RelatedItem,
-    SerialNumber,
-    StandardCost,
     StockDocumentLine,
-    StockReservation,
     Uom,
     Warehouse,
 )
@@ -759,83 +743,167 @@ def update_item(
     dimensions_service.update_detail_account(detail_account_id, company_id, code, is_active, name)
 
 
-def _item_has_stock_movements(session, item_id: int) -> bool:
-    from peecha.db.models.inventory import StockLedger
+# R301: جدول‌هایی که فقط تعریفِ خودِ کالا هستند و همراهش پاک می‌شوند (فرزند پیش از والد).
+# هر جدولِ دیگری که به کالا اشاره کند «استفاده» است و جلوی حذف را می‌گیرد.
+_OWNED_DELETES = (
+    "DELETE FROM inv.bom_lines WHERE bom_id IN (SELECT bom_id FROM inv.bom_headers WHERE finished_item_id = :i)",
+    "DELETE FROM prd.bom_outputs WHERE bom_id IN (SELECT bom_id FROM inv.bom_headers WHERE finished_item_id = :i)",
+    "DELETE FROM prd.standard_cost_cards WHERE item_id = :i"
+    " OR bom_id IN (SELECT bom_id FROM inv.bom_headers WHERE finished_item_id = :i)"
+    " OR routing_id IN (SELECT routing_id FROM prd.routings WHERE item_id = :i)",
+    "DELETE FROM inv.bom_headers WHERE finished_item_id = :i",
+    "DELETE FROM prd.routing_operations WHERE routing_id IN (SELECT routing_id FROM prd.routings WHERE item_id = :i)",
+    "DELETE FROM prd.routings WHERE item_id = :i",
+    "DELETE FROM prd.item_production_profiles WHERE item_id = :i",
+    "DELETE FROM inv.asset_depreciation_entries WHERE item_id = :i",
+    "DELETE FROM inv.asset_details WHERE item_id = :i",
+    "DELETE FROM inv.item_unit_barcodes WHERE item_id = :i",
+    "DELETE FROM inv.item_uom_conversions WHERE item_id = :i",
+    "DELETE FROM inv.item_variant_values WHERE item_id = :i",
+    "DELETE FROM inv.item_variants WHERE item_id = :i OR parent_item_id = :i",
+    "DELETE FROM inv.item_suppliers WHERE item_id = :i",
+    "DELETE FROM inv.item_supplier_codes WHERE item_id = :i",
+    "DELETE FROM inv.item_media WHERE item_id = :i",
+    "DELETE FROM inv.item_storage_profiles WHERE item_id = :i",
+    "DELETE FROM inv.related_items WHERE item_id = :i OR related_item_id = :i",
+    "DELETE FROM inv.standard_costs WHERE item_id = :i",
+    "DELETE FROM inv.replacement_costs WHERE item_id = :i",
+    "DELETE FROM inv.reorder_policies WHERE item_id = :i",
+    "DELETE FROM inv.reorder_suggestion_acknowledgements WHERE item_id = :i",
+    "DELETE FROM inv.cycle_count_plans WHERE item_id = :i",
+    "DELETE FROM comm.price_list_item_price_history WHERE item_id = :i",
+    "DELETE FROM comm.price_list_items WHERE item_id = :i",
+    "DELETE FROM comm.bundle_components WHERE bundle_id IN (SELECT bundle_id FROM comm.bundle_definitions WHERE bundle_item_id = :i)",
+    "DELETE FROM comm.bundle_definitions WHERE bundle_item_id = :i",
+    "DELETE FROM comm.marketplace_item_mappings WHERE item_id = :i",
+)
+_OWNED_TABLES = {
+    "inv.bom_headers.finished_item_id", "prd.standard_cost_cards.item_id", "prd.routings.item_id",
+    "prd.item_production_profiles.item_id", "inv.asset_details.item_id", "inv.asset_depreciation_entries.item_id",
+    "inv.item_unit_barcodes.item_id", "inv.item_uom_conversions.item_id", "inv.item_variant_values.item_id",
+    "inv.item_variants.item_id", "inv.item_variants.parent_item_id", "inv.item_suppliers.item_id",
+    "inv.item_supplier_codes.item_id", "inv.item_media.item_id", "inv.item_storage_profiles.item_id",
+    "inv.related_items.item_id", "inv.related_items.related_item_id", "inv.standard_costs.item_id",
+    "inv.replacement_costs.item_id", "inv.reorder_policies.item_id", "inv.reorder_suggestion_acknowledgements.item_id",
+    "inv.cycle_count_plans.item_id", "comm.price_list_item_price_history.item_id", "comm.price_list_items.item_id",
+    "comm.bundle_definitions.bundle_item_id", "comm.marketplace_item_mappings.item_id",
+}
+# نام فارسی جاهایی که کالا در آن‌ها «استفاده» شده (برای پیام حذف)
+USAGE_LABELS = {
+    "comm.commercial_document_lines": "ردیف اسناد خرید و فروش", "inv.stock_document_lines": "ردیف اسناد انبار",
+    "inv.stock_ledger": "گردش انبار (کاردکس)", "inv.stock_balance": "موجودی انبار",
+    "comm.purchase_request_lines": "درخواست خرید", "comm.rfq_lines": "استعلام قیمت",
+    "comm.commercial_contracts": "قراردادهای خرید و فروش", "comm.promotion_rules": "قواعد تخفیف و جایزه",
+    "comm.vendor_rebate_agreements": "قراردادهای تخفیف حجمی", "comm.service_tickets": "تیکت‌های خدمات",
+    "comm.service_ticket_parts_used": "قطعات مصرفی تیکت‌های خدمات", "comm.warranties": "گارانتی‌ها",
+    "comm.bundle_components": "جزء بستهٔ کالای دیگر", "comm.marketplace_inventory_push_log": "سابقهٔ ارسال به فروشگاه اینترنتی",
+    "crm.leads": "سرنخ‌های فروش", "crm.opportunity_lines": "فرصت‌های فروش", "fa.assets": "دارایی‌های ثابت",
+    "inv.batches": "بچ‌ها", "inv.bom_lines": "فرمول ساخت (مواد اولیهٔ کالای دیگر)", "inv.cost_adjustment_log": "اصلاح بها",
+    "inv.cost_allocations": "تخصیص بها", "inv.cost_layers": "لایه‌های بهای تمام‌شده",
+    "inv.cost_recalculation_lines": "محاسبهٔ دوبارهٔ بها", "inv.cost_recalculation_runs": "محاسبهٔ دوبارهٔ بها",
+    "inv.cycle_count_lines": "انبارگردانی", "inv.items": "متغیرهای این کالا", "inv.location_replenishment_rules": "قواعد تأمین محل انبار",
+    "inv.lot_movements": "گردش بچ", "inv.serial_numbers": "سریال‌ها", "inv.stock_reservations": "رزرو موجودی",
+    "inv.vehicle_loading_lines": "بارگیری خودرو", "inv.vehicle_settlement_lines": "تسویهٔ خودرو",
+    "inv.warehouse_tasks": "وظایف انبار (جانمایی و برداشت)", "prd.bom_outputs": "محصول جانبی فرمول تولید",
+    "prd.mrp_lines": "برنامه‌ریزی مواد", "prd.order_materials": "مواد دستور تولید", "prd.order_outputs": "محصول دستور تولید",
+    "prd.order_transactions": "گردش تولید", "prd.production_orders": "دستور تولید", "prd.production_plan_lines": "برنامهٔ تولید",
+}
 
-    return bool(session.scalar(select(func.count()).select_from(StockLedger).where(StockLedger.item_id == item_id)))
+
+def _item_references(session) -> list[tuple[str, str]]:
+    """(جدول، ستون) همهٔ کلیدهای خارجی تک‌ستونی که به inv.items اشاره می‌کنند -- از خود پایگاه داده."""
+    from sqlalchemy import text
+
+    return [(t, c) for t, c in session.execute(text(
+        "SELECT c.conrelid::regclass::text, a.attname FROM pg_constraint c "
+        "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] "
+        "WHERE c.contype = 'f' AND c.confrelid = 'inv.items'::regclass AND array_length(c.conkey, 1) = 1"))]
 
 
-def delete_item(item_id: int, company_id: int) -> None:
-    """طبق رفع باگ کشف‌شده: پیش‌تر این تابع فقط سابقهٔ حرکت انبار را چک
-    می‌کرد و مستقیماً ردیف inv.items را حذف می‌کرد — اگر کالا زیرجدول‌های
-    تعریفی خودش را داشت (asset_details/bom_headers/item_suppliers/...)،
-    حذف با نقض کلید خارجی شکست می‌خورد. حالا:
-    ۱) اگر کالا در جایی که واقعاً «استفاده» محسوب می‌شود (جزء فهرست
-       مواد اولیهٔ کالای دیگر، والد تنوع کالاهای دیگر، رزرو/بچ/سریال/
-       لایهٔ‌بها/انبارگردانی فعال) نقش داشته باشد، حذف رد می‌شود.
-    ۲) در غیر این صورت، زیرجدول‌های تعریفی خود همین کالا (که فقط با
-       همین کالا معنا دارند، نه سابقهٔ عملیاتی مستقل) پیش از حذف خود
-       کالا پاک می‌شوند."""
+def _usage(session, item_id: int, *, ignore_variants: bool = False) -> list[tuple[str, int]]:
+    from sqlalchemy import text
+
+    totals: dict[str, int] = {}
+    for table, column in _item_references(session):
+        if f"{table}.{column}" in _OWNED_TABLES or (ignore_variants and table == "inv.items"):
+            continue
+        n = session.scalar(text(f'SELECT count(*) FROM {table} WHERE "{column}" = :i'), {"i": item_id}) or 0
+        if n:
+            label = USAGE_LABELS.get(table, table)
+            totals[label] = totals.get(label, 0) + n
+    return sorted(totals.items(), key=lambda x: -x[1])
+
+
+def item_usage(company_id: int, item_id: int) -> list[tuple[str, int]]:
+    """جاهایی که این کالا در آن‌ها استفاده شده: [(نام فارسی بخش، تعداد ردیف)] -- خالی یعنی قابل‌حذف است."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
             raise ValueError("کالا نامعتبر است.")
-        if _item_has_stock_movements(session, item_id):
-            raise ValueError("این کالا سابقهٔ حرکت انبار دارد و قابل‌حذف نیست — به‌جای حذف، وضعیت آن را «متوقف‌شده» کنید.")
-        if session.scalar(
-            select(func.count()).select_from(StockDocumentLine).where(StockDocumentLine.item_id == item_id)
-        ):
-            raise ValueError("این کالا در سندی استفاده شده و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(BomLine).where(BomLine.component_item_id == item_id)):
-            raise ValueError("این کالا به‌عنوان جزء فهرست مواد اولیهٔ کالای دیگری استفاده شده و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(Item).where(Item.variant_parent_item_id == item_id)):
-            raise ValueError("این کالا والد یک یا چند تنوع کالاست و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(StockReservation).where(StockReservation.item_id == item_id)):
-            raise ValueError("این کالا رزرو موجودی دارد و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(Batch).where(Batch.item_id == item_id)):
-            raise ValueError("این کالا سابقهٔ بچ دارد و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(SerialNumber).where(SerialNumber.item_id == item_id)):
-            raise ValueError("این کالا سابقهٔ سریال دارد و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(CostLayer).where(CostLayer.item_id == item_id)):
-            raise ValueError("این کالا سابقهٔ لایهٔ بهای تمام‌شده دارد و قابل‌حذف نیست.")
-        if session.scalar(select(func.count()).select_from(CycleCountLine).where(CycleCountLine.item_id == item_id)):
-            raise ValueError("این کالا در انبارگردانی استفاده شده و قابل‌حذف نیست.")
+        return _usage(session, item_id)
 
-        bom_ids = session.scalars(select(BomHeader.bom_id).where(BomHeader.finished_item_id == item_id)).all()
-        if bom_ids:
-            session.execute(delete(BomLine).where(BomLine.bom_id.in_(bom_ids)))
-            session.execute(delete(BomHeader).where(BomHeader.bom_id.in_(bom_ids)))
-        session.execute(delete(AssetDepreciationEntry).where(AssetDepreciationEntry.item_id == item_id))
-        session.execute(delete(AssetDetail).where(AssetDetail.item_id == item_id))
-        session.execute(delete(ItemUomConversion).where(ItemUomConversion.item_id == item_id))
-        session.execute(delete(ItemVariantValue).where(ItemVariantValue.item_id == item_id))
-        session.execute(delete(ItemSupplier).where(ItemSupplier.item_id == item_id))
-        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («کالای بدونِ هیچ گردشی حذف نمی‌شود
-        # و پیامی هم نشان داده نمی‌شود»): این کالا شکست می‌خورد چون
-        # inv.item_supplier_codes (کدها/نام‌هایِ تامین‌کننده‌یِ R62) هم
-        # فقط با خودِ همین کالا معنا دارد اما این‌جا پاک نمی‌شد -- نقضِ
-        # کلیدِ خارجی به‌صورتِ یک IntegrityErrorِ خام بالا می‌آمد که هیچ‌جا
-        # به ValueErrorِ قابلِ‌نمایش تبدیل نمی‌شد، پس UI هیچ پیامی نشان
-        # نمی‌داد (فقط trace رویِ کنسول).
-        session.execute(delete(ItemSupplierCode).where(ItemSupplierCode.item_id == item_id))
-        session.execute(delete(ItemMedia).where(ItemMedia.item_id == item_id))
-        session.execute(
-            delete(RelatedItem).where((RelatedItem.item_id == item_id) | (RelatedItem.related_item_id == item_id))
-        )
-        session.execute(delete(StandardCost).where(StandardCost.item_id == item_id))
-        session.execute(delete(ReorderPolicy).where(ReorderPolicy.item_id == item_id))
-        session.execute(delete(ReorderSuggestionAcknowledgement).where(ReorderSuggestionAcknowledgement.item_id == item_id))
-        # طبقِ رفعِ باگِ واقعیِ کشف‌شده (حینِ حذفِ متغیرهایِ دارایِ قیمت):
-        # ردیف‌هایِ فهرستِ قیمت/تاریخچهٔ قیمتِ همین کالا هم فقط با خودِ
-        # همین کالا معنا دارند -- مثلِ بقیه‌یِ زیرجدول‌هایِ تعریفیِ بالا،
-        # پیش از حذفِ خودِ کالا پاک می‌شوند.
-        session.execute(delete(PriceListItemPriceHistory).where(PriceListItemPriceHistory.item_id == item_id))
-        session.execute(delete(PriceListItem).where(PriceListItem.item_id == item_id))
 
-        detail_account_id = item.item_detail_account_id
-        session.delete(item)
-        session.commit()
-    dimensions_service.delete_detail_account(detail_account_id, company_id)
+def _usage_message(name: str, usage: list[tuple[str, int]]) -> str:
+    from peecha import numerals
+
+    lines = "\n".join(f"• {label}: {numerals.to_persian_digits(str(n))} مورد" for label, n in usage)
+    return (f"«{name}» در این بخش‌ها استفاده شده و قابل‌حذف نیست:\n{lines}\n"
+            "به‌جای حذف می‌توانید وضعیت آن را «متوقف‌شده» کنید.")
+
+
+def variant_ids(company_id: int, item_id: int) -> list[int]:
+    with new_session() as session:
+        return list(session.scalars(select(Item.item_id).where(Item.company_id == company_id,
+                                                               Item.variant_parent_item_id == item_id)))
+
+
+def delete_item(item_id: int, company_id: int, *, with_variants: bool = False) -> None:
+    """حذف کالا (R301).
+
+    ۱) اگر کالا متغیر دارد: فقط با with_variants=True و همراه همهٔ متغیرهایش حذف می‌شود.
+    ۲) اگر خودش یا یکی از متغیرهایش جایی «استفاده» شده باشد (سند، گردش، تولید، فرمول ساخت کالای دیگر و ...)،
+       پیام دقیق می‌دهد که در کدام بخش‌ها و چند مورد -- از روی همهٔ کلیدهای خارجی واقعی پایگاه داده.
+    ۳) وگرنه تعریف‌های خود کالا (واحد و بارکد، فرمول ساخت و مسیر تولید خودش، تامین‌کننده‌ها، قیمت‌ها، عکس‌ها،
+       سیاست سفارش، ...) و حساب تفصیلی‌اش هم پاک می‌شوند."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None or item.company_id != company_id:
+            raise ValueError("کالا نامعتبر است.")
+        children = list(session.scalars(select(Item).where(Item.variant_parent_item_id == item_id)))
+        if children and not with_variants:
+            raise ValueError(f"این کالا {len(children)} متغیر دارد؛ با حذف آن، همهٔ متغیرهایش هم حذف می‌شوند.")
+        for victim in [*children, item]:
+            usage = _usage(session, victim.item_id, ignore_variants=victim is item)
+            if usage:
+                prefix = "متغیر " if victim is not item else ""
+                raise ValueError(_usage_message(prefix + _display_name(session, victim), usage))
+        detail_ids = []
+        try:
+            for victim in [*children, item]:
+                for sql in _OWNED_DELETES:
+                    session.execute(text(sql), {"i": victim.item_id})
+                detail_ids.append(victim.item_detail_account_id)
+                session.delete(victim)
+                session.flush()
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            table = getattr(getattr(exc.orig, "diag", None), "table_name", None)
+            schema = getattr(getattr(exc.orig, "diag", None), "schema_name", None)
+            where = USAGE_LABELS.get(f"{schema}.{table}", f"{schema}.{table}") if table else "بخش دیگری از برنامه"
+            raise ValueError(f"این کالا در «{where}» استفاده شده و قابل‌حذف نیست.") from exc
+    for detail_account_id in detail_ids:
+        dimensions_service.delete_detail_account(detail_account_id, company_id)
+
+
+def _display_name(session, item: Item) -> str:
+    from peecha.db.models.accounting import DetailAccount
+
+    account = session.get(DetailAccount, item.item_detail_account_id)
+    return f"{account.code} — {account.name}" if account is not None else f"کالای {item.item_id}"
 
 
 # ---------------------------------------------------------------------

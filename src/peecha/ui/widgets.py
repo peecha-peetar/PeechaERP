@@ -206,15 +206,7 @@ class FormScreenBase(QWidget):
 
         self.footer = QWidget()
         self.footer.setObjectName("formFooter")
-        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها («همه‌یِ آیکن‌ها کنارِ هم، سمتِ
-        # چپِ پایینِ فرم» — نه فقط رویِ این فرم، در همه‌جا): چون کلِ اپ
-        # RTL است (setLayoutDirection در main.py)، QBoxLayout.setDirection
-        # به‌تنهایی اثری ندارد — Qt جهتِ نمایشِ QBoxLayout را از
-        # layoutDirection() خودِ ویجتِ صاحبِ آن می‌گیرد، نه از Direction
-        # enum. پس باید layoutDirection خودِ ویجتِ فوتر را صریحاً LTR کرد؛
-        # وگرنه دکمه‌ها همچنان از راست به چپ می‌چینند و ترتیبشان معکوس
-        # (و محل‌شان وابسته به کدنویسیِ هر فایل) می‌ماند.
-        self.footer.setLayoutDirection(Qt.LeftToRight)
+        # R301: دکمه‌ها کنار هم در سمت راست پایین فرم (جهت فوتر از جهت برنامه پیروی می‌کند)
         self.footer_layout = QHBoxLayout(self.footer)
         self.footer_layout.setContentsMargins(18, 12, 18, 14)
         self.footer_layout.setSpacing(8)
@@ -226,8 +218,7 @@ class FormScreenBase(QWidget):
         self.footer.setVisible(visible)
 
     def set_footer_buttons(self, buttons: list[QWidget]) -> None:
-        """دکمه‌های فوتر را با ترتیب چپ‌به‌راست داده‌شده جایگزین می‌کند —
-        همیشه کنار هم، در سمت چپ فرم می‌نشینند (طبق قانون ثابت چیدمان)."""
+        """دکمه‌های فوتر را جایگزین می‌کند — کنار هم، از سمت راست فرم و به همین ترتیب."""
         while self.footer_layout.count():
             item = self.footer_layout.takeAt(0)
             if item.widget() is not None:
@@ -282,15 +273,11 @@ def build_action_footer(buttons: list[QWidget]) -> QWidget:
     """نوار دکمهٔ استاندارد پایین فرم برای صفحاتی که به‌جای
     زیرکلاسی FormScreenBase، ساختار چیدمان خودشان را حفظ می‌کنند
     (مثل فهرست‌های جدول‌محور یا صفحات چندتبی ساده). دکمه‌ها به همان
-    قاعدهٔ ثابت می‌نشینند: کنار هم، سمت چپ پایین فرم. این ویجت باید
+    قاعدهٔ ثابت می‌نشینند: کنار هم، سمت راست پایین فرم. این ویجت باید
     به‌عنوان آخرین آیتم layout اصلی صفحه اضافه شود — بیرون هر
     QScrollAreaای، نه داخلش."""
     footer = QWidget()
     footer.setObjectName("formFooter")
-    # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها: باید layoutDirection خودِ ویجتِ
-    # فوتر صریحاً LTR شود (نه فقط Direction خودِ QBoxLayout) — دلیل را
-    # در FormScreenBase.__init__ ببینید.
-    footer.setLayoutDirection(Qt.LeftToRight)
     footer_layout = QHBoxLayout(footer)
     footer_layout.setContentsMargins(18, 12, 18, 14)
     footer_layout.setSpacing(8)
@@ -1670,6 +1657,21 @@ def delete_button(tooltip: str = "حذف ردیف انتخاب‌شده") -> QPu
     button.setFixedWidth(44)
     button.setToolTip(tooltip)
     return button
+
+
+def edit_delete_actions(on_edit, on_delete, *, edit_tip: str = "ویرایش", delete_tip: str = "حذف") -> QWidget:
+    """R301: دو دکمهٔ «ویرایش» و «حذف» روی خود ردیف (هم‌شکل ردیف‌های فهرست اسناد خرید و فروش)."""
+    edit = QPushButton("✎")
+    edit.setObjectName("iconButton")
+    edit.setFixedSize(36, 28)
+    edit.setToolTip(edit_tip)
+    edit.clicked.connect(lambda _c=False: on_edit())
+    remove = QPushButton("✕")
+    remove.setObjectName("dangerIconButton")
+    remove.setFixedSize(36, 28)
+    remove.setToolTip(delete_tip)
+    remove.clicked.connect(lambda _c=False: on_delete())
+    return row_actions(edit, remove)
 
 
 def row_actions(*buttons: QWidget) -> QWidget:

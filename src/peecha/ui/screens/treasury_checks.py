@@ -316,14 +316,7 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
 
         footer = QWidget()
         footer.setObjectName("formFooter")
-        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
-        # پایینِ فرم»): QBoxLayout.setDirection به‌تنهایی اثری ندارد — Qt
-        # جهتِ نمایشِ آن را از layoutDirection() خودِ ویجتِ فوتر می‌گیرد،
-        # نه از Direction enum؛ پس باید صریحاً LTR شود. دکمه‌ها قبل از
-        # target_label/target_combo اضافه می‌شوند تا همیشه چپ بنشینند —
-        # ایندکسِ پویایِ target_combo (پایین‌تر، برایِ جایگزینی‌اش) با
-        # ترتیبِ افزودن کاری ندارد، پس این تغییر امن است.
-        footer.setLayoutDirection(Qt.LeftToRight)
+        # R301: دکمه‌ها اول اضافه می‌شوند تا کنار هم سمت راست پایین فرم بنشینند
         self._action_row = QHBoxLayout(footer)
         self._action_row.setContentsMargins(18, 12, 18, 14)
         self._action_row.setSpacing(8)

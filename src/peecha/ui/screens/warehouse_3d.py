@@ -12,7 +12,7 @@ from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QCheckBox, QGraphicsItem, QGraphicsPolygonItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView,
-    QHBoxLayout, QLabel, QSlider, QToolTip, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QSlider, QVBoxLayout, QWidget,
 )
 
 from peecha.ui import theme
@@ -20,6 +20,23 @@ from peecha.ui import theme
 _BASE = {"AREA": "#E7EEF7", "AISLE": "#F4F6F8", "RACK": "#9AA7B4", "SHELF": "#C9D3DD", "BIN": "#DCE5EE"}
 _BLOCKED = "#8C8C8C"
 _LABELED = ("AREA", "AISLE", "RACK")  # R255: برچسبِ ثابت؛ بقیه با نگه‌داشتنِ ماوس
+_FLOORS = {"AREA": 0, "AISLE": 1}
+
+
+def info_bar() -> QLabel:
+    """R301: نوار اطلاعات محل زیر نقشه با ارتفاع ثابت -- تغییر متن، نقشه را جابه‌جا نمی‌کند."""
+    bar = QLabel("")
+    bar.setObjectName("sectionHint")
+    bar.setWordWrap(True)
+    bar.setTextFormat(Qt.RichText)
+    bar.setAlignment(Qt.AlignTop | Qt.AlignRight)
+    bar.setFixedHeight(bar.fontMetrics().lineSpacing() * 3 + 8)
+    return bar
+
+
+def bar_text(html: str) -> str:
+    """متن چندخطی محل ← یک پاراگراف فشرده برای نوار اطلاعات."""
+    return html.replace("<hr>", "").replace("<br>", "  |  ")
 
 
 class _View(QGraphicsView):
@@ -59,6 +76,7 @@ class Warehouse3DView(QWidget):
     """boxes: خروجی scene_3d؛ colors: رنگ حالت نقشه برای هر محل (یا None)."""
 
     location_clicked = Signal(int)
+    HINT = "ماوس را روی هر محل نگه دارید تا نام و اطلاعاتش این‌جا نمایش داده شود."
 
     def __init__(self) -> None:
         super().__init__()
@@ -88,14 +106,13 @@ class Warehouse3DView(QWidget):
         self.labels_check.toggled.connect(lambda _c: self.redraw())
         controls.addWidget(self.labels_check)
         layout.addLayout(controls)
-        self.hover_label = QLabel("ماوس را روی هر محل نگه دارید تا نام و اطلاعاتش نمایش داده شود.")
-        self.hover_label.setObjectName("sectionHint")
-        self.hover_label.setWordWrap(True)
-        self.hover_label.setTextFormat(Qt.RichText)
-        layout.addWidget(self.hover_label)
         self.scene = QGraphicsScene(self)
         self.view = _View(self.scene, self)
         layout.addWidget(self.view, stretch=1)
+        # R301: اطلاعات محل بیرون از نقشه (نه تول‌تیپ شناور رویش)
+        self.hover_label = info_bar()
+        self.hover_label.setText(self.HINT)
+        layout.addWidget(self.hover_label)
         self.boxes: list = []
         self.colors: dict[int, QColor | None] = {}
         self.highlighted: set[int] = set()
@@ -103,15 +120,18 @@ class Warehouse3DView(QWidget):
         self.polygons: dict[int, list[QGraphicsPolygonItem]] = {}
         self.info: dict[int, str] = {}
         self.names: dict[int, str] = {}
+        self.parents: dict[int, int | None] = {}
         self._hovered: int | None = None
 
     def set_data(self, boxes: list, colors: dict | None = None, highlighted=None, dimmed=None,
-                 info: dict | None = None, names: dict | None = None) -> None:
-        """info: متن کامل هر محل برای نمایش با ماوس؛ names: برچسب کوتاه روی منطقه/راهرو/قفسه."""
+                 info: dict | None = None, names: dict | None = None, parents: dict | None = None) -> None:
+        """info: متن کامل هر محل برای نمایش با ماوس؛ names: برچسب کوتاه روی منطقه/راهرو/قفسه؛
+        parents: والد هر محل (برای ترتیب درست رسم قفسه ← طبقه ← خانه)."""
         self.boxes = boxes
         self.colors = colors or {}
         self.info = info or {}
         self.names = names or {}
+        self.parents = parents or {}
         self.highlighted = set(highlighted or ())
         self.dimmed = set(dimmed or ())
         self.redraw()
@@ -144,19 +164,51 @@ class Warehouse3DView(QWidget):
 
         return project
 
+    def _draw_order(self, project) -> list:
+        """R301: ترتیب رسم (الگوریتم نقاش) مستقل از زاویه: کف‌ها اول (منطقه پیش از راهرو)، سپس هر قفسه با همهٔ
+        زیرمحل‌هایش یک‌جا از دور به نزدیک؛ داخل قفسه: خود قفسه، بعد طبقه‌ها از پایین به بالا و خانه‌های هر طبقه
+        بلافاصله پس از همان طبقه. قبلاً خانه‌ای که دورتر از مرکز طبقه بود پیش از آن رسم و زیرش پنهان می‌شد."""
+        by_id = {b.location_id: b for b in self.boxes}
+        corners_of, depth_of = {}, {}
+        for b in self.boxes:
+            corners = [(b.x, b.y), (b.x + b.w, b.y), (b.x + b.w, b.y + b.d), (b.x, b.y + b.d)]
+            corners_of[b.location_id] = corners
+            depth_of[b.location_id] = sum(project(x, y, 0)[1] for x, y in corners) / 4
+
+        def parent(b):
+            p = by_id.get(self.parents.get(b.location_id))
+            return p if p is not None and p.level not in _FLOORS else None
+
+        def root(b):
+            seen = set()
+            while (p := parent(b)) is not None and p.location_id not in seen:
+                seen.add(b.location_id)
+                b = p
+            return b
+
+        def key(b):
+            lid = b.location_id
+            if b.level in _FLOORS:
+                return (0, _FLOORS[b.level], depth_of[lid], b.z)
+            g = root(b)
+            if g is b:
+                inner = (float("-inf"), 0, 0.0, 0.0)
+            elif b.level == "SHELF":
+                inner = (b.z, 0, 0.0, 0.0)
+            else:
+                p = parent(b)
+                shelf_z = p.z if p is not None and p.level == "SHELF" else b.z
+                inner = (shelf_z, 1, depth_of[lid], b.z)
+            return (1, depth_of[g.location_id], g.location_id, inner)
+
+        return [(b, corners_of[b.location_id]) for b in sorted(self.boxes, key=key)]
+
     def redraw(self) -> None:
         self.scene.clear()
         self.polygons = {}
         self._hovered = None
         project = self._projector()
-        order = []
-        for b in self.boxes:
-            corners = [(b.x, b.y), (b.x + b.w, b.y), (b.x + b.w, b.y + b.d), (b.x, b.y + b.d)]
-            depth = sum(project(x, y, 0)[1] for x, y in corners) / 4
-            order.append((b.z, depth, b, corners))
-        # کف‌ها اول، سپس دورتر به نزدیک‌تر و پایین به بالا
-        order.sort(key=lambda t: (t[2].level not in ("AREA", "AISLE"), t[1], t[0]))
-        for z, _depth, b, corners in order:
+        for b, corners in self._draw_order(project):
             self._draw_box(b, corners, project)
         if self.labels_check.isChecked():
             for b in self.boxes:
@@ -200,12 +252,10 @@ class Warehouse3DView(QWidget):
                 poly.setPen(pen)
         self._hovered = location_id
         if location_id is None:
-            QToolTip.hideText()
+            self.hover_label.setText(self.HINT)
             return
         text = self.info.get(location_id) or next((b.code for b in self.boxes if b.location_id == location_id), "")
-        self.hover_label.setText(text)
-        if global_pos is not None:
-            QToolTip.showText(global_pos, text, self.view)
+        self.hover_label.setText(bar_text(text))
 
     def _fill(self, b) -> QColor:
         color = self.colors.get(b.location_id)
@@ -243,6 +293,5 @@ class Warehouse3DView(QWidget):
         item.setBrush(QBrush(color))
         item.setPen(pen)
         item.setData(0, b.location_id)
-        item.setToolTip(self.info.get(b.location_id) or b.code)
         self.scene.addItem(item)
         return item

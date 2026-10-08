@@ -271,7 +271,8 @@ class _CardClick(QObject):
 class MyTasksScreen(QWidget):
     """کارتابل یکپارچه با کارت‌های گرافیکی و پنل جزئیات و تصمیم."""
 
-    scroll_in_mdi = True
+    # R301: هدر و فوتر ثابت؛ فقط فهرست کارت‌ها و پنل جزئیات اسکرول می‌خورند
+    scroll_in_mdi = False
 
     def __init__(self, main_window=None) -> None:
         super().__init__()
@@ -357,9 +358,13 @@ class MyTasksScreen(QWidget):
                   self.d_history, self.comment):
             sl.addWidget(w)
         sl.addStretch(1)
-        split.addWidget(side)
+        side_scroll = QScrollArea()
+        side_scroll.setWidgetResizable(True)
+        side_scroll.setFrameShape(QFrame.NoFrame)
+        side_scroll.setWidget(side)
+        split.addWidget(side_scroll)
         self.list_area.setMinimumWidth(520)
-        side.setMinimumWidth(340)
+        side_scroll.setMinimumWidth(340)
         split.setStretchFactor(0, 3)
         split.setStretchFactor(1, 2)
         split.setSizes([860, 480])

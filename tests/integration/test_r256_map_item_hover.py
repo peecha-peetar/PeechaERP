@@ -188,13 +188,13 @@ check(res.kind == "SERIAL" and res.location_ids == [pick1] and res.item_ids == [
 # ۲) نقشه: پس از جستجو، تولتیپِ هر محل مقدار و سریال‌ها را نشان می‌دهد
 from peecha.ui.screens.warehouse_map import WarehouseMapScreen
 ms = WarehouseMapScreen(None); ms.refresh(); ms.load_warehouse(wh)
-check("سریال" not in ms.items[pick1].toolTip(), "بدون جستجو، تولتیپ عادی محل")
+check("سریال" not in ms.items[pick1].info_text, "بدون جستجو، تولتیپ عادی محل")
 found = ms.search("P-1")
 check(set(found) == {pick1, pick2}, "جستجوی کالا دو محل را یافت")
-tip = ms.items[pick1].toolTip()
+tip = ms.items[pick1].info_text
 check("SN-1" in tip and "SN-3" in tip and "سریال‌ها" in tip and "گوشی" in tip, f"تولتیپ محل: نام کالا و سریال‌ها (got {tip[:160]})")
 check(P("3") in tip and "مقدار در این محل" in tip, "تولتیپ محل: تعداد در همین محل")
-check("موجودی ندارد" in ms.items[bulk1].toolTip(), "محل فاقد کالا: «موجودی ندارد»")
+check("موجودی ندارد" in ms.items[bulk1].info_text, "محل فاقد کالا: «موجودی ندارد»")
 check("سریال‌ها" in ms.detail_info.text(), "جزئیات محل انتخاب‌شده هم سریال‌ها را نشان می‌دهد")
 ms.view3d_check.setChecked(True)
 check("SN-9" in ms.view3d.info[pick2] and P("4") in ms.view3d.info[rp], "سه‌بعدی: سریال‌ها روی خانه و جمع روی قفسه با ماوس")
@@ -204,9 +204,9 @@ ms.select_location(pick1, focus=False)
 cells = [ms.elevation_table.item(r, c) for r in range(ms.elevation_table.rowCount()) for c in range(ms.elevation_table.columnCount())]
 check(any(c is not None and "SN-1" in c.toolTip() for c in cells), "نمای قفسه: تولتیپ خانه سریال‌ها را دارد")
 ms.search("")
-check("سریال" not in ms.items[pick1].toolTip(), "پاک‌کردن جستجو، اطلاعات کالا را از تولتیپ برمی‌دارد")
+check("سریال" not in ms.items[pick1].info_text, "پاک‌کردن جستجو، اطلاعات کالا را از تولتیپ برمی‌دارد")
 ms.search("SN-9")
-check("SN-9" in ms.items[pick2].toolTip(), "جستجو با سریال هم همان اطلاعات را می‌دهد")
+check("SN-9" in ms.items[pick2].info_text, "جستجو با سریال هم همان اطلاعات را می‌دهد")
 
 # ۳) تولتیپ خوانا: سبکِ نقشه/سه‌بعدی به تولتیپ نشت نمی‌کند
 check(ms.view.styleSheet().strip().startswith("QGraphicsView") and ms.view3d.view.styleSheet().strip().startswith("QGraphicsView"),

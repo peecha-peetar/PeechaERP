@@ -90,21 +90,27 @@ class _ReportTemplatesTab(QWidget):
         layout.addWidget(self.table, stretch=1)
 
         button_cluster = QWidget()
-        button_cluster.setLayoutDirection(Qt.LeftToRight)
         buttons = QHBoxLayout(button_cluster)
         buttons.setContentsMargins(0, 0, 0, 0)
 
-        edit_button = QPushButton("✏️ ویرایش")
-        edit_button.setToolTip("بازکردن فایل این گزارش در Jaspersoft Studio")
+        edit_button = QPushButton("✏️")
+        edit_button.setObjectName("iconButton")
+        edit_button.setFixedWidth(44)
+        edit_button.setToolTip("ویرایش -- بازکردن فایل این گزارش در Jaspersoft Studio")
         edit_button.clicked.connect(self._edit)
         buttons.addWidget(edit_button)
 
-        rename_button = QPushButton("🖊️ تغییر نام")
+        rename_button = QPushButton("🖊️")
+        rename_button.setObjectName("iconButton")
+        rename_button.setFixedWidth(44)
+        rename_button.setToolTip("تغییر نام")
         rename_button.clicked.connect(self._rename)
         buttons.addWidget(rename_button)
 
-        default_button = QPushButton("⭐ پیش‌فرض")
-        default_button.setToolTip("این گزارش پیش‌فرض همان فرم شود")
+        default_button = QPushButton("⭐")
+        default_button.setObjectName("iconButton")
+        default_button.setFixedWidth(44)
+        default_button.setToolTip("پیش‌فرض -- این گزارش پیش‌فرض همان فرم شود")
         default_button.clicked.connect(self._set_default)
         buttons.addWidget(default_button)
 
@@ -114,6 +120,7 @@ class _ReportTemplatesTab(QWidget):
         delete_button.setToolTip("حذف این گزارش")
         delete_button.clicked.connect(self._delete)
         buttons.addWidget(delete_button)
+        buttons.addStretch(1)
         layout.addWidget(button_cluster)
 
         self._rows: list[templates_service.ReportTemplateRow] = []

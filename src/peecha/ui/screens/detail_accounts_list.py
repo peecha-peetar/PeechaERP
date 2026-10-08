@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -31,16 +32,17 @@ from PySide6.QtWidgets import (
 import datetime
 
 from peecha import numerals, session
+from peecha.services import detail_deletion
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.ui import report_export
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, edit_delete_actions
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها؛ چونی که
 # QTreeWidget زیرِ RTL هم مثلِ QTableWidget، ستونِ اندیسِ ۰ در لبه‌یِ
 # فیزیکیِ راست ظاهر می‌شود، پس «کد» باید ستونِ اول باشد نه «نام».
-_COLUMNS = ["کد", "نام", "سطح", "وضعیت"]
+_COLUMNS = ["کد", "نام", "سطح", "وضعیت", "عملیات"]
 
 
 def _group_label(group_name: str) -> str:
@@ -95,7 +97,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
 
         hint = QLabel(
             "همهٔ مشتریان/تامین‌کنندگان/پرسنل/مراکز هزینه/پروژه‌ها و گروه‌های دیگر تفصیلی، یک‌جا — "
-            "کلیک روی هر ردیف فرم مربوطه را باز می‌کند."
+            "کلیک روی هر ردیف فرم مربوطه را باز می‌کند؛ با دکمه‌های کنار هر ردیف هم می‌توانید آن را ویرایش یا حذف کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -212,7 +214,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
             self.tree.resizeColumnToContents(i)
 
     def _make_group_item(self, group_name: str, color: str | None) -> QTreeWidgetItem:
-        item = QTreeWidgetItem([_group_label(group_name), "", "", ""])
+        item = QTreeWidgetItem([_group_label(group_name), "", "", "", ""])
         font = item.font(0)
         font.setBold(True)
         item.setFont(0, font)
@@ -226,13 +228,17 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self, parent: QTreeWidgetItem, e: dimensions_service.UnifiedDetailAccountRow, color: str | None
     ) -> QTreeWidgetItem:
         item = QTreeWidgetItem(
-            [e.full_code, e.name or "—", str(e.level_no), "فعال" if e.is_active else "غیرفعال"]
+            [e.full_code, e.name or "—", str(e.level_no), "فعال" if e.is_active else "غیرفعال", ""]
         )
         item.setData(0, Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code, e.group_name))
         if color:
             for col in range(len(_COLUMNS)):
                 item.setForeground(col, QBrush(QColor(color)))
         parent.addChild(item)
+        # R301: ویرایش و حذف مستقیم از همین ردیف
+        self.tree.setItemWidget(item, len(_COLUMNS) - 1, edit_delete_actions(
+            lambda e=e: self.open_entry(e.dimension_type_id, e.detail_account_id, e.person_group_code),
+            lambda e=e: self.delete_entry(e)))
         return item
 
     def _add_group_leaves(
@@ -285,6 +291,22 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
             return  # گرهِ سرگروه — چیزی برایِ باز کردن نیست
         dimension_type_id, detail_account_id, person_group_code, _group_name = data
         self.open_entry(dimension_type_id, detail_account_id, person_group_code)
+
+    def delete_entry(self, e: dimensions_service.UnifiedDetailAccountRow) -> bool:
+        """R301: حذف مستقیم از فهرست؛ همان مسیر فرم تعریف تفصیلی (کالای اصلی همراه متغیرها، با پیام دقیق)."""
+        company_id = session.current_company.company_id if session.current_company else None
+        if company_id is None:
+            return False
+        plan = detail_deletion.plan(company_id, e.detail_account_id, f"{e.full_code} — {e.name or ''}".strip(" —"))
+        if QMessageBox.question(self, "حذف", plan.confirm_text, QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return False
+        try:
+            detail_deletion.delete(company_id, e.detail_account_id, person_group_code=e.person_group_code)
+        except ValueError as exc:
+            QMessageBox.warning(self, "حذف ممکن نیست", str(exc))
+            return False
+        self.refresh()
+        return True
 
     def open_entry(self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None) -> None:
         # طبقِ درخواستِ صریح («تعریفِ تفصیلی‌ها همه در یک فرم باشد»): همه‌ی

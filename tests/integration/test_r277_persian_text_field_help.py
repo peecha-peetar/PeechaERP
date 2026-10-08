@@ -77,6 +77,7 @@ check(resolve_field_help(QLineEdit()) is None, "unlabeled free field without hel
 # ۳) صفحهٔ واقعی تنظیمات سیستم: تقریباً همهٔ فیلدها راهنما دارند
 from peecha.ui.screens.system_settings import SystemSettingsScreen
 settings = SystemSettingsScreen()
+settings.ensure_all_built()  # R301: زیرتب‌ها تنبل ساخته می‌شوند
 inputs = [w for w in settings.findChildren(QWidget) if isinstance(w, (QLineEdit, QComboBox, QDoubleSpinBox))
           and not isinstance(w.parentWidget(), (QComboBox, QDoubleSpinBox)) and not (isinstance(w, QLineEdit) and w.isReadOnly())]
 covered = sum(1 for w in inputs if resolve_field_help(w))

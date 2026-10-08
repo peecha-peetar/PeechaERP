@@ -806,7 +806,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
 
         line_button_cluster = QWidget()
-        line_button_cluster.setLayoutDirection(Qt.LeftToRight)
         line_buttons = QHBoxLayout(line_button_cluster)
         line_buttons.setContentsMargins(0, 0, 0, 0)
         edit_line_button = QPushButton("✏️")
@@ -886,7 +885,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         # طبقِ درخواستِ صریح: توضیحِ سند به‌جایِ اشغالِ یک ردیفِ کاملِ هدر،
         # کنارِ دکمه‌ها در همین فوترِ ثابت جا می‌گیرد — دکمه‌ها هنوز کنارِ
-        # هم و سمتِ چپ می‌مانند، توضیح باقیِ فضایِ فوتر را پر می‌کند.
+        # هم و سمتِ راست می‌مانند، توضیح باقیِ فضایِ فوتر را پر می‌کند.
         description_label = QLabel("شرح:")
         self.footer_layout.addWidget(description_label)
         self.description_field = QLineEdit()

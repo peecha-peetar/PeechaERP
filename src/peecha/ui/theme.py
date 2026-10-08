@@ -65,7 +65,9 @@ _DARK_TOKENS: dict[str, str] = {
     "GRID_HEADER_BG": "#171A33",
     "GRID_BORDER": "#242847",
     "GRID_ROW_ALT": "#10121F",
-    "TOOLTIP_BG": "#1E2142",
+    "TOOLTIP_BG": "#2A2E55",
+    "TOOLTIP_TEXT": "#FFFFFF",
+    "TOOLTIP_BORDER": "#5B5CF0",
 }
 
 # --- جدولِ توکن‌هایِ تمِ روشن — طراحیِ تازه، نه اینورسِ ساده‌یِ تمِ تیره ---------
@@ -98,7 +100,10 @@ _LIGHT_TOKENS: dict[str, str] = {
     "GRID_HEADER_BG": "#F5F5FA",
     "GRID_BORDER": "#E7E8F2",
     "GRID_ROW_ALT": "#FAFAFD",
-    "TOOLTIP_BG": "#2A2B45",         # تولتیپ عمداً در هر دو تم تیره می‌ماند (مثلِ VSCode)
+    # R301: تول‌تیپ روشن با متن تیره در تم روشن (تیرهٔ قبلی با متن کم‌رنگ خوانا نبود)
+    "TOOLTIP_BG": "#FFFDF2",
+    "TOOLTIP_TEXT": "#1A1B2E",
+    "TOOLTIP_BORDER": "#B9BBD6",
 }
 
 STATUS_COLOR_ROLE: dict[str, str] = {
@@ -163,11 +168,8 @@ def apply_palette(app: QApplication) -> None:
     palette.setColor(QPalette.WindowText, QColor(TEXT_PRIMARY))
     palette.setColor(QPalette.Base, QColor(SURFACE))
     palette.setColor(QPalette.AlternateBase, QColor(GRID_ROW_ALT))
-    # طبقِ طراحی، TOOLTIP_BG در هر دو تم تیره می‌ماند (مثلِ VSCode) — پس
-    # متنِ تولتیپ هم ثابت روشن است، نه TEXT_PRIMARY (که در تمِ روشن
-    # تقریباً مشکی می‌شود و رویِ زمینه‌یِ تیره‌یِ تولتیپ ناخوانا می‌شود).
     palette.setColor(QPalette.ToolTipBase, QColor(TOOLTIP_BG))
-    palette.setColor(QPalette.ToolTipText, QColor("#EEF0FA"))
+    palette.setColor(QPalette.ToolTipText, QColor(TOOLTIP_TEXT))
     palette.setColor(QPalette.Text, QColor(TEXT_PRIMARY))
     palette.setColor(QPalette.Button, QColor(SURFACE))
     palette.setColor(QPalette.ButtonText, QColor(TEXT_PRIMARY))
@@ -746,6 +748,14 @@ QListWidget::item:selected {{
 QListWidget::item:hover {{
     background-color: {HOVER};
 }}
+QListWidget#settingsSections::item {{
+    padding: 8px 12px;
+}}
+QListWidget#settingsSections::item:selected {{
+    background-color: {ACCENT};
+    color: #FFFFFF;
+    font-weight: bold;
+}}
 
 /* --- هدر --------------------------------------------------------------- */
 QWidget#headerBar {{
@@ -876,10 +886,10 @@ QCheckBox::indicator:checked {{
 
 QToolTip {{
     background-color: {TOOLTIP_BG};
-    color: #EEF0FA;
-    border: 1px solid {BORDER};
-    padding: 6px 10px;
-    border-radius: 8px;
+    color: {TOOLTIP_TEXT};
+    border: 1px solid {TOOLTIP_BORDER};
+    padding: 0px 4px;
+    border-radius: 0px;
 }}
 
 QMessageBox {{

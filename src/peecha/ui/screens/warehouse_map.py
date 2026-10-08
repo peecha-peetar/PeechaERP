@@ -24,7 +24,7 @@ from peecha import session as app_session
 from peecha.services import inventory_locations as locations_service
 from peecha.services import warehouse_locations as wl
 from peecha.ui import theme
-from peecha.ui.screens.warehouse_3d import Warehouse3DView
+from peecha.ui.screens.warehouse_3d import Warehouse3DView, bar_text, info_bar
 
 _Z = {"AREA": 0, "AISLE": 1, "RACK": 2, "SHELF": 2.5, "BIN": 3, None: 3}
 _DETAIL_SCALE = 1.4  # زیرِ این زوم Bin/برچسب‌ها رسم نمی‌شوند (Level of Detail)
@@ -63,7 +63,8 @@ class LocationItem(QGraphicsRectItem):
         self.setZValue(_Z.get(node.level, 3))
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setAcceptHoverEvents(True)
-        self.setToolTip(f"{node.full_code}\n{wl.LEVEL_LABELS.get(node.level, 'محل')} -- {wl.STATUSES.get(node.status_code, '')}")
+        # R301: اطلاعات محل در نوار زیر نقشه نمایش داده می‌شود، نه تول‌تیپ شناور روی نقشه
+        self.info_text = f"<b>{node.full_code}</b><br>{wl.LEVEL_LABELS.get(node.level, 'محل')} -- {wl.STATUSES.get(node.status_code, '')}"
         self.fill: QColor | None = None
         self.highlighted = False
         self.dimmed = False
@@ -130,6 +131,14 @@ class LocationItem(QGraphicsRectItem):
             font.setBold(self.node.level in ("AREA", "RACK"))
             painter.setFont(font)
             painter.drawText(rect.adjusted(1, 1, -1, -1), int(align), _p(label))
+
+    def hoverEnterEvent(self, event) -> None:  # noqa: N802
+        self.screen.show_hover(self.info_text)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event) -> None:  # noqa: N802
+        self.screen.show_hover(None)
+        super().hoverLeaveEvent(event)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         self._press_state = (self.pos(), self.rect())
@@ -446,7 +455,14 @@ class WarehouseMapScreen(QWidget):
         self.view3d = Warehouse3DView()
         self.view3d.location_clicked.connect(lambda lid: self.select_location(lid, focus=False))
         self.view_stack = QStackedWidget()
-        self.view_stack.addWidget(self.view)
+        self.map_page = QWidget()
+        map_layout = QVBoxLayout(self.map_page)
+        map_layout.setContentsMargins(0, 0, 0, 0)
+        map_layout.addWidget(self.view, stretch=1)
+        self.map_info = info_bar()
+        self.map_info.setText(Warehouse3DView.HINT)
+        map_layout.addWidget(self.map_info)
+        self.view_stack.addWidget(self.map_page)
         self.view_stack.addWidget(self.view3d)
         splitter.addWidget(self.view_stack)
         splitter.addWidget(side)
@@ -688,7 +704,7 @@ class WarehouseMapScreen(QWidget):
 
     # --- نمایِ سه‌بعدی (R249) ----------------------------------------------
     def set_3d(self, on: bool) -> None:
-        self.view_stack.setCurrentWidget(self.view3d if on else self.view)
+        self.view_stack.setCurrentWidget(self.view3d if on else self.map_page)
         self.refresh_3d()
 
     def refresh_3d(self) -> None:
@@ -699,7 +715,8 @@ class WarehouseMapScreen(QWidget):
         self.view3d.set_data(boxes, colors, highlighted=[lid for lid, i in self.items.items() if i.highlighted],
                              dimmed=[lid for lid, i in self.items.items() if i.dimmed],
                              info={b.location_id: self._hover_text(b.location_id) for b in boxes},
-                             names={b.location_id: self._short_name(b.location_id) for b in boxes})
+                             names={b.location_id: self._short_name(b.location_id) for b in boxes},
+                             parents={lid: n.parent_id for lid, n in self.by_id.items()})
 
     def _short_name(self, location_id: int) -> str:
         n = self.by_id.get(location_id)
@@ -710,7 +727,10 @@ class WarehouseMapScreen(QWidget):
 
     def _apply_tooltips(self) -> None:
         for lid, item in self.items.items():
-            item.setToolTip(self._hover_text(lid))
+            item.info_text = self._hover_text(lid)
+
+    def show_hover(self, html: str | None) -> None:
+        self.map_info.setText(bar_text(html) if html else Warehouse3DView.HINT)
 
     def _presence_html(self, location_id: int) -> list[str]:
         """R256: مقدار، سریال‌ها و بچ‌های کالای جستجوشده در همین محل (با زیرمحل‌ها)."""
