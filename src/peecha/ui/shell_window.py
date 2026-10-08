@@ -130,6 +130,53 @@ def _ribbon_choices(module_code: str) -> list[tuple[str, list[dict]]]:
     return groups
 
 
+_TILE_WIDTH = 108
+_TILE_ICON = 42
+_TILE_MARGIN = 6
+_TILE_SPACING = 4
+_TILE_TEXT_STYLE = "font-size: 11px; font-weight: 600; background: transparent; border: none;"
+
+
+def _tile_text_metrics():
+    """متریک فونت واقعی برچسب کاشی (فونت برنامه + QSS) -- ارتفاع کاشی و ریبون از همین حساب می‌شود."""
+    probe = QLabel()
+    probe.setStyleSheet(_TILE_TEXT_STYLE)
+    probe.ensurePolished()
+    return probe.fontMetrics()
+
+
+_TILE_TEXT_FLAGS = int(Qt.TextWordWrap | Qt.AlignHCenter)
+
+
+def _two_line_height(metrics) -> int:
+    # ارتفاع واقعی دو سطر (با فاصلهٔ بین سطرها) -- کمی بیش از دو برابر lineSpacing
+    return metrics.boundingRect(0, 0, 1000, 10_000, _TILE_TEXT_FLAGS, "آ\nآ").height()
+
+
+def _tile_height() -> int:
+    return max(88, 2 * _TILE_MARGIN + _TILE_ICON + _TILE_SPACING + _two_line_height(_tile_text_metrics()))
+
+
+def _two_lines(text: str, metrics, width: int) -> str:
+    """R290: برچسب در حداکثر دو سطر؛ بلندتر با «…» کوتاه می‌شود (متن کامل در تول‌تیپ)."""
+    flags = _TILE_TEXT_FLAGS
+    max_height = _two_line_height(metrics)
+
+    def fits(candidate: str) -> bool:
+        rect = metrics.boundingRect(0, 0, width, 10_000, flags, candidate)
+        return rect.height() <= max_height and rect.width() <= width
+
+    if fits(text):
+        return text
+    words = text.split()
+    while len(words) > 1:
+        words.pop()
+        candidate = " ".join(words) + "…"
+        if fits(candidate):
+            return candidate
+    return metrics.elidedText(text, Qt.ElideRight, width)
+
+
 class _QuickAccessTile(QFrame):
     """کاشی ریبون میان‌بر — طبق نمونه‌طراحی کارت‌رنگی ارسالی کاربر،
     هم‌زبان با widgets.SummaryCard شد: بج آیکون ته‌رنگ‌دار (شیشه‌ای رنگی
@@ -145,27 +192,31 @@ class _QuickAccessTile(QFrame):
         self.setObjectName("quickTile")
         self.setCursor(Qt.PointingHandCursor)
         # R245 (درخواستِ صریح): آیکون بدونِ کادر و بزرگ‌تر؛ کاشی در حالتِ عادی بی‌قاب، فقط با هاور پس‌زمینه می‌گیرد
-        self.setFixedSize(96, 88)
+        # R290: جای متن دقیقاً دو سطر از فونت واقعی است تا برچسب دوسطری روی آیکون نرود و بریده نشود
+        metrics = _tile_text_metrics()
+        text_width = _TILE_WIDTH - 2 * _TILE_MARGIN
+        self.setFixedSize(_TILE_WIDTH, _tile_height())
+        self.setToolTip(label)
         self._on_click = on_click
         self._color = color or theme.ACCENT
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 6, 4, 6)
-        layout.setSpacing(2)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(_TILE_MARGIN, _TILE_MARGIN, _TILE_MARGIN, _TILE_MARGIN)
+        layout.setSpacing(_TILE_SPACING)
 
         icon_label = QLabel(icon)
         icon_label.setObjectName("quickTileIcon")
-        icon_label.setFixedSize(44, 44)
+        icon_label.setFixedSize(_TILE_ICON, _TILE_ICON)
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setStyleSheet("background: transparent; border: none; font-size: 32px;")
-        layout.addWidget(icon_label, alignment=Qt.AlignCenter)
+        icon_label.setStyleSheet("background: transparent; border: none; font-size: 28px;")
+        layout.addWidget(icon_label, alignment=Qt.AlignHCenter)
 
-        text_label = QLabel(label)
-        text_label.setAlignment(Qt.AlignCenter)
-        text_label.setWordWrap(True)
-        text_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {theme.TEXT_PRIMARY}; background: transparent; border: none;")
-        layout.addWidget(text_label)
+        self.text_label = QLabel(_two_lines(label, metrics, text_width))
+        self.text_label.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        self.text_label.setWordWrap(True)
+        self.text_label.setFixedSize(text_width, _two_line_height(metrics))
+        self.text_label.setStyleSheet(f"{_TILE_TEXT_STYLE} color: {theme.TEXT_PRIMARY};")
+        layout.addWidget(self.text_label, alignment=Qt.AlignHCenter)
 
         self._rest_style = "QFrame#quickTile { background-color: transparent; border: none; border-radius: 14px; }"
         self._hover_style = (
@@ -1380,13 +1431,16 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(104)
+        # R290: جای نوار پیمایش افقی هم رزرو می‌شود تا با زیاد شدن کاشی‌ها پایین برچسب‌ها بریده نشود
+        scroll.ensurePolished()
+        scroll.setFixedHeight(_tile_height() + 2 * 6 + scroll.horizontalScrollBar().sizeHint().height() + 2)
 
         bar = QWidget()
         bar.setObjectName("quickAccessBar")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(20, 8, 20, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 6, 20, 6)
+        layout.setSpacing(6)
+        layout.setAlignment(Qt.AlignTop)
 
         scroll.setWidget(bar)
         self._quick_access_scroll = scroll

@@ -331,7 +331,8 @@ mw.open_screen("ACC_RPT_CONTRA_ACCOUNTS"); app.processEvents()
 parents = grp._subgroups_of["ACC_RPT_CONTRA_ACCOUNTS"]
 check(parents and all(not s.body.isHidden() for s in parents), "بازکردن گزارش، زیرمنوهای والد را باز می‌کند")
 tiles = mw.findChildren(shell_window._QuickAccessTile)
-check(tiles and all(t.width() == 96 and t.height() == 88 for t in tiles), "کاشی‌های ریبون بزرگ‌تر و یکسان")
+check(tiles and all(t.width() == shell_window._TILE_WIDTH >= 96 and t.height() == shell_window._tile_height() >= 88 for t in tiles),
+      "کاشی‌های ریبون بزرگ‌تر و یکسان")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)
