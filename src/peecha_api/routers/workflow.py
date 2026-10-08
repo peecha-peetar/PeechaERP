@@ -14,7 +14,7 @@ from peecha.db.base import new_session
 from peecha.db.models.security import User, UserCompany
 from peecha.db.models.workflow import WfTask, WfTaskAssignee
 from peecha.services import auth as auth_service, roles as roles_service
-from peecha.services.workflow import inbox, registry, step_up, tasks
+from peecha.services.workflow import ai, inbox, registry, step_up, tasks
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
@@ -104,7 +104,15 @@ def task_detail(task_id: int, ctx: AuthContext = Depends(get_current_context)) -
             "assignees": [{"name": n, "state": s, "note": x} for n, s, x in d.assignees],
             "decisions": [{"code": c, "label": label} for c, label in d.decisions], "form_fields": d.form_fields,
             "path": [{"label": label, "state": state} for label, state in d.path],
-            "requires_step_up": step_up.requires_step_up(ctx.company_id, task_id)}
+            "requires_step_up": step_up.requires_step_up(ctx.company_id, task_id), "summary": _summary(ctx, task_id)}
+
+
+def _summary(ctx: AuthContext, task_id: int) -> str | None:
+    """خلاصهٔ کوتاه برای تصمیم سریع (سرویس هوشمند قابل‌تعویض؛ خطایش جزئیات کار را خراب نمی‌کند)."""
+    try:
+        return ai.get_provider().summarize_task(ctx.company_id, task_id)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @router.post("/tasks/{task_id}/decide")

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha.services import roles as roles_service
 from peecha.services.workflow import builder, conditions, definitions as defs, registry, routing, simulate, sla
-from peecha.services.workflow import templates as wf_templates
+from peecha.services.workflow import ai as wf_ai, templates as wf_templates
 from peecha.services.workflow.common import DEFINITION_STATUS, NODE_TYPES, OUTCOMES
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.fixed_assets import P, combo, company_id, fill, num_field, set_combo, table, user_id
@@ -36,7 +36,8 @@ ms.ICONS.update({
     "ساخت فرایند": ("✅", "primary"), "افزودن مرحلهٔ تایید": ("➕", ""), "بالا بردن": ("🔼", ""), "پایین بردن": ("🔽", ""),
     "افزودن گیرنده": ("➕", ""), "حذف گیرنده": ("➖", "danger"), "افزودن خانه": ("➕", ""), "حذف خانه": ("➖", "danger"),
     "تنظیم شروع فرایند": ("🚀", ""), "ساخت از قالب": ("📚", "primary"), "انتقال از کارتابل قبلی": ("📥", ""),
-    "نصب قالب": ("✅", "primary"),
+    "نصب قالب": ("✅", "primary"), "ساخت با توصیف متنی": ("✍️", ""), "پیش‌نمایش پیشنهاد": ("👁️", ""),
+    "ساخت پیش‌نویس": ("✅", "primary"),
 })
 
 NODE_ICONS = {"START": "🚀", "CONDITION": "🔀", "APPROVAL": "🖊️", "TASK": "📋", "ACTION": "⚙️", "NOTIFY": "🔔", "WAIT": "⏳",
@@ -1519,6 +1520,67 @@ class TemplateDialog(QDialog):
         return did if ok else None
 
 
+class AiDraftDialog(QDialog):
+    """توصیف فارسی ← پیش‌نمایش (برداشت‌ها، مراحل، شبیه‌سازی، ایرادها) ← ساخت پیش‌نویس. انتشار جداست."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ساخت با توصیف متنی")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(760, 620)
+        self.created_id: int | None = None
+        self.draft: wf_ai.Draft | None = None
+        layout = QVBoxLayout(self)
+        hint = QLabel("فرایند را ساده بنویسید؛ مثلاً: «اگر سفارش خرید بیشتر از ۵۰۰ میلیون بود، اول مدیر و بعد مالی تایید کند "
+                      "و بعد سفارش تصویب شود؛ تا تایید نشده قفل باشد.» پیش‌نویس فقط پس از تایید شما ساخته می‌شود و "
+                      f"انتشار جداگانه است. (سرویس: {wf_ai.get_provider().name})")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.text = QTextEdit()
+        self.text.setFixedHeight(110)
+        layout.addWidget(self.text)
+        self.preview = QTextEdit()
+        self.preview.setReadOnly(True)
+        layout.addWidget(self.preview, stretch=1)
+        self.name = QLineEdit()
+        self.name.setPlaceholderText("نام فرایند (اختیاری)")
+        layout.addWidget(self.name)
+        self.preview_button = _btn("پیش‌نمایش پیشنهاد", self.make_preview)
+        self.create_button = _btn("ساخت پیش‌نویس", self.create)
+        self.create_button.setEnabled(False)
+        layout.addWidget(ms.footer([[self.preview_button, self.create_button]]))
+
+    def make_preview(self) -> bool:
+        d, ok = _run(self, "ساخت با توصیف متنی", wf_ai.draft, company_id(), self.text.toPlainText())
+        self.draft = d if ok else None
+        self.create_button.setEnabled(bool(ok and d.ok))
+        if not ok:
+            self.preview.clear()
+            return False
+        parts = ["<b>برداشت از متن شما</b><ul>" + "".join(f"<li>{x}</li>" for x in d.spec.assumptions) + "</ul>",
+                 "<b>مراحل فرایند</b><ul>" + "".join(f"<li>{x}</li>" for x in d.summary) + "</ul>",
+                 "<b>شبیه‌سازی با یک سند نمونه</b><ul>" + "".join(f"<li>{x}</li>" for x in d.simulation) + "</ul>"]
+        if d.risky:
+            parts.append("<b style='color:#B45309'>توجه</b><ul>" + "".join(f"<li>{x}</li>" for x in d.risky) + "</ul>")
+        if d.problems:
+            parts.append("<b style='color:#DC2626'>ایرادها</b><ul>" + "".join(f"<li>{x}</li>" for x in d.problems) + "</ul>")
+        self.preview.setHtml("".join(parts))
+        if not self.name.text().strip():
+            self.name.setText(d.spec.name)
+        return True
+
+    def create(self) -> int | None:
+        if self.draft is None:
+            return None
+        did, ok = _run(self, "ساخت پیش‌نویس", wf_ai.create_from_draft, company_id(), user_id(), self.draft,
+                       name=self.name.text().strip() or None)
+        if ok:
+            self.created_id = did
+            self.accept()
+        return did if ok else None
+
+
 class ProcessListScreen(QWidget):
     scroll_in_mdi = True
 
@@ -1550,10 +1612,12 @@ class ProcessListScreen(QWidget):
             ("wizard", "ساخت با ویزارد"), ("blank", "فرایند خالی"), ("design", "ویرایش در طراح"), ("test", "آزمون و اجرای آزمایشی"),
             ("publish", "انتشار"), ("activate", "فعال‌سازی"), ("pause", "توقف"), ("archive", "بایگانی"),
             ("unarchive", "بازگردانی از بایگانی"), ("copy", "کپی فرایند"), ("versions", "نسخه‌ها"), ("delete", "حذف فرایند"),
-            ("refresh", "تازه‌سازی"), ("template", "ساخت از قالب"), ("legacy", "انتقال از کارتابل قبلی"))}
+            ("refresh", "تازه‌سازی"), ("template", "ساخت از قالب"), ("legacy", "انتقال از کارتابل قبلی"),
+            ("ai", "ساخت با توصیف متنی"))}
         B = self.buttons
         B["template"].clicked.connect(lambda: self.new_from_template())
         B["legacy"].clicked.connect(lambda: self.import_legacy())
+        B["ai"].clicked.connect(lambda: self.new_from_text())
         B["wizard"].clicked.connect(lambda: self.new_with_wizard())
         B["blank"].clicked.connect(lambda: self.new_blank())
         B["design"].clicked.connect(lambda: self.open_designer())
@@ -1567,7 +1631,7 @@ class ProcessListScreen(QWidget):
         B["versions"].clicked.connect(lambda: self.versions())
         B["delete"].clicked.connect(lambda: self.delete())
         B["refresh"].clicked.connect(lambda: self.reload())
-        outer.addWidget(ms.footer([[B["template"], B["wizard"], B["blank"], B["legacy"], B["design"], B["test"]],
+        outer.addWidget(ms.footer([[B["template"], B["wizard"], B["ai"], B["blank"], B["legacy"], B["design"], B["test"]],
                                    [B["publish"], B["activate"], B["pause"], B["archive"], B["unarchive"]],
                                    [B["copy"], B["versions"], B["delete"], B["refresh"]]]))
 
@@ -1621,6 +1685,24 @@ class ProcessListScreen(QWidget):
         if code is not None:
             dlg.select(code)
             did = dlg.install()
+        else:
+            if self.dialog_runner is not None:
+                self.dialog_runner(dlg)
+            else:
+                dlg.exec()
+            did = dlg.created_id
+        self.reload()
+        if did:
+            self.select_definition(did)
+        return did
+
+    def new_from_text(self, text: str | None = None) -> int | None:
+        dlg = AiDraftDialog(self)
+        if text is not None:
+            dlg.text.setPlainText(text)
+            if not dlg.make_preview():
+                return None
+            did = dlg.create()
         else:
             if self.dialog_runner is not None:
                 self.dialog_runner(dlg)

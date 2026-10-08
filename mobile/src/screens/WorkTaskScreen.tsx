@@ -178,6 +178,9 @@ export function WorkTaskScreen({ apiClient, offlineQueue, syncEngine, taskId, on
           {detail.sla_label ? ` · ${detail.sla_label}` : ""}
         </Text>
       ) : null}
+      {detail.summary ? (
+        <Text style={[typography.body, { color: colors.textPrimary }]}>{detail.summary}</Text>
+      ) : null}
       {detail.requires_step_up ? (
         <Text style={[typography.captionBold, { color: colors.warning }]}>این مورد حساس است؛ تایید آن به وارد کردن دوبارهٔ رمز نیاز دارد.</Text>
       ) : null}

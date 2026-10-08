@@ -49,6 +49,7 @@ export interface WorkTaskDetail {
   form_fields: { key: string; label: string; kind: string; required?: boolean }[];
   path: { label: string; state: string }[];
   requires_step_up: boolean;
+  summary?: string | null;
 }
 
 export interface WorkDecideRequest {
