@@ -400,7 +400,7 @@ def overdue_followups(company_id: int, f) -> ReportResult:
 
 def rfm_report(company_id: int, f) -> ReportResult:
     analytics.ensure_fresh(company_id)
-    r = ReportResult([("بخش RFM", TEXT), ("تعداد مشتری", INT), ("خرید ۱۲ ماه", MONEY), ("سهم مبلغ", PERCENT)])
+    r = ReportResult([("گروه رفتار خرید", TEXT), ("تعداد مشتری", INT), ("خرید ۱۲ ماه", MONEY), ("سهم مبلغ", PERCENT)])
     m = analytics.rfm_matrix(company_id)
     total = sum((x["monetary"] for x in m), ZERO)
     for x in m:
@@ -409,7 +409,7 @@ def rfm_report(company_id: int, f) -> ReportResult:
 
 
 def _scores_report(company_id: int, rows: list[dict], extra) -> ReportResult:
-    r = ReportResult([("کد", TEXT), ("مشتری", TEXT), ("بخش RFM", TEXT), ("سلامت", INT), ("ریسک ریزش", PERCENT), ("روز از آخرین خرید", INT),
+    r = ReportResult([("کد", TEXT), ("مشتری", TEXT), ("گروه رفتار خرید", TEXT), ("سلامت", INT), ("احتمال ریزش", PERCENT), ("روز از آخرین خرید", INT),
                       ("خرید ۱۲ ماه", MONEY), ("ارزش طول عمر", MONEY), ("ارزش پیش‌بینی", MONEY), ("بدهی معوق", MONEY), ("اقدام پیشنهادی", TEXT)],
                      no_total={3, 4, 5})
     for x in rows:
@@ -442,7 +442,7 @@ def campaign_report(company_id: int, f) -> ReportResult:
     from peecha.services.crm import campaigns as camp_service
 
     r = ReportResult([("کمپین", TEXT), ("نوع", TEXT), ("وضعیت", TEXT), ("مخاطب", INT), ("پاسخ", INT), ("نرخ پاسخ", PERCENT), ("سرنخ", INT),
-                      ("سرنخ تبدیل‌شده", INT), ("خریدار", INT), ("فروش", MONEY), ("هزینه", MONEY), ("هزینه هر سرنخ", MONEY), ("ROI", PERCENT)],
+                      ("سرنخ تبدیل‌شده", INT), ("خریدار", INT), ("فروش", MONEY), ("هزینه", MONEY), ("هزینه هر سرنخ", MONEY), ("بازگشت سرمایه", PERCENT)],
                      no_total={11})
     for cp in camp_service.list_campaigns(company_id):
         if cp.start_date and cp.start_date > f.date_to:
@@ -459,7 +459,7 @@ def tickets_sla(company_id: int, f) -> ReportResult:
     from peecha.services.crm import tickets as ticket_service
 
     t0, t1 = _span(f.date_from, f.date_to)
-    r = ReportResult([("نوع", TEXT), ("کل", INT), ("باز", INT), ("نقض SLA", INT), ("پایبندی SLA", PERCENT),
+    r = ReportResult([("نوع", TEXT), ("کل", INT), ("باز", INT), ("نقض تعهد زمانی", INT), ("پایبندی به تعهد زمانی", PERCENT),
                       ("میانگین اولین پاسخ (ساعت)", TEXT), ("میانگین حل (ساعت)", TEXT), ("رضایت (از ۵)", TEXT)])
     hours = lambda a, b: func.avg(func.extract("epoch", a - b) / 3600)
     with new_session() as session:
@@ -478,7 +478,7 @@ def tickets_sla(company_id: int, f) -> ReportResult:
 
 def complaints(company_id: int, f) -> ReportResult:
     t0, t1 = _span(f.date_from, f.date_to)
-    r = ReportResult([("مشتری", TEXT), ("دسته", TEXT), ("تعداد شکایت", INT), ("باز", INT), ("نقض SLA", INT), ("آخرین شکایت", DATE)])
+    r = ReportResult([("مشتری", TEXT), ("دسته", TEXT), ("تعداد شکایت", INT), ("باز", INT), ("نقض تعهد زمانی", INT), ("آخرین شکایت", DATE)])
     with new_session() as session:
         rows = session.execute(select(ServiceTicket.customer_detail_account_id, DetailAccount.name, ServiceTicket.category, func.count(),
                                       func.count().filter(ServiceTicket.status_code.in_(("OPEN", "IN_PROGRESS"))),
@@ -524,7 +524,7 @@ def forecast_report(company_id: int, f) -> ReportResult:
 
 
 _NO = ()
-_CHURN_OPT = (("band", "سطح ریسک", (("HIGH", "زیاد"), ("MEDIUM_UP", "متوسط و زیاد"), ("ALL", "همه"))),)
+_CHURN_OPT = (("band", "سطح احتمال ریزش", (("HIGH", "زیاد"), ("MEDIUM_UP", "متوسط و زیاد"), ("ALL", "همه"))),)
 _DAYS_OPT = (("days", "روز بدون خرید", (("60", "۶۰ روز"), ("30", "۳۰ روز"), ("90", "۹۰ روز"), ("180", "۱۸۰ روز"))),)
 _MONTHS_OPT = (("months", "تعداد ماه", (("3", "۳ ماه"), ("6", "۶ ماه"), ("12", "۱۲ ماه"))),)
 
@@ -537,16 +537,16 @@ CRM_REPORTS: list[ReportDef] = [
               "range", _G_SALES),
     ReportDef("CRM_FORECAST", "پیش‌بینی فروش", forecast_report, _NO, "فرصت‌های وزنی ماه‌های آینده + روند فروش جاری.", "none", _G_SALES,
               options=_MONTHS_OPT),
-    ReportDef("CRM_RFM", "تحلیل RFM مشتریان", rfm_report, _NO, "تعداد و خرید هر بخش RFM.", "none", _G_CUST),
-    ReportDef("CRM_CHURN", "مشتریان در معرض ریزش", churn_report, _NO, "ریسک ریزش، سلامت و اقدام پیشنهادی.", "none", _G_CUST,
+    ReportDef("CRM_RFM", "تحلیل رفتار خرید مشتریان", rfm_report, _NO, "تعداد و خرید هر گروه رفتار خرید (تازگی، تکرار و مبلغ خرید).", "none", _G_CUST),
+    ReportDef("CRM_CHURN", "مشتریان در معرض ریزش", churn_report, _NO, "احتمال ریزش، سلامت و اقدام پیشنهادی.", "none", _G_CUST,
               options=_CHURN_OPT),
     ReportDef("CRM_CLV", "ارزش طول عمر مشتریان", clv_report, _NO, "ارزش تاکنون و پیش‌بینی‌شدهٔ هر مشتری.", "none", _G_CUST),
     ReportDef("CRM_INACTIVE", "مشتریان غیرفعال", inactive_customers, _NO, "مشتریانی که مدتی خرید نکرده‌اند.", "none", _G_CUST,
               options=_DAYS_OPT),
-    ReportDef("CRM_TICKETS_SLA", "تیکت‌ها و پایبندی SLA", tickets_sla, _NO, "تیکت‌های بازه به تفکیک نوع، نقض SLA و زمان‌ها.", "range", _G_SERV),
+    ReportDef("CRM_TICKETS_SLA", "تیکت‌ها و پایبندی به تعهد زمانی", tickets_sla, _NO, "تیکت‌های بازه به تفکیک نوع، نقض تعهد زمانی و زمان‌ها.", "range", _G_SERV),
     ReportDef("CRM_COMPLAINTS", "شکایت‌های مشتریان", complaints, _NO, "شکایت‌ها به تفکیک مشتری و دسته.", "range", _G_SERV),
     ReportDef("CRM_SATISFACTION", "رضایت مشتری", satisfaction, _NO, "امتیاز و نظر مشتری پس از حل تیکت.", "range", _G_SERV),
-    ReportDef("CRM_CAMPAIGNS", "عملکرد کمپین‌ها", campaign_report, _NO, "پاسخ، سرنخ، فروش و ROI هر کمپین.", "range", _G_MKT),
+    ReportDef("CRM_CAMPAIGNS", "عملکرد کمپین‌ها", campaign_report, _NO, "پاسخ، سرنخ، فروش و بازگشت سرمایهٔ هر کمپین.", "range", _G_MKT),
     ReportDef("CRM_ACTIVITIES", "فعالیت‌ها به تفکیک کاربر", activity_report, _NO, "تماس، جلسه، پیگیری و ... هر کاربر.", "range", _G_MKT),
     ReportDef("CRM_OVERDUE", "پیگیری‌های عقب‌افتاده", overdue_followups, _NO, "کارهای باز گذشته از موعد.", "as_of", _G_MKT),
 ]

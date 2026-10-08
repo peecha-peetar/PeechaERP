@@ -114,7 +114,7 @@ def award_referral(company_id: int, user_id: int, referrer_id: int, referred_id:
     """امتیاز معرفی مشتری تازه به معرف (یک بار به ازای هر مشتری معرفی‌شده)."""
     rules = get_rules(company_id)
     if not rules["enabled"]:
-        raise ValueError("باشگاه مشتریان در تنظیمات CRM فعال نیست.")
+        raise ValueError("باشگاه مشتریان در تنظیمات ارتباط با مشتری فعال نیست.")
     if referrer_id == referred_id:
         raise ValueError("مشتری نمی‌تواند معرف خودش باشد.")
     with new_session() as session:

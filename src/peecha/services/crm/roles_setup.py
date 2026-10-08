@@ -14,17 +14,17 @@ _REPORTS = ("CRM_LEAD_SOURCES", "CRM_LEAD_FUNNEL", "CRM_PIPELINE", "CRM_WON_LOST
             "CRM_ACTIVITIES", "CRM_OVERDUE")
 _REPORT_PERMS = {f"warehouse_report_{c.lower()}": ("VIEW", "PRINT", "EXPORT") for c in _REPORTS}
 TEMPLATES: dict[str, tuple[str, dict[str, tuple[str, ...]]]] = {
-    "CRM_USER": ("کارشناس فروش (CRM)", {
+    "CRM_USER": ("کارشناس فروش و ارتباط با مشتری", {
         "crm_customer360": ("VIEW",), "crm_tasks": ("VIEW",), "crm_leads": _RW, "crm_pipeline": _RW, "crm_activities": _ALL[:4],
         "crm_analytics": ("VIEW",), "crm_campaigns": ("VIEW",), "crm_tickets": _RW, "crm_automation": ("VIEW",), "crm_dashboard": ("VIEW",),
         "warehouse_report_crm_overdue": ("VIEW", "PRINT"),
     }),
-    "CRM_MANAGER": ("مدیر فروش (CRM)", {
+    "CRM_MANAGER": ("مدیر فروش و ارتباط با مشتری", {
         "crm_customer360": ("VIEW", "EXPORT"), "crm_tasks": ("VIEW",), "crm_leads": _ALL, "crm_pipeline": _ALL,
         "crm_activities": _ALL, "crm_assign": ("VIEW", "EDIT"), "crm_settings": ("VIEW",),
         "crm_analytics": _ALL, "crm_campaigns": _ALL, "crm_tickets": _ALL, "crm_automation": _ALL, "crm_dashboard": ("VIEW", "EXPORT"), **_REPORT_PERMS,
     }),
-    "CRM_ADMIN": ("مدیر سیستم CRM", {
+    "CRM_ADMIN": ("مدیر سامانهٔ ارتباط با مشتری", {
         "crm_customer360": ("VIEW", "EXPORT"), "crm_tasks": ("VIEW",), "crm_leads": _ALL, "crm_pipeline": _ALL,
         "crm_activities": _ALL, "crm_assign": ("VIEW", "EDIT"), "crm_settings": ("VIEW", "EDIT"),
         "crm_analytics": _ALL, "crm_campaigns": _ALL, "crm_tickets": _ALL, "crm_automation": _ALL, "crm_dashboard": ("VIEW", "EXPORT"), **_REPORT_PERMS,

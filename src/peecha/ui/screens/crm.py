@@ -12,7 +12,7 @@ import decimal
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMessageBox, QPushButton, QScrollArea, QSplitter, QTableWidget, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -60,6 +60,21 @@ def _run(parent, title: str, fn, *args, **kwargs):
     except ValueError as exc:
         QMessageBox.warning(parent, title, str(exc))
         return None, False
+
+
+def _dialog_bar(dlg: QDialog, extra, on_ok) -> QHBoxLayout:
+    """نوار پایین دیالوگ: دکمه‌های آیکونی کمکی + تأیید/انصراف استاندارد (مثل FormDialog)."""
+    bar = QHBoxLayout()
+    for text, slot in extra:
+        b = ms.style_button(QPushButton(text))
+        b.clicked.connect(lambda _c=False, f=slot: f())
+        bar.addWidget(b)
+    bar.addStretch(1)
+    box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    box.accepted.connect(on_ok)
+    box.rejected.connect(dlg.reject)
+    bar.addWidget(box)
+    return bar
 
 
 def _confirm(parent, title: str, text: str) -> bool:
@@ -185,7 +200,7 @@ class Customer360Screen(QWidget):
         self._loaded: set[str] = set()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("پروندهٔ ۳۶۰ مشتری")
+        title = QLabel("پروندهٔ جامع مشتری")
         title.setObjectName("pageTitle")
         self.customer_box = QComboBox()
         self.customer_box.setEditable(True)
@@ -214,16 +229,16 @@ class Customer360Screen(QWidget):
         outer.addWidget(cards)
         # اقدامات سریع
         self.quick = {
-            "call": _quick("📞 تماس", lambda: self.quick_activity("CALL")),
-            "task": _quick("✅ وظیفه", lambda: self.quick_activity("TASK")),
-            "visit": _quick("🚚 ویزیت", lambda: self.quick_activity("VISIT")),
-            "note": _quick("💬 یادداشت", lambda: self.quick_activity("NOTE")),
-            "opportunity": _quick("🎯 فرصت", self.new_opportunity),
-            "order": _quick("🛒 سفارش", lambda: self.new_order()),
-            "payment": _quick("💰 دریافت", lambda: self.open_erp("TREASURY_RECEIPT")),
-            "ticket": _quick("⚠️ شکایت", lambda: self.quick_activity("COMPLAINT")),
-            "service": _quick("🎫 تیکت", lambda: self.new_ticket()),
-            "message": _quick("✉️ پیام", lambda: self.send_message()),
+            "call": _quick("تماس تازه", lambda: self.quick_activity("CALL")),
+            "task": _quick("وظیفهٔ تازه", lambda: self.quick_activity("TASK")),
+            "visit": _quick("ویزیت تازه", lambda: self.quick_activity("VISIT")),
+            "note": _quick("یادداشت تازه", lambda: self.quick_activity("NOTE")),
+            "opportunity": _quick("فرصت فروش تازه", self.new_opportunity),
+            "order": _quick("سفارش فروش تازه", lambda: self.new_order()),
+            "payment": _quick("دریافت وجه از مشتری", lambda: self.open_erp("TREASURY_RECEIPT")),
+            "ticket": _quick("ثبت شکایت", lambda: self.quick_activity("COMPLAINT")),
+            "service": _quick("تیکت تازه", lambda: self.new_ticket()),
+            "message": _quick("ارسال پیام", lambda: self.send_message()),
         }
         bar = QHBoxLayout()
         for b in self.quick.values():
@@ -272,8 +287,7 @@ class Customer360Screen(QWidget):
         self.tl_from, self.tl_to = date_field(datetime.date.today() - datetime.timedelta(days=365)), date_field()
         self.tl_all_dates = QCheckBox("همهٔ تاریخ‌ها")
         self.tl_all_dates.setChecked(True)
-        apply = QPushButton("اعمال فیلتر")
-        apply.setObjectName("quickAction")
+        apply = QPushButton("اعمال فیلتر تایم‌لاین")
         apply.clicked.connect(lambda: self.load_timeline(reset=True))
         self.tl_search.returnPressed.connect(lambda: self.load_timeline(reset=True))
         for w in (self.tl_kind, self.tl_search, QLabel("از"), self.tl_from, QLabel("تا"), self.tl_to, self.tl_all_dates, apply):
@@ -282,7 +296,6 @@ class Customer360Screen(QWidget):
         self.t_timeline = table(["", "زمان", "نوع", "عنوان", "شرح", "مبلغ", "وضعیت"])
         tll.addWidget(self.t_timeline, stretch=1)
         self.more_button = QPushButton("نمایش رویدادهای قدیمی‌تر")
-        self.more_button.setObjectName("quickAction")
         self.more_button.clicked.connect(lambda: self.load_timeline(reset=False))
         tll.addWidget(self.more_button)
         self.tabs.addTab(tl, "تایم‌لاین")
@@ -396,7 +409,7 @@ class Customer360Screen(QWidget):
         info = [("نوع / شخصیت", f"{ident['customer_type']} {ident['person_type']}".strip()), ("کد اقتصادی", ident["economic_code"]),
                 ("شناسهٔ ملی", ident["national_id"]), ("تلفن", ident["phone"]), ("موبایل", ident["mobile"]), ("ایمیل", ident["email"]),
                 ("نشانی", ident["address"]), ("شهر / استان", " / ".join(x for x in (ident["city"], ident["province"]) if x)),
-                ("منطقه", ident["region"]), ("موقعیت GPS", "، ".join(str(x) for x in ident["gps"]) if ident["gps"] else None),
+                ("منطقه", ident["region"]), ("موقعیت جغرافیایی", "، ".join(str(x) for x in ident["gps"]) if ident["gps"] else None),
                 ("کانال جذب", ident["onboarding_source"]), ("بازاریاب", ident["sales_rep"]), ("ویزیتور", ident["visitors"]),
                 ("مسیر پخش", ident["route"]), ("گروه", ident["group"]), ("سطح", ident["level"]), ("وضعیت", ident["status"]),
                 ("بدهکار / بستانکار", f"{money(fin['debit_total'])} / {money(fin['credit_total'])}"),
@@ -408,10 +421,10 @@ class Customer360Screen(QWidget):
                 ("خرید سال گذشته", money(sal["sales_last_year"])), ("برگشت از فروش", money(sal["returns"]))]
         an = d.get("analytics")
         if an:
-            info += [("سلامت مشتری", f"{an['health_score']} — {an['health_label']}"), ("ریسک ریزش", f"{an['churn_risk']}٪ — {an['churn_label']}"),
-                     ("RFM", f"{an['rfm']} — {an['rfm_label']}"),
+            info += [("سلامت مشتری", f"{an['health_score']} — {an['health_label']}"), ("احتمال ریزش", f"{an['churn_risk']}٪ — {an['churn_label']}"),
+                     ("رفتار خرید (تازگی، تکرار، مبلغ)", f"{an['rfm']} — {an['rfm_label']}"),
                      ("ارزش طول عمر (تاکنون / پیش‌بینی)", f"{money(an['clv_historical'])} / {money(an['clv_predicted'])}"),
-                     ("سگمنت‌ها", "، ".join(an["segments"])), ("اقدام پیشنهادی", an["next_best_action"])]
+                     ("بخش‌های مشتری", "، ".join(an["segments"])), ("اقدام پیشنهادی", an["next_best_action"])]
         lo = d.get("loyalty")
         if lo and (lo["points"] or lo["lifetime_points"]):
             info.append(("باشگاه مشتریان", P(f"{lo['points']} امتیاز — سطح {lo['tier_label']}")))
@@ -538,7 +551,7 @@ class Customer360Screen(QWidget):
             values = _ask(self, "ارسال پیام", [
                 ("channel", "کانال", combo([(v, k) for k, v in comm_service.CHANNELS.items() if k != "INTERNAL"])),
                 ("template_id", "الگو", combo(templates, "— بدون الگو —")), ("body", "متن (یا از الگو)", _text(""))],
-                "در متن می‌توانید از {name} برای نام مشتری استفاده کنید.")
+                "در متن: " + comm_service.fields_hint())
             if values is None:
                 return None
         mid, ok = _run(self, "پیام", comm_service.send_message, company_id(), user_id(), values.get("channel") or "SMS",
@@ -1165,7 +1178,7 @@ class PipelineScreen(QWidget):
             fl = QVBoxLayout(frame)
             fl.setContentsMargins(6, 6, 6, 6)
             head = QLabel(P(f"{col.name}  ({len(col.cards)})\n{money(col.total)} — وزنی {money(col.weighted)}"
-                            + (f"\nSLA: {col.sla_hours} ساعت" if col.sla_hours else "")))
+                            + (f"\nمهلت مرحله: {col.sla_hours} ساعت" if col.sla_hours else "")))
             head.setObjectName("sectionTitle")
             head.setWordWrap(True)
             fl.addWidget(head)
@@ -1175,7 +1188,7 @@ class PipelineScreen(QWidget):
             for o in col.cards:
                 text = (f"{o.title}\n{o.customer_name or ('سرنخ: ' + o.lead_name)}\n{money(o.amount)} · {o.probability_percent.normalize()}٪"
                         + (f"\nپیش‌بینی: {_date(o.expected_close_date)}" if o.expected_close_date else "")
-                        + f"\n{o.owner_name} · {o.days_in_stage} روز در مرحله" + ("  ⚠ SLA" if o.sla_overdue else ""))
+                        + f"\n{o.owner_name} · {o.days_in_stage} روز در مرحله" + ("  ⚠ مهلت مرحله گذشته" if o.sla_overdue else ""))
                 item = QListWidgetItem(P(text))
                 item.setData(Qt.UserRole, o.opportunity_id)
                 if o.sla_overdue:
@@ -1395,10 +1408,10 @@ class CrmSettingsScreen(QWidget):
         tabs = QTabWidget()
         st = QWidget()
         sl = QVBoxLayout(st)
-        self.t_stages = table(["کد", "مرحله", "احتمال٪", "نوع", "SLA (ساعت)", "فیلدهای الزامی", "اقدام بعدی", "فعالیت خودکار"])
+        self.t_stages = table(["کد", "مرحله", "احتمال٪", "نوع", "مهلت مرحله (ساعت)", "فیلدهای الزامی", "اقدام بعدی", "فعالیت خودکار"])
         sl.addWidget(self.t_stages, stretch=1)
         self.stage_buttons = {k: QPushButton(t) for k, t in (("new", "مرحلهٔ جدید"), ("edit", "ویرایش مرحله"), ("delete", "حذف مرحله"),
-                                                            ("pipeline", "قیف جدید"), ("roles", "ساخت نقش‌های آمادهٔ CRM"))}
+                                                            ("pipeline", "قیف جدید"), ("roles", "ساخت نقش‌های آماده"))}
         self.stage_buttons["roles"].clicked.connect(lambda: self.create_roles())
         self.stage_buttons["new"].clicked.connect(lambda: self.edit_stage(new=True))
         self.stage_buttons["edit"].clicked.connect(lambda: self.edit_stage())
@@ -1471,7 +1484,7 @@ class CrmSettingsScreen(QWidget):
                 ("code", "کد", QLineEdit(g("code", "") or "")), ("name", "نام", QLineEdit(g("name", "") or "")),
                 ("probability", "احتمال موفقیت٪", num_field(g("probability_percent", ZERO))),
                 ("stage_type", "نوع", _with(combo([("باز", "OPEN"), ("برنده", "WON"), ("بازنده", "LOST")]), g("stage_type", "OPEN"))),
-                ("sla", "SLA (ساعت، خالی = بدون SLA)", num_field(g("sla_hours"))),
+                ("sla", "مهلت مرحله (ساعت، خالی = بدون مهلت)", num_field(g("sla_hours"))),
                 ("required", "فیلدهای الزامی (کدها با ویرگول: " + "، ".join(pl_service.STAGE_FIELDS) + ")",
                  QLineEdit(",".join(g("required_fields", []) or []))),
                 ("next_action", "اقدام بعدی", QLineEdit(g("next_action", "") or "")),
@@ -1536,11 +1549,11 @@ class CrmSettingsScreen(QWidget):
 # =========================================================================================================
 # تحلیل مشتری و سگمنت‌ها (R283)
 class SegmentDialog(QDialog):
-    """سازندهٔ قاعدهٔ سگمنت: هر ردیف «فیلد / عملگر / مقدار»؛ ترکیب ردیف‌ها با «و» یا «یا»."""
+    """سازندهٔ قاعدهٔ بخش مشتری: هر ردیف «فیلد / عملگر / مقدار»؛ ترکیب ردیف‌ها با «و» یا «یا»."""
 
     def __init__(self, seg=None, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("سگمنت مشتری")
+        self.setWindowTitle("بخش مشتری")
         self.setLayoutDirection(Qt.RightToLeft)
         self.resize(760, 460)
         lay = QVBoxLayout(self)
@@ -1568,13 +1581,7 @@ class SegmentDialog(QDialog):
         self.hint.setObjectName("sectionHint")
         self.hint.setWordWrap(True)
         lay.addWidget(self.hint)
-        buttons = QHBoxLayout()
-        for text, slot in (("افزودن شرط", lambda: self.add_row()), ("پیش‌نمایش تعداد", self.preview), ("ذخیره", self._accept),
-                           ("انصراف", self.reject)):
-            b = QPushButton(text)
-            b.clicked.connect(lambda _c=False, f=slot: f())
-            buttons.addWidget(b)
-        lay.addLayout(buttons)
+        lay.addLayout(_dialog_bar(self, (("افزودن شرط", lambda: self.add_row()), ("پیش‌نمایش تعداد", self.preview)), self._accept))
 
     def add_row(self, cond: dict | None = None) -> None:
         w = QWidget()
@@ -1584,7 +1591,7 @@ class SegmentDialog(QDialog):
         op = combo([(v, k) for k, v in seg_service.OPERATORS.items()])
         value = QComboBox()
         value.setEditable(True)
-        rm = QPushButton("حذف")
+        rm = ms.style_button(QPushButton("حذف شرط"))
         h.addWidget(field, 3)
         h.addWidget(op, 2)
         h.addWidget(value, 3)
@@ -1655,15 +1662,15 @@ class SegmentDialog(QDialog):
         try:
             n = seg_service.count(company_id(), self.rule())
         except ValueError as exc:
-            QMessageBox.warning(self, "سگمنت", str(exc))
+            QMessageBox.warning(self, "بخش مشتری", str(exc))
             return
-        QMessageBox.information(self, "سگمنت", P(f"{n} مشتری در این سگمنت قرار می‌گیرند."))
+        QMessageBox.information(self, "بخش مشتری", P(f"{n} مشتری در این بخش قرار می‌گیرند."))
 
     def _accept(self) -> None:
         try:
             seg_service.validate_rule(self.rule())
         except ValueError as exc:
-            QMessageBox.warning(self, "سگمنت", str(exc))
+            QMessageBox.warning(self, "بخش مشتری", str(exc))
             return
         self.accept()
 
@@ -1679,46 +1686,46 @@ class AnalyticsScreen(QWidget):
         self.rows: list[dict] = []
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("تحلیل مشتری و سگمنت‌ها")
+        title = QLabel("تحلیل و بخش‌بندی مشتریان")
         title.setObjectName("pageTitle")
         self.segment = QComboBox()
-        self.rfm = combo([(v, k) for k, v in analytics.RFM_SEGMENTS.items()], "همهٔ بخش‌های RFM")
+        self.rfm = combo([(v, k) for k, v in analytics.RFM_SEGMENTS.items()], "همهٔ گروه‌های رفتار خرید")
         self.health = combo([(v[0], k) for k, v in analytics.insights.HEALTH_BANDS.items()], "همهٔ وضعیت‌های سلامت")
-        self.churn = combo([(v, k) for k, v in analytics.insights.CHURN_BANDS.items()], "همهٔ سطوح ریسک ریزش")
-        self.order = combo([("بیشترین ریسک ریزش", "churn"), ("کمترین سلامت", "health"), ("بیشترین ارزش طول عمر", "clv"),
+        self.churn = combo([(v, k) for k, v in analytics.insights.CHURN_BANDS.items()], "همهٔ سطوح احتمال ریزش")
+        self.order = combo([("بیشترین احتمال ریزش", "churn"), ("کمترین سلامت", "health"), ("بیشترین ارزش طول عمر", "clv"),
                             ("بیشترین خرید ۱۲ ماه", "monetary")])
         for w in (self.segment, self.rfm, self.health, self.churn, self.order):
             w.currentIndexChanged.connect(lambda _i: self.reload())
         self.recalc = _quick("محاسبهٔ دوباره", self.recompute)
         outer.addWidget(ms.header_card(title, self.segment, self.rfm, self.health, self.churn, self.order, self.recalc))
         cards, self.cards = ms.summary([("healthy", "مشتری سالم", "success", "🟢"), ("attention", "نیازمند توجه", "warning", "🟡"),
-                                        ("risk", "در معرض خطر", "danger", "🔴"), ("churn", "ریسک ریزش زیاد", "danger", "📉"),
+                                        ("risk", "در معرض خطر", "danger", "🔴"), ("churn", "احتمال ریزش زیاد", "danger", "📉"),
                                         ("clv", "ارزش طول عمر کل (تاکنون)", "success", "💎"), ("clv_pred", "ارزش پیش‌بینی‌شده", "info", "🔮"),
                                         ("overdue", "بدهی معوق", "warning", "⏰"), ("computed", "آخرین محاسبه", "info", "🕒")], per_row=4)
         outer.addWidget(cards)
         self.tabs = QTabWidget()
-        self.t = table(["کد", "مشتری", "RFM", "بخش RFM", "سلامت", "ریسک ریزش", "روز از آخرین خرید", "دفعات ۱۲ ماه",
+        self.t = table(["کد", "مشتری", "امتیاز رفتار خرید", "گروه رفتار خرید", "سلامت", "احتمال ریزش", "روز از آخرین خرید", "دفعات ۱۲ ماه",
                         "خرید ۱۲ ماه", "ارزش طول عمر", "پیش‌بینی ارزش", "بدهی معوق", "اقدام پیشنهادی"])
         self.t.cellDoubleClicked.connect(lambda _r, _c: self.open_customer())
         self.tabs.addTab(self.t, "مشتریان")
-        self.t_rfm = table(["بخش RFM", "تعداد مشتری", "خرید ۱۲ ماه"])
+        self.t_rfm = table(["گروه رفتار خرید", "تعداد مشتری", "خرید ۱۲ ماه"])
         self.t_rfm.cellDoubleClicked.connect(lambda r, _c: set_combo(self.rfm, self.t_rfm.item(r, 0).data(Qt.UserRole)))
-        self.tabs.addTab(self.t_rfm, "ماتریس RFM")
+        self.tabs.addTab(self.t_rfm, "ماتریس رفتار خرید")
         sw = QWidget()
         sl = QVBoxLayout(sw)
         self.t_seg = table(["کد", "نام", "تعداد اعضا", "سیستمی", "فعال", "قاعده"])
         self.t_seg.cellDoubleClicked.connect(lambda _r, _c: self.edit_segment())
         sl.addWidget(self.t_seg, stretch=1)
-        self.seg_buttons = {k: QPushButton(t) for k, t in (("new", "سگمنت جدید"), ("edit", "ویرایش سگمنت"),
-                                                           ("delete", "حذف سگمنت"), ("members", "نمایش اعضا"))}
+        self.seg_buttons = {k: QPushButton(t) for k, t in (("new", "بخش جدید"), ("edit", "ویرایش بخش"),
+                                                           ("delete", "حذف بخش"), ("members", "نمایش اعضا"))}
         self.seg_buttons["new"].clicked.connect(lambda: self.edit_segment(new=True))
         self.seg_buttons["edit"].clicked.connect(lambda: self.edit_segment())
         self.seg_buttons["delete"].clicked.connect(lambda: self.delete_segment())
         self.seg_buttons["members"].clicked.connect(lambda: self.show_members())
         sl.addWidget(ms.footer([list(self.seg_buttons.values())]))
-        self.tabs.addTab(sw, "سگمنت‌ها")
+        self.tabs.addTab(sw, "بخش‌های مشتری")
         outer.addWidget(self.tabs, stretch=1)
-        self.buttons = {"open": QPushButton("پروندهٔ ۳۶۰"), "activity": QPushButton("ثبت پیگیری پیشنهادی")}
+        self.buttons = {"open": QPushButton("پروندهٔ جامع مشتری"), "activity": QPushButton("ثبت پیگیری پیشنهادی")}
         self.buttons["open"].clicked.connect(lambda: self.open_customer())
         self.buttons["activity"].clicked.connect(lambda: self.follow_up())
         outer.addWidget(ms.footer([list(self.buttons.values())]))
@@ -1818,7 +1825,7 @@ class AnalyticsScreen(QWidget):
     def edit_segment(self, new: bool = False, values: dict | None = None) -> int | None:
         seg = None if new else self._selected_seg()
         if not new and seg is None:
-            QMessageBox.warning(self, "سگمنت", "یک سگمنت را انتخاب کنید.")
+            QMessageBox.warning(self, "بخش مشتری", "یک بخش مشتری را انتخاب کنید.")
             return None
         if values is None:
             dlg = SegmentDialog(seg, self)
@@ -1826,7 +1833,7 @@ class AnalyticsScreen(QWidget):
             if not ok:
                 return None
             values = dlg.values()
-        sid, ok = _run(self, "سگمنت", seg_service.save_segment, company_id(), user_id(),
+        sid, ok = _run(self, "بخش مشتری", seg_service.save_segment, company_id(), user_id(),
                        segment_id=seg.segment_id if seg else None, **values)
         if ok:
             seg_service.refresh_counts(company_id())
@@ -1835,9 +1842,9 @@ class AnalyticsScreen(QWidget):
 
     def delete_segment(self) -> bool:
         seg = self._selected_seg()
-        if seg is None or not _confirm(self, "سگمنت", f"سگمنت «{seg.name}» حذف شود؟"):
+        if seg is None or not _confirm(self, "بخش مشتری", f"بخش مشتری «{seg.name}» حذف شود؟"):
             return False
-        _r, ok = _run(self, "سگمنت", seg_service.delete_segment, company_id(), user_id(), seg.segment_id)
+        _r, ok = _run(self, "بخش مشتری", seg_service.delete_segment, company_id(), user_id(), seg.segment_id)
         if ok:
             self.load_segments()
         return ok
@@ -1900,7 +1907,7 @@ class CampaignsScreen(QWidget):
         outer.addWidget(ms.header_card(title, self.search, self.status))
         cards, self.cards = ms.summary([("active", "کمپین فعال", "info", "📣"), ("members", "مخاطبان کمپین انتخابی", "info", "👥"),
                                         ("response", "نرخ پاسخ", "success", "💬"), ("leads", "سرنخ‌ها / تبدیل‌شده", "warning", "🧲"),
-                                        ("revenue", "فروش نسبت‌داده‌شده", "success", "💰"), ("roi", "بازگشت سرمایه (ROI)", "success", "📈"),
+                                        ("revenue", "فروش نسبت‌داده‌شده", "success", "💰"), ("roi", "بازگشت سرمایه", "success", "📈"),
                                         ("cpl", "هزینه به ازای سرنخ", "warning", "🎯"), ("won", "فرصت برنده / مبلغ", "success", "🏆")],
                                        per_row=4)
         outer.addWidget(cards)
@@ -1908,7 +1915,7 @@ class CampaignsScreen(QWidget):
         cw = QWidget()
         cl = QVBoxLayout(cw)
         split = QSplitter(Qt.Horizontal)
-        self.t = table(["شماره", "نام", "نوع", "وضعیت", "سگمنت", "شروع", "پایان", "مخاطبان", "بودجه", "هزینه", "مسئول"])
+        self.t = table(["شماره", "نام", "نوع", "وضعیت", "بخش مشتری", "شروع", "پایان", "مخاطبان", "بودجه", "هزینه", "مسئول"])
         self.t.itemSelectionChanged.connect(self._selected_changed)
         self.t.cellDoubleClicked.connect(lambda _r, _c: self.edit_campaign())
         split.addWidget(self.t)
@@ -1917,9 +1924,9 @@ class CampaignsScreen(QWidget):
         split.setSizes([800, 480])
         cl.addWidget(split, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (
-            ("new", "کمپین جدید"), ("edit", "ویرایش"), ("delete", "حذف"), ("build", "ساخت مخاطبان از سگمنت"),
-            ("add_customer", "افزودن مشتری"), ("add_lead", "افزودن سرنخ"), ("launch", "اجرای کمپین"), ("complete", "پایان"),
-            ("cancel", "لغو"), ("responded", "پاسخ داد"), ("converted", "تبدیل شد"), ("opted_out", "انصراف"),
+            ("new", "کمپین جدید"), ("edit", "ویرایش کمپین"), ("delete", "حذف کمپین"), ("build", "ساخت مخاطبان از بخش مشتری"),
+            ("add_customer", "افزودن مشتری"), ("add_lead", "افزودن سرنخ"), ("launch", "اجرای کمپین"), ("complete", "پایان کمپین"),
+            ("cancel", "لغو کمپین"), ("responded", "پاسخ داد"), ("converted", "تبدیل شد"), ("opted_out", "انصراف مخاطب"),
             ("new_lead", "ثبت سرنخ از کمپین"))}
         actions = {"new": lambda: self.new_campaign(), "edit": lambda: self.edit_campaign(), "delete": lambda: self.delete_campaign(),
                    "build": lambda: self.build_members(), "add_customer": lambda: self.add_customer(), "add_lead": lambda: self.add_lead(),
@@ -1941,20 +1948,9 @@ class CampaignsScreen(QWidget):
     def _loyalty_tab(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
-        self.l_enabled = QCheckBox("باشگاه مشتریان فعال است (امتیاز خرید از فاکتورهای ثبت‌شده)")
-        self.l_fields = {k: num_field() for k in ("amount_per_point", "first_purchase_bonus", "repeat_every", "repeat_bonus",
-                                                   "referral_points", "SILVER", "GOLD", "PLATINUM")}
-        labels = {"amount_per_point": "مبلغ هر امتیاز", "first_purchase_bonus": "جایزهٔ اولین خرید", "repeat_every": "هر چندمین خرید",
-                  "repeat_bonus": "جایزهٔ خرید تکراری", "referral_points": "امتیاز معرفی", "SILVER": "مرز نقره‌ای", "GOLD": "مرز طلایی",
-                  "PLATINUM": "مرز پلاتینی"}
-        lay.addWidget(self.l_enabled)
-        grid = QHBoxLayout()
-        for k, f in self.l_fields.items():
-            box = QVBoxLayout()
-            box.addWidget(QLabel(labels[k]))
-            box.addWidget(f)
-            grid.addLayout(box)
-        lay.addLayout(grid)
+        self.loyalty_rules = LoyaltyRulesPanel(self, with_save=False)
+        self.l_enabled, self.l_fields = self.loyalty_rules.l_enabled, self.loyalty_rules.l_fields
+        lay.addWidget(self.loyalty_rules)
         self.l_customer = QComboBox()
         self.l_customer.currentIndexChanged.connect(lambda _i: self.load_loyalty_customer())
         self.l_summary = QLabel("")
@@ -1966,7 +1962,7 @@ class CampaignsScreen(QWidget):
         lay.addLayout(row)
         self.t_loyalty = table(["تاریخ", "نوع", "امتیاز", "کیف پول", "سند"])
         lay.addWidget(self.t_loyalty, stretch=1)
-        self.l_buttons = {"save": QPushButton("ذخیرهٔ قواعد"), "award": QPushButton("اعمال امتیاز فاکتورها"),
+        self.l_buttons = {"save": QPushButton("ذخیرهٔ قواعد باشگاه"), "award": QPushButton("اعمال امتیاز فاکتورها"),
                           "adjust": QPushButton("اصلاح امتیاز"), "referral": QPushButton("ثبت معرفی")}
         self.l_buttons["save"].clicked.connect(lambda: self.save_loyalty())
         self.l_buttons["award"].clicked.connect(lambda: self.award())
@@ -1976,29 +1972,10 @@ class CampaignsScreen(QWidget):
         return w
 
     def _scoring_tab(self) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        hint = QLabel("سقف امتیاز هر عامل (۰ تا ۵۰) و مرز سطح‌ها؛ پس از ذخیره، سرنخ‌های باز دوباره امتیازدهی می‌شوند.")
-        hint.setObjectName("sectionHint")
-        hint.setWordWrap(True)
-        lay.addWidget(hint)
-        self.s_factors = {k: num_field() for k in lead_service.FACTOR_MAX}
-        self.s_bands = {k: num_field() for k in ("VERY_HOT", "HOT", "WARM")}
-        for group, labels in ((self.s_factors, lead_service.FACTOR_LABELS), (self.s_bands, cc.SCORE_BANDS)):
-            row = QHBoxLayout()
-            for k, f in group.items():
-                box = QVBoxLayout()
-                box.addWidget(QLabel(labels[k]))
-                box.addWidget(f)
-                row.addLayout(box)
-            lay.addLayout(row)
-        self.t_sources = table(["منبع", "امتیاز"])
-        self.t_sources.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        lay.addWidget(self.t_sources, stretch=1)
-        self.s_save = QPushButton("ذخیرهٔ امتیازدهی سرنخ")
-        self.s_save.clicked.connect(lambda: self.save_scoring())
-        lay.addWidget(ms.footer([[self.s_save]]))
-        return w
+        self.scoring = LeadScoringPanel(self)
+        self.s_factors, self.s_bands, self.t_sources = self.scoring.s_factors, self.scoring.s_bands, self.scoring.t_sources
+        self.s_save = self.scoring.save_btn
+        return self.scoring
 
     def refresh(self) -> None:
         cid = company_id()
@@ -2029,23 +2006,8 @@ class CampaignsScreen(QWidget):
         self.load_loyalty_customer()
 
     def load_settings(self) -> None:
-        cid = company_id()
-        rules = loyalty_service.get_rules(cid)
-        self.l_enabled.setChecked(bool(rules["enabled"]))
-        for k, f in self.l_fields.items():
-            f.setText(str(rules["tiers"][k] if k in rules["tiers"] else rules[k]))
-        from peecha.db.base import new_session
-
-        with new_session() as session:
-            cfg = lead_service.scoring_config(session, cid)
-        for k, f in self.s_factors.items():
-            f.setText(str(cfg["factor_max"][k]))
-        bands = dict(cfg["bands"])
-        for k, f in self.s_bands.items():
-            f.setText(str(bands[k]))
-        sources = pl_service.list_lead_sources(cid)
-        fill(self.t_sources, [[s.name, cfg["source_points"].get(s.code, 5)] for s in sources], [s.code for s in sources])
-        self.t_sources.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        self.loyalty_rules.load()
+        self.scoring.load()
 
     def reload(self) -> None:
         cid = company_id()
@@ -2092,7 +2054,7 @@ class CampaignsScreen(QWidget):
         today = datetime.date.today()
         return [("name", "نام کمپین", QLineEdit(g("name", "") or "")),
                 ("campaign_type", "نوع", _with(combo([(v, k) for k, v in camp_service.TYPES.items()]), g("campaign_type", "SMS"))),
-                ("segment_id", "سگمنت مخاطبان", _with(combo(segs, "— بدون سگمنت —"), g("segment_id"))),
+                ("segment_id", "بخش مشتری (مخاطبان)", _with(combo(segs, "— بدون بخش مشتری —"), g("segment_id"))),
                 ("lead_source_id", "منبع سرنخ‌های کمپین", _with(combo(self.lk.sources, "—"), g("lead_source_id"))),
                 ("start_date", "شروع", date_field(g("start_date") or today)),
                 ("end_date", "پایان", date_field(g("end_date") or today + datetime.timedelta(days=30))),
@@ -2229,14 +2191,7 @@ class CampaignsScreen(QWidget):
 
     # --- باشگاه و امتیاز ---
     def save_loyalty(self) -> bool:
-        def num(k):
-            return int(numerals.to_ascii_digits(self.l_fields[k].text().strip() or "0").replace(",", "").split(".")[0])
-
-        _x, ok = _run(self, "باشگاه مشتریان", loyalty_service.save_rules, company_id(), user_id(), enabled=self.l_enabled.isChecked(),
-                      amount_per_point=num("amount_per_point"), first_purchase_bonus=num("first_purchase_bonus"),
-                      repeat_every=num("repeat_every"), repeat_bonus=num("repeat_bonus"), referral_points=num("referral_points"),
-                      tiers={k: num(k) for k in ("SILVER", "GOLD", "PLATINUM")})
-        return ok
+        return self.loyalty_rules.save()
 
     def award(self) -> dict | None:
         res, ok = _run(self, "باشگاه مشتریان", loyalty_service.award_for_invoices, company_id())
@@ -2285,23 +2240,13 @@ class CampaignsScreen(QWidget):
         return pts if ok else None
 
     def save_scoring(self) -> bool:
-        def num(f):
-            return int(numerals.to_ascii_digits(f.text().strip() or "0").split(".")[0])
-
-        sources = {}
-        for i in range(self.t_sources.rowCount()):
-            code = self.t_sources.item(i, 0).data(Qt.UserRole)
-            sources[code] = int(numerals.to_ascii_digits(self.t_sources.item(i, 1).text().strip() or "0").split(".")[0])
-        _x, ok = _run(self, "امتیاز سرنخ", lead_service.save_scoring_config, company_id(), user_id(),
-                      factor_max={k: num(f) for k, f in self.s_factors.items()}, source_points=sources,
-                      bands={k: num(f) for k, f in self.s_bands.items()})
-        return ok
+        return self.scoring.save()
 
 
 # =========================================================================================================
 # تیکت‌ها، شکایات و SLA (R285)
 _SLA_TONE = {"BREACHED": _RED, "AT_RISK": _AMBER, "OK": _GREEN}
-_SLA_LABEL = {"BREACHED": "نقض SLA", "AT_RISK": "نزدیک موعد", "OK": "در موعد", "NONE": "—"}
+_SLA_LABEL = {"BREACHED": "نقض تعهد زمانی", "AT_RISK": "نزدیک موعد", "OK": "در موعد", "NONE": "—"}
 
 
 def _dt(value) -> str:
@@ -2330,14 +2275,14 @@ class TicketsScreen(QWidget):
         self.open_only = QCheckBox("فقط باز")
         self.open_only.setChecked(True)
         self.mine = QCheckBox("فقط ارجاع به من")
-        self.breached = QCheckBox("فقط نقض SLA")
+        self.breached = QCheckBox("فقط نقض تعهد زمانی")
         for w in (self.status, self.kind, self.priority):
             w.currentIndexChanged.connect(lambda _i: self.reload())
         for w in (self.open_only, self.mine, self.breached):
             w.toggled.connect(lambda _c: self.reload())
         outer.addWidget(ms.header_card(title, self.search, self.status, self.kind, self.priority, self.open_only, self.mine, self.breached))
-        cards, self.cards = ms.summary([("open", "تیکت باز", "info", "🎫"), ("breached", "نقض SLA", "danger", "⏰"),
-                                        ("compliance", "پایبندی به SLA", "success", "✅"), ("csat", "رضایت مشتری (از ۵)", "success", "⭐"),
+        cards, self.cards = ms.summary([("open", "تیکت باز", "info", "🎫"), ("breached", "نقض تعهد زمانی", "danger", "⏰"),
+                                        ("compliance", "پایبندی به تعهد زمانی", "success", "✅"), ("csat", "رضایت مشتری (از ۵)", "success", "⭐"),
                                         ("response", "میانگین اولین پاسخ (ساعت)", "warning", "💬"),
                                         ("resolution", "میانگین زمان حل (ساعت)", "warning", "🛠"),
                                         ("complaints", "شکایت‌ها", "danger", "📢"), ("total", "کل تیکت‌ها", "info", "📋")], per_row=4)
@@ -2346,7 +2291,7 @@ class TicketsScreen(QWidget):
         tw = QWidget()
         tl = QVBoxLayout(tw)
         split = QSplitter(Qt.Horizontal)
-        self.t = table(["شماره", "مشتری", "موضوع", "نوع", "اولویت", "وضعیت", "SLA", "موعد حل", "مسئول", "کانال", "رضایت"])
+        self.t = table(["شماره", "مشتری", "موضوع", "نوع", "اولویت", "وضعیت", "تعهد زمانی", "موعد حل", "مسئول", "کانال", "رضایت"])
         self.t.itemSelectionChanged.connect(self._selected_changed)
         self.t.cellDoubleClicked.connect(lambda _r, _c: self.edit_ticket())
         split.addWidget(self.t)
@@ -2362,8 +2307,8 @@ class TicketsScreen(QWidget):
         split.setSizes([860, 420])
         tl.addWidget(split, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (
-            ("new", "تیکت جدید"), ("edit", "ویرایش"), ("assign", "ارجاع"), ("reply", "پاسخ/پیگیری"), ("resolve", "حل شد"),
-            ("close", "بستن"), ("reopen", "بازکردن دوباره"), ("rate", "ثبت رضایت"), ("customer", "پروندهٔ ۳۶۰"))}
+            ("new", "تیکت جدید"), ("edit", "ویرایش تیکت"), ("assign", "ارجاع تیکت"), ("reply", "پاسخ و پیگیری"), ("resolve", "حل شد"),
+            ("close", "بستن تیکت"), ("reopen", "بازکردن دوبارهٔ تیکت"), ("rate", "ثبت رضایت"), ("customer", "پروندهٔ جامع مشتری"))}
         actions = {"new": self.new_ticket, "edit": self.edit_ticket, "assign": self.assign, "reply": self.reply, "resolve": self.resolve,
                    "close": self.close_ticket, "reopen": self.reopen, "rate": self.rate, "customer": self.open_customer}
         for k, b in self.buttons.items():
@@ -2372,17 +2317,9 @@ class TicketsScreen(QWidget):
         tl.addWidget(ms.footer([[B["new"], B["edit"], B["assign"]], [B["reply"], B["resolve"], B["close"], B["reopen"]],
                                 [B["rate"], B["customer"]]]))
         self.tabs.addTab(tw, "تیکت‌ها")
-        pw = QWidget()
-        pl_ = QVBoxLayout(pw)
-        self.t_sla = table(["نام", "نوع تیکت", "اولویت", "اولین پاسخ (ساعت)", "حل (ساعت)", "ارجاع نقض به", "فعال"])
-        self.t_sla.cellDoubleClicked.connect(lambda _r, _c: self.edit_policy())
-        pl_.addWidget(self.t_sla, stretch=1)
-        self.sla_buttons = {"new": QPushButton("SLA جدید"), "edit": QPushButton("ویرایش SLA"), "delete": QPushButton("حذف SLA")}
-        self.sla_buttons["new"].clicked.connect(lambda: self.edit_policy(new=True))
-        self.sla_buttons["edit"].clicked.connect(lambda: self.edit_policy())
-        self.sla_buttons["delete"].clicked.connect(lambda: self.delete_policy())
-        pl_.addWidget(ms.footer([list(self.sla_buttons.values())]))
-        self.tabs.addTab(pw, "سیاست‌های SLA")
+        self.sla_panel = SlaPoliciesPanel(self)
+        self.t_sla, self.sla_buttons = self.sla_panel.t_sla, self.sla_panel.sla_buttons
+        self.tabs.addTab(self.sla_panel, "سیاست‌های تعهد زمانی")
         outer.addWidget(self.tabs, stretch=1)
 
     def refresh(self) -> None:
@@ -2394,8 +2331,6 @@ class TicketsScreen(QWidget):
         for k in ("edit", "reply", "resolve", "close", "reopen", "rate"):
             self.buttons[k].setEnabled(can("crm_tickets", "EDIT"))
         self.buttons["assign"].setEnabled(can("crm_assign", "EDIT"))
-        for b in self.sla_buttons.values():
-            b.setEnabled(can("crm_settings", "EDIT"))
         ticket_service.check_sla(cid)
         self.load_policies()
         self.reload()
@@ -2566,59 +2501,31 @@ class TicketsScreen(QWidget):
         if r is not None and self._main_window is not None:
             self._main_window.open_screen("CRM_CUSTOMER360", then=lambda s: s.load_customer(r.customer_detail_account_id))
 
-    # --- SLA ---
+    # --- سیاست‌های تعهد زمانی (پنل مشترک با تنظیمات سیستم) ---
     def load_policies(self) -> None:
-        self._policies = ticket_service.list_policies(company_id())
-        users = dict((uid, name) for name, uid in self.lk.users)
-        fill(self.t_sla, [[p.name, ticket_service.TYPES.get(p.ticket_type or "", "همه"), cc.PRIORITIES.get(p.priority_code or "", "همه"),
-                           p.first_response_hours.normalize(), p.resolution_hours.normalize(), users.get(p.escalate_to_user_id, ""),
-                           "بله" if p.is_active else "خیر"] for p in self._policies], [p.sla_policy_id for p in self._policies])
+        self.sla_panel.refresh()
 
     def edit_policy(self, new: bool = False, values: dict | None = None) -> int | None:
-        pid = None if new else _selected(self.t_sla)
-        if not new and pid is None:
-            QMessageBox.warning(self, "SLA", "یک SLA را انتخاب کنید.")
-            return None
-        p = next((x for x in self._policies if x.sla_policy_id == pid), None)
-        g = (lambda name, default=None: getattr(p, name)) if p else (lambda name, default=None: default)
-        if values is None:
-            values = _ask(self, "سیاست SLA", [
-                ("name", "نام", QLineEdit(g("name", "") or "")),
-                ("ticket_type", "نوع تیکت", _with(combo([(v, k) for k, v in ticket_service.TYPES.items()], "همه"), g("ticket_type"))),
-                ("priority_code", "اولویت", _with(combo(self.lk.priorities, "همه"), g("priority_code"))),
-                ("first_response_hours", "اولین پاسخ (ساعت)", num_field(g("first_response_hours"))),
-                ("resolution_hours", "حل (ساعت)", num_field(g("resolution_hours"))),
-                ("escalate_to_user_id", "ارجاع نقض به", _with(combo(self.lk.users, "—"), g("escalate_to_user_id"))),
-                ("is_active", "فعال", _checked(g("is_active", True)))])
-            if values is None:
-                return None
-        sid, ok = _run(self, "SLA", ticket_service.save_policy, company_id(), user_id(), sla_policy_id=pid, **values)
-        if ok:
-            self.load_policies()
-        return sid if ok else None
+        return self.sla_panel.edit_policy(new, values)
 
     def delete_policy(self) -> bool:
-        pid = _selected(self.t_sla)
-        if pid is None or not _confirm(self, "SLA", "این SLA حذف شود؟"):
-            return False
-        _x, ok = _run(self, "SLA", ticket_service.delete_policy, company_id(), user_id(), pid)
-        if ok:
-            self.load_policies()
-        return ok
-
+        return self.sla_panel.delete_policy()
 
 
 # =========================================================================================================
-# اتوماسیون، پیام‌ها و الگوها (R287)
+# خودکارسازی، پیام‌ها و الگوها (R287)
+_ENTITY_LABEL = {"CUSTOMER": "مشتری", "LEAD": "سرنخ", "OPPORTUNITY": "فرصت", "TICKET": "تیکت"}
+
+
 class RuleDialog(QDialog):
     """ویرایشگر قاعده: فیلدهای شرط و اقدام با تغییر رویداد/اقدام عوض می‌شوند."""
 
-    def __init__(self, rule=None, segments=None, templates=None, parent=None) -> None:
+    def __init__(self, rule=None, segments=None, templates=None, parent=None, users=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("قاعدهٔ اتوماسیون")
+        self.setWindowTitle("قاعدهٔ خودکارسازی")
         self.setLayoutDirection(Qt.RightToLeft)
         self.resize(620, 520)
-        self.segments, self.templates = segments or [], templates or []
+        self.segments, self.templates, self.users = segments or [], templates or [], users or []
         lay = QVBoxLayout(self)
         self.name = QLineEdit(rule.name if rule else "")
         self.trigger = combo([(v[0], k) for k, v in auto_service.TRIGGERS.items()])
@@ -2647,16 +2554,11 @@ class RuleDialog(QDialog):
             self.cond_box, self.cond_fields, auto_service.TRIGGERS[self.trigger.currentData()][2], {}))
         self.action.currentIndexChanged.connect(lambda _i: self._build(
             self.act_box, self.act_fields, auto_service.ACTIONS[self.action.currentData()][1], {}))
-        hint = QLabel("در متن‌ها: " + "، ".join(f"{{{k}}} {v}" for k, v in comm_service.TEMPLATE_FIELDS.items()))
+        hint = QLabel("در متن‌ها: " + comm_service.fields_hint())
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         lay.addWidget(hint)
-        buttons = QHBoxLayout()
-        for text, slot in (("پیش‌نمایش تعداد", self.preview), ("ذخیره", self.accept), ("انصراف", self.reject)):
-            b = QPushButton(text)
-            b.clicked.connect(lambda _c=False, f=slot: f())
-            buttons.addWidget(b)
-        lay.addLayout(buttons)
+        lay.addLayout(_dialog_bar(self, (("پیش‌نمایش تعداد", self.preview),), self.accept))
 
     def _build(self, box, store: dict, params, values: dict) -> None:
         while box.count():
@@ -2668,6 +2570,9 @@ class RuleDialog(QDialog):
             v = values.get(p.key, p.default)
             if p.kind == "segment":
                 w = _with(combo(self.segments), v)
+            elif p.kind == "user":
+                w = _with(combo([("مسئول همان مشتری، سرنخ یا فرصت", "OWNER")] + self.users),
+                          int(v) if str(v or "").isdigit() else "OWNER")
             elif p.key == "template_id":
                 w = _with(combo(self.templates, "— بدون الگو —"), v)
             elif p.key == "channel":
@@ -2724,7 +2629,7 @@ class AutomationScreen(QWidget):
         self.dialog_runner = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("اتوماسیون و پیام‌ها")
+        title = QLabel("خودکارسازی و پیام‌ها")
         title.setObjectName("pageTitle")
         self.run_all_btn = _quick("اجرای همهٔ قاعده‌ها", self.run_all)
         outer.addWidget(ms.header_card(title, self.run_all_btn))
@@ -2737,8 +2642,8 @@ class AutomationScreen(QWidget):
         self.t_rules = table(["نام", "وقتی", "آنگاه", "فاصلهٔ تکرار", "فعال", "آخرین اجرا", "تعداد اقدام"])
         self.t_rules.cellDoubleClicked.connect(lambda _r, _c: self.edit_rule())
         rl.addWidget(self.t_rules, stretch=1)
-        self.rule_buttons = {k: QPushButton(t) for k, t in (("new", "قاعدهٔ جدید"), ("edit", "ویرایش"), ("delete", "حذف"),
-                                                            ("toggle", "فعال/غیرفعال"), ("run", "اجرای این قاعده"))}
+        self.rule_buttons = {k: QPushButton(t) for k, t in (("new", "قاعدهٔ جدید"), ("edit", "ویرایش قاعده"), ("delete", "حذف قاعده"),
+                                                            ("toggle", "فعال یا غیرفعال"), ("run", "اجرای این قاعده"))}
         for k, f in (("new", lambda: self.edit_rule(new=True)), ("edit", lambda: self.edit_rule()), ("delete", lambda: self.delete_rule()),
                      ("toggle", lambda: self.toggle_rule()), ("run", lambda: self.run_rule())):
             self.rule_buttons[k].clicked.connect(lambda _c=False, fn=f: fn())
@@ -2763,17 +2668,9 @@ class AutomationScreen(QWidget):
         self.retry_btn.clicked.connect(lambda: self.retry())
         ml.addWidget(ms.footer([[self.retry_btn]]))
         self.tabs.addTab(mw, "دفتر پیام‌ها")
-        tw = QWidget()
-        tl = QVBoxLayout(tw)
-        self.t_tpl = table(["کد", "نام", "کانال", "متن", "فعال"])
-        self.t_tpl.cellDoubleClicked.connect(lambda _r, _c: self.edit_template())
-        tl.addWidget(self.t_tpl, stretch=1)
-        self.tpl_buttons = {k: QPushButton(t) for k, t in (("new", "الگوی جدید"), ("edit", "ویرایش الگو"), ("delete", "حذف الگو"))}
-        self.tpl_buttons["new"].clicked.connect(lambda: self.edit_template(new=True))
-        self.tpl_buttons["edit"].clicked.connect(lambda: self.edit_template())
-        self.tpl_buttons["delete"].clicked.connect(lambda: self.delete_template())
-        tl.addWidget(ms.footer([list(self.tpl_buttons.values())]))
-        self.tabs.addTab(tw, "الگوهای پیام")
+        self.tpl_panel = TemplatesPanel(self)
+        self.t_tpl, self.tpl_buttons = self.tpl_panel.t_tpl, self.tpl_panel.tpl_buttons
+        self.tabs.addTab(self.tpl_panel, "الگوهای پیام")
         outer.addWidget(self.tabs, stretch=1)
 
     def refresh(self) -> None:
@@ -2785,9 +2682,6 @@ class AutomationScreen(QWidget):
         for k in ("edit", "toggle", "run"):
             self.rule_buttons[k].setEnabled(edit)
         self.rule_buttons["delete"].setEnabled(can("crm_automation", "DELETE"))
-        self.tpl_buttons["new"].setEnabled(can("crm_automation", "CREATE"))
-        self.tpl_buttons["edit"].setEnabled(edit)
-        self.tpl_buttons["delete"].setEnabled(can("crm_automation", "DELETE"))
         self.retry_btn.setEnabled(can("crm_activities", "CREATE"))
         self.reload()
 
@@ -2798,11 +2692,10 @@ class AutomationScreen(QWidget):
                              "بله" if r.is_active else "خیر", _dt(r.last_run_at), r.run_count] for r in self.rules],
              [r.rule_id for r in self.rules])
         log = auto_service.list_log(cid)
-        fill(self.t_log, [[_dt(x["created_at"]), x["rule_name"], x["entity_type"], x["entity_id"], x["customer_name"],
+        fill(self.t_log, [[_dt(x["created_at"]), x["rule_name"], _ENTITY_LABEL.get(x["entity_type"], x["entity_type"]), x["entity_id"],
+                           x["customer_name"],
                            x["result"].get("error") or "انجام شد"] for x in log])
-        self.templates = comm_service.list_templates(cid)
-        fill(self.t_tpl, [[t.code, t.name, comm_service.CHANNELS[t.channel], t.body[:80], "بله" if t.is_active else "خیر"]
-                          for t in self.templates], [t.template_id for t in self.templates])
+        self.tpl_panel.refresh()
         self.load_messages()
         self.cards["active"].setText(P(sum(1 for r in self.rules if r.is_active)))
         self.cards["runs"].setText(P(sum(r.run_count for r in self.rules)))
@@ -2830,7 +2723,8 @@ class AutomationScreen(QWidget):
             return None
         if values is None:
             dlg = RuleDialog(r, [(s.name, s.segment_id) for s in seg_service.list_segments(company_id(), active_only=True)],
-                             [(t.name, t.template_id) for t in self.templates if t.is_active], self)
+                             [(t.name, t.template_id) for t in self.templates if t.is_active], self,
+                             [(name, uid) for uid, name in cc.list_company_users(company_id())])
             ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
             if not ok:
                 return None
@@ -2872,11 +2766,11 @@ class AutomationScreen(QWidget):
         return n if ok else None
 
     def run_all(self) -> dict | None:
-        res, ok = _run(self, "اتوماسیون", auto_service.run_all, company_id(), user_id())
+        res, ok = _run(self, "خودکارسازی", auto_service.run_all, company_id(), user_id())
         if ok:
             self.reload()
             if not self.dialog_runner:
-                QMessageBox.information(self, "اتوماسیون", P(f"اقدام برای {sum(v for v in res.values() if v > 0)} مورد انجام شد."))
+                QMessageBox.information(self, "خودکارسازی", P(f"اقدام برای {sum(v for v in res.values() if v > 0)} مورد انجام شد."))
         return res if ok else None
 
     def retry(self) -> int | None:
@@ -2888,39 +2782,19 @@ class AutomationScreen(QWidget):
             self.load_messages()
         return new if ok else None
 
+    @property
+    def templates(self) -> list:
+        return self.tpl_panel.templates
+
     def edit_template(self, new: bool = False, values: dict | None = None) -> int | None:
-        tid = None if new else _selected(self.t_tpl)
-        if not new and tid is None:
-            QMessageBox.warning(self, "الگو", "یک الگو را انتخاب کنید.")
-            return None
-        t = next((x for x in self.templates if x.template_id == tid), None)
-        g = (lambda name, default=None: getattr(t, name)) if t else (lambda name, default=None: default)
-        if values is None:
-            values = _ask(self, "الگوی پیام", [
-                ("code", "کد", QLineEdit(g("code", "") or "")), ("name", "نام", QLineEdit(g("name", "") or "")),
-                ("channel", "کانال", _with(combo([(v, k) for k, v in comm_service.CHANNELS.items()]), g("channel", "SMS"))),
-                ("subject", "عنوان (ایمیل)", QLineEdit(g("subject", "") or "")), ("body", "متن", _text(g("body"))),
-                ("is_active", "فعال", _checked(g("is_active", True)))],
-                "در متن: " + "، ".join(f"{{{k}}} {v}" for k, v in comm_service.TEMPLATE_FIELDS.items()))
-            if values is None:
-                return None
-        new_id, ok = _run(self, "الگو", comm_service.save_template, company_id(), user_id(), template_id=tid, **values)
-        if ok:
-            self.reload()
-        return new_id if ok else None
+        return self.tpl_panel.edit_template(new, values)
 
     def delete_template(self) -> bool:
-        tid = _selected(self.t_tpl)
-        if tid is None or not _confirm(self, "الگو", "این الگو حذف شود؟"):
-            return False
-        _x, ok = _run(self, "الگو", comm_service.delete_template, company_id(), user_id(), tid)
-        if ok:
-            self.reload()
-        return ok
+        return self.tpl_panel.delete_template()
 
 
 # =========================================================================================================
-# داشبورد CRM: شاخص‌ها، پیش‌بینی، عملکرد، تقویم و جستجوی سراسری (R288)
+# داشبورد ارتباط با مشتری: شاخص‌ها، پیش‌بینی، عملکرد، تقویم و جستجوی سراسری (R288)
 @ms.styled
 class CrmDashboardScreen(QWidget):
     scroll_in_mdi = True
@@ -2931,13 +2805,13 @@ class CrmDashboardScreen(QWidget):
         self.dialog_runner = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("داشبورد CRM")
+        title = QLabel("داشبورد ارتباط با مشتری")
         title.setObjectName("pageTitle")
         today = datetime.date.today()
         self.date_from, self.date_to = date_field(today.replace(day=1)), date_field(today)
         self.mine = QCheckBox("فقط من")
         self.mine.toggled.connect(lambda _c: self.reload())
-        apply = _quick("نمایش", self.reload)
+        apply = _quick("نمایش داشبورد", self.reload)
         self.search = QLineEdit()
         self.search.setPlaceholderText("جستجوی سراسری: مشتری، سرنخ، فرصت، تیکت، کمپین، شمارهٔ سند")
         self.search.returnPressed.connect(lambda: self.run_search())
@@ -2947,8 +2821,8 @@ class CrmDashboardScreen(QWidget):
             ("pipeline", "ارزش قیف باز", "info", "🎯"), ("weighted", "ارزش وزنی قیف", "info", "⚖️"),
             ("won", "برنده / مبلغ", "success", "🏆"), ("win_rate", "نرخ موفقیت", "success", "📈"),
             ("cycle", "میانگین چرخهٔ فروش (روز)", "neutral", "⏱"), ("sales", "فروش خالص دوره", "success", "💰"),
-            ("activities", "فعالیت انجام‌شده / عقب‌افتاده", "warning", "✅"), ("tickets", "تیکت باز / نقض SLA", "danger", "🎫"),
-            ("csat", "رضایت مشتری", "success", "⭐"), ("churn", "مشتری با ریسک ریزش زیاد", "danger", "📉")], per_row=6)
+            ("activities", "فعالیت انجام‌شده / عقب‌افتاده", "warning", "✅"), ("tickets", "تیکت باز / نقض تعهد زمانی", "danger", "🎫"),
+            ("csat", "رضایت مشتری", "success", "⭐"), ("churn", "مشتری با احتمال ریزش زیاد", "danger", "📉")], per_row=6)
         outer.addWidget(cards)
         self.tabs = QTabWidget()
         self.t_forecast = table(["ماه", "فرصت باز", "مبلغ فرصت‌ها", "وزنی", "قطعی (≥۸۰٪)", "روند فروش ماهانه", "پیش‌بینی فروش"])
@@ -3069,3 +2943,296 @@ class CrmDashboardScreen(QWidget):
     def open_report(self, code: str) -> None:
         if self._main_window is not None:
             self._main_window.open_screen(f"CRM_RPT_{code}")
+
+
+# =========================================================================================================
+# R289: پنل‌های تنظیمات ارتباط با مشتری -- هم در صفحهٔ خودشان و هم در «تنظیمات سیستم › ارتباط با مشتری»
+def _int(text: str) -> int:
+    return int(numerals.to_ascii_digits((text or "").strip() or "0").replace(",", "").split(".")[0])
+
+
+class _CrmPanel(QWidget):
+    def __init__(self, host=None) -> None:
+        super().__init__()
+        self._host = host
+        self.dialog_runner = None
+
+    @property
+    def ctx(self) -> QWidget:
+        # دیالوگ و تأیید از صفحهٔ میزبان گرفته می‌شود تا رفتار جاسازی‌شده با صفحهٔ اصلی یکی باشد
+        return self._host if self._host is not None else self
+
+
+class LoyaltyRulesPanel(_CrmPanel):
+    LABELS = {"amount_per_point": "مبلغ هر امتیاز", "first_purchase_bonus": "جایزهٔ اولین خرید", "repeat_every": "هر چندمین خرید",
+              "repeat_bonus": "جایزهٔ خرید تکراری", "referral_points": "امتیاز معرفی", "SILVER": "مرز نقره‌ای", "GOLD": "مرز طلایی",
+              "PLATINUM": "مرز پلاتینی"}
+
+    def __init__(self, host=None, with_save: bool = True) -> None:
+        super().__init__(host)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.l_enabled = QCheckBox("باشگاه مشتریان فعال است (امتیاز خرید از فاکتورهای ثبت‌شده)")
+        self.l_fields = {k: num_field() for k in self.LABELS}
+        lay.addWidget(self.l_enabled)
+        grid = QHBoxLayout()
+        for k, f in self.l_fields.items():
+            box = QVBoxLayout()
+            box.addWidget(QLabel(self.LABELS[k]))
+            box.addWidget(f)
+            grid.addLayout(box)
+        lay.addLayout(grid)
+        self.save_btn = None
+        if with_save:
+            lay.addStretch(1)
+            self.save_btn = QPushButton("ذخیرهٔ قواعد باشگاه")
+            self.save_btn.clicked.connect(lambda: self.save())
+            lay.addWidget(ms.footer([[self.save_btn]]))
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        if self.save_btn is not None:
+            self.save_btn.setEnabled(can("crm_settings", "EDIT"))
+        self.load()
+
+    def load(self) -> None:
+        rules = loyalty_service.get_rules(company_id())
+        self.l_enabled.setChecked(bool(rules["enabled"]))
+        for k, f in self.l_fields.items():
+            f.setText(str(rules["tiers"][k] if k in rules["tiers"] else rules[k]))
+
+    def save(self) -> bool:
+        num = {k: _int(f.text()) for k, f in self.l_fields.items()}
+        _x, ok = _run(self.ctx, "باشگاه مشتریان", loyalty_service.save_rules, company_id(), user_id(), enabled=self.l_enabled.isChecked(),
+                      amount_per_point=num["amount_per_point"], first_purchase_bonus=num["first_purchase_bonus"],
+                      repeat_every=num["repeat_every"], repeat_bonus=num["repeat_bonus"], referral_points=num["referral_points"],
+                      tiers={k: num[k] for k in ("SILVER", "GOLD", "PLATINUM")})
+        return ok
+
+
+class LeadScoringPanel(_CrmPanel):
+    def __init__(self, host=None) -> None:
+        super().__init__(host)
+        lay = QVBoxLayout(self)
+        hint = QLabel("سقف امتیاز هر عامل (۰ تا ۵۰) و مرز سطح‌ها؛ پس از ذخیره، سرنخ‌های باز دوباره امتیازدهی می‌شوند.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.s_factors = {k: num_field() for k in lead_service.FACTOR_MAX}
+        self.s_bands = {k: num_field() for k in ("VERY_HOT", "HOT", "WARM")}
+        for group, labels in ((self.s_factors, lead_service.FACTOR_LABELS), (self.s_bands, cc.SCORE_BANDS)):
+            row = QHBoxLayout()
+            for k, f in group.items():
+                box = QVBoxLayout()
+                box.addWidget(QLabel(labels[k]))
+                box.addWidget(f)
+                row.addLayout(box)
+            lay.addLayout(row)
+        self.t_sources = table(["منبع", "امتیاز"])
+        self.t_sources.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        lay.addWidget(self.t_sources, stretch=1)
+        self.save_btn = QPushButton("ذخیرهٔ امتیازدهی سرنخ")
+        self.save_btn.clicked.connect(lambda: self.save())
+        lay.addWidget(ms.footer([[self.save_btn]]))
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        self.save_btn.setEnabled(can("crm_settings", "EDIT"))
+        self.load()
+
+    def load(self) -> None:
+        from peecha.db.base import new_session
+
+        cid = company_id()
+        with new_session() as session:
+            cfg = lead_service.scoring_config(session, cid)
+        for k, f in self.s_factors.items():
+            f.setText(str(cfg["factor_max"][k]))
+        bands = dict(cfg["bands"])
+        for k, f in self.s_bands.items():
+            f.setText(str(bands[k]))
+        sources = pl_service.list_lead_sources(cid)
+        fill(self.t_sources, [[s.name, cfg["source_points"].get(s.code, 5)] for s in sources], [s.code for s in sources])
+        self.t_sources.setEditTriggers(QAbstractItemView.AllEditTriggers)
+
+    def save(self) -> bool:
+        sources = {self.t_sources.item(i, 0).data(Qt.UserRole): _int(self.t_sources.item(i, 1).text())
+                   for i in range(self.t_sources.rowCount())}
+        _x, ok = _run(self.ctx, "امتیاز سرنخ", lead_service.save_scoring_config, company_id(), user_id(),
+                      factor_max={k: _int(f.text()) for k, f in self.s_factors.items()}, source_points=sources,
+                      bands={k: _int(f.text()) for k, f in self.s_bands.items()})
+        return ok
+
+
+class SlaPoliciesPanel(_CrmPanel):
+    """سیاست‌های تعهد زمانی تیکت (مهلت اولین پاسخ و حل به تفکیک نوع و اولویت)."""
+
+    def __init__(self, host=None) -> None:
+        super().__init__(host)
+        self._policies: list = []
+        self.users: list = []
+        lay = QVBoxLayout(self)
+        self.t_sla = table(["نام", "نوع تیکت", "اولویت", "اولین پاسخ (ساعت)", "حل (ساعت)", "ارجاع نقض به", "فعال"])
+        self.t_sla.cellDoubleClicked.connect(lambda _r, _c: self.edit_policy())
+        lay.addWidget(self.t_sla, stretch=1)
+        self.sla_buttons = {"new": QPushButton("سیاست جدید"), "edit": QPushButton("ویرایش سیاست"), "delete": QPushButton("حذف سیاست")}
+        self.sla_buttons["new"].clicked.connect(lambda: self.edit_policy(new=True))
+        self.sla_buttons["edit"].clicked.connect(lambda: self.edit_policy())
+        self.sla_buttons["delete"].clicked.connect(lambda: self.delete_policy())
+        lay.addWidget(ms.footer([list(self.sla_buttons.values())]))
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        for b in self.sla_buttons.values():
+            b.setEnabled(can("crm_settings", "EDIT"))
+        self.load()
+
+    def load(self) -> None:
+        cid = company_id()
+        self.users = [(name, uid) for uid, name in cc.list_company_users(cid)]
+        self._policies = ticket_service.list_policies(cid)
+        names = {uid: name for name, uid in self.users}
+        fill(self.t_sla, [[p.name, ticket_service.TYPES.get(p.ticket_type or "", "همه"), cc.PRIORITIES.get(p.priority_code or "", "همه"),
+                           p.first_response_hours.normalize(), p.resolution_hours.normalize(), names.get(p.escalate_to_user_id, ""),
+                           "بله" if p.is_active else "خیر"] for p in self._policies], [p.sla_policy_id for p in self._policies])
+
+    def edit_policy(self, new: bool = False, values: dict | None = None) -> int | None:
+        pid = None if new else _selected(self.t_sla)
+        if not new and pid is None:
+            QMessageBox.warning(self.ctx, "تعهد زمانی", "یک سیاست تعهد زمانی را انتخاب کنید.")
+            return None
+        p = next((x for x in self._policies if x.sla_policy_id == pid), None)
+        g = (lambda name, default=None: getattr(p, name)) if p else (lambda name, default=None: default)
+        if values is None:
+            values = _ask(self.ctx, "سیاست تعهد زمانی", [
+                ("name", "نام", QLineEdit(g("name", "") or "")),
+                ("ticket_type", "نوع تیکت", _with(combo([(v, k) for k, v in ticket_service.TYPES.items()], "همه"), g("ticket_type"))),
+                ("priority_code", "اولویت", _with(combo([(v, k) for k, v in cc.PRIORITIES.items()], "همه"), g("priority_code"))),
+                ("first_response_hours", "اولین پاسخ (ساعت)", num_field(g("first_response_hours"))),
+                ("resolution_hours", "حل (ساعت)", num_field(g("resolution_hours"))),
+                ("escalate_to_user_id", "ارجاع نقض به", _with(combo(self.users, "—"), g("escalate_to_user_id"))),
+                ("is_active", "فعال", _checked(g("is_active", True)))])
+            if values is None:
+                return None
+        sid, ok = _run(self.ctx, "تعهد زمانی", ticket_service.save_policy, company_id(), user_id(), sla_policy_id=pid, **values)
+        if ok:
+            self.load()
+        return sid if ok else None
+
+    def delete_policy(self) -> bool:
+        pid = _selected(self.t_sla)
+        if pid is None or not _confirm(self.ctx, "تعهد زمانی", "این سیاست تعهد زمانی حذف شود؟"):
+            return False
+        _x, ok = _run(self.ctx, "تعهد زمانی", ticket_service.delete_policy, company_id(), user_id(), pid)
+        if ok:
+            self.load()
+        return ok
+
+
+class TemplatesPanel(_CrmPanel):
+    def __init__(self, host=None) -> None:
+        super().__init__(host)
+        self.templates: list = []
+        lay = QVBoxLayout(self)
+        self.t_tpl = table(["کد", "نام", "کانال", "متن", "فعال"])
+        self.t_tpl.cellDoubleClicked.connect(lambda _r, _c: self.edit_template())
+        lay.addWidget(self.t_tpl, stretch=1)
+        self.tpl_buttons = {k: QPushButton(t) for k, t in (("new", "الگوی جدید"), ("edit", "ویرایش الگو"), ("delete", "حذف الگو"))}
+        self.tpl_buttons["new"].clicked.connect(lambda: self.edit_template(new=True))
+        self.tpl_buttons["edit"].clicked.connect(lambda: self.edit_template())
+        self.tpl_buttons["delete"].clicked.connect(lambda: self.delete_template())
+        lay.addWidget(ms.footer([list(self.tpl_buttons.values())]))
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        self.tpl_buttons["new"].setEnabled(can("crm_automation", "CREATE"))
+        self.tpl_buttons["edit"].setEnabled(can("crm_automation", "EDIT"))
+        self.tpl_buttons["delete"].setEnabled(can("crm_automation", "DELETE"))
+        self.load()
+
+    def load(self) -> None:
+        self.templates = comm_service.list_templates(company_id())
+        fill(self.t_tpl, [[t.code, t.name, comm_service.CHANNELS[t.channel], t.body[:80], "بله" if t.is_active else "خیر"]
+                          for t in self.templates], [t.template_id for t in self.templates])
+
+    def edit_template(self, new: bool = False, values: dict | None = None) -> int | None:
+        tid = None if new else _selected(self.t_tpl)
+        if not new and tid is None:
+            QMessageBox.warning(self.ctx, "الگو", "یک الگو را انتخاب کنید.")
+            return None
+        t = next((x for x in self.templates if x.template_id == tid), None)
+        g = (lambda name, default=None: getattr(t, name)) if t else (lambda name, default=None: default)
+        if values is None:
+            values = _ask(self.ctx, "الگوی پیام", [
+                ("code", "کد", QLineEdit(g("code", "") or "")), ("name", "نام", QLineEdit(g("name", "") or "")),
+                ("channel", "کانال", _with(combo([(v, k) for k, v in comm_service.CHANNELS.items()]), g("channel", "SMS"))),
+                ("subject", "عنوان (ایمیل)", QLineEdit(g("subject", "") or "")), ("body", "متن", _text(g("body"))),
+                ("is_active", "فعال", _checked(g("is_active", True)))],
+                "در متن: " + comm_service.fields_hint())
+            if values is None:
+                return None
+        new_id, ok = _run(self.ctx, "الگو", comm_service.save_template, company_id(), user_id(), template_id=tid, **values)
+        if ok:
+            self.load()
+        return new_id if ok else None
+
+    def delete_template(self) -> bool:
+        tid = _selected(self.t_tpl)
+        if tid is None or not _confirm(self.ctx, "الگو", "این الگو حذف شود؟"):
+            return False
+        _x, ok = _run(self.ctx, "الگو", comm_service.delete_template, company_id(), user_id(), tid)
+        if ok:
+            self.load()
+        return ok
+
+
+class AnalyticsSettingsPanel(_CrmPanel):
+    """بازهٔ تحلیل رفتار خرید و افق پیش‌بینی ارزش طول عمر؛ پس از ذخیره امتیازها دوباره محاسبه می‌شوند."""
+
+    LABELS = {"rfm_window_days": "بازهٔ تحلیل رفتار خرید (روز)", "clv_horizon_months": "افق پیش‌بینی ارزش طول عمر (ماه)"}
+
+    def __init__(self, host=None) -> None:
+        super().__init__(host)
+        lay = QVBoxLayout(self)
+        hint = QLabel("رفتار خرید هر مشتری (تازگی، تکرار و مبلغ خرید) در این بازه سنجیده می‌شود؛ "
+                      "ارزش طول عمر پیش‌بینی‌شده برای همین تعداد ماه آینده برآورد می‌شود.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.fields = {k: num_field() for k in self.LABELS}
+        row = QHBoxLayout()
+        for k, f in self.fields.items():
+            box = QVBoxLayout()
+            box.addWidget(QLabel(self.LABELS[k]))
+            box.addWidget(f)
+            row.addLayout(box)
+        row.addStretch(1)
+        lay.addLayout(row)
+        lay.addStretch(1)
+        self.save_btn = QPushButton("ذخیرهٔ تنظیمات تحلیل")
+        self.save_btn.clicked.connect(lambda: self.save())
+        lay.addWidget(ms.footer([[self.save_btn]]))
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        self.save_btn.setEnabled(can("crm_settings", "EDIT"))
+        opts = analytics.settings(company_id())
+        for k, f in self.fields.items():
+            f.setText(str(opts[k]))
+
+    def save(self) -> bool:
+        values = {k: _int(f.text()) for k, f in self.fields.items()}
+        if any(v <= 0 for v in values.values()):
+            QMessageBox.warning(self.ctx, "تحلیل مشتری", "بازه‌ها باید بیشتر از صفر باشند.")
+            return False
+        _x, ok = _run(self.ctx, "تحلیل مشتری", analytics.save_settings, company_id(), user_id(), **values)
+        if ok:
+            analytics.refresh_scores(company_id())
+            if not self.ctx.dialog_runner:
+                QMessageBox.information(self.ctx, "تحلیل مشتری", "تنظیمات ذخیره شد و امتیاز مشتریان دوباره محاسبه شد.")
+        return ok

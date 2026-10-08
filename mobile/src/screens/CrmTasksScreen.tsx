@@ -19,7 +19,7 @@ const SECTIONS: { key: string; label: string }[] = [
   { key: "overdue", label: "عقب‌افتاده" }, { key: "today", label: "امروز" }, { key: "tomorrow", label: "فردا" },
   { key: "week", label: "این هفته" },
 ];
-const SLA_LABEL: Record<string, string> = { BREACHED: "نقض SLA", AT_RISK: "نزدیک موعد", OK: "در موعد", NONE: "" };
+const SLA_LABEL: Record<string, string> = { BREACHED: "نقض تعهد زمانی", AT_RISK: "نزدیک موعد", OK: "در موعد", NONE: "" };
 
 /** کارهای امروزِ CRM (R286): پیگیری‌ها و تماس‌های عقب‌افتاده/امروز، تیکت‌هایِ ارجاع‌شده. انجام‌دادنِ کار در صفِ
  * آفلاین ثبت می‌شود (با پیگیریِ بعدیِ اختیاری) تا بدونِ اینترنت هم از دست نرود. */

@@ -43,15 +43,15 @@ FIELDS: dict[str, FieldDef] = {
     "invoice_count_total": FieldDef("تعداد کل فاکتورها", "number", CustomerScore.invoice_count_total),
     "first_purchase": FieldDef("تاریخ اولین خرید", "date", CustomerScore.first_purchase),
     "last_purchase": FieldDef("تاریخ آخرین خرید", "date", CustomerScore.last_purchase),
-    "r_score": FieldDef("امتیاز تازگی (R)", "number", CustomerScore.r_score),
-    "f_score": FieldDef("امتیاز تکرار (F)", "number", CustomerScore.f_score),
-    "m_score": FieldDef("امتیاز مبلغ (M)", "number", CustomerScore.m_score),
-    "rfm_segment": FieldDef("بخش RFM", "choice", CustomerScore.rfm_segment, analytics.RFM_SEGMENTS),
+    "r_score": FieldDef("امتیاز تازگی خرید (۱ تا ۵)", "number", CustomerScore.r_score),
+    "f_score": FieldDef("امتیاز تکرار خرید (۱ تا ۵)", "number", CustomerScore.f_score),
+    "m_score": FieldDef("امتیاز مبلغ خرید (۱ تا ۵)", "number", CustomerScore.m_score),
+    "rfm_segment": FieldDef("گروه رفتار خرید", "choice", CustomerScore.rfm_segment, analytics.RFM_SEGMENTS),
     "health_score": FieldDef("امتیاز سلامت", "number", CustomerScore.health_score),
     "health_band": FieldDef("وضعیت سلامت", "choice", CustomerScore.health_band,
                             {k: v[0] for k, v in analytics.insights.HEALTH_BANDS.items()}),
-    "churn_risk": FieldDef("ریسک ریزش", "number", CustomerScore.churn_risk),
-    "churn_band": FieldDef("سطح ریسک ریزش", "choice", CustomerScore.churn_band, analytics.insights.CHURN_BANDS),
+    "churn_risk": FieldDef("احتمال ریزش (درصد)", "number", CustomerScore.churn_risk),
+    "churn_band": FieldDef("سطح احتمال ریزش", "choice", CustomerScore.churn_band, analytics.insights.CHURN_BANDS),
     "clv_historical": FieldDef("ارزش طول عمر (تاکنون)", "number", CustomerScore.clv_historical),
     "clv_predicted": FieldDef("ارزش طول عمر (پیش‌بینی)", "number", CustomerScore.clv_predicted),
     "overdue_amount": FieldDef("بدهی معوق", "number", CustomerScore.overdue_amount),
@@ -73,7 +73,7 @@ OPERATORS = {"=": "برابر", "!=": "نابرابر", ">": "بزرگ‌تر", 
              "in": "یکی از", "not_in": "هیچ‌کدام از", "between": "بین", "contains": "شامل", "is_null": "خالی", "not_null": "پر"}
 
 SYSTEM_SEGMENTS = (
-    ("VIP", "مشتریان ویژه (VIP)", {"any": [{"field": "priority_code", "op": "=", "value": "VIP"},
+    ("VIP", "مشتریان ویژه", {"any": [{"field": "priority_code", "op": "=", "value": "VIP"},
                                           {"field": "rfm_segment", "op": "=", "value": "CHAMPIONS"}]}),
     ("HIGH_VALUE", "ارزش بالا", {"all": [{"field": "m_score", "op": ">=", "value": 4}]}),
     ("NEW", "مشتریان جدید", {"all": [{"field": "first_purchase", "op": ">=", "value": {"days_ago": 90}}]}),
@@ -103,7 +103,7 @@ def _value(fd: FieldDef, v):
 def _cond(rule: dict):
     """قاعدهٔ JSON ← عبارت SQL. قاعدهٔ نامعتبر ValueError می‌دهد (پیش از ذخیره)."""
     if not isinstance(rule, dict):
-        raise ValueError("قاعدهٔ سگمنت نامعتبر است.")
+        raise ValueError("قاعدهٔ بخش مشتری نامعتبر است.")
     if "all" in rule or "any" in rule:
         parts = [_cond(r) for r in rule.get("all", rule.get("any")) or []]
         if not parts:
@@ -113,7 +113,7 @@ def _cond(rule: dict):
         return not_(_cond(rule["not"]))
     fd = FIELDS.get(rule.get("field"))
     if fd is None:
-        raise ValueError(f"فیلد سگمنت ناشناخته است: {rule.get('field')}")
+        raise ValueError(f"فیلد بخش مشتری ناشناخته است: {rule.get('field')}")
     col, op, raw = fd.column, rule.get("op"), rule.get("value")
     if op == "is_null":
         return col.is_(None)
@@ -183,7 +183,7 @@ def get_segment(company_id: int, segment_id: int) -> Segment:
     with new_session() as session:
         seg = session.get(Segment, segment_id)
         if seg is None or seg.company_id != company_id:
-            raise ValueError("سگمنت نامعتبر است.")
+            raise ValueError("بخش مشتری نامعتبر است.")
         session.expunge(seg)
         return seg
 
@@ -192,18 +192,18 @@ def save_segment(company_id: int, user_id: int | None, *, segment_id: int | None
                  rule: dict, description: str | None = None, is_active: bool = True) -> int:
     code, name = (code or "").strip().upper(), (name or "").strip()
     if not code or not name:
-        raise ValueError("کد و نام سگمنت الزامی است.")
+        raise ValueError("کد و نام بخش مشتری الزامی است.")
     validate_rule(rule)
     with new_session() as session:
         dup = session.scalar(select(Segment.segment_id).where(Segment.company_id == company_id, Segment.code == code))
         if dup and dup != segment_id:
-            raise ValueError("کد سگمنت تکراری است.")
+            raise ValueError("کد بخش مشتری تکراری است.")
         if segment_id:
             seg = session.get(Segment, segment_id)
             if seg is None or seg.company_id != company_id:
-                raise ValueError("سگمنت نامعتبر است.")
+                raise ValueError("بخش مشتری نامعتبر است.")
             if seg.is_system and seg.code != code:
-                raise ValueError("کد سگمنت سیستمی قابل تغییر نیست.")
+                raise ValueError("کد بخش مشتری سیستمی قابل تغییر نیست.")
         else:
             seg = Segment(company_id=company_id, created_by_user_id=user_id, is_system=False)
             session.add(seg)
@@ -219,9 +219,9 @@ def delete_segment(company_id: int, user_id: int | None, segment_id: int) -> Non
     with new_session() as session:
         seg = session.get(Segment, segment_id)
         if seg is None or seg.company_id != company_id:
-            raise ValueError("سگمنت نامعتبر است.")
+            raise ValueError("بخش مشتری نامعتبر است.")
         if seg.is_system:
-            raise ValueError("سگمنت سیستمی حذف نمی‌شود؛ می‌توانید آن را غیرفعال کنید.")
+            raise ValueError("بخش مشتری سیستمی حذف نمی‌شود؛ می‌توانید آن را غیرفعال کنید.")
         c.audit(session, company_id, user_id, "Segment", segment_id, "DELETE", {"code": seg.code})
         session.delete(seg)
         session.commit()

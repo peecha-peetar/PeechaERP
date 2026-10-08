@@ -75,6 +75,7 @@ _TAB_FORMS: dict[str, tuple[str, ...]] = {
     "چاپ و گزارش‌ها": ("report_settings",),
     "دارایی‌های ثابت": ("fa_setup",),
     "تولید": ("prd_settings",),
+    "ارتباط با مشتری": ("crm_settings",),
 }
 _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
     ("کدینگ حسابداری", "تعداد رقم سطوح تفصیلی"): ("detail_level_digits",),
@@ -86,6 +87,7 @@ _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
     ("کاربران و دسترسی‌ها", "طراحی گردش کار"): ("workflow_designer",),
     ("داده‌های حسابداری", "ترجمه‌ها"): ("translations",),
     ("انبار و موجودی", "قیمت‌گذاری"): ("inventory_settings", "costing_settings"),
+    ("ارتباط با مشتری", "الگوهای پیام"): ("crm_settings", "crm_automation"),
 }
 
 
@@ -174,6 +176,8 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # تنظیماتِ بهایِ تمام‌شده همان «انبار و موجودی › قیمت‌گذاری» است.
         self._add_outer_tab("دارایی‌های ثابت", self._build_fixed_assets_tab())
         self._add_outer_tab("تولید", self._build_production_tab())
+        # R289: تنظیمات ارتباط با مشتری (چرخ‌دندهٔ کنار منوی «مدیریت ارتباط با مشتری»)
+        self._add_outer_tab("ارتباط با مشتری", self._build_crm_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
         self.no_access_label = QLabel("به هیچ بخشی از تنظیمات دسترسی ندارید؛ از مدیر سیستم بخواهید در «نقش‌ها و دسترسی‌ها» فعال کند.")
@@ -402,6 +406,18 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         from peecha.ui.screens.production import PrdSettingsScreen
 
         return self._sub_tabs([("تنظیمات کلی تولید", PrdSettingsScreen())])
+
+    def _build_crm_tab(self):
+        from peecha.ui.screens import crm
+
+        return self._sub_tabs([
+            ("قیف فروش و منابع سرنخ", crm.CrmSettingsScreen()),
+            ("باشگاه مشتریان", crm.LoyaltyRulesPanel()),
+            ("امتیازدهی سرنخ", crm.LeadScoringPanel()),
+            ("تعهد زمانی تیکت‌ها", crm.SlaPoliciesPanel()),
+            ("الگوهای پیام", crm.TemplatesPanel()),
+            ("تحلیل مشتری", crm.AnalyticsSettingsPanel()),
+        ])
 
     def apply_permissions(self) -> None:
         cache: dict[str, bool] = {}

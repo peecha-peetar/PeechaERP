@@ -48,7 +48,7 @@ const ADDRESS_TYPE_LABELS: Record<string, string> = {
 };
 const SEGMENT_LABELS: Record<string, string> = {
   NEW: "مشتری جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
-  AT_RISK: "در معرض ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
+  AT_RISK: "در معرض ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "ویژه",
 };
 
 function SectionHeader({ label, count }: { label: string; count: number }) {
@@ -91,13 +91,13 @@ function CrmInsights({ crm }: { crm: Crm360Response }) {
       {a ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: spacing.sm }}>
           <StatTile label="سلامت" value={`${a.health_score} — ${a.health_label}`} tone={HEALTH_TONE[a.health_band]} />
-          <StatTile label="ریسک ریزش" value={`${a.churn_risk}٪ — ${a.churn_label}`} tone={a.churn_band === "HIGH" ? "danger" : undefined} />
-          <StatTile label="RFM" value={`${a.rfm} — ${a.rfm_label}`} />
+          <StatTile label="احتمال ریزش" value={`${a.churn_risk}٪ — ${a.churn_label}`} tone={a.churn_band === "HIGH" ? "danger" : undefined} />
+          <StatTile label="رفتار خرید" value={`${a.rfm} — ${a.rfm_label}`} />
           <StatTile label="ارزش طول عمر" value={formatAmount(a.clv_historical)} />
         </View>
       ) : null}
       {a && a.segments.length > 0 ? (
-        <Text style={[typography.caption, { color: colors.textSecondary }]}>سگمنت‌ها: {a.segments.join("، ")}</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>بخش‌های مشتری: {a.segments.join("، ")}</Text>
       ) : null}
       {crm.loyalty && crm.loyalty.lifetime_points > 0 ? (
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xxs }]}>
@@ -388,7 +388,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack, onNewTic
         ))
       )}
 
-      <SectionHeader label="فعالیت‌های CRM" count={activities.length} />
+      <SectionHeader label="فعالیت‌های پیگیری مشتری" count={activities.length} />
       {openActivities.length > 0 ? (
         <Text style={[typography.caption, { color: colors.warning, marginBottom: spacing.sm }]}>
           {openActivities.length} فعالیت باز نیاز به پیگیری دارد.
@@ -452,7 +452,7 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack, onNewTic
           <Button label="انصراف" variant="ghost" onPress={resetActivityForm} style={{ marginTop: spacing.sm }} />
         </Card>
       ) : (
-        <Button label="افزودن فعالیت CRM" variant="secondary" onPress={() => setShowActivityForm(true)} />
+        <Button label="افزودن فعالیت پیگیری" variant="secondary" onPress={() => setShowActivityForm(true)} />
       )}
 
       <SectionHeader label="آدرس‌ها" count={addresses.length} />

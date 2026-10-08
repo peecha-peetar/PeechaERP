@@ -27,6 +27,13 @@ STATUS = {"QUEUED": "در صف", "SENT": "ارسال‌شده", "FAILED": "نا�
 _ACTIVITY_TYPE = {"SMS": "MESSAGE", "WHATSAPP": "MESSAGE", "TELEGRAM": "MESSAGE", "EMAIL": "EMAIL", "INTERNAL": "NOTE"}
 TEMPLATE_FIELDS = {"name": "نام مشتری/سرنخ", "company": "نام شرکت شما", "balance": "ماندهٔ حساب", "overdue": "بدهی معوق",
                    "days": "روزهای بدون خرید", "amount": "مبلغ", "subject": "موضوع"}
+# R289: جای‌نگهدار فارسی هم‌ارز هر فیلد ({نام} همان {name})؛ متن‌های قدیمی انگلیسی هم کار می‌کنند.
+PERSIAN_FIELDS = {"نام": "name", "شرکت": "company", "مانده": "balance", "معوق": "overdue", "روز": "days", "مبلغ": "amount",
+                  "موضوع": "subject"}
+
+
+def fields_hint() -> str:
+    return "، ".join(f"{{{fa}}} {TEMPLATE_FIELDS[en]}" for fa, en in PERSIAN_FIELDS.items())
 
 
 @dataclass
@@ -82,8 +89,10 @@ class _SafeDict(dict):
 
 
 def render(text: str, values: dict) -> str:
-    """جای‌گذاری {name} و ... ؛ فیلد ناشناخته دست‌نخورده می‌ماند (خطا نمی‌دهد)."""
-    return string.Formatter().vformat(text or "", (), _SafeDict({k: v for k, v in values.items() if v is not None}))
+    """جای‌گذاری {نام} / {name} و ... ؛ فیلد ناشناخته دست‌نخورده می‌ماند (خطا نمی‌دهد)."""
+    known = {k: v for k, v in values.items() if v is not None}
+    known.update({fa: known[en] for fa, en in PERSIAN_FIELDS.items() if en in known and fa not in known})
+    return string.Formatter().vformat(text or "", (), _SafeDict(known))
 
 
 def list_templates(company_id: int, active_only: bool = False) -> list[MessageTemplate]:
@@ -190,7 +199,7 @@ def send_message(company_id: int, user_id: int | None, channel: str, body: str, 
         session.commit()
         message_id = msg.message_id
     if channel == "INTERNAL":
-        c.notify(company_id, notify_user_id, "CRM_MESSAGE", subj or "پیام CRM", text, "CrmCustomer" if customer_id else "CrmMessage",
+        c.notify(company_id, notify_user_id, "CRM_MESSAGE", subj or "پیام ارتباط با مشتری", text, "CrmCustomer" if customer_id else "CrmMessage",
                  customer_id or message_id)
         result = SendResult(True)
         provider_code = "NOTIFICATION"

@@ -83,7 +83,7 @@ _NAV_ICONS = {
 }
 
 # R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11}
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11, "CRM": 12}
 # زیرتبِ مقصد برایِ ماژول‌هایی که تنظیماتشان درونِ تبِ ماژولِ دیگری است
 _SETTINGS_SUBTAB_BY_GROUP_CODE = {"COSTING": (7, "قیمت‌گذاری")}
 

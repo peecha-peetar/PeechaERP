@@ -259,11 +259,11 @@ CRM_REPORT_MENU = [
         ("CRM_WON_LOST", "تحلیل برد و باخت"), ("CRM_PERFORMANCE", "عملکرد فروشندگان"), ("CRM_FORECAST", "پیش‌بینی فروش"),
     ]),
     ("CRM_CUST", "تحلیل مشتری", [
-        ("CRM_RFM", "تحلیل RFM مشتریان"), ("CRM_CHURN", "مشتریان در معرض ریزش"), ("CRM_CLV", "ارزش طول عمر مشتریان"),
+        ("CRM_RFM", "تحلیل رفتار خرید مشتریان"), ("CRM_CHURN", "مشتریان در معرض ریزش"), ("CRM_CLV", "ارزش طول عمر مشتریان"),
         ("CRM_INACTIVE", "مشتریان غیرفعال"),
     ]),
     ("CRM_SERV", "خدمات مشتری", [
-        ("CRM_TICKETS_SLA", "تیکت‌ها و پایبندی SLA"), ("CRM_COMPLAINTS", "شکایت‌های مشتریان"), ("CRM_SATISFACTION", "رضایت مشتری"),
+        ("CRM_TICKETS_SLA", "تیکت‌ها و پایبندی به تعهد زمانی"), ("CRM_COMPLAINTS", "شکایت‌های مشتریان"), ("CRM_SATISFACTION", "رضایت مشتری"),
     ]),
     ("CRM_MKT", "بازاریابی و فعالیت", [
         ("CRM_CAMPAIGNS", "عملکرد کمپین‌ها"), ("CRM_ACTIVITIES", "فعالیت‌ها به تفکیک کاربر"), ("CRM_OVERDUE", "پیگیری‌های عقب‌افتاده"),
@@ -533,17 +533,17 @@ NAV_ITEMS = [
         "code": "CRM",
         "label": "مدیریت ارتباط با مشتری",
         "children": [
-            {"code": "CRM_DASHBOARD", "label": "داشبورد CRM", "screen": "crm_dashboard"},
-            {"code": "CRM_CUSTOMER360", "label": "پروندهٔ ۳۶۰ مشتری", "screen": "crm_customer360"},
+            {"code": "CRM_DASHBOARD", "label": "داشبورد ارتباط با مشتری", "screen": "crm_dashboard"},
+            {"code": "CRM_CUSTOMER360", "label": "پروندهٔ جامع مشتری", "screen": "crm_customer360"},
             {"code": "CRM_TASKS", "label": "مرکز کارها و پیگیری‌ها", "screen": "crm_tasks"},
             {"code": "CRM_LEADS", "label": "سرنخ‌ها", "screen": "crm_leads"},
             {"code": "CRM_PIPELINE", "label": "قیف فروش و فرصت‌ها", "screen": "crm_pipeline"},
-            {"code": "CRM_ANALYTICS", "label": "تحلیل مشتری و سگمنت‌ها", "screen": "crm_analytics"},
+            {"code": "CRM_ANALYTICS", "label": "تحلیل و بخش‌بندی مشتریان", "screen": "crm_analytics"},
             {"code": "CRM_CAMPAIGNS", "label": "کمپین‌ها و باشگاه مشتریان", "screen": "crm_campaigns"},
             {"code": "CRM_TICKETS", "label": "تیکت‌ها و شکایات", "screen": "crm_tickets"},
-            {"code": "CRM_AUTOMATION", "label": "اتوماسیون و پیام‌ها", "screen": "crm_automation"},
+            {"code": "CRM_AUTOMATION", "label": "خودکارسازی و پیام‌ها", "screen": "crm_automation"},
             {"code": "CRM_REPORTS", "label": "گزارش‌ها", "children": _report_menu("CRM_RPT", "warehouse_report_", CRM_REPORT_MENU)},
-            {"code": "CRM_SETTINGS", "label": "تنظیمات ارتباط با مشتری (قیف فروش، منابع سرنخ)", "screen": "crm_settings", "in_ribbon": False},
+            {"code": "CRM_SETTINGS", "label": "تنظیمات ارتباط با مشتری", "screen": "crm_settings", "hidden_from_sidebar": True},
         ],
     },
     {
@@ -786,6 +786,20 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_SALES_BY_ITEM", "🛍️"),
         ("REPORTS_CUSTOMER_PROFIT", "💹"),
         ("REPORTS_SALES_FORECAST", "🔮"),
+    ],
+    # R289: ریبون ارتباط با مشتری
+    "CRM": [
+        ("CRM_DASHBOARD", "📊"),
+        ("CRM_CUSTOMER360", "👤"),
+        ("CRM_TASKS", "✅"),
+        ("CRM_LEADS", "🧲"),
+        ("CRM_PIPELINE", "🎯"),
+        ("CRM_TICKETS", "🎫"),
+        ("CRM_CAMPAIGNS", "📣"),
+        ("CRM_ANALYTICS", "📈"),
+        ("CRM_AUTOMATION", "🤖"),
+        ("CRM_RPT_CRM_PERFORMANCE", "🏆"),
+        ("CRM_RPT_CRM_FORECAST", "🔮"),
     ],
     "SETTINGS": [],
 }

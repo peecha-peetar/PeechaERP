@@ -51,7 +51,7 @@ def ensure_default_policies(company_id: int) -> None:
         if session.scalar(select(func.count()).where(SlaPolicy.company_id == company_id)):
             return
         for name, prio, first, resolve in DEFAULT_POLICIES:
-            session.add(SlaPolicy(company_id=company_id, name=f"SLA {name}", priority_code=prio,
+            session.add(SlaPolicy(company_id=company_id, name=f"اولویت {name}", priority_code=prio,
                                   first_response_hours=decimal.Decimal(first), resolution_hours=decimal.Decimal(resolve)))
         session.commit()
 
@@ -71,7 +71,7 @@ def save_policy(company_id: int, user_id: int | None, *, sla_policy_id: int | No
                 resolution_hours, ticket_type: str | None = None, priority_code: str | None = None,
                 escalate_to_user_id: int | None = None, is_active: bool = True) -> int:
     if not (name or "").strip():
-        raise ValueError("نام SLA الزامی است.")
+        raise ValueError("نام سیاست تعهد زمانی الزامی است.")
     first, resolve = decimal.Decimal(first_response_hours or 0), decimal.Decimal(resolution_hours or 0)
     if first <= 0 or resolve <= 0:
         raise ValueError("زمان پاسخ و حل باید بیشتر از صفر باشد.")
@@ -85,7 +85,7 @@ def save_policy(company_id: int, user_id: int | None, *, sla_policy_id: int | No
         if sla_policy_id:
             pol = session.get(SlaPolicy, sla_policy_id)
             if pol is None or pol.company_id != company_id:
-                raise ValueError("SLA نامعتبر است.")
+                raise ValueError("سیاست تعهد زمانی نامعتبر است.")
         else:
             pol = SlaPolicy(company_id=company_id)
             session.add(pol)
@@ -102,7 +102,7 @@ def delete_policy(company_id: int, user_id: int | None, sla_policy_id: int) -> N
     with new_session() as session:
         pol = session.get(SlaPolicy, sla_policy_id)
         if pol is None or pol.company_id != company_id:
-            raise ValueError("SLA نامعتبر است.")
+            raise ValueError("سیاست تعهد زمانی نامعتبر است.")
         c.audit(session, company_id, user_id, "SlaPolicy", sla_policy_id, "DELETE", {"name": pol.name})
         session.delete(pol)
         session.commit()
@@ -351,7 +351,7 @@ def check_sla(company_id: int, now: datetime.datetime | None = None) -> list[int
         session.commit()
     for tid, no, subject, what, targets in notes:
         for u in targets:
-            c.notify(company_id, u, "CRM_TICKET_SLA", f"نقض SLA تیکت {no}: {what} گذشته است", subject, "CrmTicket", tid)
+            c.notify(company_id, u, "CRM_TICKET_SLA", f"نقض تعهد زمانی تیکت {no}: {what} گذشته است", subject, "CrmTicket", tid)
     return [n[0] for n in notes]
 
 

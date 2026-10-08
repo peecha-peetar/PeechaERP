@@ -50,7 +50,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const SEGMENT_LABELS: Record<string, string> = {
   NEW: "مشتری جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
-  AT_RISK: "در معرض ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
+  AT_RISK: "در معرض ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "ویژه",
 };
 
 function DashboardStat({ label, value }: { label: string; value: string }) {

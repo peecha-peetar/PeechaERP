@@ -102,7 +102,7 @@ check({s.code for s in seg.segments_of_customer(company_id, cust_a)} >= {"VIP", 
 # ===== پروندهٔ ۳۶۰ =====
 d360 = c360.customer_360(company_id, cust_a)
 an = d360["analytics"]
-check(an and an["health_label"] and an["rfm_label"] == "قهرمانان" and "مشتریان ویژه (VIP)" in an["segments"], "360 shows analytics block")
+check(an and an["health_label"] and an["rfm_label"] == "مشتریان برتر" and "مشتریان ویژه" in an["segments"], "360 shows analytics block")
 
 # ===== API =====
 from fastapi.testclient import TestClient

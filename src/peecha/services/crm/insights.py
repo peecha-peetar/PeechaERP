@@ -107,7 +107,7 @@ class RuleBasedProvider:
             out.append({"code": "SERVICE", "action": "TASK", "severity": "warning", "suggestion": "رسیدگی به شکایت",
                         "text": f"{s.open_complaints} شکایت یا درخواست باز دارد."})
         if s.priority_code == "VIP":
-            out.append({"code": "VIP", "action": "TASK", "severity": "info", "suggestion": "خدمت با اولویت", "text": "مشتری ویژه (VIP) است."})
+            out.append({"code": "VIP", "action": "TASK", "severity": "info", "suggestion": "خدمت با اولویت", "text": "مشتری ویژه است."})
         if s.freq_prev_90 and s.freq_recent_90 < s.freq_prev_90 / 2:
             out.append({"code": "DECLINE", "action": "MEETING", "severity": "warning", "suggestion": "جلسه برای بررسی نیاز",
                         "text": "دفعات خرید سه ماه اخیر به کمتر از نصف رسیده است."})

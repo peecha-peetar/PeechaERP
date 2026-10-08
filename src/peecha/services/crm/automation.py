@@ -31,43 +31,43 @@ ZERO = decimal.Decimal(0)
 class Param:
     key: str
     label: str
-    kind: str  # int | stage | segment | text
+    kind: str  # int | stage | segment | user | text
     default: object = None
 
 
 TRIGGERS: dict[str, tuple[str, str, tuple[Param, ...]]] = {
     "CUSTOMER_INACTIVE": ("مشتری بدون خرید", "CUSTOMER", (Param("days", "روز بدون خرید", "int", 60),)),
-    "CHURN_HIGH": ("ریسک ریزش زیاد", "CUSTOMER", ()),
+    "CHURN_HIGH": ("احتمال ریزش زیاد", "CUSTOMER", ()),
     "INVOICE_OVERDUE": ("فاکتور معوق", "CUSTOMER", (Param("days", "روز گذشته از سررسید", "int", 1),
                                                     Param("min_amount", "حداقل مبلغ معوق", "int", 0))),
     "LEAD_NOT_CONTACTED": ("سرنخ بدون تماس", "LEAD", (Param("hours", "ساعت پس از ثبت", "int", 24),)),
     "OPPORTUNITY_STALE": ("فرصت راکد در مرحله", "OPPORTUNITY", (Param("days", "روز در همان مرحله", "int", 14),
                                                                Param("stage_code", "فقط مرحله (کد، اختیاری)", "text", ""))),
-    "TICKET_SLA_BREACHED": ("نقض SLA تیکت", "TICKET", ()),
-    "SEGMENT_MEMBER": ("عضو سگمنت", "CUSTOMER", (Param("segment_id", "سگمنت", "segment", None),)),
+    "TICKET_SLA_BREACHED": ("نقض تعهد زمانی تیکت", "TICKET", ()),
+    "SEGMENT_MEMBER": ("عضو بخش مشتری", "CUSTOMER", (Param("segment_id", "بخش مشتری", "segment", None),)),
 }
 ACTIONS: dict[str, tuple[str, tuple[Param, ...]]] = {
     "CREATE_ACTIVITY": ("ساخت فعالیت/پیگیری", (Param("activity_type", "نوع فعالیت", "text", "FOLLOW_UP"),
-                                                Param("subject", "موضوع (با {name} و ...)", "text", "پیگیری {name}"),
+                                                Param("subject", "موضوع (با {نام} و ...)", "text", "پیگیری {نام}"),
                                                 Param("due_in_days", "موعد (روز بعد)", "int", 0),
                                                 Param("priority", "اولویت", "text", "NORMAL"),
-                                                Param("assign_to", "مسئول (OWNER یا شناسهٔ کاربر)", "text", "OWNER"))),
-    "NOTIFY": ("اعلان به کاربر", (Param("title", "عنوان", "text", "{name}"), Param("body", "متن", "text", ""),
-                                  Param("user_id", "کاربر (OWNER یا شناسه)", "text", "OWNER"))),
+                                                Param("assign_to", "مسئول", "user", "OWNER"))),
+    "NOTIFY": ("اعلان به کاربر", (Param("title", "عنوان", "text", "{نام}"), Param("body", "متن", "text", ""),
+                                  Param("user_id", "کاربر گیرنده", "user", "OWNER"))),
     "SEND_MESSAGE": ("ارسال پیام به مشتری", (Param("channel", "کانال", "text", "SMS"), Param("template_id", "الگو", "int", None),
                                               Param("body", "متن (اگر الگو نیست)", "text", ""))),
 }
 DEFAULT_RULES = (
     ("مشتری ۶۰ روز بدون خرید ← پیگیری فروش", "CUSTOMER_INACTIVE", {"days": 60}, "CREATE_ACTIVITY",
-     {"activity_type": "FOLLOW_UP", "subject": "پیگیری فروش: {name} ({days} روز بدون خرید)", "due_in_days": 0}, 30),
+     {"activity_type": "FOLLOW_UP", "subject": "پیگیری فروش: {نام} ({روز} روز بدون خرید)", "due_in_days": 0}, 30),
     ("فاکتور معوق ← پیگیری وصول", "INVOICE_OVERDUE", {"days": 1, "min_amount": 0}, "CREATE_ACTIVITY",
-     {"activity_type": "CALL", "subject": "پیگیری وصول {name} (معوق {overdue})", "due_in_days": 0, "priority": "HIGH"}, 7),
+     {"activity_type": "CALL", "subject": "پیگیری وصول {نام} (معوق {معوق})", "due_in_days": 0, "priority": "HIGH"}, 7),
     ("سرنخ ۲۴ ساعت بدون تماس ← اعلان به مسئول", "LEAD_NOT_CONTACTED", {"hours": 24}, "NOTIFY",
-     {"title": "سرنخ {name} هنوز تماس نگرفته است", "user_id": "OWNER"}, 3),
+     {"title": "سرنخ {نام} هنوز تماس نگرفته است", "user_id": "OWNER"}, 3),
     ("فرصت ۱۴ روز راکد ← وظیفه", "OPPORTUNITY_STALE", {"days": 14}, "CREATE_ACTIVITY",
-     {"activity_type": "TASK", "subject": "پیگیری فرصت {name} ({days} روز بدون تغییر)", "due_in_days": 1}, 14),
-    ("ریسک ریزش زیاد ← جلسه", "CHURN_HIGH", {}, "CREATE_ACTIVITY",
-     {"activity_type": "MEETING", "subject": "جلسهٔ حفظ مشتری: {name}", "due_in_days": 3, "priority": "HIGH"}, 30),
+     {"activity_type": "TASK", "subject": "پیگیری فرصت {نام} ({روز} روز بدون تغییر)", "due_in_days": 1}, 14),
+    ("احتمال ریزش زیاد ← جلسه", "CHURN_HIGH", {}, "CREATE_ACTIVITY",
+     {"activity_type": "MEETING", "subject": "جلسهٔ حفظ مشتری: {نام}", "due_in_days": 3, "priority": "HIGH"}, 30),
 )
 
 
@@ -113,7 +113,7 @@ def _validate(company_id: int, trigger_code: str, conditions: dict, action_code:
             raise ValueError(f"«{p.label}» نمی‌تواند منفی باشد.")
         if p.kind == "segment":
             if not v:
-                raise ValueError("سگمنت قاعده انتخاب نشده است.")
+                raise ValueError("بخش مشتری قاعده انتخاب نشده است.")
             seg_service.get_segment(company_id, int(v))
     if action_code == "CREATE_ACTIVITY":
         if params.get("activity_type", "FOLLOW_UP") not in c.ACTIVITY_TYPES or params.get("activity_type") == "OPPORTUNITY":
@@ -127,7 +127,7 @@ def _validate(company_id: int, trigger_code: str, conditions: dict, action_code:
             raise ValueError("برای ارسال پیام، الگو یا متن لازم است.")
     owner = params.get("assign_to", params.get("user_id", "OWNER"))
     if owner not in (None, "", "OWNER") and not str(owner).isdigit():
-        raise ValueError("مسئول باید OWNER یا شناسهٔ کاربر باشد.")
+        raise ValueError("مسئول قاعده باید «مسئول همان مورد» یا یکی از کاربران باشد.")
 
 
 def save_rule(company_id: int, user_id: int | None, *, rule_id: int | None = None, name: str, trigger_code: str,
@@ -250,7 +250,7 @@ def _act(company_id: int, rule: AutomationRule, m: Match, actor: int) -> dict:
     p = rule.action_params or {}
     if rule.action_code == "CREATE_ACTIVITY":
         aid = act_service.create_activity(company_id, actor, act_service.ActivityFields(
-            p.get("activity_type") or "FOLLOW_UP", comm.render(p.get("subject") or "پیگیری {name}", m.values)[:200],
+            p.get("activity_type") or "FOLLOW_UP", comm.render(p.get("subject") or "پیگیری {نام}", m.values)[:200],
             customer_detail_account_id=m.customer_id, lead_id=m.lead_id,
             opportunity_id=m.entity_id if m.entity_type == "OPPORTUNITY" else None,
             ticket_id=m.entity_id if m.entity_type == "TICKET" else None,
@@ -261,7 +261,7 @@ def _act(company_id: int, rule: AutomationRule, m: Match, actor: int) -> dict:
     if rule.action_code == "NOTIFY":
         target = _owner(rule, p.get("user_id"), m)
         if target:
-            c.notify(company_id, target, "CRM_AUTOMATION", comm.render(p.get("title") or "{name}", m.values)[:200],
+            c.notify(company_id, target, "CRM_AUTOMATION", comm.render(p.get("title") or "{نام}", m.values)[:200],
                      comm.render(p.get("body") or rule.name, m.values), f"Crm{m.entity_type.title()}", m.entity_id)
         return {"notified": target}
     mid = comm.send_message(company_id, actor, p.get("channel") or "SMS", p.get("body") or "", customer_id=m.customer_id,

@@ -78,7 +78,7 @@ with new_session() as s:
     s.commit()
 check(tk.check_sla(company_id) == [t2] and tk.get_ticket(company_id, t2).escalation_level == 2, "resolution breach → level 2")
 from peecha.services import notifications as notif
-check(any("نقض SLA" in n.title for n in notif.list_notifications(uid, company_id)), "SLA breach notified to creator")
+check(any("نقض تعهد زمانی" in n.title for n in notif.list_notifications(uid, company_id)), "SLA breach notified to creator")
 
 # ===== ویرایش، ارجاع و فهرست =====
 tk.update_ticket(company_id, uid, t2, TF(cust_b, "سؤال قیمت عمده", "INQUIRY", "CRITICAL", category="قیمت"))

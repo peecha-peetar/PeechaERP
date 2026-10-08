@@ -34,7 +34,7 @@ CUSTOMER_TYPES = {"INDIVIDUAL": "شخص", "COMPANY": "شرکت", "STORE": "فر�
 PERSON_TYPES = {"NATURAL": "حقیقی", "LEGAL": "حقوقی"}
 PROFILE_STATUS = {"DRAFT": "پیش‌نویس", "PENDING_APPROVAL": "در انتظار تایید", "ACTIVE": "فعال", "SUSPENDED": "معلق",
                   "BLACKLISTED": "لیست سیاه", "INACTIVE": "غیرفعال"}
-PRIORITY = {"LOW": "کم", "NORMAL": "عادی", "HIGH": "بالا", "VIP": "ویژه (VIP)"}
+PRIORITY = {"LOW": "کم", "NORMAL": "عادی", "HIGH": "بالا", "VIP": "ویژه"}
 ONBOARDING = {"WALK_IN": "مراجعهٔ حضوری", "ONLINE": "آنلاین", "REFERRAL": "معرفی", "IMPORTED": "انتقال اطلاعات",
               "AGENT": "ویزیتور"}
 DOC_LABELS = {"SALES_PROFORMA": "پیش‌فاکتور", "SALES_ORDER": "سفارش", "SALES_INVOICE": "فاکتور", "SALES_RETURN": "برگشت از فروش"}
@@ -240,7 +240,7 @@ def smart_actions(ident: dict, fin: dict, sal: dict, open_tickets: int = 0) -> l
         out.append({"code": "CREDIT", "severity": "danger", "action": "TASK", "text": "از سقف اعتبار عبور کرده است.",
                     "suggestion": "بررسی اعتبار پیش از فروش نسیه"})
     if ident.get("priority_code") == "VIP":
-        out.append({"code": "VIP", "severity": "info", "action": "TASK", "text": "مشتری ویژه (VIP) است.",
+        out.append({"code": "VIP", "severity": "info", "action": "TASK", "text": "مشتری ویژه است.",
                     "suggestion": "خدمت با اولویت"})
     if open_tickets:
         out.append({"code": "TICKETS", "severity": "warning", "action": "TASK", "text": f"{open_tickets} درخواست پشتیبانی باز دارد.",

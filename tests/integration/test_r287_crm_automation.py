@@ -60,7 +60,7 @@ check(len(auto.list_rules(company_id)) == 5, "defaults seeded once")
 check(fx.raises(lambda: auto.save_rule(company_id, uid, name="x", trigger_code="NOPE", conditions={}, action_code="NOTIFY",
                                        action_params={}), "رویداد"), "trigger validated")
 check(fx.raises(lambda: auto.save_rule(company_id, uid, name="x", trigger_code="SEGMENT_MEMBER", conditions={}, action_code="NOTIFY",
-                                       action_params={}), "سگمنت"), "segment required")
+                                       action_params={}), "بخش مشتری"), "segment required")
 check(fx.raises(lambda: auto.save_rule(company_id, uid, name="x", trigger_code="CHURN_HIGH", conditions={}, action_code="SEND_MESSAGE",
                                        action_params={"channel": "SMS"}), "الگو یا متن"), "message action needs body")
 

@@ -70,7 +70,7 @@ def _apply(session, company_id: int, camp: Campaign, f: CampaignFields) -> None:
     if f.segment_id:
         seg = session.get(Segment, f.segment_id)
         if seg is None or seg.company_id != company_id:
-            raise ValueError("سگمنت نامعتبر است.")
+            raise ValueError("بخش مشتری نامعتبر است.")
     for k, v in f.__dict__.items():
         setattr(camp, k, (v.strip() or None) if isinstance(v, str) else v)
     camp.name = f.name.strip()
@@ -99,7 +99,7 @@ def update_campaign(company_id: int, user_id: int, campaign_id: int, f: Campaign
         if camp.status_code in ("COMPLETED", "CANCELLED"):
             raise ValueError("کمپین بسته‌شده قابل ویرایش نیست.")
         if camp.status_code != "DRAFT" and (f.campaign_type != camp.campaign_type or f.segment_id != camp.segment_id):
-            raise ValueError("پس از اجرا، نوع و سگمنت کمپین تغییر نمی‌کند؛ فقط تاریخ، هزینه و توضیحات.")
+            raise ValueError("پس از اجرا، نوع و بخش مشتری کمپین تغییر نمی‌کند؛ فقط تاریخ، هزینه و توضیحات.")
         before = {k: getattr(camp, k) for k in f.__dict__}
         _apply(session, company_id, camp, f)
         c.audit(session, company_id, user_id, "Campaign", campaign_id, "UPDATE",
@@ -155,7 +155,7 @@ def build_members(company_id: int, user_id: int, campaign_id: int) -> int:
         if camp.status_code != "DRAFT":
             raise ValueError("مخاطبان فقط پیش از اجرای کمپین ساخته می‌شوند.")
         if not camp.segment_id:
-            raise ValueError("برای کمپین سگمنت انتخاب نشده است.")
+            raise ValueError("برای کمپین بخش مشتری انتخاب نشده است.")
         segment_id = camp.segment_id
     ids = seg_service.members(company_id, segment_id)
     return _add_customers(company_id, user_id, campaign_id, ids, replace_targeted=True)

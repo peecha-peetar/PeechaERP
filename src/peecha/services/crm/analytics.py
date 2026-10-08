@@ -23,9 +23,9 @@ from peecha.services.crm import common as c
 from peecha.services.crm import insights
 
 ZERO = decimal.Decimal(0)
-RFM_SEGMENTS = {"CHAMPIONS": "قهرمانان", "LOYAL": "وفادار", "POTENTIAL": "وفادار بالقوه", "NEW": "مشتری تازه",
-                "PROMISING": "امیدوارکننده", "NEED_ATTENTION": "نیازمند توجه", "AT_RISK": "در معرض ریزش",
-                "HIBERNATING": "خواب‌رفته", "LOST": "از دست رفته", "NO_PURCHASE": "بدون خرید"}
+RFM_SEGMENTS = {"CHAMPIONS": "مشتریان برتر", "LOYAL": "وفادار", "POTENTIAL": "در مسیر وفاداری", "NEW": "مشتری تازه",
+                "PROMISING": "امیدبخش", "NEED_ATTENTION": "نیازمند توجه", "AT_RISK": "در معرض ریزش",
+                "HIBERNATING": "کم‌فعال", "LOST": "ازدست‌رفته", "NO_PURCHASE": "بدون خرید"}
 DEFAULT_OPTIONS = {"clv_horizon_months": 24, "rfm_window_days": 365, "dormant_days": 90, "inactivity_days": 60}
 
 
