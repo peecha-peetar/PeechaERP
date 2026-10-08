@@ -340,3 +340,72 @@ def import_legacy(company_id: int, user_id: int | None, form_code: str) -> int:
     return definitions.create_definition(company_id, user_id, code=f"LEGACY_{form_code}"[:40], name=f"تایید {adapter.label} (از کارتابل قبلی)",
                                          entity_type=adapter.entity_type, description="منتقل‌شده از کارتابل قدیمی",
                                          graph=graph, template_code=f"LEGACY:{form_code}")
+
+
+# --- یک مسیر تایید برای هر سند (R300) ---------------------------------------------------------------------------
+def legacy_forms(entity_type: str | None) -> list[str]:
+    """فرم‌های کارتابل قبلی که همین نوع سند را تایید می‌کنند."""
+    if entity_type == "FA_REQUEST":
+        from peecha.services.fixed_assets.approval import OPERATIONS
+
+        return [form for form, _event, _label in OPERATIONS.values()]
+    adapter = registry.get_adapter(entity_type)
+    return [adapter.form_code] if adapter and adapter.form_code else []
+
+
+def governs_approvals(graph: dict) -> bool:
+    """فرایندی که روی خود سند مرحلهٔ تایید دارد (نه فقط بررسی دوره‌ای یا اعلان)."""
+    trigger = graph.get("trigger") or {}
+    return trigger.get("type") in ("EVENT", "MANUAL") and any(n.get("type") == "APPROVAL" for n in graph.get("nodes") or [])
+
+
+def _active_graph(company_id: int, definition_id: int) -> dict:
+    d = definitions.get_definition(company_id, definition_id)
+    return definitions.get_graph(company_id, definition_id, d.active_version_id) if d.active_version_id else {}
+
+
+def active_legacy_for(company_id: int, entity_type: str | None) -> list[str]:
+    """نام فرم‌هایی که کارتابل قبلی‌شان برای این نوع سند هنوز روشن است."""
+    from peecha.services import cartable
+    from peecha.services.roles import FORM_LABELS
+
+    out = []
+    for form in legacy_forms(entity_type):
+        active, steps = cartable.get_workflow_steps(company_id, form)
+        if active and steps:
+            out.append(FORM_LABELS.get(form, form))
+    return out
+
+
+def retire_legacy(company_id: int, user_id: int | None, definition_id: int) -> list[str]:
+    """با اجرایی شدن فرایند تایید یک سند، کارتابل قبلی همان سند خاموش می‌شود (مراحلش برای برگرداندن می‌ماند).
+
+    موارد در جریان کارتابل قبلی تا پایان همان‌جا تایید می‌شوند؛ فقط درخواست تازه به آن نمی‌رود."""
+    from peecha.services import cartable
+    from peecha.services.roles import FORM_LABELS
+
+    d = definitions.get_definition(company_id, definition_id)
+    if not d.entity_type or not governs_approvals(_active_graph(company_id, definition_id)):
+        return []
+    retired = []
+    for form in legacy_forms(d.entity_type):
+        active, steps = cartable.get_workflow_steps(company_id, form)
+        if active and steps:
+            cartable.save_workflow_steps(company_id, form, False, [s.approver_role_id for s in steps])
+            retired.append(FORM_LABELS.get(form, form))
+    return retired
+
+
+definitions.RUNNABLE_HOOKS.append(retire_legacy)
+
+
+def governing_process(company_id: int, form_code: str) -> str | None:
+    """نام فرایند اجرایی‌ای که تایید سندهای این فرم را در دست دارد (برای جلوگیری از روشن کردن دوبارهٔ کارتابل قبلی)."""
+    from peecha.services.workflow.common import RUNNABLE_STATUSES
+
+    entity_types = [a.entity_type for a in registry.adapters() if form_code in legacy_forms(a.entity_type)]
+    for entity_type in entity_types:
+        for d in definitions.list_definitions(company_id, include_archived=False, entity_type=entity_type):
+            if d.status_code in RUNNABLE_STATUSES and governs_approvals(_active_graph(company_id, d.definition_id)):
+                return d.name
+    return None

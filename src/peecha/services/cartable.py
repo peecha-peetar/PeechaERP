@@ -382,7 +382,11 @@ def approve_item(cartable_item_id: int, user_id: int, comment: str = "") -> None
             # R291: اجرای سند پیش از ثبت «تایید نهایی»؛ اگر سرویس سند خطا بدهد، مورد در انتظار می‌ماند (نه نیمه‌کاره)
             handler = _HANDLERS.get(form_code)
             if handler is not None:
-                handler.on_approved(company_id, source_record_id, user_id)
+                # R300: موردی که همهٔ مراحل کارتابل قبلی را گذرانده، با قفل فرایند تازه دوباره متوقف نمی‌شود
+                from peecha.services.workflow import model_events
+
+                with model_events.ungated():
+                    handler.on_approved(company_id, source_record_id, user_id)
             item.status_id = _status_id(session, "APPROVED")
         _audit(session, item, user_id, "APPROVE", comment)
         session.commit()

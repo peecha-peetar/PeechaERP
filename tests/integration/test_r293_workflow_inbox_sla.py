@@ -181,7 +181,7 @@ check([w.key for w in inbox.approvals(company_id, a2)] and all(w.kind == "APPROV
 det = inbox.detail(company_id, a2, f"WF:{tasks.list_tasks(company_id, instance_id=i4)[0].task_id}")
 check(det["decisions"][0] == ("APPROVE", "تایید") and det["path"] and det["context"] == [("مبلغ", "۵")], f"detail for quick decision ({det['context']})")
 check(raises(lambda: inbox.quick_decide(company_id, a2, f"CARTABLE:{item}", "REJECT", ""), "علت"), "legacy reject needs reason")
-check(raises(lambda: inbox.detail(company_id, a2, "CRM:1"), "سند را باز کنید"), "follow-ups have no quick decision")
+check(raises(lambda: inbox.quick_decide(company_id, a2, "CRM:1", "APPROVE"), "سند را باز کنید"), "follow-ups have no quick decision")
 res = inbox.bulk_approve(company_id, a2, [w.key for w in inbox.approvals(company_id, a2)], "تایید گروهی")
 check(all(ok for _k, ok, _m in res) and len(res) == 2 and runtime.get_instance(company_id, i4).status_code == "COMPLETED",
       f"bulk approve across engine and legacy inbox ({res})")
@@ -202,6 +202,7 @@ from peecha import nav_catalog, session as sess
 from peecha.services import roles as roles_mod
 from peecha.ui import shell_window
 from peecha.ui.screens import workflow_center as ui
+from peecha.ui.screens import my_tasks as cartable_ui
 from peecha.ui.screens.system_settings import SystemSettingsScreen
 from peecha.ui.widgets import SummaryCard
 from peecha.db.models.security import User
@@ -209,7 +210,7 @@ from peecha.db.models.core import Company
 
 flat = {i["code"]: i for i in nav_catalog.flatten_nav_items()}
 ribbon = nav_catalog.DEFAULT_QUICK_ACCESS_BY_MODULE.get("WF", [])
-check({"WF_MY_WORK", "WF_APPROVALS", "WF_NOTIFICATIONS", "WF_DELEGATIONS"} <= {c for c, _ in ribbon} and
+check({"MY_TASKS", "WF_NOTIFICATIONS", "WF_DELEGATIONS"} <= {c for c, _ in ribbon} and
       all(c in flat for c, _ in ribbon), "workflow ribbon")
 check(flat["WF_SETTINGS"].get("hidden_from_sidebar") and shell_window._SETTINGS_TAB_BY_GROUP_CODE.get("WF") == 13,
       "settings gear → system settings tab 13")
@@ -236,13 +237,13 @@ def no_text_buttons(w, name):
 
 login(a1)
 i5 = runtime.start_instance(company_id, d, "REQ3", 1, started_by=requester)
-mw = ui.MyWorkScreen()
+mw = cartable_ui.MyTasksScreen()  # R300: «کارهای من» و «مرکز تایید» در «کارتابل من» یکی شدند
 mw.refresh()
 no_text_buttons(mw, "MyWork")
-check(len(mw.findChildren(SummaryCard)) == 5 and mw.cards["approvals"].text() == "۱" and mw.table.rowCount() >= 1, "my work screen loads")
-mw.kind.setCurrentIndex(mw.kind.findData("FOLLOWUP"))
-check(mw.table.rowCount() == 0 and not mw.empty.isHidden(), "filter by kind")
-mw.kind.setCurrentIndex(0)
+check(len(mw.findChildren(SummaryCard)) == 6 and mw.cards["approvals"].text() == "۱" and len(mw.cards_by_key) >= 1, "my work screen loads")
+mw.set_view("FOLLOWUP")
+check(not mw.cards_by_key, "filter by kind")
+mw.set_view("ALL")
 key5 = f"WF:{tasks.list_tasks(company_id, instance_id=i5)[0].task_id}"
 check(mw.select_key(key5) and mw.approve_selected() and runtime.get_instance(company_id, i5).status_code == "COMPLETED",
       "approve from my work")
@@ -250,10 +251,11 @@ check(mw.select_key(key5) and mw.approve_selected() and runtime.get_instance(com
 login(a1)
 i6 = runtime.start_instance(company_id, d, "REQ3", 1, started_by=requester)
 i7 = runtime.start_instance(company_id, d, "REQ3", 1, started_by=requester)
-ac = ui.ApprovalCenterScreen()
+ac = cartable_ui.MyTasksScreen()
 ac.refresh()
+ac.set_view("APPROVAL")
 no_text_buttons(ac, "ApprovalCenter")
-check(ac.table.rowCount() == 2 and ac.current is not None and "✔ ثبت و ارسال" in ac.d_path.text()
+check(len(ac.cards_by_key) == 2 and ac.current is not None and "✔ ثبت و ارسال" in ac.d_path.text()
       and ac.d_context.rowCount() == 1, "approval center shows context and path")
 check(not ac.buttons["changes"].isEnabled(), "changes button disabled when no correction path")
 check(ac.add_note("لطفاً مدارک پیوست شود") and ac.d_history.rowCount() >= 1, "note from approval center")
@@ -261,8 +263,9 @@ WARN.clear()
 check(not ac.decide("REJECT", "") and any("علت" in w for w in WARN), "reject without reason warns")
 ac.select_key(f"WF:{tasks.list_tasks(company_id, instance_id=i6)[0].task_id}")
 check(ac.decide("REJECT", "بودجه ندارد") and runtime.get_instance(company_id, i6).outcome_code == "REJECTED", "reject with reason")
-check(ac.table.rowCount() == 1, "list refreshed")
-ac.table.selectAll()
+check(len(ac.cards_by_key) == 1, "list refreshed")
+for c in ac.cards_by_key.values():
+    c.check.setChecked(True)
 res = ac.bulk_approve()
 check(res and all(ok for _k, ok, _m in res) and runtime.get_instance(company_id, i7).status_code == "COMPLETED", "bulk approve from UI")
 

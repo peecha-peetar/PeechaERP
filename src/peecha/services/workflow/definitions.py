@@ -478,6 +478,17 @@ def set_status(company_id: int, user_id: int | None, definition_id: int, status_
         _sync_triggers(session, d)
         audit(session, company_id, user_id, "Definition", definition_id, "UPDATE", {"status": status_code})
         session.commit()
+    if status_code in RUNNABLE_STATUSES:
+        _after_runnable(company_id, user_id, definition_id)
+
+
+# R300: کارهای پس از اجرایی شدن فرایند (مثل خاموش کردن کارتابل قبلی همان سند تا دو مسیر تایید هم‌زمان نباشد)
+RUNNABLE_HOOKS: list = []
+
+
+def _after_runnable(company_id: int, user_id: int | None, definition_id: int) -> None:
+    for hook in RUNNABLE_HOOKS:
+        hook(company_id, user_id, definition_id)
 
 
 def publish(company_id: int, user_id: int | None, definition_id: int) -> int:
@@ -505,8 +516,12 @@ def publish(company_id: int, user_id: int | None, definition_id: int) -> int:
         session.flush()
         _sync_triggers(session, d)
         audit(session, company_id, user_id, "Definition", definition_id, "PUBLISH", {"version_no": latest.version_no})
+        runnable = d.status_code in RUNNABLE_STATUSES
         session.commit()
-        return latest.version_id
+        version_id = latest.version_id
+    if runnable:
+        _after_runnable(company_id, user_id, definition_id)
+    return version_id
 
 
 def delete_definition(company_id: int, user_id: int | None, definition_id: int) -> None:

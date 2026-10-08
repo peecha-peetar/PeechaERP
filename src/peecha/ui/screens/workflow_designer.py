@@ -25,6 +25,16 @@ from peecha.services import roles as roles_service
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 
+def _governing_process(company_id: int, form_code: str) -> str | None:
+    try:
+        from peecha.services.workflow import registry, templates
+
+        registry.ensure_loaded()
+        return templates.governing_process(company_id, form_code)
+    except Exception:  # noqa: BLE001 -- نبود جدول‌های گردش کار رفتار این صفحه را عوض نمی‌کند
+        return None
+
+
 class _StepRow(QWidget):
     def __init__(self, step_no: int, roles: list[roles_service.RoleRow], selected_role_id: int | None, on_remove) -> None:
         super().__init__()
@@ -157,6 +167,10 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
             return
         is_active, steps = cartable_service.get_workflow_steps(company_id, form_code)
         self.active_checkbox.setChecked(is_active)
+        governing = _governing_process(company_id, form_code)
+        if governing:
+            self.status_label.setText(f"تایید این فرم اکنون با فرایند «{governing}» در «گردش کار و تایید» انجام می‌شود؛ "
+                                      "این کارتابل فقط موارد در جریان قبلی را تمام می‌کند.")
         if not self._roles:
             self.status_label.setText("هیچ نقشی برای این شرکت تعریف نشده — ابتدا از صفحهٔ «نقش‌ها» یک نقش بسازید.")
             return
@@ -189,6 +203,12 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         role_ids = [row.approver_role_id() for row in self._step_rows]
         if any(r is None for r in role_ids):
             self.status_label.setText("برای هر مرحله باید یک نقش انتخاب شود.")
+            return
+        governing = _governing_process(company_id, form_code) if self.active_checkbox.isChecked() and role_ids else None
+        if governing:
+            # R300: هر سند فقط یک مسیر تایید دارد
+            QMessageBox.warning(self, "دو مسیر تایید", f"تایید این فرم با فرایند «{governing}» انجام می‌شود. برای روشن کردن "
+                                "این کارتابل، اول آن فرایند را در «فرایندها و طراحی» متوقف کنید.")
             return
         cartable_service.save_workflow_steps(company_id, form_code, self.active_checkbox.isChecked(), role_ids)
         self.status_label.setText("")

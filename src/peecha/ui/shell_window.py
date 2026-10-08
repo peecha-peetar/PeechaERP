@@ -83,6 +83,8 @@ _NAV_ICONS = {
     "SETTINGS": "⚙️",
 }
 
+# R300: منوهای قدیمی که در یک صفحه یکی شدند ← همان صفحه (یک کار، یک جا)
+_NAV_ALIASES = {"WF_MY_WORK": "MY_TASKS", "WF_APPROVALS": "MY_TASKS"}
 # R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11, "CRM": 12,
                                "WF": 13}
@@ -2063,8 +2065,6 @@ class MainWindow(QMainWindow):
         # R293: گردش کار و تایید
         from peecha.ui.screens import workflow_center as wf_screens
 
-        self.register_screen("wf_my_work", lambda: wf_screens.MyWorkScreen(self))
-        self.register_screen("wf_approvals", lambda: wf_screens.ApprovalCenterScreen(self))
         self.register_screen("wf_notifications", lambda: wf_screens.NotificationCenterScreen(self))
         self.register_screen("wf_delegations", lambda: wf_screens.DelegationsScreen(self))
         self.register_screen("wf_settings", lambda: wf_screens.WorkflowSettingsScreen(self))
@@ -2162,6 +2162,7 @@ class MainWindow(QMainWindow):
 
     # --- ناوبری -------------------------------------------------------------
     def open_screen(self, code: str, *, then=None) -> None:
+        code = _NAV_ALIASES.get(code, code)
         flat_items = _flatten_nav_items()
         item = next((i for i in flat_items if i["code"] == code), None)
         if item is None:

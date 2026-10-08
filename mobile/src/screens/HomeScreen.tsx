@@ -20,7 +20,7 @@ interface Props {
   salesMode?: SalesMode;
   /** R286: کارهای CRM (پیگیری‌ها، تیکت‌ها، ثبت سرنخ). */
   onOpenCrmTasks?: () => void;
-  /** R297: کارتابل یکپارچهٔ گردش کار (تاییدها و کارها) */
+  /** R300: کارتابل یکپارچه (همهٔ تاییدها و کارها در یک جا) */
   onOpenWorkInbox?: () => void;
 }
 
@@ -82,7 +82,7 @@ export function HomeScreen({
 
         {onOpenWorkInbox ? (
           <Card onPress={onOpenWorkInbox}>
-            <Text style={[typography.bodyBold, { color: colors.primary }]}>تاییدها و کارهای گردش کار</Text>
+            <Text style={[typography.bodyBold, { color: colors.primary }]}>کارتابل: تاییدها، کارها و درخواست‌های من</Text>
           </Card>
         ) : null}
 

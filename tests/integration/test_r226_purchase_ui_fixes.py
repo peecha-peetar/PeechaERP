@@ -136,7 +136,7 @@ keeper_kinds = {(t.kind, t.document_id) for t in ops_service.list_operational_ta
 check(("GOODS_RECEIPT", po) in keeper_kinds, "کارتابل انباردار: رسید کالای سفارش")
 from peecha.ui.screens.my_tasks import MyTasksScreen
 tasks_screen = MyTasksScreen(mw); tasks_screen.refresh()
-check(tasks_screen.op_table.rowCount() >= 1, f"صفحهٔ کارتابل کارهای اسناد را نشان می‌دهد (got {tasks_screen.op_table.rowCount()})")
+check(any(k.startswith("DOC:") for k in tasks_screen.cards_by_key), f"صفحهٔ کارتابل کارهای اسناد را نشان می‌دهد ({list(tasks_screen.cards_by_key)})")
 
 # ===== ۵: انبارِ هر ردیف در تاییدِ رسید =====
 check(raises(lambda: documents_service.approve_warehouse(po, company_id, keeper.user_id, line_warehouses={l1: wh_main, l2: wh_other})),

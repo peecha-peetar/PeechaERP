@@ -50,7 +50,11 @@ def _item(w: inbox.WorkItem) -> dict:
             "ref_id": w.ref_id, "title": w.title, "subtitle": w.subtitle, "due_at": _iso(w.due_at), "is_overdue": w.is_overdue,
             "priority_code": w.priority_code, "priority_label": w.priority_label, "created_at": _iso(w.created_at),
             "can_decide": w.source == "WF", "status_note": w.status_note,
-            "definition": w.extra.get("definition") if w.source == "WF" else None}
+            "definition": w.extra.get("definition") if w.source in ("WF", "MINE") else None,
+            # R300: کارت گرافیکی موبایل (چه باید کرد، رنگ نوع کار، نقطه‌های مرحله)
+            "action": w.action, "tone": w.tone, "quick": w.can_quick_decide, "step_no": w.step_no, "step_total": w.step_total,
+            "path": [{"label": label, "state": state} for label, state in w.path],
+            "customer_id": w.extra.get("customer_id") if w.source in ("CUSTOMER", "CRM") else None}
 
 
 def _involved(ctx: AuthContext, task_id: int) -> bool:
@@ -84,7 +88,9 @@ def _idem(key, endpoint, ctx, compute, serialize):
 @router.get("/inbox")
 def my_inbox(source: str | None = None, ctx: AuthContext = Depends(get_current_context)) -> dict:
     items = inbox.my_work(ctx.company_id, ctx.user_id, sources=(source,) if source else None)
-    return {"items": [_item(w) for w in items], "count": len(items), "overdue": sum(1 for w in items if w.is_overdue)}
+    requests = inbox.my_requests(ctx.company_id, ctx.user_id) if not source else []
+    return {"items": [_item(w) for w in items], "count": len(items), "overdue": sum(1 for w in items if w.is_overdue),
+            "approvals": sum(1 for w in items if w.kind == "APPROVAL"), "requests": [_item(w) for w in requests]}
 
 
 @router.get("/tasks/{task_id}")

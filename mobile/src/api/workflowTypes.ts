@@ -17,12 +17,22 @@ export interface WorkInboxItem {
   can_decide: boolean;
   status_note: string;
   definition: string | null;
+  // R300: کارت گرافیکی کارتابل
+  action?: string; // «چه باید کرد»، مثل «تایید یا رد کنید»
+  tone?: string; // approve | task | doc | followup | customer | mine
+  quick?: boolean; // تایید/رد همین‌جا ممکن است
+  step_no?: number | null;
+  step_total?: number | null;
+  path?: { label: string; state: string }[];
+  customer_id?: number | null;
 }
 
 export interface WorkInboxResponse {
   items: WorkInboxItem[];
   count: number;
   overdue: number;
+  approvals?: number;
+  requests?: WorkInboxItem[]; // درخواست‌های در جریانی که خود کاربر فرستاده
 }
 
 export interface WorkTaskDetail {

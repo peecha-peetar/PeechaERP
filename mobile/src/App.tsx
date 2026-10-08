@@ -12,7 +12,6 @@ import { AppBar, BottomNav, BottomNavKey, EmptyState, InlineSpinner, SyncStatus,
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
 import { Customer360Screen } from "./screens/Customer360Screen";
-import { ApprovalsInboxScreen } from "./screens/ApprovalsInboxScreen";
 import { CustomerAddressesScreen } from "./screens/CustomerAddressesScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
@@ -82,7 +81,6 @@ export type RootStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   ManagerDashboard: undefined;
-  Approvals: undefined;
   VehicleSettlement: undefined;
   Warehouse: undefined;
   CrmTasks: undefined;
@@ -529,7 +527,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 apiClient={services.apiClient}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
                 onOpenTask={(taskId) => navigation.navigate("WorkTask", { taskId })}
-                onOpenApprovals={() => navigation.navigate("Approvals")}
+                onOpenCustomer={(detailAccountId) => navigation.navigate("CustomerDetail", { detailAccountId })}
                 onOpenCrmTasks={() => navigation.navigate("CrmTasks")}
               />
             </SafeAreaView>
@@ -643,7 +641,6 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 onChangeMode={() => setSelectedMode(null)}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
                 onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
-                onOpenApprovals={() => navigation.navigate("Approvals")}
                 onOpenWorkInbox={() => navigation.navigate("WorkInbox")}
                 onOpenWarehouse={() => navigation.navigate("Warehouse")}
                 onOpenVehicleSettlement={
@@ -660,18 +657,6 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
               <ManagerDashboardScreen
                 apiClient={services.apiClient}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
-              />
-            </SafeAreaView>
-          )}
-        </RootStack.Screen>
-
-        <RootStack.Screen name="Approvals">
-          {({ navigation }) => (
-            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-              <ApprovalsInboxScreen
-                apiClient={services.apiClient}
-                onBack={() => navigation.navigate("Settings")}
-                onOpenCustomer={(detailAccountId) => navigation.navigate("CustomerDetail", { detailAccountId })}
               />
             </SafeAreaView>
           )}

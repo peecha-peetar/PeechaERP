@@ -560,8 +560,9 @@ NAV_ITEMS = [
         "code": "WF",
         "label": "گردش کار و تایید",
         "children": [
-            {"code": "WF_MY_WORK", "label": "کارهای من", "screen": "wf_my_work"},
-            {"code": "WF_APPROVALS", "label": "مرکز تایید", "screen": "wf_approvals"},
+            # R300: هر دو در «کارتابل من» (بالای منو) یکی شدند؛ برای دسترسی‌ها و میانبرهای قبلی می‌مانند و همان را باز می‌کنند
+            {"code": "WF_MY_WORK", "label": "کارهای من", "screen": "wf_my_work", "hidden_from_sidebar": True},
+            {"code": "WF_APPROVALS", "label": "مرکز تایید", "screen": "wf_approvals", "hidden_from_sidebar": True},
             {"code": "WF_NOTIFICATIONS", "label": "اعلان‌ها", "screen": "wf_notifications"},
             {"code": "WF_DELEGATIONS", "label": "تفویض اختیار", "screen": "wf_delegations"},
             # R294: طراحی فرایند بدون کدنویسی
@@ -832,8 +833,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
     ],
     # R293: ریبون گردش کار
     "WF": [
-        ("WF_MY_WORK", "📥"),
-        ("WF_APPROVALS", "🖊️"),
+        ("MY_TASKS", "📥"),
         ("WF_NOTIFICATIONS", "🔔"),
         ("WF_DELEGATIONS", "🤝"),
         ("WF_PROCESSES", "🔀"),

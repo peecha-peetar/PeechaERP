@@ -150,6 +150,7 @@ def ensure_loaded() -> None:
     _LOADED = True
     from peecha.services.workflow import actions  # noqa: F401 -- اقدام‌های داخلی
     from peecha.services.workflow import adapters  # noqa: F401 -- اتصال ماژول‌ها (R295)
+    from peecha.services.workflow import templates  # noqa: F401 -- خاموش‌کردن کارتابل قبلی با انتشار فرایند (R300)
 
 
 def adapters() -> list[EntityAdapter]:
