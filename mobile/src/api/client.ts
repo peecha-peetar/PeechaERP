@@ -49,6 +49,8 @@ import {
   LocationSearchResult,
   PutawaySuggestion,
   StockTransferRequest,
+  TaskScans,
+  WmsSettings,
   WmsTask,
   WmsTaskType,
   WmsWave,
@@ -487,16 +489,30 @@ export class ApiClient {
     await this.request<void>(`/locations/tasks/${taskId}/start`, { method: "POST" });
   }
 
-  async confirmPutaway(taskId: number, toLocationId: number, idempotencyKey?: string): Promise<{ stock_document_id: number | null }> {
-    return this.request(`/locations/tasks/${taskId}/putaway`, { method: "POST", body: { to_location_id: toLocationId }, idempotencyKey });
+  async getWmsSettings(): Promise<WmsSettings> {
+    return this.request<WmsSettings>("/locations/settings");
   }
 
-  async confirmPick(taskId: number, quantity: string, idempotencyKey?: string): Promise<{ status: string }> {
-    return this.request(`/locations/tasks/${taskId}/pick`, { method: "POST", body: { quantity }, idempotencyKey });
+  async confirmPutaway(
+    taskId: number, toLocationId: number, idempotencyKey?: string, scans: TaskScans = {},
+  ): Promise<{ stock_document_id: number | null }> {
+    return this.request(`/locations/tasks/${taskId}/putaway`, {
+      method: "POST", body: { to_location_id: toLocationId, scanned_location: scans.location ?? null }, idempotencyKey,
+    });
   }
 
-  async confirmReplenish(taskId: number, quantity: string | null, idempotencyKey?: string): Promise<{ stock_document_id: number }> {
-    return this.request(`/locations/tasks/${taskId}/replenish`, { method: "POST", body: { quantity }, idempotencyKey });
+  async confirmPick(taskId: number, quantity: string, idempotencyKey?: string, scans: TaskScans = {}): Promise<{ status: string }> {
+    return this.request(`/locations/tasks/${taskId}/pick`, {
+      method: "POST", body: { quantity, scanned_location: scans.location ?? null, scanned_item: scans.item ?? null }, idempotencyKey,
+    });
+  }
+
+  async confirmReplenish(
+    taskId: number, quantity: string | null, idempotencyKey?: string, scans: TaskScans = {},
+  ): Promise<{ stock_document_id: number }> {
+    return this.request(`/locations/tasks/${taskId}/replenish`, {
+      method: "POST", body: { quantity, scanned_from: scans.from ?? null, scanned_to: scans.to ?? null }, idempotencyKey,
+    });
   }
 
   async transferStock(payload: StockTransferRequest, idempotencyKey?: string): Promise<{ stock_document_id: number }> {

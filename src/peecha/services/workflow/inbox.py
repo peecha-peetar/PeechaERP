@@ -23,6 +23,7 @@ DOC_ACTIONS = {
     "PRE_SALES_WAREHOUSE": "تایید انبار سفارش را بزنید", "SETTLEMENT_APPROVAL": "نحوهٔ تسویه را تایید کنید",
     "CONVERT_TO_INVOICE": "سند را به فاکتور تبدیل کنید", "POST_ORDER": "سفارش را ثبت نهایی کنید",
     "INVENTORY_RESIDUAL": "سند اصلاح ماندهٔ ریالی را ثبت کنید",
+    "PUTAWAY_PENDING": "برای رسیدها وظیفهٔ جانمایی بسازید",
 }
 _CUSTOMER_FORM = "detail_dimensions"  # همان دسترسی ویرایش مشتریان که صندوق تایید قبلی موبایل می‌خواست
 

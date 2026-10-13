@@ -96,6 +96,15 @@ def _detail(company_id: int, location_id: int) -> dict:
     return out
 
 
+@router.get("/settings")
+def wms_settings(ctx: AuthContext = _VIEW) -> dict:
+    """R304: کلیدهایی که رفتار صفحهٔ انبار موبایل را عوض می‌کنند."""
+    from peecha.services import stock_controls
+
+    on = stock_controls.enabled_codes(ctx.company_id)
+    return {"scan_confirmation": stock_controls.SCAN_CONFIRMATION in on}
+
+
 @router.get("/warehouses/{warehouse_id}/map")
 def warehouse_map(warehouse_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
     """همهٔ محل‌های انبار با مختصات نقشه و اشغال (برای نقشهٔ موبایل/نمای سه‌بعدی آینده)."""
@@ -420,44 +429,56 @@ class TransferRequest(BaseModel):
     to_location_id: int
     quantity: decimal.Decimal
     allow_over_capacity: bool = False
+    scanned_from: str | None = None  # R304: اسکن‌ها (با کلید «تایید عملیات انبار موبایل با اسکن» الزامی‌اند)
+    scanned_to: str | None = None
+    scanned_item: str | None = None
 
 
 @router.post("/transfer")
 def transfer(body: TransferRequest, ctx: AuthContext = _TRANSFER_EDIT, key: str | None = _KEY) -> dict:
+    scans = {"from": body.scanned_from, "to": body.scanned_to, "item": body.scanned_item}
     return _write(key, "POST /locations/transfer", ctx,
                   lambda: wl.transfer(ctx.company_id, ctx.user_id, body.item_id, body.from_location_id, body.to_location_id,
-                                      body.quantity, body.allow_over_capacity),
+                                      body.quantity, body.allow_over_capacity, scans=scans),
                   lambda doc_id: {"stock_document_id": doc_id})
 
 
 class PutawayConfirm(BaseModel):
     to_location_id: int
+    scanned_location: str | None = None
 
 
 @router.post("/tasks/{task_id}/putaway")
 def confirm_putaway(task_id: int, body: PutawayConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/putaway", ctx,
-                  lambda: ops.complete_putaway(task_id, ctx.company_id, ctx.user_id, body.to_location_id),
+                  lambda: ops.complete_putaway(task_id, ctx.company_id, ctx.user_id, body.to_location_id,
+                                               scans={"location": body.scanned_location}),
                   lambda doc_id: {"task_id": task_id, "stock_document_id": doc_id})
 
 
 class PickConfirm(BaseModel):
     quantity: decimal.Decimal
+    scanned_location: str | None = None
+    scanned_item: str | None = None
 
 
 @router.post("/tasks/{task_id}/pick")
 def confirm_pick(task_id: int, body: PickConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/pick", ctx,
-                  lambda: ops.complete_pick(task_id, ctx.company_id, ctx.user_id, body.quantity),
+                  lambda: ops.complete_pick(task_id, ctx.company_id, ctx.user_id, body.quantity,
+                                            scans={"location": body.scanned_location, "item": body.scanned_item}),
                   lambda _r: {"task_id": task_id, "status": "DONE"})
 
 
 class ReplenishConfirm(BaseModel):
     quantity: decimal.Decimal | None = None
+    scanned_from: str | None = None
+    scanned_to: str | None = None
 
 
 @router.post("/tasks/{task_id}/replenish")
 def confirm_replenish(task_id: int, body: ReplenishConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/replenish", ctx,
-                  lambda: ops.complete_replenishment(task_id, ctx.company_id, ctx.user_id, body.quantity),
+                  lambda: ops.complete_replenishment(task_id, ctx.company_id, ctx.user_id, body.quantity,
+                                                     scans={"from": body.scanned_from, "to": body.scanned_to}),
                   lambda doc_id: {"task_id": task_id, "stock_document_id": doc_id})

@@ -815,6 +815,22 @@ export interface StockTransferRequest {
   to_location_id: number;
   quantity: string;
   allow_over_capacity?: boolean;
+  // R304: متن اسکن‌شدهٔ برچسب‌ها (با کلید «تایید عملیات انبار موبایل با اسکن» لازم است)
+  scanned_from?: string | null;
+  scanned_to?: string | null;
+  scanned_item?: string | null;
+}
+
+/** R304: کلیدهای سرور که رفتار صفحهٔ انبار را عوض می‌کنند. */
+export interface WmsSettings {
+  scan_confirmation: boolean;
+}
+
+export interface TaskScans {
+  location?: string | null;
+  item?: string | null;
+  from?: string | null;
+  to?: string | null;
 }
 
 // --- R250: موج، شمارشِ محل، نقشه --------------------------------------------

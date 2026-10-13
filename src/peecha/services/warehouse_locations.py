@@ -689,6 +689,59 @@ def search(company_id: int, text: str, warehouse_id: int | None = None) -> Simpl
     return SimpleNamespace(kind="PRODUCT" if item_ids else "NONE", location_ids=sorted(set(locations)), item_ids=item_ids)
 
 
+def scan_matches_location(company_id: int, code: str | None, location_id: int) -> bool:
+    """R304: آیا متن اسکن‌شده (QR، کد یا بارکد محل) همین محل است؟"""
+    if not (code or "").strip():
+        return False
+    try:
+        hit = search(company_id, code)
+    except ValueError:
+        return False
+    return hit.kind == "LOCATION" and location_id in hit.location_ids
+
+
+def scan_matches_item(company_id: int, code: str | None, item_id: int) -> bool:
+    """R304: آیا متن اسکن‌شده (کد، بارکد، بارکد واحد یا سریال) دقیقاً همین کالاست؟"""
+    from peecha import numerals
+    from peecha.db.models.accounting import DetailAccount
+    from peecha.services import unit_conversion as uc
+
+    text = numerals.to_ascii_digits((code or "").strip())
+    if not text:
+        return False
+    upper = text.upper()
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None or item.company_id != company_id:
+            return False
+        item_code = session.scalar(select(DetailAccount.code).where(DetailAccount.detail_account_id == item.item_detail_account_id))
+        if upper in {(v or "").upper() for v in (item_code, item.barcode, item.sku)} - {""}:
+            return True
+        if session.scalar(select(SerialNumber.serial_id).where(SerialNumber.item_id == item_id,
+                                                               func.upper(SerialNumber.serial_no) == upper)):
+            return True
+    hit = uc.resolve_barcode(company_id, text, with_price=False)
+    return hit is not None and hit.item_id == item_id
+
+
+def verify_scans(company_id: int, scans: dict | None, expected: list[tuple[str, str, int]]) -> None:
+    """R304: با کلید «تایید عملیات انبار موبایل با اسکن»؛ scans=None یعنی دسکتاپ (بدون اسکن).
+    expected: [(کلید اسکن، location|item، شناسه)]."""
+    from peecha.services import stock_controls
+
+    if scans is None or not stock_controls.is_on(company_id, stock_controls.SCAN_CONFIRMATION):
+        return
+    labels = {"location": "محل", "item": "کالا", "from": "محل مبدا", "to": "محل مقصد"}
+    for key, kind, target_id in expected:
+        code = scans.get(key)
+        if not (code or "").strip():
+            raise ValueError(f"برای تایید، برچسب {labels.get(key, key)} را اسکن کنید.")
+        ok = scan_matches_item(company_id, code, target_id) if kind == "item" else \
+            scan_matches_location(company_id, code, target_id)
+        if not ok:
+            raise ValueError(f"برچسب اسکن‌شده با {labels.get(key, key)} این عملیات نمی‌خواند.")
+
+
 # =====================================================================
 # پیشنهادِ جانمایی، مسیرِ برداشت، Heatmap و تاریخچه
 # =====================================================================
@@ -892,10 +945,13 @@ def history(company_id: int, location_id: int, limit: int = 200) -> list[SimpleN
 # انتقال بینِ محل‌ها (با سندِ انتقالِ عادیِ سیستم)
 # =====================================================================
 def transfer(company_id: int, user_id: int, item_id: int, from_location_id: int, to_location_id: int,
-             quantity: decimal.Decimal, allow_over_capacity: bool = False) -> int:
-    """اعتبارسنجی محل مقصد (فعال، مجاز برای جانمایی، ظرفیت) و ثبت سند انتقال عادی؛ خروجی = شناسهٔ سند."""
+             quantity: decimal.Decimal, allow_over_capacity: bool = False, scans: dict | None = None) -> int:
+    """اعتبارسنجی محل مقصد (فعال، مجاز برای جانمایی، ظرفیت) و ثبت سند انتقال عادی؛ خروجی = شناسهٔ سند.
+    R304: scans (موبایل) = {"from"، "to"، "item"}."""
     from peecha.services import inventory_documents as inv_documents_service
 
+    verify_scans(company_id, scans, [("from", "location", from_location_id), ("to", "location", to_location_id),
+                                     ("item", "item", item_id)])
     quantity = decimal.Decimal(quantity)
     if quantity <= 0:
         raise ValueError("مقدار انتقال باید مثبت باشد.")

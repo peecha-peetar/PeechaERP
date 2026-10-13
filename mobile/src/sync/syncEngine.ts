@@ -123,13 +123,13 @@ export class SyncEngine {
         await this.api.transferStock(action.payload, action.idempotencyKey);
         return;
       case "WMS_PUTAWAY":
-        await this.api.confirmPutaway(action.payload.taskId, action.payload.toLocationId, action.idempotencyKey);
+        await this.api.confirmPutaway(action.payload.taskId, action.payload.toLocationId, action.idempotencyKey, action.payload.scans);
         return;
       case "WMS_PICK":
-        await this.api.confirmPick(action.payload.taskId, action.payload.quantity, action.idempotencyKey);
+        await this.api.confirmPick(action.payload.taskId, action.payload.quantity, action.idempotencyKey, action.payload.scans);
         return;
       case "WMS_REPLENISH":
-        await this.api.confirmReplenish(action.payload.taskId, action.payload.quantity, action.idempotencyKey);
+        await this.api.confirmReplenish(action.payload.taskId, action.payload.quantity, action.idempotencyKey, action.payload.scans);
         return;
       case "WMS_COUNT":
         await this.api.recordLocationCount(action.payload.sessionId, action.payload.locationId, action.payload.itemId,

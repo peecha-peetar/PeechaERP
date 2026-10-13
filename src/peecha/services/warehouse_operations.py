@@ -287,6 +287,10 @@ def start_task(task_id: int, company_id: int, user_id: int) -> None:
         session.commit()
 
 
+def _scanned(scans: dict | None) -> bool:
+    return bool(scans) and all((v or "").strip() for v in scans.values())
+
+
 def _audit(session, task: WarehouseTask, action: str, user_id: int | None, **changes) -> None:
     """R303: ردپای عملیات وظیفهٔ انبار در audit.activity_log (همان تراکنش)."""
     from peecha.services import audit as audit_service
@@ -308,10 +312,13 @@ def cancel_task(task_id: int, company_id: int, user_id: int | None = None) -> No
         session.commit()
 
 
-def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_location_id: int) -> int | None:
-    """جانمایی: اگر محل مقصد با محل فعلی فرق دارد، با سند انتقال عادی سیستم جابه‌جا می‌شود."""
+def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_location_id: int, scans: dict | None = None) -> int | None:
+    """جانمایی: اگر محل مقصد با محل فعلی فرق دارد، با سند انتقال عادی سیستم جابه‌جا می‌شود.
+    R304: scans (موبایل) = {"location": متن اسکن محل مقصد}."""
     from peecha.services import inventory_documents as inv_documents_service
+    from peecha.services import warehouse_locations as wl
 
+    wl.verify_scans(company_id, scans, [("location", "location", to_bin_location_id)])
     with new_session() as session:
         task = _task(session, task_id, company_id)
         if task.task_type_code != "PUTAWAY" or task.status_code not in ("OPEN", "IN_PROGRESS"):
@@ -352,12 +359,17 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
         task.status_code, task.completed_at, task.completed_by_user_id = "DONE", now, user_id
         task.started_at = task.started_at or now
         task.to_bin_location_id, task.done_quantity_base, task.resulting_stock_document_id = to_bin_location_id, qty, doc_id
-        _audit(session, task, "COMPLETE", user_id, quantity=qty, to_bin=to_bin_location_id, stock_document_id=doc_id)
+        _audit(session, task, "COMPLETE", user_id, quantity=qty, to_bin=to_bin_location_id, stock_document_id=doc_id,
+               scanned=_scanned(scans))
         session.commit()
     return doc_id
 
 
-def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: decimal.Decimal) -> None:
+def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: decimal.Decimal,
+                  scans: dict | None = None) -> None:
+    """R304: scans (موبایل) = {"location": اسکن محل برداشت، "item": اسکن کالا}."""
+    from peecha.services import warehouse_locations as wl
+
     picked_quantity = decimal.Decimal(picked_quantity)
     if picked_quantity < 0:
         raise ValueError("مقدار برداشته نمی‌تواند منفی باشد.")
@@ -365,6 +377,7 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
         task = _task(session, task_id, company_id)
         if task.task_type_code != "PICK" or task.status_code not in ("OPEN", "IN_PROGRESS"):
             raise ValueError("این وظیفهٔ برداشت باز نیست.")
+        wl.verify_scans(company_id, scans, [("location", "location", task.from_bin_location_id), ("item", "item", task.item_id)])
         now = datetime.datetime.now()
         task.status_code, task.completed_at, task.completed_by_user_id = "DONE", now, user_id
         task.started_at = task.started_at or now
@@ -372,7 +385,8 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
         _release(session, task, "FULFILLED", picked_quantity)
         warehouse_id, wave_id = task.warehouse_id, task.wave_id
         _close_wave_if_done(session, wave_id)
-        _audit(session, task, "COMPLETE", user_id, quantity=picked_quantity, requested=task.quantity_base)
+        _audit(session, task, "COMPLETE", user_id, quantity=picked_quantity, requested=task.quantity_base,
+               scanned=_scanned(scans))
         session.commit()
     auto_replenish(company_id, user_id, warehouse_id)
 
@@ -599,14 +613,18 @@ def generate_replenishment_tasks(company_id: int, user_id: int, warehouse_id: in
     return created
 
 
-def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity: decimal.Decimal | None = None) -> int:
-    """جابه‌جایی واقعی با سند انتقال عادی (همان مسیر انتقال نقشه با بررسی وضعیت/ظرفیت/سازگاری)."""
+def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity: decimal.Decimal | None = None,
+                           scans: dict | None = None) -> int:
+    """جابه‌جایی واقعی با سند انتقال عادی (همان مسیر انتقال نقشه با بررسی وضعیت/ظرفیت/سازگاری).
+    R304: scans (موبایل) = {"from": اسکن محل مبدا، "to": اسکن محل مقصد}."""
     from peecha.services import warehouse_locations as wl
 
     with new_session() as session:
         task = _task(session, task_id, company_id)
         if task.task_type_code != "REPLENISH" or task.status_code not in ("OPEN", "IN_PROGRESS"):
             raise ValueError("این وظیفهٔ تامین مجدد باز نیست.")
+        wl.verify_scans(company_id, scans, [("from", "location", task.from_bin_location_id),
+                                            ("to", "location", task.to_bin_location_id)])
         qty = decimal.Decimal(quantity) if quantity is not None else task.quantity_base
         if qty <= 0 or qty > task.quantity_base:
             raise ValueError("مقدار تامین باید مثبت و حداکثر برابر مقدار وظیفه باشد.")
@@ -633,7 +651,7 @@ def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity
         for res in session.scalars(select(StockReservation).where(
                 StockReservation.source_type_code == "WMS_REPLENISH_TASK", StockReservation.source_record_id == task_id)):
             res.status_code, res.fulfilled_quantity_base = "FULFILLED", min(qty, res.quantity)
-        _audit(session, task, "COMPLETE", user_id, quantity=qty, stock_document_id=doc_id)
+        _audit(session, task, "COMPLETE", user_id, quantity=qty, stock_document_id=doc_id, scanned=_scanned(scans))
         session.commit()
     return doc_id
 

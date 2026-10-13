@@ -6,6 +6,7 @@ import {
   PaymentCreateRequest,
   StartVisitRequest,
   StockTransferRequest,
+  TaskScans,
 } from "../api/types";
 import { CrmActivityCompleteRequest, CrmActivityRequest, CrmLeadRequest, CrmTicketRequest } from "../api/crmTypes";
 import { generateIdempotencyKey } from "./idempotency";
@@ -65,9 +66,9 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "CREATE_CUSTOMER"; payload: CustomerCreateRequest }
   // R249: عملیاتِ انبار (اپِ انباردار)
   | { idempotencyKey: string; createdAt: string; type: "WMS_TRANSFER"; payload: StockTransferRequest }
-  | { idempotencyKey: string; createdAt: string; type: "WMS_PUTAWAY"; payload: { taskId: number; toLocationId: number } }
-  | { idempotencyKey: string; createdAt: string; type: "WMS_PICK"; payload: { taskId: number; quantity: string } }
-  | { idempotencyKey: string; createdAt: string; type: "WMS_REPLENISH"; payload: { taskId: number; quantity: string | null } }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_PUTAWAY"; payload: { taskId: number; toLocationId: number; scans?: TaskScans } }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_PICK"; payload: { taskId: number; quantity: string; scans?: TaskScans } }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_REPLENISH"; payload: { taskId: number; quantity: string | null; scans?: TaskScans } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; quantity: string; batchNo?: string | null } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_SERIAL_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; serialNos: string[] } }
   // R286: CRM میدانی

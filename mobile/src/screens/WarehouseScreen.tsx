@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { ApiClient, ApiError } from "../api/client";
 import {
   LocationCountLine, LocationCountSession, LocationDetail, LocationSearchResult, PutawaySuggestion, WarehouseMapNode, WarehouseRow, WmsTask,
-  PutawaySource, WmsKpis, WmsTaskType, WmsWave,
+  PutawaySource, TaskScans, WmsKpis, WmsTaskType, WmsWave,
 } from "../api/types";
 import { BarcodeScannerModal, Button, Card, EmptyState, Input, SearchBar, StatusBadge, useToast } from "../components";
 import { formatAmount, toAsciiDigits } from "../format";
@@ -24,7 +24,13 @@ interface Props {
 
 type Tab = "SEARCH" | "TASKS" | "TRANSFER" | "COUNT" | "MAP" | "KPI";
 type ScanTarget =
-  | "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO" | "COUNT_LOCATION" | "COUNT_START" | "COUNT_SERIAL";
+  | "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO" | "COUNT_LOCATION" | "COUNT_START" | "COUNT_SERIAL"
+  | "TASK_LOCATION" | "TASK_ITEM" | "TASK_FROM" | "TASK_TO";
+// R304: محل/کالایی که با اسکن انتخاب شده، متن برچسب را هم نگه می‌دارد (برای تایید سمت سرور)
+type Picked = { id: number; code: string; scanned?: string };
+const TASK_SCAN_KEYS: Partial<Record<ScanTarget, keyof TaskScans>> = {
+  TASK_LOCATION: "location", TASK_ITEM: "item", TASK_FROM: "from", TASK_TO: "to",
+};
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال", INACTIVE: "غیرفعال", BLOCKED: "مسدود", FULL: "پر", RESERVED: "رزرو", QUARANTINE: "قرنطینه",
@@ -66,12 +72,14 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const [activeTask, setActiveTask] = useState<WmsTask | null>(null);
   const [taskQty, setTaskQty] = useState("");
   const [suggestions, setSuggestions] = useState<PutawaySuggestion[]>([]);
-  const [putawayTarget, setPutawayTarget] = useState<{ id: number; code: string } | null>(null);
+  const [putawayTarget, setPutawayTarget] = useState<Picked | null>(null);
+  const [scanRequired, setScanRequired] = useState(false);
+  const [taskScans, setTaskScans] = useState<TaskScans>({});
 
   // انتقال
-  const [transferItem, setTransferItem] = useState<{ id: number; label: string } | null>(null);
-  const [transferFrom, setTransferFrom] = useState<{ id: number; code: string } | null>(null);
-  const [transferTo, setTransferTo] = useState<{ id: number; code: string } | null>(null);
+  const [transferItem, setTransferItem] = useState<{ id: number; label: string; scanned?: string } | null>(null);
+  const [transferFrom, setTransferFrom] = useState<Picked | null>(null);
+  const [transferTo, setTransferTo] = useState<Picked | null>(null);
   const [transferQty, setTransferQty] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -124,6 +132,10 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   useEffect(() => {
     if (tab === "TASKS") loadTasks();
   }, [tab, loadTasks]);
+
+  useEffect(() => {
+    apiClient.getWmsSettings().then((s) => setScanRequired(s.scan_confirmation)).catch(() => setScanRequired(false));
+  }, [apiClient]);
 
   useEffect(() => {
     if ((tab === "COUNT" || tab === "MAP" || tab === "TASKS") && warehouses.length === 0) {
@@ -197,6 +209,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     setActiveTask(task);
     setTaskQty(task.quantity);
     setPutawayTarget(null);
+    setTaskScans({});
     setSuggestions([]);
     if (task.task_type === "PUTAWAY") {
       try {
@@ -225,11 +238,29 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         toast.show("محل مقصد را انتخاب یا اسکن کنید.", "warning");
         return;
       }
-      ok = await submit({ type: "WMS_PUTAWAY", payload: { taskId: activeTask.task_id, toLocationId: putawayTarget.id } }, "جانمایی ثبت شد.");
+      if (scanRequired && !putawayTarget.scanned) {
+        toast.show("برای تایید، برچسب محل مقصد را اسکن کنید.", "warning");
+        return;
+      }
+      ok = await submit(
+        { type: "WMS_PUTAWAY", payload: { taskId: activeTask.task_id, toLocationId: putawayTarget.id, scans: { location: putawayTarget.scanned ?? null } } },
+        "جانمایی ثبت شد.",
+      );
     } else if (activeTask.task_type === "PICK") {
-      ok = await submit({ type: "WMS_PICK", payload: { taskId: activeTask.task_id, quantity: qty } }, "برداشت ثبت شد.");
+      if (scanRequired && (!taskScans.location || !taskScans.item)) {
+        toast.show("برای تایید، محل برداشت و کالا را اسکن کنید.", "warning");
+        return;
+      }
+      ok = await submit({ type: "WMS_PICK", payload: { taskId: activeTask.task_id, quantity: qty, scans: taskScans } }, "برداشت ثبت شد.");
     } else {
-      ok = await submit({ type: "WMS_REPLENISH", payload: { taskId: activeTask.task_id, quantity: qty || null } }, "تامین مجدد ثبت شد.");
+      if (scanRequired && (!taskScans.from || !taskScans.to)) {
+        toast.show("برای تایید، محل مبدا و مقصد را اسکن کنید.", "warning");
+        return;
+      }
+      ok = await submit(
+        { type: "WMS_REPLENISH", payload: { taskId: activeTask.task_id, quantity: qty || null, scans: taskScans } },
+        "تامین مجدد ثبت شد.",
+      );
     }
     if (ok) {
       setActiveTask(null);
@@ -242,10 +273,17 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       toast.show("کالا، محل مبدا، محل مقصد و مقدار را کامل کنید.", "warning");
       return;
     }
+    if (scanRequired && (!transferItem.scanned || !transferFrom.scanned || !transferTo.scanned)) {
+      toast.show("برای تایید انتقال، کالا و هر دو محل را اسکن کنید.", "warning");
+      return;
+    }
     const ok = await submit(
       {
         type: "WMS_TRANSFER",
-        payload: { item_id: transferItem.id, from_location_id: transferFrom.id, to_location_id: transferTo.id, quantity: toAsciiDigits(transferQty) },
+        payload: {
+          item_id: transferItem.id, from_location_id: transferFrom.id, to_location_id: transferTo.id, quantity: toAsciiDigits(transferQty),
+          scanned_item: transferItem.scanned ?? null, scanned_from: transferFrom.scanned ?? null, scanned_to: transferTo.scanned ?? null,
+        },
       },
       "انتقال ثبت شد.",
     );
@@ -264,6 +302,12 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       return;
     }
     setScanTarget(null);
+    const taskKey = target ? TASK_SCAN_KEYS[target] : undefined;
+    if (taskKey) {  // R304: سرور تطبیق برچسب با محل/کالای وظیفه را بررسی می‌کند
+      setTaskScans((prev) => ({ ...prev, [taskKey]: code.trim() }));
+      toast.show("برچسب خوانده شد.", "success");
+      return;
+    }
     try {
       if (target === "SEARCH") {
         setQuery(code);
@@ -273,11 +317,11 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         if (found.kind !== "PRODUCT" || found.item_ids.length === 0) throw new ApiError(404, "کالایی با این بارکد پیدا نشد.");
         const itemId = found.item_ids[0];
         const row = found.locations.flatMap((l) => l.contents).find((c) => c.item_id === itemId);
-        setTransferItem({ id: itemId, label: row ? `${row.item_code} — ${row.item_name}` : code });
+        setTransferItem({ id: itemId, label: row ? `${row.item_code} — ${row.item_name}` : code, scanned: code.trim() });
       } else if (target) {
         const loc = await resolveLocation(apiClient, code);
         if (!loc) throw new ApiError(404, "محلی با این کد پیدا نشد.");
-        const picked = { id: loc.location_id, code: loc.code };
+        const picked: Picked = { id: loc.location_id, code: loc.code, scanned: code.trim() };
         if (target === "PUTAWAY_TARGET") setPutawayTarget(picked);
         if (target === "TRANSFER_FROM") setTransferFrom(picked);
         if (target === "TRANSFER_TO") setTransferTo(picked);
@@ -439,6 +483,23 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     </View>
   );
 
+  const scanRow = (label: string, target: ScanTarget, key: keyof TaskScans) => (
+    <View key={key} style={{ gap: spacing.xs }}>
+      <Button label={label} size="md" variant="secondary" onPress={() => setScanTarget(target)} />
+      <Text style={[typography.caption, { color: taskScans[key] ? colors.success : colors.textSecondary }]}>
+        {taskScans[key] ? `خوانده شد: ${taskScans[key]}` : "هنوز اسکن نشده"}
+      </Text>
+    </View>
+  );
+
+  const renderTaskScans = (task: WmsTask) => (
+    <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+      {task.task_type === "PICK"
+        ? [scanRow("اسکن محل برداشت", "TASK_LOCATION", "location"), scanRow("اسکن کالا", "TASK_ITEM", "item")]
+        : [scanRow("اسکن محل مبدا", "TASK_FROM", "from"), scanRow("اسکن محل مقصد", "TASK_TO", "to")]}
+    </View>
+  );
+
   const renderTaskPanel = (task: WmsTask) => (
     <Card>
       {text(typography.bodyBold, `${task.task_label} · ${task.item_code} — ${task.item_name}`)}
@@ -461,10 +522,15 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
             ))
           )}
           <Button label="اسکن محل مقصد" size="md" variant="secondary" onPress={() => setScanTarget("PUTAWAY_TARGET")} />
-          {putawayTarget ? text(typography.body, `مقصد: ${putawayTarget.code}`) : null}
+          {putawayTarget
+            ? text(typography.body, `مقصد: ${putawayTarget.code}${scanRequired && !putawayTarget.scanned ? " (هنوز اسکن نشده)" : ""}`)
+            : null}
         </View>
       ) : (
-        <Input label="مقدار انجام‌شده" value={taskQty} onChangeText={setTaskQty} numeric keyboardType="decimal-pad" style={{ marginTop: spacing.md }} />
+        <>
+          <Input label="مقدار انجام‌شده" value={taskQty} onChangeText={setTaskQty} numeric keyboardType="decimal-pad" style={{ marginTop: spacing.md }} />
+          {scanRequired ? renderTaskScans(task) : null}
+        </>
       )}
       <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
         <Button label="تایید" size="md" fullWidth={false} loading={busy} onPress={completeTask} />

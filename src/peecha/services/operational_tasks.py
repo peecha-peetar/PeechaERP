@@ -36,6 +36,7 @@ KIND_LABELS = {
     "CONVERT_TO_INVOICE": "تبدیل به فاکتور",
     "POST_ORDER": "ثبت نهایی سفارش (پیش از رسید)",
     "INVENTORY_RESIDUAL": "اصلاح ماندهٔ ریالی موجودی صفر",
+    "PUTAWAY_PENDING": "جانمایی رسیدهای انبار",
 }
 
 
@@ -147,6 +148,8 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     ]
     tasks += _rows(company_id, received, "CONVERT_TO_INVOICE")
 
+    tasks += _putaway_pending(company_id, user_id, is_manager)
+
     if is_manager:
         from peecha.services import inventory_residual as residual_service
 
@@ -160,6 +163,35 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
                 f"{len(residuals)} کالا با موجودی صفر و ماندهٔ ریالی — پیشنهاد سند تسعیر", "", None, "",
             ))
     return tasks
+
+
+def _putaway_pending(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R304 (کلید «رسیدهای جانمایی‌نشده در کارتابل انباردار»): یک کار برای هر انبار، برای انباردار همان انبار و مدیر."""
+    from peecha.db.models.inventory import Warehouse
+    from peecha.services import stock_controls
+    from peecha.services import warehouse_operations as ops
+
+    if not stock_controls.is_on(company_id, stock_controls.PUTAWAY_IN_CARTABLE):
+        return []
+    by_warehouse: dict[int, list] = {}
+    for src in ops.putaway_sources(company_id):
+        by_warehouse.setdefault(src.doc.destination_warehouse_id, []).append(src)
+    if not by_warehouse:
+        return []
+    with new_session() as session:
+        warehouses = {w.warehouse_id: w for w in session.scalars(select(Warehouse).where(Warehouse.warehouse_id.in_(by_warehouse)))}
+    out = []
+    for warehouse_id, sources in sorted(by_warehouse.items()):
+        w = warehouses.get(warehouse_id)
+        if w is None or not (is_manager or w.manager_user_id == user_id):
+            continue
+        lines = sum(s.open_lines for s in sources)
+        out.append(OperationalTask(
+            "PUTAWAY_PENDING", KIND_LABELS["PUTAWAY_PENDING"], 0, "",
+            f"{len(sources)} رسید با {lines} ردیف جانمایی‌نشده در «{w.name}»", w.name,
+            max(s.doc.document_date for s in sources), "",
+        ))
+    return out
 
 
 # =====================================================================
