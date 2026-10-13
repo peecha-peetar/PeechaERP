@@ -40,6 +40,8 @@ KIND_LABELS = {
     "QC_PENDING": "کنترل کیفیت رسیدها",
     "EXPIRY_NEAR": "کالای نزدیک به انقضا",
     "EXPIRED_STOCK": "کالای منقضی در انبار",
+    "TRANSIT_ARRIVING": "ارسال در راه به انبار",
+    "CROSS_DOCK": "ارسال مستقیم از رسید",
 }
 
 
@@ -154,6 +156,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _putaway_pending(company_id, user_id, is_manager)
     tasks += _qc_pending(company_id, user_id, is_manager)
     tasks += _expiry_alerts(company_id, user_id, is_manager)
+    tasks += _flow_tasks(company_id, user_id, is_manager)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -244,6 +247,32 @@ def _expiry_alerts(company_id: int, user_id: int, is_manager: bool) -> list[Oper
         if s.near:
             out.append(OperationalTask("EXPIRY_NEAR", KIND_LABELS["EXPIRY_NEAR"], 0, "",
                                        f"{s.near} بچ در «{s.name}» تا {days} روز دیگر منقضی می‌شود", s.name, None, ""))
+    return out
+
+
+def _flow_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R309: ارسال‌های در راه برای انباردار مقصد و رسیدهایی که سفارش منتظر دارند (هر کدام با کلید خودش)."""
+    from peecha.db.models.inventory import Warehouse
+    from peecha.services import cross_dock, stock_controls, transit_transfer
+
+    on = stock_controls.enabled_codes(company_id)
+    counts = []
+    if stock_controls.TWO_STEP_TRANSFER in on:
+        counts.append(("TRANSIT_ARRIVING", transit_transfer.arriving_by_warehouse(company_id), "{n} ارسال در راه به «{w}»"))
+    if stock_controls.CROSS_DOCK in on:
+        counts.append(("CROSS_DOCK", cross_dock.pending_by_warehouse(company_id), "{n} ردیف رسید در «{w}» سفارش منتظر دارد"))
+    ids = {w for _k, c, _t in counts for w in c}
+    if not ids:
+        return []
+    with new_session() as session:
+        whs = {w.warehouse_id: w for w in session.scalars(select(Warehouse).where(Warehouse.warehouse_id.in_(ids)))}
+    out = []
+    for kind, by_wh, title in counts:
+        for warehouse_id, n in sorted(by_wh.items()):
+            w = whs.get(warehouse_id)
+            if w is None or not (is_manager or w.manager_user_id == user_id):
+                continue
+            out.append(OperationalTask(kind, KIND_LABELS[kind], 0, "", title.format(n=n, w=w.name), w.name, None, ""))
     return out
 
 

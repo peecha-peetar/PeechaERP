@@ -73,6 +73,12 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
     if kind in ("EXPIRY_NEAR", "EXPIRED_STOCK"):
         main_window.open_screen("INV_WMS_TASKS", then=lambda screen: screen.show_expiry())
         return True
+    if kind == "TRANSIT_ARRIVING":
+        main_window.open_screen("INV_WMS_TASKS", then=lambda screen: screen.show_transit())
+        return True
+    if kind == "CROSS_DOCK":
+        main_window.open_screen("INV_WMS_TASKS", then=lambda screen: screen.show_flow())
+        return True
     nav_code = _TYPE_TO_NAV_CODE.get(document_type_code)
     if nav_code is None:
         return False
@@ -92,7 +98,7 @@ ms.ICONS.update({
 TONES = {"approve": ("🖊️", "INFO"), "task": ("📋", "CHART_TEAL"), "doc": ("📦", "CHART_PURPLE"),
          "followup": ("📞", "CHART_ORANGE"), "customer": ("👤", "SUCCESS"), "mine": ("📨", "ACCENT")}
 DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "GOODS_RECEIPT": "📦", "PRE_SALES_WAREHOUSE": "🏬", "SETTLEMENT_APPROVAL": "💰",
-              "CONVERT_TO_INVOICE": "🔁", "POST_ORDER": "📌", "INVENTORY_RESIDUAL": "🧮", "PUTAWAY_PENDING": "📥", "QC_PENDING": "🧪", "EXPIRY_NEAR": "⏳", "EXPIRED_STOCK": "⌛"}
+              "CONVERT_TO_INVOICE": "🔁", "POST_ORDER": "📌", "INVENTORY_RESIDUAL": "🧮", "PUTAWAY_PENDING": "📥", "QC_PENDING": "🧪", "EXPIRY_NEAR": "⏳", "EXPIRED_STOCK": "⌛", "TRANSIT_ARRIVING": "🚚", "CROSS_DOCK": "🔀"}
 _STEP_COLORS = {"done": "SUCCESS", "current": "INFO", "pending": "TEXT_DISABLED", "failed": "DANGER"}
 VIEWS = [("همهٔ کارهای من", "ALL"), ("منتظر تایید من", "APPROVAL"), ("کارهای انجام‌دادنی", "TASK"), ("مراحل اسناد", "STEP"),
          ("پیگیری مشتری", "FOLLOWUP"), ("درخواست‌های من", "MINE")]

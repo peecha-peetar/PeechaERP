@@ -21,7 +21,7 @@ from peecha.db.models.inventory import (
     BinLocation, CycleCountLine, CycleCountPlan, CycleCountSession, LocationReplenishmentRule, PickWave, StockBalance, StockDocument,
     StockDocumentLine, StockLedger, StockReservation, WarehouseTask,
 )
-from peecha.services import quality_control
+from peecha.services import quality_control, stock_controls
 
 _ZERO = decimal.Decimal(0)
 TASK_TYPES = {"PUTAWAY": "جانمایی", "PICK": "برداشت", "REPLENISH": "تامین مجدد"}
@@ -188,6 +188,13 @@ def pick_sources(company_id: int) -> list[SimpleNamespace]:
     return out
 
 
+def _free_in_bin(session, item_id: int, warehouse_id: int, bin_id: int | None) -> decimal.Decimal:
+    bal = session.scalar(select(StockBalance).where(
+        StockBalance.item_id == item_id, StockBalance.warehouse_id == warehouse_id, StockBalance.bin_location_id == bin_id,
+        StockBalance.batch_id.is_(None)))
+    return max(decimal.Decimal(bal.quantity_on_hand) - decimal.Decimal(bal.quantity_reserved or 0), _ZERO) if bal else _ZERO
+
+
 def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], user_id: int) -> list[int]:
     """وظیفه برای ردیف‌های یک سند (تکراری ساخته نمی‌شود)."""
     from peecha.services import commercial_documents as documents_service
@@ -215,17 +222,23 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
             lines = list(session.scalars(select(StockDocumentLine).where(StockDocumentLine.stock_document_id == doc_id)
                                          .order_by(StockDocumentLine.line_no)))
             waiting = quality_control.waiting_line_ids(session, [ln.line_id for ln in lines]) if task_type == "PUTAWAY" else set()
+            cross_dock = task_type == "PUTAWAY" and stock_controls.is_on(company_id, stock_controls.CROSS_DOCK, session)
             for ln in lines:
                 if ln.line_id in existing_stock or ln.line_id in waiting:
                     continue
+                quantity = ln.quantity_base
                 if task_type == "PUTAWAY":
                     from_bin = session.scalar(select(StockLedger.bin_location_id).where(
                         StockLedger.stock_document_line_id == ln.line_id, StockLedger.movement_direction == "IN"))
+                    if cross_dock:  # R309: آنچه برای سفارش منتظر رزرو شده از محل رسید مستقیم برداشت می‌شود
+                        quantity = min(quantity, _free_in_bin(session, ln.item_id, warehouse_id, from_bin))
+                        if quantity <= 0:
+                            continue
                 else:
                     from_bin = ln.bin_location_id or _pick_bin(session, company_id, warehouse_id, ln.item_id, ln.quantity_base)
                 task = WarehouseTask(company_id=company_id, warehouse_id=warehouse_id, task_type_code=task_type,
                                      source_stock_document_id=doc_id, source_stock_line_id=ln.line_id, item_id=ln.item_id,
-                                     quantity_base=ln.quantity_base, from_bin_location_id=from_bin or _default_bin(session, warehouse_id),
+                                     quantity_base=quantity, from_bin_location_id=from_bin or _default_bin(session, warehouse_id),
                                      created_by_user_id=user_id)
                 session.add(task)
                 session.flush()

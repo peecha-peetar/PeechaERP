@@ -1043,6 +1043,245 @@ class _ExpiryTab(QWidget):
         return doc_id
 
 
+def _icon_buttons(layout: QHBoxLayout, actions) -> None:
+    from peecha.ui.screens import module_style as ms
+
+    for text, slot in actions:
+        button = ms.style_button(QPushButton(text))
+        button.clicked.connect(lambda _c=False, f=slot: f())
+        layout.addWidget(button)
+
+
+def _hint(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("sectionHint")
+    label.setWordWrap(True)
+    return label
+
+
+class _TransitTab(QWidget):
+    """R309: انتقال دومرحله‌ای بین انبارها (کلید «انتقال دومرحله‌ای بین انبارها»)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.addWidget(_hint("سند انتقال بین دو انبار را به‌صورت پیش‌نویس بسازید و اینجا «ارسال» کنید؛ کالا تا ثبت دریافت در انبار "
+                               "ترانزیت (در راه) می‌ماند. انبار مقصد مقدار رسیده را دریافت می‌کند و کسری در راه باقی می‌ماند."))
+        top = QHBoxLayout()
+        top.addWidget(QLabel("سند انتقال پیش‌نویس:"))
+        self.draft_combo = QComboBox()
+        self.draft_combo.setMinimumWidth(320)
+        top.addWidget(self.draft_combo)
+        _icon_buttons(top, (("ارسال از راه ترانزیت", self.send_selected),))
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.table = _table(["ارسال", "از انبار", "به انبار", "کالا", "ارسال‌شده", "رسیده", "در راه"])
+        self.table.itemSelectionChanged.connect(self._fill_quantity)
+        layout.addWidget(self.table, stretch=1)
+        actions = QHBoxLayout()
+        actions.addWidget(QLabel("مقدار رسیده:"))
+        self.quantity_spin = QDoubleSpinBox()
+        self.quantity_spin.setRange(0, 1e12)
+        self.quantity_spin.setDecimals(3)
+        actions.addWidget(self.quantity_spin)
+        _icon_buttons(actions, (("ثبت دریافت ارسال", self.receive_selected), ("به‌روزرسانی", self.refresh)))
+        actions.addStretch(1)
+        self.status_label = QLabel("")
+        actions.addWidget(self.status_label)
+        layout.addLayout(actions)
+        self._rows = []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        from peecha.db.base import new_session
+        from peecha.db.models.inventory import StockDocument, Warehouse
+        from peecha.services import transit_transfer
+        from sqlalchemy import select
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        with new_session() as session:
+            names = {w.warehouse_id: w for w in session.scalars(select(Warehouse).where(Warehouse.company_id == company_id))}
+            drafts = list(session.scalars(select(StockDocument).where(
+                StockDocument.company_id == company_id, StockDocument.document_type_code == "TRANSFER",
+                StockDocument.status_code.in_(("DRAFT", "CONFIRMED")),
+                StockDocument.source_warehouse_id != StockDocument.destination_warehouse_id).order_by(StockDocument.document_date)))
+        self.draft_combo.clear()
+        for d in drafts:
+            src, dst = names.get(d.source_warehouse_id), names.get(d.destination_warehouse_id)
+            if src is None or dst is None or "TRANSIT" in (src.warehouse_type_code, dst.warehouse_type_code):
+                continue
+            self.draft_combo.addItem(numerals.to_persian_digits(
+                f"انتقال {d.document_no} — {src.name} ← {dst.name} — {numerals.format_jalali_date(d.document_date)}"), d.stock_document_id)
+        self._rows = [(s, ln) for s in transit_transfer.in_transit(company_id) for ln in s.lines]
+        self.table.setRowCount(len(self._rows))
+        for row, (s, ln) in enumerate(self._rows):
+            cells = [f"#{s.document_no}", s.source_name, s.destination_name, ln.item_label, decimals.format_qty(ln.sent),
+                     decimals.format_qty(ln.received), decimals.format_qty(ln.remaining)]
+            for col, text in enumerate(cells):
+                self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+    def _selected(self):
+        row = self.table.currentRow()
+        return self._rows[row] if 0 <= row < len(self._rows) else None
+
+    def _fill_quantity(self) -> None:
+        sel = self._selected()
+        if sel is not None:
+            self.quantity_spin.setValue(float(sel[1].remaining))
+
+    def _run(self, fn, ok_text: str) -> bool:
+        try:
+            fn()
+        except ValueError as exc:
+            QMessageBox.warning(self, "ارسال بین انبارها", str(exc))
+            return False
+        theme.set_status_label(self.status_label, ok_text, ok=True)
+        self.refresh()
+        return True
+
+    def send_selected(self) -> bool:
+        from peecha.services import transit_transfer
+
+        doc_id = self.draft_combo.currentData()
+        if doc_id is None:
+            return False
+        return self._run(lambda: transit_transfer.send(self._company_id(), app_session.current_user.user_id, doc_id),
+                         "کالا ارسال شد و تا دریافت، در راه است.")
+
+    def receive_selected(self) -> bool:
+        from peecha.services import transit_transfer
+
+        sel = self._selected()
+        if sel is None:
+            return False
+        shipment, line = sel
+        qty = decimal.Decimal(str(self.quantity_spin.value()))
+        return self._run(lambda: transit_transfer.receive(self._company_id(), app_session.current_user.user_id,
+                                                          shipment.stock_document_id, {line.item_id: qty}),
+                         "دریافت ثبت شد.")
+
+
+class _FlowTab(QWidget):
+    """R309: پیشنهاد چیدمان و ارسال مستقیم از رسید (هر بخش با کلید خودش)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("انبار:"))
+        self.warehouse_combo = QComboBox()
+        self.warehouse_combo.setMinimumWidth(200)
+        self.warehouse_combo.currentIndexChanged.connect(lambda _i: self._load())
+        top.addWidget(self.warehouse_combo)
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.slot_box = QWidget()
+        slot = QVBoxLayout(self.slot_box)
+        slot.setContentsMargins(0, 0, 0, 0)
+        slot.addWidget(_hint("پیشنهاد چیدمان: کالای پرگردشی که در محل برداشت نیست و کالای کم‌گردشی که محل برداشت را گرفته است. "
+                             "برای هر پیشنهاد یک سند انتقال پیش‌نویس ساخته می‌شود که در «اسناد انبار» بررسی و ثبت می‌کنید."))
+        self.slot_table = _table(["کالا", "کلاس", "دفعات خروج", "از محل", "به محل", "مقدار", "علت"])
+        slot.addWidget(self.slot_table, stretch=1)
+        row = QHBoxLayout()
+        _icon_buttons(row, (("ساخت سند انتقال پیشنهادی", self.create_move),))
+        row.addStretch(1)
+        slot.addLayout(row)
+        layout.addWidget(self.slot_box, stretch=1)
+        self.dock_box = QWidget()
+        dock = QVBoxLayout(self.dock_box)
+        dock.setContentsMargins(0, 0, 0, 0)
+        dock.addWidget(_hint("ارسال مستقیم: رسیدهای این هفته که کالایشان را سفارش فروش تاییدشده‌ای منتظر است. با «ارسال مستقیم» همان "
+                             "موجودی محل رسید برای سفارش رزرو و وظیفهٔ برداشت از همان محل ساخته می‌شود."))
+        self.dock_table = _table(["رسید", "انبار", "کالا", "آزاد در محل رسید", "نیاز سفارش‌ها", "سفارش‌ها"])
+        dock.addWidget(self.dock_table, stretch=1)
+        row = QHBoxLayout()
+        _icon_buttons(row, (("ارسال مستقیم برای سفارش‌ها", self.cross_dock_selected),))
+        row.addStretch(1)
+        dock.addLayout(row)
+        layout.addWidget(self.dock_box, stretch=1)
+        bottom = QHBoxLayout()
+        _icon_buttons(bottom, (("به‌روزرسانی", self.refresh),))
+        bottom.addStretch(1)
+        self.status_label = QLabel("")
+        bottom.addWidget(self.status_label)
+        layout.addLayout(bottom)
+        self._slots, self._docks = [], []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        current = self.warehouse_combo.currentData()
+        self.warehouse_combo.blockSignals(True)
+        self.warehouse_combo.clear()
+        for w in locations_service.list_warehouses(company_id):
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+        self.warehouse_combo.setCurrentIndex(max(self.warehouse_combo.findData(current), 0))
+        self.warehouse_combo.blockSignals(False)
+        self._load()
+
+    def _load(self) -> None:
+        from peecha.services import cross_dock, slotting, stock_controls
+
+        company_id, warehouse_id = self._company_id(), self.warehouse_combo.currentData()
+        if company_id is None or warehouse_id is None:
+            return
+        on = stock_controls.enabled_codes(company_id)
+        self.slot_box.setVisible(stock_controls.SLOTTING in on)
+        self.dock_box.setVisible(stock_controls.CROSS_DOCK in on)
+        self._slots = slotting.suggestions(company_id, warehouse_id) if stock_controls.SLOTTING in on else []
+        self.slot_table.setRowCount(len(self._slots))
+        for r, sg in enumerate(self._slots):
+            for c, text in enumerate([sg.item_label, sg.abc_class, str(sg.picks), sg.from_code, sg.to_code,
+                                      decimals.format_qty(sg.quantity), sg.reason]):
+                self.slot_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
+        self._docks = cross_dock.opportunities(company_id, warehouse_id) if stock_controls.CROSS_DOCK in on else []
+        self.dock_table.setRowCount(len(self._docks))
+        for r, o in enumerate(self._docks):
+            for c, text in enumerate([f"#{o.document_no}", o.warehouse_name, o.item_label, decimals.format_qty(o.free),
+                                      decimals.format_qty(o.demand), "، ".join(str(n) for n in o.orders)]):
+                self.dock_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+    def create_move(self) -> int | None:
+        from peecha.db.base import new_session
+        from peecha.db.models.inventory import StockDocument
+        from peecha.services import slotting
+
+        row = self.slot_table.currentRow()
+        if not 0 <= row < len(self._slots):
+            return None
+        doc_id = slotting.create_move_draft(self._company_id(), app_session.current_user.user_id, self.warehouse_combo.currentData(),
+                                            self._slots[row])
+        with new_session() as session:
+            number = session.get(StockDocument, doc_id).document_no
+        theme.set_status_label(self.status_label, numerals.to_persian_digits(
+            f"سند پیش‌نویس انتقال شمارهٔ {number} آماده است؛ در «اسناد انبار» بررسی و ثبت کنید."), ok=True)
+        return doc_id
+
+    def cross_dock_selected(self) -> list[int] | None:
+        from peecha.services import cross_dock
+
+        row = self.dock_table.currentRow()
+        if not 0 <= row < len(self._docks):
+            return None
+        try:
+            tasks = cross_dock.execute(self._company_id(), app_session.current_user.user_id, self._docks[row].line_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "ارسال مستقیم", str(exc))
+            return None
+        theme.set_status_label(self.status_label, numerals.to_persian_digits(
+            f"موجودی برای سفارش‌ها رزرو شد و {len(tasks)} وظیفهٔ برداشت ساخته شد."), ok=True)
+        self._load()
+        return tasks
+
+
 class WarehouseOperationsScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -1060,6 +1299,8 @@ class WarehouseOperationsScreen(QWidget):
         self.kpi_tab = _KpiTab()
         self.quality_tab = _QualityTab()
         self.expiry_tab = _ExpiryTab()
+        self.transit_tab = _TransitTab()
+        self.flow_tab = _FlowTab()
         self.tabs.addTab(self.tasks_tab, "وظایف جانمایی، برداشت و تامین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارش دوره‌ای")
         self.tabs.addTab(self.replenish_tab, "قاعده‌های تامین مجدد")
@@ -1068,6 +1309,8 @@ class WarehouseOperationsScreen(QWidget):
         self.tabs.addTab(self.kpi_tab, "داشبورد عملیات")
         self.tabs.addTab(self.quality_tab, "کنترل کیفیت")
         self.tabs.addTab(self.expiry_tab, "انقضا")
+        self.tabs.addTab(self.transit_tab, "ارسال بین انبارها")
+        self.tabs.addTab(self.flow_tab, "چیدمان و ارسال مستقیم")
         self.tabs.currentChanged.connect(lambda _i: self.tabs.currentWidget().refresh())
         layout.addWidget(self.tabs, stretch=1)
 
@@ -1088,9 +1331,22 @@ class WarehouseOperationsScreen(QWidget):
         self.tabs.setTabVisible(self.tabs.indexOf(self.expiry_tab), expiry_on)
         if expiry_on:
             self.expiry_tab.refresh()
+        on = stock_controls.enabled_codes(company.company_id) if company is not None else set()
+        self.tabs.setTabVisible(self.tabs.indexOf(self.transit_tab), stock_controls.TWO_STEP_TRANSFER in on)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.flow_tab), bool({stock_controls.SLOTTING, stock_controls.CROSS_DOCK} & on))
+        if stock_controls.TWO_STEP_TRANSFER in on:
+            self.transit_tab.refresh()
+        if {stock_controls.SLOTTING, stock_controls.CROSS_DOCK} & on:
+            self.flow_tab.refresh()
 
     def show_quality(self) -> None:
         self.tabs.setCurrentWidget(self.quality_tab)
 
     def show_expiry(self) -> None:
         self.tabs.setCurrentWidget(self.expiry_tab)
+
+    def show_transit(self) -> None:
+        self.tabs.setCurrentWidget(self.transit_tab)
+
+    def show_flow(self) -> None:
+        self.tabs.setCurrentWidget(self.flow_tab)
