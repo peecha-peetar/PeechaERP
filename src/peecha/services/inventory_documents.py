@@ -455,9 +455,14 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             pass
         raise
 
+    from peecha.services import audit as audit_service
+
     with new_session() as session:
         original = session.get(StockDocument, stock_document_id)
         original.status_code = "CANCELLED"
+        audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="StockDocument",
+                                   entity_id=stock_document_id, action="REVERSE",
+                                   changes={"operation": "REVERSE_CANCEL", "reversal_stock_document_id": reversal_doc_id})
         session.commit()
 
     return reversal_doc_id
@@ -635,7 +640,9 @@ def revert_to_draft(stock_document_id: int, company_id: int) -> None:
         session.commit()
 
 
-def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
+def cancel_stock_document(stock_document_id: int, company_id: int, user_id: int | None = None) -> None:
+    from peecha.services import audit as audit_service
+
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id:
@@ -643,29 +650,78 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
         if doc.status_code not in ("DRAFT", "CONFIRMED"):
             raise ValueError("سند ثبت‌شده هرگز لغو نمی‌شود — برای اصلاح، سند تازه‌ای ثبت کنید.")
         doc.status_code = "CANCELLED"
+        audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="StockDocument",
+                                   entity_id=stock_document_id, action="CANCEL",
+                                   changes={"type": doc.document_type_code, "no": doc.document_no})
         session.commit()
+
+
+def _document_moves(doc: StockDocument) -> list[tuple[int, str]]:
+    adjust = doc.document_type_code == "ADJUSTMENT"
+    moves = []
+    if doc.source_warehouse_id is not None:
+        moves.append((doc.source_warehouse_id, "ADJUST" if adjust else "ISSUE"))
+    if doc.destination_warehouse_id is not None:
+        moves.append((doc.destination_warehouse_id, "ADJUST" if adjust else "RECEIPT"))
+    return moves
+
+
+def _before_engine(session, doc: StockDocument, user_id: int, controls) -> None:
+    """R303: کنترل‌های روشن انبار و مصرف رزرو خود سند — پیش از موتور و در همان تراکنش."""
+    from peecha.services import stock_controls, stock_reservations, warehouse_locations
+
+    stock_controls.check_warehouse_access(session, controls, user_id, _document_moves(doc))
+    if controls.location_status and doc.document_type_code != "ADJUSTMENT":
+        check = warehouse_locations.check_document_locations(doc.company_id, doc.stock_document_id, session=session,
+                                                              errors_only=True)
+        for message in check.errors:
+            controls.violate(message)
+    stock_reservations.consume_for_stock_document(session, doc.stock_document_id, include_picks=controls.reservation)
+
+
+def _log_post(session, doc: StockDocument, user_id: int, result) -> None:
+    from peecha.services import audit as audit_service
+
+    changes = {"operation": "POST", "type": doc.document_type_code, "no": doc.document_no,
+               "journal_entry_id": result.journal_entry_id}
+    if result.warnings:
+        changes["warnings"] = list(result.warnings)
+    audit_service.log_activity(session, company_id=doc.company_id, user_id=user_id, entity_type="StockDocument",
+                               entity_id=doc.stock_document_id, action="EXECUTE", changes=changes)
 
 
 def post_stock_document(
     stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
-    extra_je_lines: list[je_service.LineInput] | None = None,
+    extra_je_lines: list[je_service.LineInput] | None = None, *, soft_controls: bool = False,
 ) -> engine_service.PostResult:
+    """R303: موتور انبار، ردیابی بچ/سریال، لایه‌های بها و سند حسابداری در یک تراکنش (یا همه یا هیچ).
+    soft_controls: فروش موبایل (کالا تحویل شده) — تخلف کنترل‌های روشن فقط هشدار ثبت می‌شود، نه رد."""
     from peecha.services import lot_tracking
-
+    from peecha.services import stock_controls
     from peecha.services import warehouse_locations
+    from peecha.services.costing import engine as costing_engine
 
     # R252: ردیفِ خروجیِ بی‌محل در انبارِ دارایِ نقشه، محلی که واقعاً موجودی دارد می‌گیرد (نه محلِ پیش‌فرضِ خالی)
     warehouse_locations.assign_outbound_bins(company_id, stock_document_id)
-    # R227: بچ/سریال/انقضا -- اعتبارسنجی پیش از موتورِ انبار، ثبتِ ردیابی پس از آن.
-    lot_tracking.validate_before_post(stock_document_id, company_id)
-    result = engine_service.post_stock_document(
-        stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines,
-    )
-    lot_tracking.apply_after_post(stock_document_id, company_id)
-    # R258: لایه‌هایِ ورودی به تفکیکِ بچ/سریالِ واقعی (پایهٔ شناساییِ ویژه)
-    from peecha.services.costing import engine as costing_engine
-
-    costing_engine.split_layers_by_lot(stock_document_id)
+    with new_session() as session:
+        doc = session.get(StockDocument, stock_document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        controls = stock_controls.load(company_id, soft=soft_controls, session=session)
+        _before_engine(session, doc, posted_by_user_id, controls)
+        # R227: بچ/سریال/انقضا -- اعتبارسنجی پیش از موتورِ انبار، ثبتِ ردیابی پس از آن.
+        lot_tracking.validate_before_post_in(session, stock_document_id, company_id)
+        result = engine_service.post_stock_document(
+            stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, session=session,
+            controls=controls,
+        )
+        lot_tracking.apply_after_post_in(session, stock_document_id, company_id, controls=controls)
+        session.flush()
+        # R258: لایه‌هایِ ورودی به تفکیکِ بچ/سریالِ واقعی (پایهٔ شناساییِ ویژه)
+        costing_engine.split_layers_by_lot_in(session, stock_document_id)
+        result.warnings = list(controls.warnings)
+        _log_post(session, doc, posted_by_user_id, result)
+        session.commit()
     return result
 
 
@@ -676,8 +732,15 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
     stock_balance)؛ این‌جا فقط delegate می‌کند، هم‌الگو با post_stock_document."""
     from peecha.services import lot_tracking
 
+    from peecha.services import audit as audit_service
+
     result = engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
     lot_tracking.reverse_document_movements(stock_document_id, company_id)
+    with new_session() as session:  # R303: ردپای برگشت سند
+        audit_service.log_activity(session, company_id=company_id, user_id=reversed_by_user_id, entity_type="StockDocument",
+                                   entity_id=stock_document_id, action="REVERSE",
+                                   changes={"reversal_stock_document_id": result.stock_document_id})
+        session.commit()
     return result
 
 
@@ -734,11 +797,16 @@ def create_and_post_in_session(
                 quantity=decimal.Decimal(e.quantity), supplier_detail_account_id=e.supplier_detail_account_id,
                 is_consignment=e.is_consignment))
     session.flush()
+    from peecha.services import stock_controls
+
+    controls = stock_controls.load(company_id, session=session)
+    _before_engine(session, doc, user_id, controls)
     lot_tracking.validate_before_post_in(session, doc.stock_document_id, company_id)
     result = engine_service.post_stock_document(doc.stock_document_id, company_id, user_id, session=session,
-                                                role_overrides=role_overrides)
-    lot_tracking.apply_after_post_in(session, doc.stock_document_id, company_id)
+                                                role_overrides=role_overrides, controls=controls)
+    lot_tracking.apply_after_post_in(session, doc.stock_document_id, company_id, controls=controls)
     session.flush()
     costing_engine.split_layers_by_lot_in(session, doc.stock_document_id)
+    _log_post(session, doc, user_id, result)
     session.flush()
     return result, line_ids

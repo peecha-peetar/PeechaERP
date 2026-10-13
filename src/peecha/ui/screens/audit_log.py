@@ -25,8 +25,13 @@ from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوع موجودیت"]
 
-_ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف"}
-_ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سند حسابداری"}
+_ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف", "APPROVE": "تایید", "REVERSE": "برگشت",
+                  "MERGE": "ادغام", "SUBMIT": "ارسال", "REJECT": "رد", "DELEGATE": "واگذاری", "ESCALATE": "ارجاع به مافوق",
+                  "EXECUTE": "ثبت نهایی", "PUBLISH": "انتشار", "CANCEL": "لغو", "RETRY": "تلاش دوباره", "RESOLVE": "حل",
+                  "COMMENT": "یادداشت", "START": "شروع", "COMPLETE": "انجام"}
+_ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سند حسابداری", "StockDocument": "سند انبار",
+                       "WarehouseTask": "وظیفهٔ انبار", "CycleCountSession": "شمارش انبار", "CommercialDocument": "سند فروش/خرید",
+                       "BinLocation": "محل انبار", "ItemStorageProfile": "شرایط نگهداری کالا", "ProductionOrder": "دستور تولید"}
 
 
 class AuditLogScreen(FieldHelpMixin, QWidget):

@@ -1650,7 +1650,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if confirm != QMessageBox.Yes:
             return
         try:
-            documents_service.cancel_stock_document(self._document_id, self._company_id())
+            documents_service.cancel_stock_document(self._document_id, self._company_id(),
+                                                    app_session.current_user.user_id if app_session.current_user else None)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در لغو سند", str(exc))

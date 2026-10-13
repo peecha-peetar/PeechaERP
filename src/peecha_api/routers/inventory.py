@@ -4,10 +4,13 @@ services/inventory_engine.get_item_stock_by_warehouse موجود (بدون
 
 from __future__ import annotations
 
+import decimal
+
 from fastapi import APIRouter, Depends
 
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import stock_controls
 from peecha_api.deps import AuthContext, get_current_context
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -29,8 +32,18 @@ def list_warehouses(ctx: AuthContext = Depends(get_current_context)) -> list[dic
 
 @router.get("/{item_id}")
 def get_item_stock(item_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """R303: رزرو و موجودی آزاد هم برمی‌گردد؛ با کلید «اجرای دسترسی کاربران به انبار» فقط انبارهای مجاز."""
     rows = engine_service.get_item_stock_by_warehouse(ctx.company_id, item_id)
-    return [
-        {"warehouse_id": r.warehouse_id, "warehouse_name": r.warehouse_name, "quantity_on_hand": str(r.quantity_on_hand)}
-        for r in rows
-    ]
+    reserved: dict[int, decimal.Decimal] = {}
+    for b in engine_service.list_balances(ctx.company_id, item_id=item_id):
+        reserved[b.warehouse_id] = reserved.get(b.warehouse_id, decimal.Decimal(0)) + b.quantity_reserved
+    visible = stock_controls.visible_warehouse_ids(ctx.company_id, ctx.user_id, [r.warehouse_id for r in rows])
+    out = []
+    for r in rows:
+        if r.warehouse_id not in visible:
+            continue
+        held = reserved.get(r.warehouse_id, decimal.Decimal(0))
+        out.append({"warehouse_id": r.warehouse_id, "warehouse_name": r.warehouse_name,
+                    "quantity_on_hand": str(r.quantity_on_hand), "quantity_reserved": str(held),
+                    "quantity_available": str(r.quantity_on_hand - held)})
+    return out

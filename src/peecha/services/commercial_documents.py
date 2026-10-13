@@ -2004,6 +2004,10 @@ def confirm_document(document_id: int, company_id: int, confirmed_by_user_id: in
                 counterparty_id, f"عبور از سقف اعتبار در سفارش #{document_id}", confirmed_by_user_id,
                 related_document_id=document_id,
             )
+        # R303: رزرو موجودی سفارش (کلید «رزرو موجودی برای سفارش فروش»)؛ کمبود هرگز مانع ثبت سفارش نیست
+        from peecha.services import stock_reservations
+
+        stock_reservations.reserve_sales_order(company_id, document_id, confirmed_by_user_id)
 
 
 def approve_document(document_id: int, company_id: int, approved_by_user_id: int | None = None) -> None:
@@ -2560,6 +2564,9 @@ def revert_to_draft(document_id: int, company_id: int) -> None:
         doc.status_code = "DRAFT"
         _log_status(session, doc, _old_status)
         session.commit()
+    from peecha.services import stock_reservations
+
+    stock_reservations.release_sales_order(company_id, document_id, _actor())
 
 
 @dataclass
@@ -2684,6 +2691,9 @@ def cancel_document(
             if original is not None and original.corrected_by_document_id == document_id:
                 original.corrected_by_document_id = None
         session.commit()
+    from peecha.services import stock_reservations
+
+    stock_reservations.release_sales_order(company_id, document_id, _actor(cancelled_by_user_id))
 
 
 @dataclass
@@ -3312,6 +3322,7 @@ def post_document(
             group_post_result = inv_documents_service.post_stock_document(
                 group_stock_document_id, company_id, posted_by_user_id, is_informal_tax=is_informal_tax,
                 extra_je_lines=(landed_cost_je_lines if stock_document_id is None else None),
+                soft_controls=from_field_sales,  # R303: فروش موبایل (کالا تحویل شده) رد نمی‌شود، فقط هشدار
             )
 
             # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک

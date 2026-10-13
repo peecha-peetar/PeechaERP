@@ -241,5 +241,9 @@ def finalize_count_session(session_id: int, company_id: int, approved_by_user_id
         s.approved_by_user_id = approved_by_user_id
         s.approved_at = datetime.datetime.now()
         s.resulting_stock_document_id = document_ids[0] if document_ids else None
+        from peecha.services import audit as audit_service  # R303: ردپای تایید انبارگردانی
+
+        audit_service.log_activity(session, company_id=company_id, user_id=approved_by_user_id, entity_type="CycleCountSession",
+                                   entity_id=session_id, action="APPROVE", changes={"stock_documents": document_ids})
         session.commit()
     return document_ids

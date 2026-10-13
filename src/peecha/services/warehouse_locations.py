@@ -1071,11 +1071,33 @@ def _document_moves(doc, ln) -> list[tuple[str, int]]:
     return [(d, b) for d, b in moves if b is not None]
 
 
-def check_document_locations(company_id: int, stock_document_id: int) -> SimpleNamespace:
+def _quarantine_exit_allowed(session, doc, ln) -> bool:
+    """R303: از محل قرنطینه فقط برگشت به تامین‌کننده یا انتقال به انبار ضایعات/قرنطینه یا محل قرنطینهٔ دیگر."""
+    from peecha.db.models.inventory import Warehouse
+    from peecha.services import stock_controls
+
+    if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN", "ADJUSTMENT"):
+        return True
+    if doc.document_type_code != "TRANSFER":
+        return False
+    dest = session.get(Warehouse, doc.destination_warehouse_id) if doc.destination_warehouse_id else None
+    if dest is not None and dest.warehouse_type_code in stock_controls.DISPOSAL_WAREHOUSE_TYPES:
+        return True
+    dest_bin = session.get(BinLocation, ln.destination_bin_location_id) if ln.destination_bin_location_id else None
+    return dest_bin is not None and dest_bin.status_code == "QUARANTINE"
+
+
+def check_document_locations(company_id: int, stock_document_id: int, session=None, errors_only: bool = False) -> SimpleNamespace:
     """پیش از تایید/ثبت سند انبار: خطا = ورود به محل غیرفعال/مسدود/در تعمیر/پر یا خروج از محل مسدود/در تعمیر؛
-    هشدار = محل بدون اجازهٔ جانمایی/آسیب‌دیده، ناسازگاری کالا و عبور از ظرفیت."""
+    هشدار = محل بدون اجازهٔ جانمایی/آسیب‌دیده، ناسازگاری کالا و عبور از ظرفیت.
+    R303: با کلید «کنترل وضعیت محل»، خروج از محل قرنطینه هم خطاست (جز مقصدهای مجاز)؛ session برای ثبت اتمیک."""
+    from peecha.services import stock_controls
+
     errors, warnings = [], []
-    with new_session() as session:
+    own = session is None
+    if own:
+        session = new_session()
+    try:
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
@@ -1084,9 +1106,14 @@ def check_document_locations(company_id: int, stock_document_id: int) -> SimpleN
         moves = [(ln, d, b) for ln in lines for d, b in _document_moves(doc, ln)]
         wh_of = dict(session.execute(select(BinLocation.bin_location_id, BinLocation.warehouse_id).where(
             BinLocation.bin_location_id.in_({b for _l, _d, b in moves} or {-1}))).all())
+        quarantine_control = stock_controls.is_on(company_id, stock_controls.LOCATION_STATUS, session)
+        quarantine_ok = {ln.line_id: _quarantine_exit_allowed(session, doc, ln) for ln in lines} if quarantine_control else {}
+    finally:
+        if own:
+            session.close()
     trees: dict[int, dict] = {}
     occ_cache: dict[int, dict] = {}
-    dims = _item_dims(company_id) if moves else {}
+    dims = _item_dims(company_id) if moves and not errors_only else {}
     incoming: dict[int, list] = defaultdict(lambda: [_ZERO, _ZERO])
     for ln, direction, bin_id in moves:
         wid = wh_of.get(bin_id)
@@ -1098,10 +1125,14 @@ def check_document_locations(company_id: int, stock_document_id: int) -> SimpleN
         label = f"ردیف {ln.line_no}: محل «{node.full_code}»"
         if direction == "OUT" and node.status_code in NO_EXIT_STATUSES:
             errors.append(f"{label} {STATUSES[node.status_code]} است و خروج کالا از آن مجاز نیست.")
+        elif direction == "OUT" and node.status_code == "QUARANTINE" and quarantine_control and not quarantine_ok.get(ln.line_id):
+            errors.append(f"{label} قرنطینه است؛ فقط برگشت به تامین‌کننده یا انتقال به انبار ضایعات/قرنطینه مجاز است.")
         if direction != "IN":
             continue
         if node.status_code in NO_ENTRY_STATUSES or not node.is_active:
             errors.append(f"{label} {STATUSES.get(node.status_code, 'غیرفعال')} است و ورود کالا به آن مجاز نیست.")
+            continue
+        if errors_only:
             continue
         if not node.allow_putaway or node.is_damaged:
             warnings.append(f"{label} برای جانمایی مجاز نیست یا آسیب‌دیده است.")
@@ -1224,7 +1255,7 @@ def assign_outbound_bins(company_id: int, stock_document_id: int) -> list[tuple[
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id or doc.status_code not in ("DRAFT", "CONFIRMED"):
             return assigned
-        t = doc.document_type_code
+        t, doc_date = doc.document_type_code, doc.document_date
         if t not in _OUT_TYPES and not (t == "ADJUSTMENT" and doc.source_warehouse_id):
             return assigned
         warehouse_id = doc.source_warehouse_id
@@ -1237,11 +1268,25 @@ def assign_outbound_bins(company_id: int, stock_document_id: int) -> list[tuple[
             return assigned
         default = locations_service.get_default_bin_location(warehouse_id)
         default_id = default.bin_location_id if default else None
-        stock = defaultdict(dict)
-        for b, i, q in session.execute(select(StockBalance.bin_location_id, StockBalance.item_id, func.sum(StockBalance.quantity_on_hand))
-                                       .where(StockBalance.warehouse_id == warehouse_id)
-                                       .group_by(StockBalance.bin_location_id, StockBalance.item_id)).all():
-            stock[i][b] = (q or _ZERO) - _ZERO
+        # R303: با کلید رعایت رزرو، فقط موجودی آزاد (رزرو خود همین سند آزاد حساب می‌شود)؛ با کلید وضعیت محل، قرنطینه هم نه
+        from peecha.services import stock_controls, stock_reservations
+
+        on = stock_controls.enabled_codes(company_id, session)
+        use_free = stock_controls.RESERVATION in on
+        no_exit = NO_EXIT_STATUSES + (("QUARANTINE",) if stock_controls.LOCATION_STATUS in on
+                                      and t not in ("RETURN_OUT", "ADJUSTMENT") else ())
+        own = stock_reservations.linked_reservations(session, stock_document_id) if use_free else []
+        stock, raw = defaultdict(dict), defaultdict(dict)
+        for b, i, q, r in session.execute(select(StockBalance.bin_location_id, StockBalance.item_id,
+                                                 func.sum(StockBalance.quantity_on_hand), func.sum(StockBalance.quantity_reserved))
+                                          .where(StockBalance.warehouse_id == warehouse_id)
+                                          .group_by(StockBalance.bin_location_id, StockBalance.item_id)).all():
+            raw[i][b] = q or _ZERO
+            stock[i][b] = (q or _ZERO) - ((r or _ZERO) if use_free else _ZERO)
+        skip_expired = stock_controls.EXPIRED in on
+        for res in own:
+            if res.bin_location_id in stock.get(res.item_id, {}):
+                stock[res.item_id][res.bin_location_id] += stock_reservations.remaining(res)
     nodes = {n.location_id: n for n in tree(company_id, warehouse_id)}
     batches = bin_batches(company_id, warehouse_id)
     with new_session() as session:
@@ -1250,7 +1295,14 @@ def assign_outbound_bins(company_id: int, stock_document_id: int) -> list[tuple[
             if default_id is not None and item_stock.get(default_id, _ZERO) >= ln.quantity_base:
                 continue
             candidates = [b for b, q in item_stock.items() if b != default_id and q >= ln.quantity_base and b in nodes
-                          and nodes[b].status_code not in NO_EXIT_STATUSES and b != ln.destination_bin_location_id]
+                          and nodes[b].status_code not in no_exit and b != ln.destination_bin_location_id]
+            if not candidates and use_free:
+                # موجودی آزاد هیچ محلی کافی نیست: محل دارای موجودی تا موتور پیام روشن «رزرو شده» بدهد، نه «کمبود»
+                raw_item = raw.get(ln.item_id, {})
+                if default_id is not None and raw_item.get(default_id, _ZERO) >= ln.quantity_base:
+                    continue
+                candidates = [b for b, q in raw_item.items() if b != default_id and q >= ln.quantity_base and b in nodes
+                              and nodes[b].status_code not in no_exit and b != ln.destination_bin_location_id]
             if not candidates:
                 continue
             entries = lot_tracking.get_line_tracking(stock_line_id=ln.line_id)
@@ -1265,14 +1317,15 @@ def assign_outbound_bins(company_id: int, stock_document_id: int) -> list[tuple[
 
             def rank(b):
                 lots = batches.get((b, ln.item_id), [])
-                expiry = min((x.expiry_date for x in lots if x.expiry_date), default=datetime.date.max)
+                expiry = min((x.expiry_date for x in lots if x.expiry_date
+                              and not (skip_expired and x.expiry_date < doc_date)), default=datetime.date.max)
                 types = {a.location_type_code for a in ancestors(nodes, b)}
-                return expiry, not (types & {"PICK_FACE", "PICKING"}), -item_stock[b], nodes[b].full_code
+                return expiry, not (types & {"PICK_FACE", "PICKING"}), -item_stock.get(b, _ZERO), nodes[b].full_code
 
             chosen = min(candidates, key=rank)
             row = session.get(StockDocumentLine, ln.line_id)
             row.bin_location_id = chosen
-            item_stock[chosen] -= ln.quantity_base
+            item_stock[chosen] = item_stock.get(chosen, _ZERO) - ln.quantity_base
             assigned.append((ln.line_no, nodes[chosen].full_code))
         session.commit()
     return assigned

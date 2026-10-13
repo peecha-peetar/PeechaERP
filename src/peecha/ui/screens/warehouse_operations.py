@@ -161,7 +161,7 @@ class _TasksTab(QWidget):
 
     def cancel_selected(self) -> bool:
         task = self._selected()
-        return bool(task) and self._run(lambda: ops.cancel_task(task.task_id, self._company_id()), "وظیفه لغو شد.")
+        return bool(task) and self._run(lambda: ops.cancel_task(task.task_id, self._company_id(), self._user_id()), "وظیفه لغو شد.")
 
     def complete_selected(self, value=None) -> bool:
         """value: برای جانمایی شناسهٔ محل مقصد، برای برداشت مقدار برداشته (اگر None باشد از کاربر پرسیده می‌شود)."""

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import datetime
 import decimal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
 
@@ -249,6 +249,11 @@ def list_features(company_id: int) -> list[FeatureRow]:
             FeatureRow(d.feature_code, d.name, d.category, d.requires_feature_code, d.feature_code in enabled)
             for d in definitions
         ]
+
+
+def feature_descriptions() -> dict[str, str]:
+    with new_session() as session:
+        return {d.feature_code: d.description or "" for d in session.scalars(select(FeatureDefinition))}
 
 
 def set_feature_enabled(company_id: int, feature_code: str, is_enabled: bool) -> None:
@@ -545,6 +550,11 @@ def list_item_cost_history(
 class PostResult:
     stock_document_id: int
     journal_entry_id: int | None
+    warnings: list[str] = field(default_factory=list)  # R303: تخلف کنترل‌ها در حالت soft (فروش موبایل)
+
+
+def _q(value) -> str:
+    return format(decimal.Decimal(value).normalize(), "f")
 
 
 def _standard_cost(session, item_id: int, as_of_date: datetime.date) -> decimal.Decimal:
@@ -609,7 +619,7 @@ def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
 
 
 def _post_stock_document_core(session, stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool,
-                              extra_je_lines, role_overrides: dict[str, str] | None):
+                              extra_je_lines, role_overrides: dict[str, str] | None, controls=None):
     overrides = role_overrides or {}
     doc = session.get(StockDocument, stock_document_id)
     if doc is None or doc.company_id != company_id:
@@ -784,6 +794,16 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
                 f"موجودی کافی در انبار «{warehouse.name}» برای کالای «{item_label}» وجود ندارد "
                 f"(موجود: {bal.quantity_on_hand}، درخواستی: {quantity_base})."
             )
+        if controls is not None and controls.reservation and doc_type in ("ISSUE", "TRANSFER", "RETURN_OUT"):
+            # R303: رزرو دیگران (رزرو خود سند پیش از این مصرف شده است)
+            reserved = decimal.Decimal(bal.quantity_reserved or 0)
+            free = max(bal.quantity_on_hand - reserved, _ZERO)
+            if reserved > 0 and quantity_base > free:
+                controls.violate(
+                    f"بخشی از موجودی کالای «{item_label}» در انبار «{warehouse.name}» برای سفارش، برداشت یا تولید دیگری "
+                    f"رزرو شده است (موجود: {_q(bal.quantity_on_hand)}، رزرو: {_q(reserved)}، آزاد: {_q(free)}، "
+                    f"درخواستی: {_q(quantity_base)})."
+                )
 
         def fallback_cost() -> decimal.Decimal:
             if bal.average_unit_cost or negative_policy == "WAREHOUSE":
@@ -1300,14 +1320,15 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
 def post_stock_document(
     stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
     extra_je_lines: list[je_service.LineInput] | None = None, *, session=None,
-    role_overrides: dict[str, str] | None = None,
+    role_overrides: dict[str, str] | None = None, controls=None,
 ) -> PostResult:
     """R266: با session، موجودی و سند حسابداری در همان تراکنش فراخواننده ثبت می‌شوند (بدون commit)؛
     role_overrides نقش حساب را فقط برای همین سند عوض می‌کند (مثلاً COGS ← PRODUCTION_WIP در حوالهٔ تولید).
     بدون این دو پارامتر رفتار دقیقاً همان قبلی است."""
     if session is not None:
         doc, je_lines, description = _post_stock_document_core(
-            session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides)
+            session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides,
+            controls)
         journal_entry_id = None
         if je_lines:
             journal_entry_id = je_service.create_journal_entry(
@@ -1316,11 +1337,13 @@ def post_stock_document(
             ).journal_entry_id
             doc.journal_entry_id = journal_entry_id
         session.flush()
-        return PostResult(stock_document_id=doc.stock_document_id, journal_entry_id=journal_entry_id)
+        return PostResult(stock_document_id=doc.stock_document_id, journal_entry_id=journal_entry_id,
+                          warnings=list(controls.warnings) if controls is not None else [])
 
     with new_session() as session:
         doc, je_lines, description = _post_stock_document_core(
-            session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides)
+            session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides,
+            controls)
         session.commit()
 
         result_stock_document_id = doc.stock_document_id
@@ -1337,7 +1360,8 @@ def post_stock_document(
             doc.journal_entry_id = journal_entry_id
             session.commit()
 
-    return PostResult(stock_document_id=result_stock_document_id, journal_entry_id=journal_entry_id)
+    return PostResult(stock_document_id=result_stock_document_id, journal_entry_id=journal_entry_id,
+                      warnings=list(controls.warnings) if controls is not None else [])
 
 
 def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> PostResult:

@@ -21,6 +21,28 @@ router = APIRouter(prefix="/locations", tags=["locations"])
 _VIEW = Depends(require_permission(wl.FORM_CODE, "VIEW"))
 _EDIT = Depends(require_permission(wl.FORM_CODE, "EDIT"))
 _KEY = Depends(get_idempotency_key)
+# R303: با کلید «دسترسی جداگانه برای عملیات انبار در موبایل»، علاوه بر نقشه، دسترسی همان صفحهٔ دسکتاپ لازم است
+_OPS_FORM = "warehouse_operations"  # جانمایی، برداشت و برنامهٔ شمارش
+_TRANSFER_FORM = "inventory_document_transfer"  # انتقال
+
+
+def _area(form_code: str, action: str):
+    def _check(ctx: AuthContext = Depends(require_permission(wl.FORM_CODE, action))) -> AuthContext:
+        from peecha.services import roles as roles_service
+        from peecha.services import stock_controls
+
+        if stock_controls.is_on(ctx.company_id, stock_controls.MOBILE_PERMISSIONS) and \
+                not roles_service.user_has_permission(ctx.user_id, ctx.company_id, form_code, action):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"دسترسی لازم ({form_code}/{action}) برای این عملیات وجود ندارد.")
+        return ctx
+
+    return Depends(_check)
+
+
+_OPS_VIEW = _area(_OPS_FORM, "VIEW")
+_OPS_EDIT = _area(_OPS_FORM, "EDIT")
+_TRANSFER_EDIT = _area(_TRANSFER_FORM, "EDIT")
 
 
 def _write(key: str | None, endpoint: str, ctx: AuthContext, compute, serialize) -> dict:
@@ -156,7 +178,7 @@ def storage_profile(item_id: int, ctx: AuthContext = _VIEW) -> dict:
 
 @router.get("/tasks")
 def list_tasks(task_type: str | None = None, open_only: bool = True, warehouse_id: int | None = None,
-               ctx: AuthContext = _VIEW) -> list[dict]:
+               ctx: AuthContext = _OPS_VIEW) -> list[dict]:
     """وظایف انبار برای اپ انباردار (جانمایی/برداشت/تامین مجدد) با کد کالا و محل."""
     from peecha.services import inventory_catalog as catalog_service
 
@@ -184,7 +206,7 @@ def list_tasks(task_type: str | None = None, open_only: bool = True, warehouse_i
 
 
 @router.post("/tasks/{task_id}/start")
-def start_task(task_id: int, ctx: AuthContext = _EDIT) -> dict:
+def start_task(task_id: int, ctx: AuthContext = _OPS_EDIT) -> dict:
     try:
         ops.start_task(task_id, ctx.company_id, ctx.user_id)
     except ValueError as exc:
@@ -193,7 +215,7 @@ def start_task(task_id: int, ctx: AuthContext = _EDIT) -> dict:
 
 
 @router.get("/waves")
-def list_waves(open_only: bool = True, ctx: AuthContext = _VIEW) -> list[dict]:
+def list_waves(open_only: bool = True, ctx: AuthContext = _OPS_VIEW) -> list[dict]:
     """R250: موج‌های برداشت با پیشرفت."""
     out = []
     for w in ops.list_waves(ctx.company_id, open_only):
@@ -210,7 +232,7 @@ class WaveCreate(BaseModel):
 
 
 @router.post("/waves")
-def create_wave(body: WaveCreate, ctx: AuthContext = _EDIT) -> dict:
+def create_wave(body: WaveCreate, ctx: AuthContext = _OPS_EDIT) -> dict:
     try:
         return {"wave_id": ops.create_wave(ctx.company_id, body.warehouse_id, ctx.user_id, body.task_ids)}
     except ValueError as exc:
@@ -218,12 +240,12 @@ def create_wave(body: WaveCreate, ctx: AuthContext = _EDIT) -> dict:
 
 
 @router.post("/replenishment/generate")
-def generate_replenishment(warehouse_id: int | None = None, ctx: AuthContext = _EDIT) -> dict:
+def generate_replenishment(warehouse_id: int | None = None, ctx: AuthContext = _OPS_EDIT) -> dict:
     return {"task_ids": ops.generate_replenishment_tasks(ctx.company_id, ctx.user_id, warehouse_id)}
 
 
 @router.get("/counts")
-def list_counts(ctx: AuthContext = _VIEW) -> list[dict]:
+def list_counts(ctx: AuthContext = _OPS_VIEW) -> list[dict]:
     """R250: شمارش‌های باز محل‌محور."""
     from peecha.services import location_counts as lc
 
@@ -239,7 +261,7 @@ class CountCreate(BaseModel):
 
 
 @router.post("/counts")
-def create_count(body: CountCreate, ctx: AuthContext = _EDIT) -> dict:
+def create_count(body: CountCreate, ctx: AuthContext = _OPS_EDIT) -> dict:
     from peecha.services import location_counts as lc
 
     try:
@@ -249,7 +271,7 @@ def create_count(body: CountCreate, ctx: AuthContext = _EDIT) -> dict:
 
 
 @router.get("/counts/{session_id}")
-def count_detail(session_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
+def count_detail(session_id: int, ctx: AuthContext = _OPS_VIEW) -> list[dict]:
     """ردیف‌های شمارش؛ در شمارش کور مقدار دفتری تا پیش از شمارش پنهان است."""
     from peecha.services import location_counts as lc
 
@@ -274,7 +296,7 @@ class CountRecord(BaseModel):
 
 
 @router.post("/counts/{session_id}/record")
-def record_count(session_id: int, body: CountRecord, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+def record_count(session_id: int, body: CountRecord, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     from peecha.services import location_counts as lc
 
     return _write(key, f"POST /locations/counts/{session_id}/record", ctx,
@@ -290,7 +312,7 @@ class SerialCountRecord(BaseModel):
 
 
 @router.post("/counts/{session_id}/serials")
-def record_serial_count(session_id: int, body: SerialCountRecord, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+def record_serial_count(session_id: int, body: SerialCountRecord, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     """R252: سریال‌های اسکن‌شده در یک محل."""
     from peecha.services import location_counts as lc
 
@@ -300,7 +322,7 @@ def record_serial_count(session_id: int, body: SerialCountRecord, ctx: AuthConte
 
 
 @router.get("/putaway-sources")
-def putaway_sources(ctx: AuthContext = _VIEW) -> list[dict]:
+def putaway_sources(ctx: AuthContext = _OPS_VIEW) -> list[dict]:
     """R252: رسیدهای ثبت‌شدهٔ اخیر که هنوز وظیفهٔ جانمایی ندارند (برای ساخت وظیفه از موبایل)."""
     return [{"document_id": src.key[1], "document_type": src.doc.document_type_code, "document_no": src.doc.document_no,
              "document_date": src.doc.document_date.isoformat(), "warehouse_id": src.doc.destination_warehouse_id,
@@ -313,7 +335,7 @@ class TaskGenerate(BaseModel):
 
 
 @router.post("/tasks/generate")
-def generate_tasks(body: TaskGenerate, ctx: AuthContext = _EDIT) -> dict:
+def generate_tasks(body: TaskGenerate, ctx: AuthContext = _OPS_EDIT) -> dict:
     try:
         return {"task_ids": ops.generate_tasks(ctx.company_id, body.task_type, ("STOCK", body.document_id), ctx.user_id)}
     except ValueError as exc:
@@ -321,7 +343,7 @@ def generate_tasks(body: TaskGenerate, ctx: AuthContext = _EDIT) -> dict:
 
 
 @router.get("/kpis")
-def kpis(days: int = 30, warehouse_id: int | None = None, ctx: AuthContext = _VIEW) -> dict:
+def kpis(days: int = 30, warehouse_id: int | None = None, ctx: AuthContext = _OPS_VIEW) -> dict:
     """R251: داشبورد عملیات انبار."""
     import datetime
 
@@ -401,7 +423,7 @@ class TransferRequest(BaseModel):
 
 
 @router.post("/transfer")
-def transfer(body: TransferRequest, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+def transfer(body: TransferRequest, ctx: AuthContext = _TRANSFER_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, "POST /locations/transfer", ctx,
                   lambda: wl.transfer(ctx.company_id, ctx.user_id, body.item_id, body.from_location_id, body.to_location_id,
                                       body.quantity, body.allow_over_capacity),
@@ -413,7 +435,7 @@ class PutawayConfirm(BaseModel):
 
 
 @router.post("/tasks/{task_id}/putaway")
-def confirm_putaway(task_id: int, body: PutawayConfirm, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+def confirm_putaway(task_id: int, body: PutawayConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/putaway", ctx,
                   lambda: ops.complete_putaway(task_id, ctx.company_id, ctx.user_id, body.to_location_id),
                   lambda doc_id: {"task_id": task_id, "stock_document_id": doc_id})
@@ -424,7 +446,7 @@ class PickConfirm(BaseModel):
 
 
 @router.post("/tasks/{task_id}/pick")
-def confirm_pick(task_id: int, body: PickConfirm, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+def confirm_pick(task_id: int, body: PickConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/pick", ctx,
                   lambda: ops.complete_pick(task_id, ctx.company_id, ctx.user_id, body.quantity),
                   lambda _r: {"task_id": task_id, "status": "DONE"})
@@ -435,7 +457,7 @@ class ReplenishConfirm(BaseModel):
 
 
 @router.post("/tasks/{task_id}/replenish")
-def confirm_replenish(task_id: int, body: ReplenishConfirm, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+def confirm_replenish(task_id: int, body: ReplenishConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/replenish", ctx,
                   lambda: ops.complete_replenishment(task_id, ctx.company_id, ctx.user_id, body.quantity),
                   lambda doc_id: {"task_id": task_id, "stock_document_id": doc_id})

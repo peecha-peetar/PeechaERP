@@ -12,12 +12,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -714,17 +716,32 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         self.status_label.setText("ذخیره شد.")
 
 
+# R303: قابلیت‌ها به تفکیک گروه، هرکدام با توضیح کوتاه زیرش
+_FEATURE_CATEGORIES = [
+    ("WMS", "کنترل‌های انبار پیشرفته"), ("LOCATION", "انبار و محل"), ("TRACKING", "ردیابی"), ("QUALITY", "کیفیت"),
+    ("CATALOG", "کالا"), ("PLANNING", "برنامه‌ریزی"), ("WORKFLOW", "گردش کار"), ("SECURITY", "امنیت"),
+]
+
+
 class _FeatureToggleTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._checkboxes: dict[str, QCheckBox] = {}
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        outer.addWidget(scroll)
+        body = QWidget()
+        scroll.setWidget(body)
+        layout = QVBoxLayout(body)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("قابلیت‌های فعال")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("فعال‌سازی هر قابلیت ممکن است به قابلیت دیگری وابسته باشد."))
+        layout.addWidget(QLabel("هر قابلیت را می‌توانید روشن یا خاموش کنید؛ بعضی به روشن‌بودن قابلیت دیگری نیاز دارند."))
 
         self.rows_layout = QVBoxLayout()
         layout.addLayout(self.rows_layout)
@@ -744,12 +761,29 @@ class _FeatureToggleTab(QWidget):
         self._checkboxes = {}
         if company_id is None:
             return
-        for feature in engine_service.list_features(company_id):
-            checkbox = QCheckBox(feature.name)
-            checkbox.setChecked(feature.is_enabled)
-            checkbox.toggled.connect(lambda checked, code=feature.feature_code: self._toggle(code, checked))
-            self._checkboxes[feature.feature_code] = checkbox
-            self.rows_layout.addWidget(checkbox)
+        features = engine_service.list_features(company_id)
+        descriptions = engine_service.feature_descriptions()
+        order = [code for code, _label in _FEATURE_CATEGORIES]
+        groups = dict(_FEATURE_CATEGORIES)
+        for category in order + sorted({f.category for f in features} - set(order)):
+            members = [f for f in features if f.category == category]
+            if not members:
+                continue
+            heading = QLabel(groups.get(category, category))
+            heading.setObjectName("sectionTitle")
+            self.rows_layout.addWidget(heading)
+            for feature in members:
+                checkbox = QCheckBox(feature.name)
+                checkbox.setChecked(feature.is_enabled)
+                checkbox.toggled.connect(lambda checked, code=feature.feature_code: self._toggle(code, checked))
+                self._checkboxes[feature.feature_code] = checkbox
+                self.rows_layout.addWidget(checkbox)
+                if descriptions.get(feature.feature_code):
+                    hint = QLabel(descriptions[feature.feature_code])
+                    hint.setObjectName("sectionHint")
+                    hint.setWordWrap(True)
+                    hint.setContentsMargins(24, 0, 0, 4)
+                    self.rows_layout.addWidget(hint)
         self.status_label.setText("")
 
     def _toggle(self, feature_code: str, checked: bool) -> None:

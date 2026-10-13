@@ -5161,6 +5161,25 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.warning(self, "هشدار بودجهٔ خرید", "\n".join(warnings))
         return warnings
 
+    def _reservation_warnings(self) -> list[str]:
+        """R303: کمبود موجودی آزاد سفارش فروش پس از تایید (فقط هشدار، جلوی ثبت را نمی‌گیرد)."""
+        if self._document_id is None or self.document_type_code != "SALES_ORDER":
+            return []
+        from peecha.services import stock_controls, stock_reservations
+
+        if not stock_controls.is_on(self._company_id(), stock_controls.SALES_ORDER_RESERVATION):
+            return []
+        _doc, lines = documents_service.get_document(self._document_id, self._company_id())
+        reserved = stock_reservations.order_reservation_summary(self._company_id(), self._document_id)
+        warnings = []
+        for ln in lines:
+            short = ln.quantity_base - reserved.get(ln.line_id, ln.quantity_base)
+            if short > 0:
+                warnings.append(f"ردیف {ln.line_no}: {format(short.normalize(), 'f')} واحد موجودی آزاد برای رزرو نبود.")
+        if warnings:
+            QMessageBox.warning(self, "هشدار موجودی سفارش", "\n".join(warnings) + "\n\nسفارش ثبت شد؛ این مقدار رزرو نشده است.")
+        return warnings
+
     def _confirm_button_clicked(self) -> None:
         # طبقِ گزارشِ صریحِ کاربر («کاربر فاکتور را صادر می‌کند و نحوه‌یِ
         # دریافت هم در ابتدا مشخص می‌شود»): به‌جایِ اینکه کاربر بعداً
@@ -5169,6 +5188,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         confirmed = self._confirm()
         if confirmed:
             self._budget_warnings()
+            self._reservation_warnings()
         if confirmed and self._is_invoice:
             self._prompt_settlement_after_confirm()
             if self._one_step_invoice_post:

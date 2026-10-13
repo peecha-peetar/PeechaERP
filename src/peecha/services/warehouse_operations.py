@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from peecha.db.base import new_session
 from peecha.db.models.inventory import (
@@ -248,7 +249,11 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
                 created.append(task.task_id)
         else:
             raise ValueError("منبع وظیفه نامعتبر است.")
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError as exc:  # R303: ایندکس یکتای وظیفه (ساخت هم‌زمان)
+            session.rollback()
+            raise ValueError("برای این ردیف همین حالا وظیفه ساخته شده است؛ فهرست وظایف را تازه کنید.") from exc
     return created
 
 
@@ -282,7 +287,16 @@ def start_task(task_id: int, company_id: int, user_id: int) -> None:
         session.commit()
 
 
-def cancel_task(task_id: int, company_id: int) -> None:
+def _audit(session, task: WarehouseTask, action: str, user_id: int | None, **changes) -> None:
+    """R303: ردپای عملیات وظیفهٔ انبار در audit.activity_log (همان تراکنش)."""
+    from peecha.services import audit as audit_service
+
+    audit_service.log_activity(session, company_id=task.company_id, user_id=user_id, entity_type="WarehouseTask",
+                               entity_id=task.task_id, action=action,
+                               changes={"type": task.task_type_code, **{k: str(v) for k, v in changes.items()}})
+
+
+def cancel_task(task_id: int, company_id: int, user_id: int | None = None) -> None:
     with new_session() as session:
         task = _task(session, task_id, company_id)
         if task.status_code == "DONE":
@@ -290,6 +304,7 @@ def cancel_task(task_id: int, company_id: int) -> None:
         task.status_code = "CANCELLED"
         _release(session, task, "CANCELLED")
         _close_wave_if_done(session, task.wave_id)
+        _audit(session, task, "CANCEL", user_id)
         session.commit()
 
 
@@ -337,6 +352,7 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
         task.status_code, task.completed_at, task.completed_by_user_id = "DONE", now, user_id
         task.started_at = task.started_at or now
         task.to_bin_location_id, task.done_quantity_base, task.resulting_stock_document_id = to_bin_location_id, qty, doc_id
+        _audit(session, task, "COMPLETE", user_id, quantity=qty, to_bin=to_bin_location_id, stock_document_id=doc_id)
         session.commit()
     return doc_id
 
@@ -356,6 +372,7 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
         _release(session, task, "FULFILLED", picked_quantity)
         warehouse_id, wave_id = task.warehouse_id, task.wave_id
         _close_wave_if_done(session, wave_id)
+        _audit(session, task, "COMPLETE", user_id, quantity=picked_quantity, requested=task.quantity_base)
         session.commit()
     auto_replenish(company_id, user_id, warehouse_id)
 
@@ -365,39 +382,39 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
 # R249: رزروِ وظیفه، انتخابِ محلِ برداشت و تأمینِ مجددِ جبههٔ برداشت
 # =====================================================================
 def _reserve(session, task: WarehouseTask) -> None:
-    """رزرو قطعی مقدار وظیفه در همان inv.stock_reservations (ستون رزرو موتور انبار دست نمی‌خورد)."""
+    """رزرو قطعی مقدار وظیفه در همان inv.stock_reservations (R303: تابع مشترک stock_reservations).
+    برداشت از ردیف سفارشی که خودش رزرو دارد، رزرو دوم نمی‌سازد."""
+    from peecha.services import stock_reservations
+
     if task.task_type_code not in _RESERVATION_SOURCE or not task.quantity_base or task.quantity_base <= 0:
         return
-    res = StockReservation(company_id=task.company_id, item_id=task.item_id, warehouse_id=task.warehouse_id,
+    if task.source_commercial_line_id and stock_reservations.active(
+            session, stock_reservations.SALES_ORDER, [task.source_commercial_line_id], lock=False):
+        return
+    stock_reservations.add(session, company_id=task.company_id, item_id=task.item_id, warehouse_id=task.warehouse_id,
                            bin_location_id=task.from_bin_location_id, quantity=task.quantity_base,
-                           source_type_code=_RESERVATION_SOURCE[task.task_type_code], source_record_id=task.task_id)
-    session.add(res)
-    _hold(session, res, 1)
+                           source_type=_RESERVATION_SOURCE[task.task_type_code], source_id=task.task_id)
 
 
 def _hold(session, res: StockReservation, sign: int) -> None:
-    """R252: رزرو فعال در ستون رزرو مانده هم نگه داشته می‌شود تا «موجودی آزاد» (کاتالوگ/فروشگاه/بارگیری) کم شود.
-    موتور انبار این ستون را بررسی نمی‌کند، پس ثبت حواله و فروش هرگز به‌خاطر آن رد نمی‌شود."""
-    if res.bin_location_id is None:
-        return
-    bal = session.scalar(select(StockBalance).where(
-        StockBalance.item_id == res.item_id, StockBalance.warehouse_id == res.warehouse_id,
-        StockBalance.bin_location_id == res.bin_location_id, StockBalance.batch_id.is_(None)))
-    if bal is not None:
-        bal.quantity_reserved = max(_ZERO, (bal.quantity_reserved or _ZERO) + sign * res.quantity)
+    """R252: رزرو فعال در ستون رزرو مانده هم نگه داشته می‌شود تا «موجودی آزاد» کم شود (R303: ماندهٔ رزرو، تابع مشترک).
+    موتور انبار فقط با کلید «خروج فقط از موجودی آزاد» این ستون را بررسی می‌کند."""
+    from peecha.services import stock_reservations
+
+    stock_reservations.hold(session, res, sign * stock_reservations.remaining(res))
 
 
 def _release(session, task: WarehouseTask, status: str, fulfilled: decimal.Decimal | None = None) -> None:
+    from peecha.services import stock_reservations
+
     source = _RESERVATION_SOURCE.get(task.task_type_code)
     if source is None:
         return
-    for res in session.scalars(select(StockReservation).where(
-            StockReservation.source_type_code == source, StockReservation.source_record_id == task.task_id,
-            StockReservation.status_code == "ACTIVE")):
-        res.status_code, res.released_at = status, datetime.datetime.now()
-        _hold(session, res, -1)
+    for res in stock_reservations.active(session, source, [task.task_id]):
+        done = decimal.Decimal(res.fulfilled_quantity_base or 0)
+        stock_reservations.release(session, res, status)
         if fulfilled is not None:
-            res.fulfilled_quantity_base = min(decimal.Decimal(fulfilled), res.quantity)
+            res.fulfilled_quantity_base = max(done, min(decimal.Decimal(fulfilled), res.quantity))
 
 
 def task_reservations(company_id: int, task_id: int) -> list[StockReservation]:
@@ -616,6 +633,7 @@ def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity
         for res in session.scalars(select(StockReservation).where(
                 StockReservation.source_type_code == "WMS_REPLENISH_TASK", StockReservation.source_record_id == task_id)):
             res.status_code, res.fulfilled_quantity_base = "FULFILLED", min(qty, res.quantity)
+        _audit(session, task, "COMPLETE", user_id, quantity=qty, stock_document_id=doc_id)
         session.commit()
     return doc_id
 

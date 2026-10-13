@@ -387,12 +387,10 @@ def _reserve_material(session, order: ProductionOrder, m: OrderMaterial) -> deci
 
 
 def _hold(session, res: StockReservation, delta: decimal.Decimal) -> None:
-    """همان ستون رزرو ماندهٔ موجودی (هم‌الگو با رزرو وظایف انبار) تا موجودی آزاد کم شود."""
-    bal = session.scalar(select(StockBalance).where(
-        StockBalance.item_id == res.item_id, StockBalance.warehouse_id == res.warehouse_id,
-        StockBalance.bin_location_id == res.bin_location_id, StockBalance.batch_id.is_(None)).with_for_update())
-    if bal is not None:
-        bal.quantity_reserved = max(ZERO, decimal.Decimal(bal.quantity_reserved or 0) + delta)
+    """همان ستون رزرو ماندهٔ موجودی (R303: تابع مشترک stock_reservations) تا موجودی آزاد کم شود."""
+    from peecha.services import stock_reservations
+
+    stock_reservations.hold(session, res, delta)
 
 
 def _consume_reservation(session, m: OrderMaterial, quantity: decimal.Decimal, status_if_all: str = "FULFILLED") -> None:
@@ -671,12 +669,18 @@ def _issue(session, order: ProductionOrder, lines: list[IssueLine], date: dateti
         wh = ln.warehouse_id or m.warehouse_id or order.material_warehouse_id
         by_wh.setdefault(wh, []).append((m, ln, item_id))
     txns: list[OrderTransaction] = []
+    from peecha.services import stock_controls
+
+    # R303: با کلید رعایت رزرو، رزرو خود دستور پیش از انتخاب محل آزاد می‌شود و فقط موجودی آزاد برداشته می‌شود
+    enforce = stock_controls.is_on(order.company_id, stock_controls.RESERVATION, session)
     for n, (wh, group) in enumerate(by_wh.items()):
         doc_lines, owners = [], []
         for m, ln, item_id in group:
             q = decimal.Decimal(ln.quantity)
             uom = session.get(Item, item_id).base_uom_id
-            bins = _bins_with_stock(session, item_id, wh, free_only=False)
+            if enforce:
+                _consume_reservation(session, m, q)
+            bins = _bins_with_stock(session, item_id, wh, free_only=enforce)
             left = q
             for bin_id, avail in bins:
                 take = min(avail, left)
@@ -688,8 +692,10 @@ def _issue(session, order: ProductionOrder, lines: list[IssueLine], date: dateti
                 left -= take
             if left > 0:
                 if not st.allow_negative_material:
+                    held = " (بخشی از موجودی برای دستور یا سفارش دیگری رزرو شده است)" if enforce and \
+                        _stock_in(session, item_id, wh) >= q else ""
                     raise ValueError(f"موجودی «{c.item_label(session, item_id)}» در انبار کافی نیست "
-                                     f"(کمبود {c.qty(left).normalize()}).")
+                                     f"(کمبود {c.qty(left).normalize()}){held}.")
                 doc_lines.append(inv_docs.LineFields(item_id=item_id, uom_id=uom, quantity=left, quantity_base=left,
                                                      conversion_factor=ONE))
                 owners.append((m, item_id, left))
@@ -705,7 +711,8 @@ def _issue(session, order: ProductionOrder, lines: list[IssueLine], date: dateti
         for i, ((m, item_id, q), amount) in enumerate(zip(owners, per_line)):
             m.issued_qty = decimal.Decimal(m.issued_qty) + q
             m.issued_amount = decimal.Decimal(m.issued_amount) + amount
-            _consume_reservation(session, m, q)
+            if not enforce:
+                _consume_reservation(session, m, q)
             k = key if (key and n == 0 and i == 0) else (f"{key}:{n}:{i}" if key else None)
             txns.append(record(session, order, "ISSUE", date, user_id, item_id=item_id, quantity=q, amount=amount,
                                wip_delta=amount, material_id=m.material_id, stock_document_id=result.stock_document_id,

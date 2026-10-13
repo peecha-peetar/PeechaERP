@@ -280,6 +280,10 @@ def finalize_location_count(company_id: int, session_id: int, user_id: int) -> l
         s = _session(session, company_id, session_id)
         s.status_code, s.approved_by_user_id, s.approved_at = "POSTED", user_id, datetime.datetime.now()
         s.resulting_stock_document_id = doc_ids[0] if doc_ids else None
+        from peecha.services import audit as audit_service  # R303: ردپای تایید شمارش محل
+
+        audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="CycleCountSession",
+                                   entity_id=session_id, action="APPROVE", changes={"stock_documents": doc_ids})
         session.commit()
     return doc_ids
 

@@ -388,7 +388,7 @@ def _bin_pools(session, company_id: int, item_id: int, bin_id: int) -> dict[tupl
 
 def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quantity: decimal.Decimal,
                   entries: list[TrackingEntry], preferred_supplier_id: int | None, prefer_consignment: bool,
-                  bin_id: int | None = None):
+                  bin_id: int | None = None, exclude_expired_on: datetime.date | None = None):
     """[(batch_id, serial_id, supplier_id, is_consignment, qty)] از استخرهای همین انبار.
     R251: اگر محل خروج معلوم است، اول از استخرهای موجود در همان محل (تا سقف موجودی محل)."""
     pools = _pools(session, company_id, item.item_id, warehouse_id)
@@ -402,6 +402,11 @@ def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quant
     }
     remaining_by_pool = {(p[1], p[2], p[3], p[4]): p[5] for p in pools}
     first_seen = {(p[1], p[2], p[3], p[4]): p[6] for p in pools}
+    if exclude_expired_on is not None:  # R303: بچ تاریخ‌گذشته انتخاب نمی‌شود
+        for key in remaining_by_pool:
+            expiry = batch_expiry.get(key[0])
+            if expiry is not None and expiry < exclude_expired_on:
+                remaining_by_pool[key] = _ZERO
     result = []
 
     def take(keys, wanted):
@@ -485,14 +490,47 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
         session.commit()
 
 
-def apply_after_post_in(session, stock_document_id: int, company_id: int) -> None:
-    """R266: همان منطق در تراکنش فراخواننده (بدون commit)."""
+def _expired_exit_blocked(session, doc: StockDocument) -> bool:
+    """R303: خروج کالای منقضی فقط در حواله و انتقال به انبار دیگر (جز ضایعات/قرنطینه) ممنوع است."""
+    from peecha.db.models.inventory import Warehouse
+    from peecha.services import stock_controls
+
+    if doc.document_type_code == "ISSUE":
+        return True
+    if doc.document_type_code != "TRANSFER" or doc.destination_warehouse_id == doc.source_warehouse_id:
+        return False
+    dest = session.get(Warehouse, doc.destination_warehouse_id)
+    return dest is None or dest.warehouse_type_code not in stock_controls.DISPOSAL_WAREHOUSE_TYPES
+
+
+def _check_explicit_expiry(session, item: Item, line: StockDocumentLine, entries: list[TrackingEntry],
+                           on_date: datetime.date, controls) -> None:
+    from peecha.services import stock_controls
+
+    batch_ids = {line.batch_id} if line.batch_id else set()
+    names = {e.batch_no for e in entries if e.batch_no}
+    q = select(Batch).where(Batch.item_id == item.item_id)
+    for batch in session.scalars(q):
+        if (batch.batch_id in batch_ids or batch.batch_no in names) and stock_controls.is_expired(batch.expiry_date, on_date):
+            controls.violate(f"بچ «{batch.batch_no}» کالای «{_item_name(session, item)}» در "
+                             f"{_jalali(batch.expiry_date)} منقضی شده و خروج آن مجاز نیست.")
+
+
+def _jalali(value: datetime.date) -> str:
+    from peecha.numerals import format_jalali_date
+
+    return format_jalali_date(value)
+
+
+def apply_after_post_in(session, stock_document_id: int, company_id: int, controls=None) -> None:
+    """R266: همان منطق در تراکنش فراخواننده (بدون commit). R303: controls = کنترل خروج کالای منقضی."""
     doc = session.get(StockDocument, stock_document_id)
     if doc is None or doc.company_id != company_id:
         return
     directions = _directions(doc)
     if not directions:
         return
+    expiry_guard = controls is not None and controls.expired and _expired_exit_blocked(session, doc)
     lines = session.scalars(
         select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
         .order_by(StockDocumentLine.line_no)
@@ -524,11 +562,24 @@ def apply_after_post_in(session, stock_document_id: int, company_id: int) -> Non
             if direction == "OUT":
                 prefer_supplier = supplier_id if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else None
                 out_bin = ledger_bin.get((line.line_id, warehouse_id, "OUT"))
-                allocations = _allocate_out(
+                allocate = lambda cutoff=None: _allocate_out(  # noqa: E731
                     session, company_id, item, warehouse_id, line.quantity_base, entries,
                     prefer_supplier, prefer_consignment=doc.document_type_code == "CONSIGN_RETURN",
-                    bin_id=out_bin if line.bin_location_id is not None else None,
+                    bin_id=out_bin if line.bin_location_id is not None else None, exclude_expired_on=cutoff,
                 )
+                if expiry_guard and item.track_batch:
+                    _check_explicit_expiry(session, item, line, entries, doc.document_date, controls)
+                    allocations = allocate(None if controls.soft else doc.document_date)
+                    got = sum((a[4] for a in allocations), _ZERO)
+                    if controls.soft:
+                        fresh = sum((a[4] for a in allocate(doc.document_date)), _ZERO)
+                        if fresh < got:
+                            controls.violate(f"بخشی از کالای «{_item_name(session, item)}» از بچ منقضی خارج شد.")
+                    elif got < line.quantity_base and sum((a[4] for a in allocate()), _ZERO) > got:
+                        controls.violate(f"موجودی غیرمنقضی کالای «{_item_name(session, item)}» در این انبار کافی نیست "
+                                         f"({format(got.normalize(), 'f')} از {format(line.quantity_base.normalize(), 'f')}).")
+                else:
+                    allocations = allocate()
                 for batch_id, serial_id, sup, cons, q in allocations:
                     session.add(LotMovement(
                         company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
