@@ -435,7 +435,10 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
         _ensure_auto_reversal_reason_code(company_id, reversal_type) if reversal_type in _REASON_REQUIRED_TYPES else None
     )
 
+    from peecha.services import quality_control
+
     reversal_doc_id = create_stock_document(company_id, user_id, reversal_type, datetime.date.today(), header)
+    qc_released = quality_control.release_document(stock_document_id)  # R306: کالای منتظر کیفیت هم برمی‌گردد
     try:
         for line_no, item_id, uom_id, quantity, quantity_base, bin_location_id, destination_bin_location_id, factor in lines_snapshot:
             add_line(reversal_doc_id, company_id, LineFields(
@@ -453,6 +456,8 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             delete_stock_document(reversal_doc_id, company_id)
         except ValueError:
             pass
+        if qc_released:
+            quality_control.rehold_document(stock_document_id)
         raise
 
     from peecha.services import audit as audit_service
@@ -719,6 +724,9 @@ def post_stock_document(
         session.flush()
         # R258: لایه‌هایِ ورودی به تفکیکِ بچ/سریالِ واقعی (پایهٔ شناساییِ ویژه)
         costing_engine.split_layers_by_lot_in(session, stock_document_id)
+        from peecha.services import quality_control
+
+        quality_control.hold_receipt(session, doc)  # R306: کلید «نگه‌داشت رسید تا تایید کیفیت»
         result.warnings = list(controls.warnings)
         _log_post(session, doc, posted_by_user_id, result)
         session.commit()
@@ -733,9 +741,11 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
     from peecha.services import lot_tracking
 
     from peecha.services import audit as audit_service
+    from peecha.services import quality_control
 
     result = engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
     lot_tracking.reverse_document_movements(stock_document_id, company_id)
+    quality_control.release_document(stock_document_id)
     with new_session() as session:  # R303: ردپای برگشت سند
         audit_service.log_activity(session, company_id=company_id, user_id=reversed_by_user_id, entity_type="StockDocument",
                                    entity_id=stock_document_id, action="REVERSE",

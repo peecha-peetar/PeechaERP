@@ -31,7 +31,8 @@ _ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "�
                   "COMMENT": "یادداشت", "START": "شروع", "COMPLETE": "انجام"}
 _ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سند حسابداری", "StockDocument": "سند انبار",
                        "WarehouseTask": "وظیفهٔ انبار", "CycleCountSession": "شمارش انبار", "CommercialDocument": "سند فروش/خرید",
-                       "BinLocation": "محل انبار", "ItemStorageProfile": "شرایط نگهداری کالا", "ProductionOrder": "دستور تولید"}
+                       "BinLocation": "محل انبار", "ItemStorageProfile": "شرایط نگهداری کالا", "ProductionOrder": "دستور تولید",
+                       "QcInspection": "بازرسی کیفیت"}
 
 
 class AuditLogScreen(FieldHelpMixin, QWidget):

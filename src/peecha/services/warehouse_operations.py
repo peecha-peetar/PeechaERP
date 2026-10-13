@@ -21,6 +21,7 @@ from peecha.db.models.inventory import (
     BinLocation, CycleCountLine, CycleCountPlan, CycleCountSession, LocationReplenishmentRule, PickWave, StockBalance, StockDocument,
     StockDocumentLine, StockLedger, StockReservation, WarehouseTask,
 )
+from peecha.services import quality_control
 
 _ZERO = decimal.Decimal(0)
 TASK_TYPES = {"PUTAWAY": "جانمایی", "PICK": "برداشت", "REPLENISH": "تامین مجدد"}
@@ -162,6 +163,7 @@ def putaway_sources(company_id: int, days: int = 60) -> list[SimpleNamespace]:
         tasked = set(session.scalars(select(WarehouseTask.source_stock_line_id).where(
             WarehouseTask.company_id == company_id, WarehouseTask.task_type_code == "PUTAWAY",
             WarehouseTask.status_code != "CANCELLED", WarehouseTask.source_stock_line_id.is_not(None))))
+        tasked |= quality_control.waiting_line_ids(session)  # R306: منتظر کنترل کیفیت هنوز جانمایی نمی‌شود
         lines = {}
         for ln in session.scalars(select(StockDocumentLine).where(
                 StockDocumentLine.stock_document_id.in_([d.stock_document_id for d in docs] or [-1]))):
@@ -212,8 +214,9 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
             warehouse_id = doc.destination_warehouse_id if task_type == "PUTAWAY" else doc.source_warehouse_id
             lines = list(session.scalars(select(StockDocumentLine).where(StockDocumentLine.stock_document_id == doc_id)
                                          .order_by(StockDocumentLine.line_no)))
+            waiting = quality_control.waiting_line_ids(session, [ln.line_id for ln in lines]) if task_type == "PUTAWAY" else set()
             for ln in lines:
-                if ln.line_id in existing_stock:
+                if ln.line_id in existing_stock or ln.line_id in waiting:
                     continue
                 if task_type == "PUTAWAY":
                     from_bin = session.scalar(select(StockLedger.bin_location_id).where(

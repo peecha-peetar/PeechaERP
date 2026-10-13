@@ -294,7 +294,7 @@ def count_detail(session_id: int, ctx: AuthContext = _OPS_VIEW) -> list[dict]:
              "expected_serials": None if hide(ln) or not ln.serial else lc.expected_serials(ctx.company_id, ln.location_id, ln.item_id),
              "expected": None if hide(ln) else str(ln.expected),
              "counted": str(ln.counted) if ln.counted is not None else None,
-             "variance": str(ln.variance) if ln.variance is not None else None} for ln in lines]
+             "moved": str(ln.moved), "variance": str(ln.variance) if ln.variance is not None else None} for ln in lines]
 
 
 class CountRecord(BaseModel):

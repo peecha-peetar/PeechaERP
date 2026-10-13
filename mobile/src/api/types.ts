@@ -865,6 +865,7 @@ export interface LocationCountLine {
   expected_serials?: string[] | null;
   expected: string | null;
   counted: string | null;
+  moved?: string;
   variance: string | null;
 }
 

@@ -14,7 +14,7 @@ import datetime
 import decimal
 from types import SimpleNamespace
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.inventory import (
@@ -117,13 +117,45 @@ def list_location_counts(company_id: int, open_only: bool = False) -> list[Cycle
         return list(session.scalars(q.order_by(CycleCountSession.session_id.desc())))
 
 
-def count_lines(company_id: int, session_id: int) -> list[SimpleNamespace]:
-    from peecha.services import inventory_catalog as catalog_service
+def _moved(session, warehouse_id: int, ln: CycleCountLine, start: datetime.datetime | None, track_batch: bool) -> decimal.Decimal:
+    """R306: خالص حرکت (ورود − خروج) همین محل در اسنادی که بین شروع شمارش و شمردن ردیف ثبت شده‌اند."""
+    from peecha.db.models.inventory import LotMovement, StockDocument, StockDocumentLine, StockLedger
 
+    if start is None or ln.counted_at <= start:
+        return _ZERO
+
+    def window(q, line_col):
+        return (q.join(StockDocumentLine, StockDocumentLine.line_id == line_col)
+                .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
+                .where(StockDocument.posted_at > start, StockDocument.posted_at <= ln.counted_at))
+
+    lots = window(select(func.coalesce(func.sum(LotMovement.quantity_base), 0)), LotMovement.stock_document_line_id).where(
+        LotMovement.warehouse_id == warehouse_id, LotMovement.item_id == ln.item_id, LotMovement.bin_location_id == ln.bin_location_id)
+    if ln.batch_id is not None:
+        return decimal.Decimal(session.scalar(lots.where(LotMovement.batch_id == ln.batch_id)) or 0)
+    signed = case((StockLedger.movement_direction == "IN", StockLedger.quantity_base), else_=-StockLedger.quantity_base)
+    total = decimal.Decimal(session.scalar(window(select(func.coalesce(func.sum(signed), 0)), StockLedger.stock_document_line_id).where(
+        StockLedger.warehouse_id == warehouse_id, StockLedger.item_id == ln.item_id,
+        StockLedger.bin_location_id == ln.bin_location_id)) or 0)
+    if track_batch:  # ردیف بی‌بچ کالای بچ‌دار = ماندهٔ بیرون از بچ‌ها
+        total -= decimal.Decimal(session.scalar(lots.where(LotMovement.batch_id.is_not(None))) or 0)
+    return total
+
+
+def count_lines(company_id: int, session_id: int) -> list[SimpleNamespace]:
+    """R306: با کلید «تطبیق شمارش با حرکت‌های حین شمارش»، اختلاف = شمرده − (دفتری شروع + حرکت ثبت‌شده تا شمردن)."""
+    from peecha.services import inventory_catalog as catalog_service
+    from peecha.services import stock_controls
+
+    reconcile = stock_controls.is_on(company_id, stock_controls.COUNT_RECONCILE)
     with new_session() as session:
         s = _session(session, company_id, session_id)
         warehouse_id, blind = s.warehouse_id, s.is_blind_count
         lines = list(session.scalars(select(CycleCountLine).where(CycleCountLine.session_id == session_id)))
+        flags = {i: (tb, ts) for i, tb, ts in session.execute(select(Item.item_id, Item.track_batch, Item.track_serial).where(
+            Item.item_id.in_({ln.item_id for ln in lines} or {-1})))}
+        moved = {ln.line_id: _moved(session, warehouse_id, ln, s.snapshot_at, flags[ln.item_id][0])
+                 for ln in lines if reconcile and ln.counted_at is not None and not flags[ln.item_id][1]}
     codes = {n.location_id: n.full_code for n in wl.tree(company_id, warehouse_id)}
     items = {i.item_id: i for i in catalog_service.list_items(company_id)}
     with new_session() as session:
@@ -138,8 +170,9 @@ def count_lines(company_id: int, session_id: int) -> list[SimpleNamespace]:
             batch_id=ln.batch_id, batch_no=batches[ln.batch_id].batch_no if ln.batch_id in batches else None,
             serial=bool(item.track_serial) if item else False,
             expiry_date=batches[ln.batch_id].expiry_date if ln.batch_id in batches else None,
-            expected=ln.expected_quantity_base, counted=ln.counted_quantity_base,
-            variance=(ln.counted_quantity_base - ln.expected_quantity_base) if ln.counted_quantity_base is not None else None,
+            expected=ln.expected_quantity_base, counted=ln.counted_quantity_base, moved=moved.get(ln.line_id, _ZERO),
+            variance=(ln.counted_quantity_base - ln.expected_quantity_base - moved.get(ln.line_id, _ZERO))
+            if ln.counted_quantity_base is not None else None,
             counted_at=ln.counted_at, blind=blind))
     return sorted(out, key=lambda r: (r.location_code, r.item_code, r.batch_no or ""))
 
@@ -269,6 +302,7 @@ def finalize_location_count(company_id: int, session_id: int, user_id: int) -> l
                 item_id=ln.item_id, uom_id=base_uom[ln.item_id], quantity=qty, quantity_base=qty, conversion_factor=decimal.Decimal(1),
                 reason_code_id=reason, bin_location_id=ln.location_id,
                 description=f"شمارش محل {ln.location_code}: دفتری {ln.expected.normalize()}، شمارش {ln.counted.normalize()}"
+                            + (f"، حرکت حین شمارش {ln.moved.normalize()}" if ln.moved else "")
                             + (f" -- بچ {ln.batch_no}" if ln.batch_no else "")))
             if ln.batch_no:
                 lot_tracking.set_line_tracking(company_id, [lot_tracking.TrackingEntry(

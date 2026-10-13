@@ -37,6 +37,7 @@ KIND_LABELS = {
     "POST_ORDER": "ثبت نهایی سفارش (پیش از رسید)",
     "INVENTORY_RESIDUAL": "اصلاح ماندهٔ ریالی موجودی صفر",
     "PUTAWAY_PENDING": "جانمایی رسیدهای انبار",
+    "QC_PENDING": "کنترل کیفیت رسیدها",
 }
 
 
@@ -149,6 +150,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _rows(company_id, received, "CONVERT_TO_INVOICE")
 
     tasks += _putaway_pending(company_id, user_id, is_manager)
+    tasks += _qc_pending(company_id, user_id, is_manager)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -190,6 +192,27 @@ def _putaway_pending(company_id: int, user_id: int, is_manager: bool) -> list[Op
             "PUTAWAY_PENDING", KIND_LABELS["PUTAWAY_PENDING"], 0, "",
             f"{len(sources)} رسید با {lines} ردیف جانمایی‌نشده در «{w.name}»", w.name,
             max(s.doc.document_date for s in sources), "",
+        ))
+    return out
+
+
+def _qc_pending(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R306 (کلید «نگه‌داشت رسید تا تایید کیفیت»): ردیف‌های منتظر بازرسی، یک کار برای هر انبار."""
+    from peecha.db.models.inventory import Warehouse
+    from peecha.services import quality_control
+
+    counts = quality_control.pending_by_warehouse(company_id)
+    if not counts:
+        return []
+    with new_session() as session:
+        warehouses = {w.warehouse_id: w for w in session.scalars(select(Warehouse).where(Warehouse.warehouse_id.in_(counts)))}
+    out = []
+    for warehouse_id, n in sorted(counts.items()):
+        w = warehouses.get(warehouse_id)
+        if w is None or not (is_manager or w.manager_user_id == user_id):
+            continue
+        out.append(OperationalTask(
+            "QC_PENDING", KIND_LABELS["QC_PENDING"], 0, "", f"{n} ردیف رسید در «{w.name}» منتظر کنترل کیفیت است", w.name, None, "",
         ))
     return out
 

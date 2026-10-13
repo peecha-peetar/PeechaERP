@@ -611,7 +611,7 @@ class _LocationCountTab(QWidget):
         top.addWidget(self.session_combo)
         top.addStretch(1)
         layout.addLayout(top)
-        self.table = _table(["محل", "کالا", "دفتری", "شمارش", "اختلاف", "زمان شمارش"])
+        self.table = _table(["محل", "کالا", "دفتری", "شمارش", "حرکت حین شمارش", "اختلاف", "زمان شمارش"])
         layout.addWidget(self.table, stretch=1)
         actions = QHBoxLayout()
         for text, slot in (("ثبت شمارش…", self.record_selected), ("نهایی‌سازی و اصلاح اختلاف", self.finalize), ("لغو شمارش", self.cancel)):
@@ -667,7 +667,7 @@ class _LocationCountTab(QWidget):
         for row, ln in enumerate(self._lines):
             cells = [ln.location_code, f"{ln.item_code} — {ln.item_name}" + (f" (بچ {ln.batch_no})" if ln.batch_no else ""),
                      "—" if ln.blind and ln.counted is None else fmt(ln.expected),
-                     fmt(ln.counted), fmt(ln.variance), _fmt_dt(ln.counted_at)]
+                     fmt(ln.counted), fmt(ln.moved) if ln.moved else "", fmt(ln.variance), _fmt_dt(ln.counted_at)]
             for col, text in enumerate(cells):
                 self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
 
@@ -830,6 +830,114 @@ class _KpiTab(QWidget):
                 self.operator_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
 
 
+class _QualityTab(QWidget):
+    """R306: رسیدهای منتظر کنترل کیفیت (کلید «نگه‌داشت رسید تا تایید کیفیت»)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from peecha.ui.screens import module_style as ms
+
+        layout = QVBoxLayout(self)
+        hint = QLabel("کالای این رسیدها در انبار هست ولی تا ثبت نتیجهٔ کنترل کیفیت فروخته یا خارج نمی‌شود. "
+                      "مقدار پذیرفته آزاد می‌شود و مقدار ردشده با سند انتقال به انبار قرنطینه یا ضایعات می‌رود.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.table = _table(["رسید", "تاریخ", "تامین‌کننده", "انبار", "کالا", "بچ", "مقدار منتظر"])
+        self.table.itemSelectionChanged.connect(self._show_spec)
+        layout.addWidget(self.table, stretch=1)
+        self.spec_label = QLabel("")
+        self.spec_label.setWordWrap(True)
+        layout.addWidget(self.spec_label)
+        form = QHBoxLayout()
+        self.rejected_spin = QDoubleSpinBox()
+        self.rejected_spin.setRange(0, 1e12)
+        self.rejected_spin.setDecimals(3)
+        self.sampled_spin = QDoubleSpinBox()
+        self.sampled_spin.setRange(0, 1e12)
+        self.sampled_spin.setDecimals(3)
+        self.reject_combo = QComboBox()
+        self.reject_combo.setMinimumWidth(180)
+        self.notes_field = QLineEdit()
+        self.notes_field.setPlaceholderText("توضیح بازرسی")
+        for label, widget in (("مقدار ردشده:", self.rejected_spin), ("مقدار نمونه:", self.sampled_spin),
+                              ("انبار ردشده:", self.reject_combo)):
+            form.addWidget(QLabel(label))
+            form.addWidget(widget)
+        form.addWidget(self.notes_field, stretch=1)
+        layout.addLayout(form)
+        actions = QHBoxLayout()
+        for text, slot in (("پذیرش کامل", self.approve_selected), ("ثبت نتیجهٔ بازرسی", self.inspect_selected),
+                           ("به‌روزرسانی", self.refresh)):
+            button = ms.style_button(QPushButton(text))
+            button.clicked.connect(lambda _c=False, f=slot: f())
+            actions.addWidget(button)
+        actions.addStretch(1)
+        self.status_label = QLabel("")
+        actions.addWidget(self.status_label)
+        layout.addLayout(actions)
+        self._rows = []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        from peecha.services import quality_control as qc
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        whs = {w.warehouse_id: w.name for w in locations_service.list_warehouses(company_id)}
+        self.reject_combo.clear()
+        self.reject_combo.addItem("— انبار قرنطینهٔ پیش‌فرض —", None)
+        for w in qc.reject_warehouses(company_id):
+            self.reject_combo.addItem(w.name, w.warehouse_id)
+        self._rows = qc.list_pending(company_id)
+        self.table.setRowCount(len(self._rows))
+        for row, r in enumerate(self._rows):
+            cells = [str(r.document_no), numerals.format_jalali_date(r.document_date), r.supplier_name, whs.get(r.warehouse_id, ""),
+                     f"{r.item_code} — {r.item_name}", "، ".join(r.batch_nos), decimals.format_qty(r.quantity)]
+            for col, text in enumerate(cells):
+                self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+        self.spec_label.setText("")
+
+    def _selected(self):
+        row = self.table.currentRow()
+        return self._rows[row] if 0 <= row < len(self._rows) else None
+
+    def _show_spec(self) -> None:
+        r = self._selected()
+        parts = [p for p in ((f"استاندارد: {r.qc_standard}" if r and r.qc_standard else ""),
+                             (f"آزمون: {r.qc_test_spec}" if r and r.qc_test_spec else "")) if p]
+        self.spec_label.setText("  •  ".join(parts))
+
+    def _inspect(self, rejected: decimal.Decimal) -> bool:
+        from peecha.services import quality_control as qc
+
+        r = self._selected()
+        if r is None:
+            return False
+        sampled = decimal.Decimal(str(self.sampled_spin.value())) if self.sampled_spin.value() else None
+        try:
+            result = qc.inspect(self._company_id(), r.line_id, app_session.current_user.user_id, rejected,
+                                self.reject_combo.currentData(), sampled, self.notes_field.text())
+        except ValueError as exc:
+            QMessageBox.warning(self, "کنترل کیفیت", str(exc))
+            return False
+        theme.set_status_label(self.status_label, f"نتیجه ثبت شد: {qc.RESULT_LABELS[result.result_code]}", ok=True)
+        self.rejected_spin.setValue(0)
+        self.sampled_spin.setValue(0)
+        self.notes_field.clear()
+        self.refresh()
+        return True
+
+    def approve_selected(self) -> bool:
+        return self._inspect(decimal.Decimal(0))
+
+    def inspect_selected(self) -> bool:
+        return self._inspect(decimal.Decimal(str(self.rejected_spin.value())))
+
+
 class WarehouseOperationsScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -845,12 +953,14 @@ class WarehouseOperationsScreen(QWidget):
         self.waves_tab = _WavesTab()
         self.count_tab = _LocationCountTab()
         self.kpi_tab = _KpiTab()
+        self.quality_tab = _QualityTab()
         self.tabs.addTab(self.tasks_tab, "وظایف جانمایی، برداشت و تامین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارش دوره‌ای")
         self.tabs.addTab(self.replenish_tab, "قاعده‌های تامین مجدد")
         self.tabs.addTab(self.waves_tab, "موج‌های برداشت")
         self.tabs.addTab(self.count_tab, "شمارش محل")
         self.tabs.addTab(self.kpi_tab, "داشبورد عملیات")
+        self.tabs.addTab(self.quality_tab, "کنترل کیفیت")
         self.tabs.currentChanged.connect(lambda _i: self.tabs.currentWidget().refresh())
         layout.addWidget(self.tabs, stretch=1)
 
@@ -861,3 +971,12 @@ class WarehouseOperationsScreen(QWidget):
         self.waves_tab.refresh()
         self.count_tab.refresh()
         self.kpi_tab.refresh()
+        self.quality_tab.refresh()
+        from peecha.services import stock_controls
+
+        company = app_session.current_company
+        on = company is not None and stock_controls.is_on(company.company_id, stock_controls.QC_HOLD)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.quality_tab), on or bool(self.quality_tab._rows))
+
+    def show_quality(self) -> None:
+        self.tabs.setCurrentWidget(self.quality_tab)
