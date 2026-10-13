@@ -126,7 +126,8 @@ export class SyncEngine {
         await this.api.confirmPutaway(action.payload.taskId, action.payload.toLocationId, action.idempotencyKey, action.payload.scans);
         return;
       case "WMS_PICK":
-        await this.api.confirmPick(action.payload.taskId, action.payload.quantity, action.idempotencyKey, action.payload.scans);
+        await this.api.confirmPick(action.payload.taskId, action.payload.quantity, action.idempotencyKey, action.payload.scans,
+          action.payload.shortReason ?? null);
         return;
       case "WMS_REPLENISH":
         await this.api.confirmReplenish(action.payload.taskId, action.payload.quantity, action.idempotencyKey, action.payload.scans);

@@ -191,7 +191,14 @@ class _TasksTab(QWidget):
             if not ok:
                 return False
             value = decimal.Decimal(str(qty))
-        return self._run(lambda: ops.complete_pick(task.task_id, company_id, user_id, value), "برداشت ثبت شد.")
+        reason = None
+        from peecha.services import stock_controls
+
+        if value < task.quantity_base and stock_controls.is_on(company_id, stock_controls.PICK_CONTROL):
+            reason, ok = QInputDialog.getText(self, "کسری برداشت", "علت برداشت کمتر از مقدار وظیفه:")
+            if not ok:
+                return False
+        return self._run(lambda: ops.complete_pick(task.task_id, company_id, user_id, value, short_reason=reason), "برداشت ثبت شد.")
 
 
 class _PlansTab(QWidget):

@@ -219,7 +219,7 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
                     from_bin = session.scalar(select(StockLedger.bin_location_id).where(
                         StockLedger.stock_document_line_id == ln.line_id, StockLedger.movement_direction == "IN"))
                 else:
-                    from_bin = ln.bin_location_id or _best_pick_bin(session, warehouse_id, ln.item_id)
+                    from_bin = ln.bin_location_id or _pick_bin(session, company_id, warehouse_id, ln.item_id, ln.quantity_base)
                 task = WarehouseTask(company_id=company_id, warehouse_id=warehouse_id, task_type_code=task_type,
                                      source_stock_document_id=doc_id, source_stock_line_id=ln.line_id, item_id=ln.item_id,
                                      quantity_base=ln.quantity_base, from_bin_location_id=from_bin or _default_bin(session, warehouse_id),
@@ -241,7 +241,8 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
                 task = WarehouseTask(company_id=company_id, warehouse_id=warehouse_id, task_type_code="PICK",
                                      source_commercial_document_id=doc_id, source_commercial_line_id=ln.line_id, item_id=ln.item_id,
                                      quantity_base=ln.quantity_base,
-                                     from_bin_location_id=_best_pick_bin(session, warehouse_id, ln.item_id) or _default_bin(session, warehouse_id),
+                                     from_bin_location_id=_pick_bin(session, company_id, warehouse_id, ln.item_id, ln.quantity_base,
+                                                                    ln.line_id) or _default_bin(session, warehouse_id),
                                      created_by_user_id=user_id)
                 session.add(task)
                 session.flush()
@@ -366,8 +367,10 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
 
 
 def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: decimal.Decimal,
-                  scans: dict | None = None) -> None:
-    """R304: scans (موبایل) = {"location": اسکن محل برداشت، "item": اسکن کالا}."""
+                  scans: dict | None = None, short_reason: str | None = None) -> None:
+    """R304: scans (موبایل) = {"location": اسکن محل برداشت، "item": اسکن کالا}.
+    R305: با کلید «کنترل برداشت»، بیش‌برداشت ممنوع و کم‌برداشت با علت (short_reason)."""
+    from peecha.services import stock_controls
     from peecha.services import warehouse_locations as wl
 
     picked_quantity = decimal.Decimal(picked_quantity)
@@ -378,6 +381,14 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
         if task.task_type_code != "PICK" or task.status_code not in ("OPEN", "IN_PROGRESS"):
             raise ValueError("این وظیفهٔ برداشت باز نیست.")
         wl.verify_scans(company_id, scans, [("location", "location", task.from_bin_location_id), ("item", "item", task.item_id)])
+        short_reason = (short_reason or "").strip() or None
+        if stock_controls.is_on(company_id, stock_controls.PICK_CONTROL, session):
+            if picked_quantity > task.quantity_base:
+                raise ValueError("مقدار برداشته از مقدار وظیفه بیشتر است؛ بیش‌برداشت مجاز نیست.")
+            if picked_quantity < task.quantity_base and not short_reason:
+                raise ValueError("برداشت کمتر از مقدار وظیفه است؛ علت کسری را وارد کنید.")
+        if short_reason:
+            task.notes = f"کسری برداشت: {short_reason}"[:500]
         now = datetime.datetime.now()
         task.status_code, task.completed_at, task.completed_by_user_id = "DONE", now, user_id
         task.started_at = task.started_at or now
@@ -386,7 +397,7 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
         warehouse_id, wave_id = task.warehouse_id, task.wave_id
         _close_wave_if_done(session, wave_id)
         _audit(session, task, "COMPLETE", user_id, quantity=picked_quantity, requested=task.quantity_base,
-               scanned=_scanned(scans))
+               scanned=_scanned(scans), short_reason=short_reason or "")
         session.commit()
     auto_replenish(company_id, user_id, warehouse_id)
 
@@ -448,6 +459,70 @@ def reserved_by_bin(company_id: int, warehouse_id: int | None = None) -> dict[tu
         if warehouse_id is not None:
             q = q.where(StockReservation.warehouse_id == warehouse_id)
         return {(b, i): q_ or _ZERO for b, i, q_ in session.execute(q.group_by(StockReservation.bin_location_id, StockReservation.item_id))}
+
+
+def _pick_bin(session, company_id: int, warehouse_id: int, item_id: int, need: decimal.Decimal,
+              commercial_line_id: int | None = None) -> int | None:
+    """R305: با کلید «کنترل برداشت»، محل رزرو سفارش و سپس محل دارای موجودی آزاد و زودانقضاتر؛ وگرنه روش قبلی."""
+    from peecha.services import stock_controls, stock_reservations
+
+    if not stock_controls.is_on(company_id, stock_controls.PICK_CONTROL, session):
+        return _best_pick_bin(session, warehouse_id, item_id)
+    if commercial_line_id is not None:
+        held = [r for r in stock_reservations.active(session, stock_reservations.SALES_ORDER, [commercial_line_id], lock=False)
+                if r.warehouse_id == warehouse_id and r.bin_location_id]
+        if held:
+            return max(held, key=lambda r: (stock_reservations.remaining(r), -r.reservation_id)).bin_location_id
+    return _smart_pick_bin(session, company_id, warehouse_id, item_id, decimal.Decimal(need or 0)) \
+        or _best_pick_bin(session, warehouse_id, item_id)
+
+
+def _smart_pick_bin(session, company_id: int, warehouse_id: int, item_id: int, need: decimal.Decimal) -> int | None:
+    """محل برداشت با موجودی آزاد (فیزیکی − رزرو): اول محل‌های برداشت، بعد زودانقضاترین بچ غیرمنقضی،
+    بعد محلی که کل مقدار را دارد، بعد بیشترین موجودی آزاد."""
+    from peecha.services import warehouse_locations as wl
+
+    rows = session.execute(
+        select(StockBalance.bin_location_id, func.sum(StockBalance.quantity_on_hand), func.sum(StockBalance.quantity_reserved))
+        .where(StockBalance.warehouse_id == warehouse_id, StockBalance.item_id == item_id)
+        .group_by(StockBalance.bin_location_id)).all()
+    free = {b: (q or _ZERO) - (r or _ZERO) for b, q, r in rows if (q or _ZERO) - (r or _ZERO) > 0}
+    if not free:
+        return None
+    by_id = {n.location_id: n for n in wl.tree(company_id, warehouse_id)}
+    lots = wl.bin_batches(company_id, warehouse_id, item_id)
+    today = datetime.date.today()
+    ranked = []
+    for bin_id, qty in free.items():
+        node = by_id.get(bin_id)
+        if node is None or node.status_code in wl.NO_EXIT_STATUSES + ("QUARANTINE",) or not node.is_pickable:
+            continue
+        types = {a.location_type_code for a in wl.ancestors(by_id, bin_id)}
+        expiry = min((x.expiry_date for x in lots.get((bin_id, item_id), []) if x.expiry_date and x.expiry_date >= today),
+                     default=datetime.date.max)
+        ranked.append((not (types & {"PICK_FACE", "PICKING"}), expiry, qty < need, -qty, bin_id))
+    return min(ranked)[-1] if ranked else None
+
+
+def generate_picks_for_reserved_orders(company_id: int, user_id: int, warehouse_id: int | None = None) -> list[int]:
+    """R305: وظیفهٔ برداشت برای سفارش‌های فروش ثبت‌شده‌ای که رزرو فعال دارند و هنوز وظیفه ندارند."""
+    from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
+    from peecha.services import stock_reservations
+
+    with new_session() as session:
+        q = (select(CommercialDocument.document_id)
+             .join(CommercialDocumentLine, CommercialDocumentLine.document_id == CommercialDocument.document_id)
+             .join(StockReservation, (StockReservation.source_type_code == stock_reservations.SALES_ORDER)
+                   & (StockReservation.source_record_id == CommercialDocumentLine.line_id) & (StockReservation.status_code == "ACTIVE"))
+             .where(CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
+                    CommercialDocument.status_code.in_(("CONFIRMED", "APPROVED", "POSTED"))))
+        if warehouse_id is not None:
+            q = q.where(StockReservation.warehouse_id == warehouse_id)
+        document_ids = sorted(set(session.scalars(q)))
+    created: list[int] = []
+    for document_id in document_ids:
+        created += generate_tasks(company_id, "PICK", ("COMMERCIAL", document_id), user_id)
+    return created
 
 
 def _best_pick_bin(session, warehouse_id: int, item_id: int) -> int | None:
@@ -678,8 +753,13 @@ def _close_wave_if_done(session, wave_id: int | None) -> None:
 
 
 def create_wave(company_id: int, warehouse_id: int, user_id: int, task_ids: list[int] | None = None) -> int:
-    """موج از وظایف برداشت باز بی‌موج انبار (یا وظایف داده‌شده)، به ترتیب مسیر نزدیک‌ترین همسایه."""
+    """موج از وظایف برداشت باز بی‌موج انبار (یا وظایف داده‌شده)، به ترتیب مسیر نزدیک‌ترین همسایه.
+    R305: با کلید «کنترل برداشت»، پیش از آن وظایف سفارش‌های رزروشدهٔ همین انبار ساخته می‌شود."""
+    from peecha.services import stock_controls
     from peecha.services import warehouse_locations as wl
+
+    if task_ids is None and stock_controls.is_on(company_id, stock_controls.PICK_CONTROL):
+        generate_picks_for_reserved_orders(company_id, user_id, warehouse_id)
 
     with new_session() as session:
         q = select(WarehouseTask).where(

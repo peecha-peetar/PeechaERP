@@ -37,7 +37,7 @@ describe("تایید عملیات انبار با اسکن (R304)", () => {
       payload: { item_id: 1, from_location_id: 2, to_location_id: 3, quantity: "5", scanned_from: "A", scanned_to: "B", scanned_item: "X" },
     });
     expect(calls.map((c) => c.body)).toEqual([
-      { quantity: "3", scanned_location: "PEECHA-LOC:5:WH01-B01", scanned_item: "6260000000011" },
+      { quantity: "3", scanned_location: "PEECHA-LOC:5:WH01-B01", scanned_item: "6260000000011", short_reason: null },
       { to_location_id: 9, scanned_location: "WH01-B09" },
       { quantity: null, scanned_from: "A", scanned_to: "B" },
       { item_id: 1, from_location_id: 2, to_location_id: 3, quantity: "5", scanned_from: "A", scanned_to: "B", scanned_item: "X" },
@@ -52,7 +52,18 @@ describe("تایید عملیات انبار با اسکن (R304)", () => {
     }) as unknown as Fetcher;
     const { queue, engine } = await build(fetcher);
     await submitWmsAction(queue, engine, { type: "WMS_PICK", payload: { taskId: 4, quantity: "3" } });
-    expect(bodies).toEqual([{ quantity: "3", scanned_location: null, scanned_item: null }]);
+    expect(bodies).toEqual([{ quantity: "3", scanned_location: null, scanned_item: null, short_reason: null }]);
+  });
+
+  it("R305: علت کسری برداشت همراه برداشت می‌رود", async () => {
+    const bodies: unknown[] = [];
+    const fetcher = jest.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return jsonResponse(200, { status: "DONE" });
+    }) as unknown as Fetcher;
+    const { queue, engine } = await build(fetcher);
+    await submitWmsAction(queue, engine, { type: "WMS_PICK", payload: { taskId: 4, quantity: "2", shortReason: "آسیب‌دیده" } });
+    expect(bodies).toEqual([{ quantity: "2", scanned_location: null, scanned_item: null, short_reason: "آسیب‌دیده" }]);
   });
 
   it("تنظیمات انبار از سرور خوانده می‌شود", async () => {

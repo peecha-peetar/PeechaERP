@@ -501,9 +501,13 @@ export class ApiClient {
     });
   }
 
-  async confirmPick(taskId: number, quantity: string, idempotencyKey?: string, scans: TaskScans = {}): Promise<{ status: string }> {
+  async confirmPick(
+    taskId: number, quantity: string, idempotencyKey?: string, scans: TaskScans = {}, shortReason: string | null = null,
+  ): Promise<{ status: string }> {
     return this.request(`/locations/tasks/${taskId}/pick`, {
-      method: "POST", body: { quantity, scanned_location: scans.location ?? null, scanned_item: scans.item ?? null }, idempotencyKey,
+      method: "POST",
+      body: { quantity, scanned_location: scans.location ?? null, scanned_item: scans.item ?? null, short_reason: shortReason },
+      idempotencyKey,
     });
   }
 

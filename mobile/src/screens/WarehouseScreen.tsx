@@ -74,6 +74,8 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const [suggestions, setSuggestions] = useState<PutawaySuggestion[]>([]);
   const [putawayTarget, setPutawayTarget] = useState<Picked | null>(null);
   const [scanRequired, setScanRequired] = useState(false);
+  const [pickControl, setPickControl] = useState(false);
+  const [shortReason, setShortReason] = useState("");
   const [taskScans, setTaskScans] = useState<TaskScans>({});
 
   // انتقال
@@ -134,7 +136,12 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   }, [tab, loadTasks]);
 
   useEffect(() => {
-    apiClient.getWmsSettings().then((s) => setScanRequired(s.scan_confirmation)).catch(() => setScanRequired(false));
+    apiClient.getWmsSettings()
+      .then((s) => {
+        setScanRequired(s.scan_confirmation);
+        setPickControl(Boolean(s.pick_control));
+      })
+      .catch(() => setScanRequired(false));
   }, [apiClient]);
 
   useEffect(() => {
@@ -210,6 +217,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     setTaskQty(task.quantity);
     setPutawayTarget(null);
     setTaskScans({});
+    setShortReason("");
     setSuggestions([]);
     if (task.task_type === "PUTAWAY") {
       try {
@@ -251,7 +259,20 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         toast.show("برای تایید، محل برداشت و کالا را اسکن کنید.", "warning");
         return;
       }
-      ok = await submit({ type: "WMS_PICK", payload: { taskId: activeTask.task_id, quantity: qty, scans: taskScans } }, "برداشت ثبت شد.");
+      const picked = Number(qty || "0");
+      const wanted = Number(toAsciiDigits(activeTask.quantity));
+      if (pickControl && picked > wanted) {
+        toast.show("مقدار برداشته از مقدار وظیفه بیشتر است.", "warning");
+        return;
+      }
+      if (pickControl && picked < wanted && !shortReason.trim()) {
+        toast.show("برداشت کمتر از مقدار وظیفه است؛ علت کسری را بنویسید.", "warning");
+        return;
+      }
+      ok = await submit(
+        { type: "WMS_PICK", payload: { taskId: activeTask.task_id, quantity: qty, scans: taskScans, shortReason: shortReason.trim() || null } },
+        "برداشت ثبت شد.",
+      );
     } else {
       if (scanRequired && (!taskScans.from || !taskScans.to)) {
         toast.show("برای تایید، محل مبدا و مقصد را اسکن کنید.", "warning");
@@ -529,6 +550,9 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       ) : (
         <>
           <Input label="مقدار انجام‌شده" value={taskQty} onChangeText={setTaskQty} numeric keyboardType="decimal-pad" style={{ marginTop: spacing.md }} />
+          {pickControl && task.task_type === "PICK" && Number(toAsciiDigits(taskQty) || "0") < Number(toAsciiDigits(task.quantity)) ? (
+            <Input label="علت کسری برداشت" value={shortReason} onChangeText={setShortReason} style={{ marginTop: spacing.sm }} />
+          ) : null}
           {scanRequired ? renderTaskScans(task) : null}
         </>
       )}

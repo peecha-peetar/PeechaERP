@@ -102,7 +102,7 @@ def wms_settings(ctx: AuthContext = _VIEW) -> dict:
     from peecha.services import stock_controls
 
     on = stock_controls.enabled_codes(ctx.company_id)
-    return {"scan_confirmation": stock_controls.SCAN_CONFIRMATION in on}
+    return {"scan_confirmation": stock_controls.SCAN_CONFIRMATION in on, "pick_control": stock_controls.PICK_CONTROL in on}
 
 
 @router.get("/warehouses/{warehouse_id}/map")
@@ -460,13 +460,15 @@ class PickConfirm(BaseModel):
     quantity: decimal.Decimal
     scanned_location: str | None = None
     scanned_item: str | None = None
+    short_reason: str | None = None  # R305: علت کم‌برداشت
 
 
 @router.post("/tasks/{task_id}/pick")
 def confirm_pick(task_id: int, body: PickConfirm, ctx: AuthContext = _OPS_EDIT, key: str | None = _KEY) -> dict:
     return _write(key, f"POST /locations/tasks/{task_id}/pick", ctx,
                   lambda: ops.complete_pick(task_id, ctx.company_id, ctx.user_id, body.quantity,
-                                            scans={"location": body.scanned_location, "item": body.scanned_item}),
+                                            scans={"location": body.scanned_location, "item": body.scanned_item},
+                                            short_reason=body.short_reason),
                   lambda _r: {"task_id": task_id, "status": "DONE"})
 
 

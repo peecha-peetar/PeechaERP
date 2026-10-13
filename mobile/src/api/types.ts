@@ -824,6 +824,7 @@ export interface StockTransferRequest {
 /** R304: کلیدهای سرور که رفتار صفحهٔ انبار را عوض می‌کنند. */
 export interface WmsSettings {
   scan_confirmation: boolean;
+  pick_control?: boolean;  // R305
 }
 
 export interface TaskScans {

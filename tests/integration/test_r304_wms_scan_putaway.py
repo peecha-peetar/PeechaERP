@@ -64,7 +64,7 @@ H = {"Authorization": "Bearer " + client.post("/auth/login", json={"username": "
 feats = {f.feature_code: f for f in engine_service.list_features(company_id)}
 check(all(feats[c].category == "WMS" and not feats[c].is_enabled for c in (sc.SCAN_CONFIRMATION, sc.PUTAWAY_IN_CARTABLE)),
       "two new switches in the WMS group, both off")
-check(client.get("/locations/settings", headers=H).json() == {"scan_confirmation": False}, "mobile reads the scan switch (off)")
+check(client.get("/locations/settings", headers=H).json()["scan_confirmation"] is False, "mobile reads the scan switch (off)")
 
 # ===== ۲) تطبیق برچسب =====
 qr = wl.qr_payload(b1, code_of(b1))
@@ -81,7 +81,7 @@ check(client.post(f"/locations/tasks/{put[0]}/putaway", headers=H, json={"to_loc
       "switch off: putaway without scanning works (previous behaviour)")
 check(on_hand(item_a, b1) == 10, "putaway moved stock")
 engine_service.set_feature_enabled(company_id, sc.SCAN_CONFIRMATION, True)
-check(client.get("/locations/settings", headers=H).json() == {"scan_confirmation": True}, "mobile sees the switch on")
+check(client.get("/locations/settings", headers=H).json()["scan_confirmation"] is True, "mobile sees the switch on")
 r2 = receipt(item_a, 4, bin_id=b3)
 put2 = ops.generate_tasks(company_id, "PUTAWAY", ("STOCK", r2), uid)[0]
 r = client.post(f"/locations/tasks/{put2}/putaway", headers=H, json={"to_location_id": b2})
