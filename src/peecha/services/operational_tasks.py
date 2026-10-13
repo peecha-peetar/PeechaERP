@@ -38,6 +38,8 @@ KIND_LABELS = {
     "INVENTORY_RESIDUAL": "اصلاح ماندهٔ ریالی موجودی صفر",
     "PUTAWAY_PENDING": "جانمایی رسیدهای انبار",
     "QC_PENDING": "کنترل کیفیت رسیدها",
+    "EXPIRY_NEAR": "کالای نزدیک به انقضا",
+    "EXPIRED_STOCK": "کالای منقضی در انبار",
 }
 
 
@@ -151,6 +153,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
 
     tasks += _putaway_pending(company_id, user_id, is_manager)
     tasks += _qc_pending(company_id, user_id, is_manager)
+    tasks += _expiry_alerts(company_id, user_id, is_manager)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -214,6 +217,33 @@ def _qc_pending(company_id: int, user_id: int, is_manager: bool) -> list[Operati
         out.append(OperationalTask(
             "QC_PENDING", KIND_LABELS["QC_PENDING"], 0, "", f"{n} ردیف رسید در «{w.name}» منتظر کنترل کیفیت است", w.name, None, "",
         ))
+    return out
+
+
+def _expiry_alerts(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R307 (کلید «هشدار انقضا و انتقال کالای منقضی»): برای هر انبار یک کار نزدیک‌انقضا و یک کار منقضی."""
+    from peecha.db.models.inventory import Warehouse
+    from peecha.services import expiry_watch, stock_controls
+
+    if not stock_controls.is_on(company_id, stock_controls.EXPIRY_ALERTS):
+        return []
+    summary = expiry_watch.summary_by_warehouse(company_id)
+    if not summary:
+        return []
+    days = stock_controls.expiry_alert_days(company_id)
+    with new_session() as session:
+        keepers = dict(session.execute(select(Warehouse.warehouse_id, Warehouse.manager_user_id).where(
+            Warehouse.warehouse_id.in_(summary))).all())
+    out = []
+    for warehouse_id, s in sorted(summary.items()):
+        if not (is_manager or keepers.get(warehouse_id) == user_id):
+            continue
+        if s.expired:
+            out.append(OperationalTask("EXPIRED_STOCK", KIND_LABELS["EXPIRED_STOCK"], 0, "",
+                                       f"{s.expired} بچ منقضی در «{s.name}»", s.name, s.first, ""))
+        if s.near:
+            out.append(OperationalTask("EXPIRY_NEAR", KIND_LABELS["EXPIRY_NEAR"], 0, "",
+                                       f"{s.near} بچ در «{s.name}» تا {days} روز دیگر منقضی می‌شود", s.name, None, ""))
     return out
 
 

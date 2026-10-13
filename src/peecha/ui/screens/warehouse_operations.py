@@ -938,6 +938,102 @@ class _QualityTab(QWidget):
         return self._inspect(decimal.Decimal(str(self.rejected_spin.value())))
 
 
+class _ExpiryTab(QWidget):
+    """R307: بچ‌های نزدیک به انقضا و منقضی (کلید «هشدار انقضا و انتقال کالای منقضی»)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from peecha.ui.screens import module_style as ms
+
+        layout = QVBoxLayout(self)
+        self.hint = QLabel("")
+        self.hint.setObjectName("sectionHint")
+        self.hint.setWordWrap(True)
+        layout.addWidget(self.hint)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("انبار:"))
+        self.warehouse_combo = QComboBox()
+        self.warehouse_combo.setMinimumWidth(200)
+        self.warehouse_combo.currentIndexChanged.connect(lambda _i: self._load())
+        top.addWidget(self.warehouse_combo)
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.table = _table(["انبار", "محل", "کالا", "بچ", "تاریخ انقضا", "مانده", "مقدار"])
+        layout.addWidget(self.table, stretch=1)
+        actions = QHBoxLayout()
+        for text, slot in (("ساخت سند انتقال کالای منقضی", self.create_disposal), ("به‌روزرسانی", self.refresh)):
+            button = ms.style_button(QPushButton(text))
+            button.clicked.connect(lambda _c=False, f=slot: f())
+            actions.addWidget(button)
+        actions.addStretch(1)
+        self.status_label = QLabel("")
+        actions.addWidget(self.status_label)
+        layout.addLayout(actions)
+        self._rows = []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        from peecha.services import stock_controls
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        days = stock_controls.expiry_alert_days(company_id)
+        self.hint.setText(numerals.to_persian_digits(
+            f"بچ‌هایی که منقضی شده‌اند یا تا {days} روز دیگر منقضی می‌شوند (روزها در تنظیمات انبار). برای کالای منقضی یک سند "
+            "پیش‌نویس انتقال به انبار ضایعات یا قرنطینه ساخته می‌شود؛ آن را در «اسناد انبار» بررسی و ثبت کنید."))
+        current = self.warehouse_combo.currentData()
+        self.warehouse_combo.blockSignals(True)
+        self.warehouse_combo.clear()
+        self.warehouse_combo.addItem("— همه —", None)
+        for w in locations_service.list_warehouses(company_id):
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+        index = self.warehouse_combo.findData(current)
+        self.warehouse_combo.setCurrentIndex(max(index, 0))
+        self.warehouse_combo.blockSignals(False)
+        self._load()
+
+    def _load(self) -> None:
+        from peecha.services import expiry_watch
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self._rows = expiry_watch.near_expiry(company_id, self.warehouse_combo.currentData())
+        self.table.setRowCount(len(self._rows))
+        for row, r in enumerate(self._rows):
+            left = "منقضی" if r.expired else ("امروز" if r.days_left == 0 else f"{r.days_left} روز")
+            cells = [r.warehouse_name, r.bin_code, r.item_label, r.batch_no, numerals.format_jalali_date(r.expiry_date), left,
+                     decimals.format_qty(r.quantity, item_id=r.item_id)]
+            for col, text in enumerate(cells):
+                self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+    def create_disposal(self) -> int | None:
+        from peecha.services import expiry_watch
+        from peecha.db.base import new_session
+        from peecha.db.models.inventory import StockDocument
+
+        warehouse_id = self.warehouse_combo.currentData()
+        if warehouse_id is None:
+            row = self.table.currentRow()
+            warehouse_id = self._rows[row].warehouse_id if 0 <= row < len(self._rows) else None
+        if warehouse_id is None:
+            QMessageBox.information(self, "کالای منقضی", "انبار را انتخاب کنید یا یک ردیف از همان انبار را برگزینید.")
+            return None
+        try:
+            doc_id = expiry_watch.create_disposal_draft(self._company_id(), app_session.current_user.user_id, warehouse_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "کالای منقضی", str(exc))
+            return None
+        with new_session() as session:
+            number = session.get(StockDocument, doc_id).document_no
+        theme.set_status_label(self.status_label, numerals.to_persian_digits(
+            f"سند پیش‌نویس انتقال شمارهٔ {number} آماده است؛ در «اسناد انبار» بررسی و ثبت کنید."), ok=True)
+        return doc_id
+
+
 class WarehouseOperationsScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -954,6 +1050,7 @@ class WarehouseOperationsScreen(QWidget):
         self.count_tab = _LocationCountTab()
         self.kpi_tab = _KpiTab()
         self.quality_tab = _QualityTab()
+        self.expiry_tab = _ExpiryTab()
         self.tabs.addTab(self.tasks_tab, "وظایف جانمایی، برداشت و تامین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارش دوره‌ای")
         self.tabs.addTab(self.replenish_tab, "قاعده‌های تامین مجدد")
@@ -961,6 +1058,7 @@ class WarehouseOperationsScreen(QWidget):
         self.tabs.addTab(self.count_tab, "شمارش محل")
         self.tabs.addTab(self.kpi_tab, "داشبورد عملیات")
         self.tabs.addTab(self.quality_tab, "کنترل کیفیت")
+        self.tabs.addTab(self.expiry_tab, "انقضا")
         self.tabs.currentChanged.connect(lambda _i: self.tabs.currentWidget().refresh())
         layout.addWidget(self.tabs, stretch=1)
 
@@ -977,6 +1075,13 @@ class WarehouseOperationsScreen(QWidget):
         company = app_session.current_company
         on = company is not None and stock_controls.is_on(company.company_id, stock_controls.QC_HOLD)
         self.tabs.setTabVisible(self.tabs.indexOf(self.quality_tab), on or bool(self.quality_tab._rows))
+        expiry_on = company is not None and stock_controls.is_on(company.company_id, stock_controls.EXPIRY_ALERTS)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.expiry_tab), expiry_on)
+        if expiry_on:
+            self.expiry_tab.refresh()
 
     def show_quality(self) -> None:
         self.tabs.setCurrentWidget(self.quality_tab)
+
+    def show_expiry(self) -> None:
+        self.tabs.setCurrentWidget(self.expiry_tab)

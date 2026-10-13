@@ -85,6 +85,8 @@ ICONS: dict[str, tuple[str, str]] = {
     "نمایش داشبورد": ("🔄", "primary"),
     # R306: کنترل کیفیت رسید
     "پذیرش کامل": ("✅", "primary"), "ثبت نتیجهٔ بازرسی": ("🧪", ""),
+    # R307: پایش انقضا
+    "ساخت سند انتقال کالای منقضی": ("♻️", "primary"),
 }
 _OBJECT_NAMES = {"primary": "primaryIconButton", "danger": "dangerIconButton", "": "iconButton"}
 

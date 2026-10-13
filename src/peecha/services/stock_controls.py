@@ -25,8 +25,11 @@ PUTAWAY_IN_CARTABLE = "WMS_PUTAWAY_IN_CARTABLE"  # R304
 PICK_CONTROL = "WMS_PICK_CONTROL"  # R305
 COUNT_RECONCILE = "WMS_COUNT_RECONCILE"  # R306
 QC_HOLD = "WMS_QC_HOLD"  # R306
+SMART_REPLENISH = "WMS_SMART_REPLENISH"  # R307
+EXPIRY_ALERTS = "WMS_EXPIRY_ALERTS"  # R307
 ALL = (RESERVATION, SALES_ORDER_RESERVATION, LOCATION_STATUS, EXPIRED, WAREHOUSE_ACCESS, MOBILE_PERMISSIONS,
-       SCAN_CONFIRMATION, PUTAWAY_IN_CARTABLE, PICK_CONTROL, COUNT_RECONCILE, QC_HOLD)
+       SCAN_CONFIRMATION, PUTAWAY_IN_CARTABLE, PICK_CONTROL, COUNT_RECONCILE, QC_HOLD, SMART_REPLENISH, EXPIRY_ALERTS)
+DEFAULT_EXPIRY_ALERT_DAYS = 30
 
 # انواع سندی که رزرو دیگران را نباید مصرف کنند (اصلاح موجودی = واقعیت شمارش، مستثنا)
 RESERVATION_TYPES = ("ISSUE", "TRANSFER", "RETURN_OUT")
@@ -116,3 +119,25 @@ def visible_warehouse_ids(company_id: int, user_id: int, warehouse_ids: list[int
 
 def is_expired(expiry_date: datetime.date | None, on_date: datetime.date) -> bool:
     return expiry_date is not None and expiry_date < on_date
+
+
+def expiry_alert_days(company_id: int) -> int:
+    from peecha.db.models.inventory import WmsSettings
+
+    with new_session() as session:
+        row = session.get(WmsSettings, company_id)
+        return row.expiry_alert_days if row is not None else DEFAULT_EXPIRY_ALERT_DAYS
+
+
+def set_expiry_alert_days(company_id: int, days: int) -> None:
+    from peecha.db.models.inventory import WmsSettings
+
+    if not 1 <= int(days) <= 3650:
+        raise ValueError("روزهای هشدار انقضا باید بین ۱ و ۳۶۵۰ باشد.")
+    with new_session() as session:
+        row = session.get(WmsSettings, company_id)
+        if row is None:
+            session.add(WmsSettings(company_id=company_id, expiry_alert_days=int(days)))
+        else:
+            row.expiry_alert_days, row.updated_at = int(days), datetime.datetime.now()
+        session.commit()

@@ -860,6 +860,16 @@ class CompanyCostingSettings(Base):
         String(200), default="MANUAL,LAST_RECEIPT,LAST_PURCHASE_PRICE,LAST_PURCHASE_ORDER,SUPPLIER_PRICE")
 
 
+class WmsSettings(Base):
+    """R307 — معادل 218_wms_replenish_expiry.sql."""
+    __tablename__ = "wms_settings"
+    __table_args__ = {"schema": "inv"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    expiry_alert_days: Mapped[int] = mapped_column(SmallInteger, default=30)
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
 class CostLayer(Base):
     __tablename__ = "cost_layers"
     __table_args__ = (

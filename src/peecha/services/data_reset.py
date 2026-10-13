@@ -604,6 +604,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "(SELECT warehouse_id FROM inv.warehouses WHERE company_id = :company_id)",
     "DELETE FROM inv.company_costing_settings WHERE company_id = :company_id",
     "DELETE FROM inv.company_features WHERE company_id = :company_id",
+    "DELETE FROM inv.wms_settings WHERE company_id = :company_id",
     "DELETE FROM inv.reorder_policies WHERE company_id = :company_id",
     "DELETE FROM comm.account_mappings WHERE company_id = :company_id",
     "DELETE FROM comm.company_features WHERE company_id = :company_id",

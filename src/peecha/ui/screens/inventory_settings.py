@@ -33,6 +33,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
+from peecha.services import stock_controls
 from peecha.services import unit_conversion as uc
 from peecha.ui.widgets import FieldGrid, FieldSpec, FormDrawer, LayoutEditMixin, set_widget_help
 
@@ -784,7 +785,33 @@ class _FeatureToggleTab(QWidget):
                     hint.setWordWrap(True)
                     hint.setContentsMargins(24, 0, 0, 4)
                     self.rows_layout.addWidget(hint)
+                if feature.feature_code == stock_controls.EXPIRY_ALERTS:
+                    self.rows_layout.addWidget(self._expiry_days_row(company_id))
         self.status_label.setText("")
+
+    def _expiry_days_row(self, company_id: int) -> QWidget:
+        """R307: چند روز پیش از انقضا هشدار داده شود."""
+        row = QWidget()
+        line = QHBoxLayout(row)
+        line.setContentsMargins(24, 0, 0, 6)
+        line.addWidget(QLabel("هشدار از چند روز پیش از انقضا:"))
+        self.expiry_days_spin = QSpinBox()
+        self.expiry_days_spin.setRange(1, 3650)
+        self.expiry_days_spin.setSuffix(" روز")
+        self.expiry_days_spin.setValue(stock_controls.expiry_alert_days(company_id))
+        self.expiry_days_spin.editingFinished.connect(self._save_expiry_days)
+        line.addWidget(self.expiry_days_spin)
+        line.addStretch(1)
+        return row
+
+    def _save_expiry_days(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        try:
+            stock_controls.set_expiry_alert_days(company_id, self.expiry_days_spin.value())
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
 
     def _toggle(self, feature_code: str, checked: bool) -> None:
         company_id = _company_id()

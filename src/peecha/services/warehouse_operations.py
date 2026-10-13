@@ -618,12 +618,16 @@ def delete_rule(company_id: int, rule_id: int) -> None:
 
 def replenishment_needs(company_id: int, warehouse_id: int | None = None) -> list[SimpleNamespace]:
     """قاعده‌هایی که موجودی + وظایف باز تامین به حداقل یا کمتر رسیده؛ مقدار = تا حداکثر، با منابع پیشنهادی
-    (محل‌های دیگر همان انبار با موجودی آزاد، اولویت ذخیره/حجیم)."""
+    (محل‌های دیگر همان انبار با موجودی آزاد، اولویت ذخیره/حجیم).
+    R307 (کلید «تامین مجدد با در نظر گرفتن رزرو»): نیاز با موجودی آزاد محل (پس از رزرو سفارش/برداشت باز) سنجیده می‌شود،
+    مقدار از جای خالی محل بیشتر نمی‌شود و منبع فقط موجودی آزاد واقعی (پس از همهٔ رزروها) است."""
+    from peecha.services import stock_controls
     from peecha.services import warehouse_locations as wl
 
     rules = [r for r in list_rules(company_id, warehouse_id) if r.is_active]
     if not rules:
         return []
+    smart = stock_controls.is_on(company_id, stock_controls.SMART_REPLENISH)
     with new_session() as session:
         loc_wh = dict(session.execute(select(BinLocation.bin_location_id, BinLocation.warehouse_id).where(
             BinLocation.bin_location_id.in_([r.bin_location_id for r in rules]))).all())
@@ -646,15 +650,18 @@ def replenishment_needs(company_id: int, warehouse_id: int | None = None) -> lis
         inside = wl.descendants(nodes, rule.bin_location_id)
         on_hand = sum((q for b, i, q, _r, _v in stock[wid] if i == rule.item_id and b in inside and q), _ZERO)
         pending = open_qty.get(rule.rule_id) or _ZERO
-        if on_hand + pending > rule.min_quantity or not wl.is_operable(target):
+        held = sum((r_ for b, i, _q, r_, _v in stock[wid] if i == rule.item_id and b in inside and r_), _ZERO) if smart else _ZERO
+        if on_hand - held + pending > rule.min_quantity or not wl.is_operable(target):
             continue
         need = rule.max_quantity - on_hand - pending
+        if smart and need <= 0:  # محل پر است؛ رزروها را برداشت باز خالی می‌کند
+            continue
         sources = []
-        for b, i, q, _r, _v in stock[wid]:
+        for b, i, q, r_, _v in stock[wid]:
             node = by_id.get(b)
             if i != rule.item_id or b in inside or not q or node is None or node.status_code in wl.NO_EXIT_STATUSES:
                 continue
-            free = q - reserved[wid].get((b, i), _ZERO)
+            free = q - ((r_ or _ZERO) if smart else reserved[wid].get((b, i), _ZERO))
             if free <= 0:
                 continue
             types = {a.location_type_code for a in wl.ancestors(by_id, b)}
@@ -662,7 +669,7 @@ def replenishment_needs(company_id: int, warehouse_id: int | None = None) -> lis
             sources.append(SimpleNamespace(location_id=b, location_code=node.full_code, free=free, rank=rank))
         sources.sort(key=lambda x: (x.rank, -x.free, x.location_code))
         out.append(SimpleNamespace(rule=rule, warehouse_id=wid, location_code=target.full_code, item_id=rule.item_id,
-                                   on_hand=on_hand, pending=pending, need=need, sources=sources,
+                                   on_hand=on_hand, reserved=held, pending=pending, need=need, sources=sources,
                                    available=sum((x.free for x in sources), _ZERO)))
     return out
 
