@@ -428,6 +428,14 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
           </Text>
         </Card>
       ))}
+      {kpis?.short_reasons && kpis.short_reasons.length > 0 ? (
+        <Card>
+          {text(typography.bodyBold, "علت‌های کسری برداشت")}
+          {kpis.short_reasons.map((r) => (
+            <Text key={r.reason} style={[typography.caption, { color: colors.textSecondary }]}>{`${r.reason}: ${r.count}`}</Text>
+          ))}
+        </Card>
+      ) : null}
     </View>
   );
 

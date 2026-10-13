@@ -362,7 +362,8 @@ def kpis(days: int = 30, warehouse_id: int | None = None, ctx: AuthContext = _OP
     r = wms_kpis.dashboard(ctx.company_id, today - datetime.timedelta(days=max(1, min(days, 365))), today, warehouse_id)
     return {"kpis": [{"code": c, "title": t, "value": None if v is None else str(v), "unit": u} for c, t, v, u in r.kpis],
             "by_type": [{"type": k, "label": v.label, "done": v.done, "open": v.open, "avg_minutes": v.avg_minutes}
-                        for k, v in r.by_type.items()]}
+                        for k, v in r.by_type.items()],
+            "short_reasons": [{"reason": reason, "count": n} for reason, n in r.short_reasons]}
 
 
 def label_svgs(location_id: int, code: str) -> tuple[str, str]:

@@ -772,6 +772,8 @@ class _KpiTab(QWidget):
         self.operator_table = _table(["اپراتور", "وظایف", "ساعت", "وظیفه در ساعت", "برداشت", "دقت برداشت"])
         layout.addWidget(self.type_table, stretch=1)
         layout.addWidget(self.operator_table, stretch=1)
+        self.reason_table = _table(["علت کسری برداشت", "تعداد"])  # R308: کلید «شاخص‌های تکمیلی»
+        layout.addWidget(self.reason_table, stretch=1)
         self.result = None
 
     def _company_id(self):
@@ -808,7 +810,7 @@ class _KpiTab(QWidget):
                 card.setMinimumHeight(64)
                 self.cards.addWidget(card, i // 4, i % 4)
                 self.card_labels[code] = card
-            shown = "—" if value is None else numerals.format_money(value, 1 if unit == "٪" or unit == "متر" else 0, None)
+            shown = "—" if value is None else numerals.format_money(value, 1 if unit in ("٪", "متر", "ساعت") else 0, None)
             self.card_labels[code].setText(numerals.to_persian_digits(f"{title}\n{shown} {unit}"))
         rows = list(self.result.by_type.values())
         self.type_table.setRowCount(len(rows))
@@ -828,6 +830,13 @@ class _KpiTab(QWidget):
             acc = f"{o.exact * 100 / o.picks:.0f}٪" if o.picks else "—"
             for c, text in enumerate([names.get(uid, "نامشخص"), str(o.tasks), f"{o.hours:.1f}", rate, str(o.picks), acc]):
                 self.operator_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
+        from peecha.services import stock_controls
+
+        self.reason_table.setVisible(stock_controls.is_on(company_id, stock_controls.ADVANCED_KPIS))
+        self.reason_table.setRowCount(len(self.result.short_reasons))
+        for r, (reason, count) in enumerate(self.result.short_reasons):
+            for c, text in enumerate([reason, str(count)]):
+                self.reason_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
 
 
 class _QualityTab(QWidget):

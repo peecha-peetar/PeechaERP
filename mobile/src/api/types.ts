@@ -892,6 +892,7 @@ export interface WmsKpi {
 export interface WmsKpis {
   kpis: WmsKpi[];
   by_type: { type: string; label: string; done: number; open: number; avg_minutes: number | null }[];
+  short_reasons?: { reason: string; count: number }[];
 }
 
 export interface LocationLabel {
