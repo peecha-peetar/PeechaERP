@@ -228,6 +228,8 @@ class WorkCard(QFrame):
 
     def _actions(self) -> list[tuple[str, callable]]:
         s, it = self.screen, self.item
+        if it.tone == "mine" and it.extra.get("document_id"):
+            return [("بازکردن سند", lambda: s.open_selected())]
         if it.tone == "mine":
             return [("یادآوری به گیرنده", lambda: s.remind()), ("پس‌گرفتن درخواست", lambda: s.withdraw())]
         if it.kind == "APPROVAL" and it.can_quick_decide:
@@ -550,7 +552,7 @@ class MyTasksScreen(QWidget):
         self.buttons["open"].setEnabled(bool(item))
         self.buttons["bulk"].setEnabled(any(w.can_quick_decide and w.kind == "APPROVAL" for w in self.shown))
         self.buttons["remind"].setEnabled(mine and bool(item.extra.get("open_task_ids")))
-        self.buttons["withdraw"].setEnabled(mine)
+        self.buttons["withdraw"].setEnabled(mine and not item.extra.get("document_id"))
 
     def _require(self) -> inbox.WorkItem | None:
         item = self.selected_item()
@@ -563,6 +565,8 @@ class MyTasksScreen(QWidget):
         item = self._require()
         if item is None:
             return False
+        if item.source == "MINE" and item.extra.get("document_id"):
+            return open_operational_task(self._main_window, "", item.extra["document_type_code"], item.extra["document_id"])
         if item.source == "MINE":
             from peecha.ui.screens.workflow_center import open_entity
 

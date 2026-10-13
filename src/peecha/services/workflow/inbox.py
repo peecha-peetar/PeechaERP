@@ -127,8 +127,16 @@ def _doc_items(company_id: int, user_id: int) -> list[WorkItem]:
                             d.title, d.counterparty_name, None, False, "NORMAL", PRIORITIES["NORMAL"], created, False, "",
                             {"kind": d.kind, "document_type_code": d.document_type_code, "document_id": d.document_id,
                              "document_date": d.document_date},
-                            DOC_ACTIONS.get(d.kind, d.kind_label), "doc"))
+                            _doc_action(d.kind, d.document_type_code, d.kind_label), "doc"))
     return out
+
+
+def _doc_action(kind: str, document_type_code: str, fallback: str) -> str:
+    if kind == "GOODS_RECEIPT" and document_type_code:
+        from peecha.services.operational_tasks import warehouse_word
+
+        return f"{warehouse_word(document_type_code)} انبار را تایید کنید"
+    return DOC_ACTIONS.get(kind, fallback)
 
 
 def _crm_items(company_id: int, user_id: int) -> list[WorkItem]:
@@ -228,7 +236,7 @@ def my_requests(company_id: int, user_id: int, limit: int = 100) -> list[WorkIte
             WfInstance.company_id == company_id, WfInstance.started_by_user_id == user_id,
             WfInstance.status_code.in_(("RUNNING", "WAITING"))).order_by(WfInstance.instance_id.desc()).limit(limit)))
         if not rows:
-            return []
+            return _my_orders(company_id, user_id, set(), limit)
         ids = [r.instance_id for r in rows]
         defs = dict(session.execute(select(WfDefinition.definition_id, WfDefinition.name).where(
             WfDefinition.definition_id.in_({r.definition_id for r in rows}))).all())
@@ -259,6 +267,29 @@ def my_requests(company_id: int, user_id: int, limit: int = 100) -> list[WorkIte
                                       "definition": defs.get(r.definition_id, ""), "open_task_ids": [t.task_id for t in open_],
                                       "waiting_on": who},
                             f"منتظر {who}" if who else "در حال انجام", "mine", step_no, step_total, path))
+    return out + _my_orders(company_id, user_id, {(r.entity_type, r.entity_id) for r in rows}, limit)
+
+
+def _my_orders(company_id: int, user_id: int, in_workflow: set, limit: int) -> list[WorkItem]:
+    """R302: سفارش خرید/فروشی که خود کاربر صادر کرده و هنوز کامل فاکتور نشده، با مرحلهٔ فعلی و منتظر چه کسی است
+    (فقط نمایش؛ سفارشی که فرایند گردش کار دارد همان‌جا دیده می‌شود و تکرار نمی‌شود)."""
+    from peecha.services import operational_tasks
+
+    try:
+        orders = operational_tasks.list_my_orders_in_progress(company_id, user_id, limit)
+    except Exception:  # noqa: BLE001 -- خطای این بخش نباید درخواست‌های گردش کار را پنهان کند
+        return []
+    out = []
+    for o in orders:
+        if (o.document_type_code, o.document_id) in in_workflow:
+            continue
+        step_no, step_total = _progress(o.path)
+        out.append(WorkItem(f"MYDOC:{o.document_id}", "MINE", SOURCES["MINE"], "REQUEST", KINDS["REQUEST"], o.document_id,
+                            o.title, f"منتظر: {o.waiting_on}", None, False, "NORMAL", PRIORITIES["NORMAL"], o.created_at, False,
+                            o.current_step, {"document_id": o.document_id, "document_type_code": o.document_type_code,
+                                             "counterparty": o.counterparty_name, "document_date": o.document_date,
+                                             "definition": "مراحل سفارش", "open_task_ids": [], "waiting_on": o.waiting_on},
+                            f"منتظر {o.waiting_on}", "mine", step_no, step_total, o.path))
     return out
 
 
@@ -325,6 +356,18 @@ def detail(company_id: int, user_id: int, key: str) -> dict:
         return {**empty, "title": item.title, "requester": "شما", "path": item.path, "history": history, "due_at": item.due_at,
                 "context": [("فرایند", item.extra["definition"]), ("منتظر", item.extra["waiting_on"] or "—"),
                             ("مرحلهٔ جاری", item.status_note or "—")]}
+    if source == "MYDOC":
+        item = next((w for w in my_requests(company_id, user_id) if w.key == key), None)
+        if item is None:
+            raise WorkflowError("این سفارش دیگر در جریان نیست.")
+        from peecha import numerals
+
+        context = [("سند", item.title), ("طرف حساب", item.extra["counterparty"] or "—"),
+                   ("مرحلهٔ جاری", item.status_note), ("منتظر", item.extra["waiting_on"])]
+        if item.extra.get("document_date"):
+            context.insert(2, ("تاریخ", numerals.format_jalali_date(item.extra["document_date"])))
+        return {**empty, "title": item.title, "requester": "شما", "path": item.path, "context": context,
+                "instructions": "برای دیدن یا ادامهٔ کار، سند را باز کنید."}
     if source in ("DOC", "CRM"):
         item = next((w for w in my_work(company_id, user_id, sources=(source,)) if w.key == key), None)
         if item is None:
@@ -402,6 +445,8 @@ def remind(company_id: int, user_id: int, key: str, note: str = "") -> int:
 
 def withdraw(company_id: int, user_id: int, key: str, reason: str = "") -> None:
     source, _sep, rest = key.partition(":")
+    if source == "MYDOC":
+        raise WorkflowError("این سفارش درخواست گردش کار نیست؛ برای لغو، خود سند را باز کنید.")
     if source != "MINE":
         raise WorkflowError("فقط درخواست‌های خودتان را می‌توانید پس بگیرید.")
     tasks.withdraw_request(company_id, int(rest), user_id, reason)
