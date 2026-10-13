@@ -61,7 +61,7 @@ def _receipt_bins(session, line_id: int) -> list[tuple[int, decimal.Decimal]]:
 
 
 def opportunities(company_id: int, warehouse_id: int | None = None, days: int = 7) -> list[SimpleNamespace]:
-    """ردیف‌های رسید اخیر که سفارش فروشِ منتظرِ همان کالا دارند."""
+    """ردیف‌های رسید اخیر که سفارش فروش منتظر همان کالا دارند."""
     from peecha.services import quality_control
 
     since = datetime.date.today() - datetime.timedelta(days=days)
