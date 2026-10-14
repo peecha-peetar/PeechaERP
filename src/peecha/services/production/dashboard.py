@@ -96,11 +96,11 @@ def dashboard(company_id: int, date_from: datetime.date, date_to: datetime.date)
         Kpi("ACTUAL", "بهای واقعی", actual, "MONEY", "PRD_COST", "مواد + دستمزد + ماشین + سربار − جانبی"),
         Kpi("STANDARD", "بهای استاندارد", standard, "MONEY", "PRD_STD_VS_ACTUAL", "استاندارد واحد × تولید"),
         Kpi("VARIANCE", "انحراف بها", actual - standard, "MONEY", "PRD_COST_VARIANCE", "واقعی − استاندارد"),
-        Kpi("SCRAP", "ضایعات٪", (scrap * _HUNDRED / (good + scrap)).quantize(decimal.Decimal("0.1")) if good + scrap else ZERO,
+        Kpi("SCRAP", "ضایعات٪", (scrap * _HUNDRED / (good + scrap)).quantize(decimal.Decimal("0.1")) if good + scrap else None,
             "PERCENT", "PRD_SCRAP_ANALYSIS", "ضایعات ÷ (سالم + ضایعات)"),
-        Kpi("MAT_EFF", "کارایی مواد٪", (sum(mat_eff) / len(mat_eff)).quantize(decimal.Decimal("0.1")) if mat_eff else ZERO,
+        Kpi("MAT_EFF", "کارایی مواد٪", (sum(mat_eff) / len(mat_eff)).quantize(decimal.Decimal("0.1")) if mat_eff else None,
             "PERCENT", "PRD_EFFICIENCY", "مصرف استاندارد ÷ واقعی"),
-        Kpi("LAB_EFF", "کارایی دستمزد٪", (sum(lab_eff) / len(lab_eff)).quantize(decimal.Decimal("0.1")) if lab_eff else ZERO,
+        Kpi("LAB_EFF", "کارایی دستمزد٪", (sum(lab_eff) / len(lab_eff)).quantize(decimal.Decimal("0.1")) if lab_eff else None,
             "PERCENT", "PRD_EFFICIENCY", "ساعت استاندارد ÷ واقعی"),
     ]
     by_period, by_product = defaultdict(lambda: ZERO), defaultdict(lambda: ZERO)

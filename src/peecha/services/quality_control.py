@@ -20,7 +20,7 @@ from peecha.db.models.inventory import (
     Batch, Item, LineTrackingEntry, QcInspection, StockDocument, StockDocumentLine, StockLedger, StockReservation, Warehouse,
 )
 from peecha.services import audit as audit_service
-from peecha.services import stock_controls, stock_reservations
+from peecha.services import stock_controls, stock_reservations, supplier_quality
 
 SOURCE = "QC_HOLD"
 _TYPES = ("RECEIPT", "CONSIGNMENT_IN")
@@ -42,6 +42,8 @@ def hold_receipt(session, doc: StockDocument) -> int:
             continue
         if stock_reservations.active(session, SOURCE, [ln.line_id], lock=False):
             continue
+        if session.scalar(select(QcInspection.qc_inspection_id).where(QcInspection.stock_document_line_id == ln.line_id).limit(1)):
+            continue   # R310: ردیف بازرسی‌شده با شکست برگشت سند دوباره نگه داشته نمی‌شود
         for bin_id, qty in session.execute(
                 select(StockLedger.bin_location_id, func.sum(StockLedger.quantity_base))
                 .where(StockLedger.stock_document_line_id == ln.line_id, StockLedger.movement_direction == "IN")
@@ -207,6 +209,7 @@ def inspect(company_id: int, line_id: int, user_id: int, rejected_quantity: deci
                            notes=(notes or "").strip() or None)
         session.add(row)
         session.flush()
+        supplier_quality.refresh(session, company_id, doc.counterparty_detail_account_id)  # R310
         audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="QcInspection",
                                    entity_id=row.qc_inspection_id, action="APPROVE",
                                    changes={"operation": "QC_INSPECT", "stock_line_id": line_id, "result": result_code,

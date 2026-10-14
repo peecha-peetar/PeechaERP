@@ -536,13 +536,17 @@ def efficiency(company_id: int, f) -> ReportResult:
 
 
 def capacity(company_id: int, f) -> ReportResult:
-    from peecha.services.production.planning import capacity_load
+    from peecha.services.production.planning import capacity_load, machines_label
 
     r = ReportResult([("مرکز کاری", TEXT), ("ظرفیت (ساعت)", QTY), ("بار (ساعت)", QTY), ("آزاد (ساعت)", QTY), ("بهره‌برداری٪", PERCENT),
-                      ("وضعیت", TEXT), ("دستورها", TEXT)], no_total={4}, note="ظرفیت = روزهای کاری × شیفت × ساعت × راندمان.")
+                      ("وضعیت", TEXT), ("دستورها", TEXT), ("ظرفیت اسمی (ساعت)", QTY), ("ماشین در دسترس", TEXT),
+                      ("ماشین خارج از دسترس", TEXT)], no_total={4},
+                     note="ظرفیت = روزهای کاری × شیفت × ساعت × راندمان، به نسبت ماشین‌های در دسترس هر روز "
+                          "(ماشین در تعمیر، متوقف یا واگذارشده حساب نمی‌شود).")
     for x in capacity_load(company_id, f.date_from, f.date_to):
         r.add([f"{x.code} -- {x.name}", x.capacity_hours, x.load_hours, x.free_hours, x.utilization,
-               "اضافه‌بار" if x.overloaded else "عادی", "، ".join(x.orders[:8])])
+               "اضافه‌بار" if x.overloaded else "عادی", "، ".join(x.orders[:8]), x.nominal_capacity_hours,
+               machines_label(x), "، ".join(f"{m.code} ({m.status_label})" for m in x.down_machines)])
     return r
 
 

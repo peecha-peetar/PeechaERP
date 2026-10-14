@@ -431,4 +431,4 @@ def pipeline_summary(company_id: int, pipeline_id: int | None = None, owner_user
     closed = won[0] + lost[0]
     return {"open_count": open_[0], "pipeline_value": open_[1], "weighted_value": open_[2].quantize(decimal.Decimal("0.01")),
             "won_count": won[0], "won_value": won[1], "lost_count": lost[0], "lost_value": lost[1],
-            "conversion_rate": (decimal.Decimal(won[0]) * 100 / closed).quantize(decimal.Decimal("0.1")) if closed else ZERO}
+            "conversion_rate": (decimal.Decimal(won[0]) * 100 / closed).quantize(decimal.Decimal("0.1")) if closed else None}

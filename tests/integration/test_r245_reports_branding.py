@@ -204,7 +204,7 @@ old_codes = {e["code"] for _g, _l, es in nav_catalog.ACCOUNTING_REPORT_MENU for 
 check({"REPORTS_TRIAL_BALANCE", "REPORTS_BALANCE_SHEET", "REPORTS_ANOMALIES", "REPORTS_COST_CENTER"} <= old_codes and len(old_codes) == 13,
       "۱۳ گزارش قبلی حسابداری با همان کد در زیرگروه‌ها")
 menu_codes = [e[0] for _g, _l, es in nav_catalog.PURCHASE_REPORT_MENU for e in es if not isinstance(e, dict)]
-check(sorted(menu_codes) == sorted(r.code for r in pr.REPORTS) and len(pr.REPORTS) == 116, f"منوی خرید هم‌خوان با ۱۱۶ گزارش (got {len(pr.REPORTS)})")
+check(sorted(menu_codes) == sorted(r.code for r in pr.REPORTS) and len(pr.REPORTS) == 117, f"منوی خرید هم‌خوان با ۱۱۷ گزارش (R310: بازرسی‌های کیفیت رسید) (got {len(pr.REPORTS)})")
 
 # --- ۲) گزارش‌هایِ حسابداری -----------------------------------------------------
 reg = arun("VOUCHER_REGISTER")

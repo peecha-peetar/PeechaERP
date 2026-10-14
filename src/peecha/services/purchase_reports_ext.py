@@ -678,7 +678,7 @@ def price_vs_reference(company_id: int, f: PurchaseFilters) -> ReportResult:
         if (direction == "ABOVE" and diff < _Q2) or (direction == "BELOW" and diff > -_Q2):
             continue
         result.add([doc.document_date, doc.document_no, ctx.names.get(doc.counterparty_detail_account_id, ""),
-                    ctx.item_label(ln.item_id), ref_label, ref, price, diff, (diff * 100 / ref) if ref else _ZERO,
+                    ctx.item_label(ln.item_id), ref_label, ref, price, diff, (diff * 100 / ref) if ref else None,
                     ln.quantity_base, _money(diff * ln.quantity_base)], (doc.document_id, doc.document_type_code))
     return result
 
@@ -724,8 +724,8 @@ def actual_procurement_cost(company_id: int, f: PurchaseFilters) -> ReportResult
     for item_id, a in sorted(agg.items(), key=lambda kv: -kv[1]["ledger"]):
         extra = a["ledger"] - a["invoice"]
         result.add([ctx.item_label(item_id), a["qty"], a["invoice"], extra, a["ledger"],
-                    (a["invoice"] / a["qty"]) if a["qty"] else _ZERO, (a["ledger"] / a["qty"]) if a["qty"] else _ZERO,
-                    (extra * 100 / a["invoice"]) if a["invoice"] else _ZERO])
+                    (a["invoice"] / a["qty"]) if a["qty"] else None, (a["ledger"] / a["qty"]) if a["qty"] else None,
+                    (extra * 100 / a["invoice"]) if a["invoice"] else None])
     return result
 
 
@@ -1192,15 +1192,17 @@ def slow_and_dead_stock(company_id: int, f: PurchaseFilters) -> ReportResult:
 # =====================================================================
 def supplier_terms(company_id: int, f: PurchaseFilters) -> ReportResult:
     from peecha.db.models.commercial import SupplierProfile
+    from peecha.services import supplier_quality
 
     ctx = base._ctx(company_id)
     with new_session() as session:
         profiles = {p.supplier_detail_account_id: p for p in session.scalars(
             select(SupplierProfile).where(SupplierProfile.company_id == company_id))}
+        quality = supplier_quality.by_supplier(session, company_id, *supplier_quality.window())  # R310: از بازرسی‌های یک سال اخیر
     result = ReportResult([
         ("تامین‌کننده", TEXT), ("مهلت پرداخت (روز)", INT), ("شرط تحویل (Incoterm)", TEXT), ("زمان تحویل پیش‌فرض", TEXT),
         ("سقف اعتبار", MONEY), ("امتیاز کیفیت", TEXT), ("وضعیت", TEXT),
-    ], no_total={1})
+    ], no_total={1}, note="امتیاز کیفیت از بازرسی‌های کنترل کیفیت رسید در یک سال اخیر (گزارش «بازرسی‌های کیفیت رسید»).")
     for s in dimensions_service.list_suppliers(company_id):
         sid = s["detail_account_id"]
         if f.supplier_id is not None and sid != f.supplier_id:
@@ -1208,7 +1210,7 @@ def supplier_terms(company_id: int, f: PurchaseFilters) -> ReportResult:
         p = profiles.get(sid)
         result.add([ctx.names.get(sid, ""), p.payment_term_days if p else 0, (p.incoterm_code or "") if p else "",
                     f"{p.default_lead_time_days} روز" if p and p.default_lead_time_days else "", p.credit_limit_amount if p else _ZERO,
-                    str(p.quality_rating) if p and p.quality_rating is not None else "", (p.status_code if p else "بدون پروفایل")])
+                    supplier_quality.label(quality[sid].rating if sid in quality else None), (p.status_code if p else "بدون پروفایل")])
     return result
 
 
@@ -1590,7 +1592,7 @@ def request_register(company_id: int, f: PurchaseFilters) -> ReportResult:
         result.add([r.request_no, r.request_date, users.get(r.requester_user_id, ""), pr_service.PRIORITY_LABELS[r.priority_code],
                     r.required_date, pr_service.STATUS_LABELS[r.status_code], len(ls), _estimated(ls),
                     pr_service.FULFILMENT_LABELS[pr_service.fulfilment(ls, ordered)] if r.status_code == "APPROVED" else "",
-                    (done * 100 / total) if total else _ZERO, users.get(r.approved_by_user_id, "")], (r.request_id, "PURCHASE_REQUEST"))
+                    (done * 100 / total) if total else None, users.get(r.approved_by_user_id, "")], (r.request_id, "PURCHASE_REQUEST"))
     return result
 
 
@@ -1682,7 +1684,7 @@ def requests_by_requester(company_id: int, f: PurchaseFilters) -> ReportResult:
     ])
     for key, a in sorted(agg.items(), key=lambda kv: -kv[1]["value"]):
         result.add([key, a["count"], a["approved"], a["rejected"], a["ordered"],
-                    decimal.Decimal(a["rejected"] * 100) / a["count"] if a["count"] else _ZERO, a["value"]])
+                    decimal.Decimal(a["rejected"] * 100) / a["count"] if a["count"] else None, a["value"]])
     return result
 
 
@@ -1773,7 +1775,7 @@ def rfq_comparison(company_id: int, f: PurchaseFilters) -> ReportResult:
             state = "برنده" if r.quote.is_awarded else ("بهترین پیشنهاد" if r.is_best else "")
             result.add([row.rfq_no, ctx.item_label(r.line.item_id), r.line.quantity, ctx.names.get(r.supplier.supplier_detail_account_id, ""),
                         r.quote.unit_price, r.quote.discount_percent, r.net, _money(r.total), r.quote.lead_time_days, r.quote.valid_until,
-                        r.rank, ((r.net - b) * 100 / b) if b else _ZERO, state], (row.rfq_id, "RFQ"))
+                        r.rank, ((r.net - b) * 100 / b) if b else None, state], (row.rfq_id, "RFQ"))
     return result
 
 
@@ -1802,9 +1804,9 @@ def rfq_supplier_response(company_id: int, f: PurchaseFilters) -> ReportResult:
         if f.supplier_id is not None and sid != f.supplier_id:
             continue
         result.add([ctx.names.get(sid, ""), a["invited"], a["responded"], a["declined"],
-                    decimal.Decimal(a["responded"] * 100) / a["invited"] if a["invited"] else _ZERO,
+                    decimal.Decimal(a["responded"] * 100) / a["invited"] if a["invited"] else None,
                     round(sum(a["days"]) / len(a["days"])) if a["days"] else None, a["wins"],
-                    decimal.Decimal(a["wins"] * 100) / a["responded"] if a["responded"] else _ZERO])
+                    decimal.Decimal(a["wins"] * 100) / a["responded"] if a["responded"] else None])
     return result
 
 
@@ -1828,7 +1830,7 @@ def rfq_savings(company_id: int, f: PurchaseFilters) -> ReportResult:
             high = max(r.net for r in ls)
             qty = winner.line.quantity
             result.add([row.rfq_no, ctx.item_label(winner.line.item_id), qty, len(ls), winner.net, avg, high, _money((avg - winner.net) * qty),
-                        _money((high - winner.net) * qty), ((high - winner.net) * 100 / high) if high else _ZERO], (row.rfq_id, "RFQ"))
+                        _money((high - winner.net) * qty), ((high - winner.net) * 100 / high) if high else None], (row.rfq_id, "RFQ"))
     return result
 
 
@@ -1967,7 +1969,7 @@ def budget_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
     ], no_total={6})
     for key, (amount, actual, commitment, count) in sorted(agg.items()):
         result.add([key, count, amount, actual, commitment, amount - actual - commitment,
-                    ((actual + commitment) * 100 / amount) if amount else _ZERO])
+                    ((actual + commitment) * 100 / amount) if amount else None])
     return result
 
 

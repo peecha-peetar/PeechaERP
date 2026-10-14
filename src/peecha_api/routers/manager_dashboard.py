@@ -73,13 +73,14 @@ def get_dashboard(
         ctx.company_id, date_from, date_to, "RECEIPT", created_by_user_id=visitor_user_id,
         route_detail_account_id=route_detail_account_id,
     )
+    # R310: بدون مخرج، شاخص «بدون داده» است (null)، نه صفر
     average_order_value = (
-        order_summary.total_amount / order_summary.document_count if order_summary.document_count else 0
+        order_summary.total_amount / order_summary.document_count if order_summary.document_count else None
     )
     collection_rate = (
-        collection_amount / order_summary.total_amount if order_summary.total_amount else 0
+        collection_amount / order_summary.total_amount if order_summary.total_amount else None
     )
-    conversion_rate = (order_summary.document_count / completed_visits) if completed_visits else 0
+    conversion_rate = (order_summary.document_count / completed_visits) if completed_visits else None
 
     new_customer_count = partners_service.count_new_customers(ctx.company_id, date_from, date_to)
     customers_without_purchase_count = partners_service.count_customers_without_purchase(ctx.company_id)
@@ -116,13 +117,17 @@ def get_dashboard(
         "date_to": date_to.isoformat(),
         "sales_amount": str(order_summary.total_amount),
         "order_count": order_summary.document_count,
-        "average_order_value": str(average_order_value),
+        "average_order_value": _str_or_none(average_order_value),
         "collection_amount": str(collection_amount),
-        "collection_rate": str(collection_rate),
+        "collection_rate": _str_or_none(collection_rate),
         "visit_count": len(visits),
         "visit_completed_count": completed_visits,
-        "visit_to_order_conversion": str(conversion_rate),
+        "visit_to_order_conversion": _str_or_none(conversion_rate),
         "new_customer_count": new_customer_count,
         "customers_without_purchase_count": customers_without_purchase_count,
         "by_visitor": by_visitor,
     }
+
+
+def _str_or_none(value) -> str | None:
+    return None if value is None else str(value)

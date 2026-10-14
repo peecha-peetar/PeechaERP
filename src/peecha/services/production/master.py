@@ -14,11 +14,12 @@ from types import SimpleNamespace
 from sqlalchemy import func, or_, select
 
 from peecha.db.base import new_session
-from peecha.db.models.fixed_assets import Asset
+from peecha.db.models.fixed_assets import Asset, AssetEvent
 from peecha.db.models.inventory import BomHeader, BomLine, Item
 from peecha.db.models.production import (
     BomOutput, ItemProductionProfile, LaborRate, Operation, Routing, RoutingOperation, WorkCenter, WorkCenterMachine,
 )
+from peecha.services.fixed_assets.common import CLOSED_STATUSES, STATUS_LABELS as ASSET_STATUS_LABELS
 from peecha.services.production import common as c
 
 ZERO, ONE = c.ZERO, c.ONE
@@ -126,15 +127,21 @@ def unlink_machine(company_id: int, work_center_id: int, asset_id: int) -> None:
             session.commit()
 
 
+def _machines(session, wc: WorkCenter) -> tuple[list[Asset], set[int]]:
+    linked = set(session.scalars(select(WorkCenterMachine.asset_id).where(WorkCenterMachine.work_center_id == wc.work_center_id)))
+    rows = list(session.scalars(select(Asset).where(Asset.company_id == wc.company_id, Asset.is_production_machine.is_(True),
+                                                    or_(Asset.asset_id.in_(linked or {-1}), Asset.work_center_code == wc.code))
+                                .order_by(Asset.asset_code)))
+    return rows, linked
+
+
 def work_center_machines(company_id: int, work_center_id: int) -> list[SimpleNamespace]:
     """ماشین‌های لینک‌شده + دارایی‌هایی که «کد مرکز کار»شان در ماژول دارایی همین کد است."""
     with new_session() as session:
         wc = session.get(WorkCenter, work_center_id)
         if wc is None or wc.company_id != company_id:
             raise ValueError("مرکز کاری نامعتبر است.")
-        linked = set(session.scalars(select(WorkCenterMachine.asset_id).where(WorkCenterMachine.work_center_id == work_center_id)))
-        rows = session.scalars(select(Asset).where(Asset.company_id == company_id, Asset.is_production_machine.is_(True),
-                                                   or_(Asset.asset_id.in_(linked or {-1}), Asset.work_center_code == wc.code)))
+        rows, linked = _machines(session, wc)
         return [SimpleNamespace(asset_id=a.asset_id, code=a.asset_code, name=a.name, machine_rate=a.machine_rate,
                                 status_code=a.status_code, linked=a.asset_id in linked) for a in rows]
 
@@ -147,6 +154,58 @@ def capacity_hours(wc: WorkCenter, date_from: datetime.date, date_to: datetime.d
     working = sum(1 for i in range(days) if ((date_from + datetime.timedelta(days=i)).weekday() + 2) % 7 < wc.working_days_per_week)
     return (decimal.Decimal(working) * wc.daily_hours * decimal.Decimal(wc.efficiency_percent) / _HUNDRED).quantize(
         decimal.Decimal("0.01"))
+
+
+# R310: ماشین در این وضعیت‌ها برای تولید در دسترس نیست (در تعمیر، متوقف، در حال ساخت، واگذارشده)
+DOWN_STATUSES = frozenset({"UNDER_MAINTENANCE", "SUSPENDED", "UNDER_CONSTRUCTION"} | CLOSED_STATUSES)
+_CLOSING_EVENTS = ("SALE", "SCRAP", "DONATION", "WRITE_OFF", "DISPOSAL", "SPLIT", "MERGE")
+
+
+def _down_days(session, asset: Asset, days: list[datetime.date], today: datetime.date) -> set[datetime.date]:
+    """روزهایی که ماشین از روی تاریخچهٔ وضعیت دارایی در دسترس نبوده؛ از امروز به بعد وضعیت فعلی ملاک است."""
+    events = session.execute(select(AssetEvent.event_type, AssetEvent.event_date, AssetEvent.details).where(
+        AssetEvent.asset_id == asset.asset_id, AssetEvent.status_code == "POSTED").order_by(AssetEvent.event_date, AssetEvent.event_id)).all()
+    changes = [(d, det) for t, d, det in events if t == "STATUS" and isinstance(det, dict) and det.get("to")]
+    # وضعیت پیش از اولین تغییر؛ بی‌تاریخچه = وضعیت فعلی (وضعیت واگذارشده فقط از تاریخ واگذاری اثر دارد)
+    before = changes[0][1].get("from") if changes else (None if asset.status_code in CLOSED_STATUSES else asset.status_code)
+    closed_on = None
+    if asset.status_code in CLOSED_STATUSES:
+        closed_on = max((d for t, d, _x in events if t in _CLOSING_EVENTS), default=datetime.date.min)
+    out = set()
+    for day in days:
+        if closed_on is not None and day >= closed_on:
+            out.add(day)
+            continue
+        status = asset.status_code if day >= today else next((det["to"] for d, det in reversed(changes) if d <= day), before)
+        if status in DOWN_STATUSES:
+            out.add(day)
+    return out
+
+
+def available_capacity(session, wc: WorkCenter, date_from: datetime.date, date_to: datetime.date,
+                       today: datetime.date | None = None) -> SimpleNamespace:
+    """ظرفیت با کسر ماشین‌های خارج از دسترس — هر روز کاری به نسبت ماشین‌های در دسترس همان روز.
+
+    مرکزی که ماشین تعریف‌شده ندارد همان ظرفیت اسمی را دارد (دادهٔ ماشین برای کسر نیست).
+    """
+    nominal = capacity_hours(wc, date_from, date_to)
+    machines, _linked = _machines(session, wc)
+    today = today or datetime.date.today()
+    total = len(machines)
+    if not machines or nominal <= 0:
+        return SimpleNamespace(hours=nominal, nominal_hours=nominal, machines_total=total, machines_down=0, down=[])
+    span = (date_to - date_from).days + 1
+    days = [d for d in (date_from + datetime.timedelta(days=i) for i in range(span)) if (d.weekday() + 2) % 7 < wc.working_days_per_week]
+    down, machine_days = [], 0
+    for a in machines:
+        dd = _down_days(session, a, days, today)
+        machine_days += len(days) - len(dd)
+        if dd:
+            down.append(SimpleNamespace(asset_id=a.asset_id, code=a.asset_code, name=a.name, status_code=a.status_code,
+                                        status_label=ASSET_STATUS_LABELS.get(a.status_code, a.status_code), down_days=len(dd)))
+    share = decimal.Decimal(machine_days) / decimal.Decimal(total)
+    hours = (share * wc.daily_hours * decimal.Decimal(wc.efficiency_percent) / _HUNDRED).quantize(decimal.Decimal("0.01"))
+    return SimpleNamespace(hours=hours, nominal_hours=nominal, machines_total=total, machines_down=len(down), down=down)
 
 
 def save_labor_rate(company_id: int, code: str, name: str, hourly_rate, employee_id: int | None = None,

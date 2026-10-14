@@ -613,13 +613,24 @@ def capacity_load(company_id: int, date_from: datetime.date, date_to: datetime.d
                     load[op.work_center_id] += pm.op_hours(op, ln.quantity).elapsed_hours
         out = []
         for wc_id, wc in centers.items():
-            cap = pm.capacity_hours(wc, date_from, date_to)
+            avail = pm.available_capacity(session, wc, date_from, date_to)   # R310: بدون ماشین‌های خارج از دسترس
+            cap = avail.hours
             used = c.money(load[wc_id])
-            util = c.money(used * 100 / cap) if cap else (decimal.Decimal(100) if used else ZERO)
+            util = c.money(used * 100 / cap) if cap else None   # R310: بدون ظرفیت در دسترس، درصد معنا ندارد
             out.append(SimpleNamespace(work_center_id=wc_id, code=wc.code, name=wc.name, capacity_hours=cap, load_hours=used,
                                        utilization=util, overloaded=used > cap, free_hours=max(ZERO, cap - used),
-                                       orders=sorted(orders[wc_id])))
-        return sorted(out, key=lambda x: -x.utilization)
+                                       orders=sorted(orders[wc_id]), nominal_capacity_hours=avail.nominal_hours,
+                                       machines_total=avail.machines_total, machines_down=avail.machines_down,
+                                       down_machines=avail.down))
+        # بار بدون ظرفیت در دسترس اول، بعد بیشترین بهره‌برداری، مرکز بی‌ظرفیت و بی‌بار آخر
+        return sorted(out, key=lambda x: (1, -x.utilization) if x.utilization is not None else (0 if x.overloaded else 2, 0))
+
+
+def machines_label(x) -> str:
+    """«۲ از ۳»؛ مرکز بدون ماشین تعریف‌شده = «تعریف نشده»."""
+    if not x.machines_total:
+        return "تعریف نشده"
+    return f"{x.machines_total - x.machines_down} از {x.machines_total}"
 
 
 def calendar(company_id: int, date_from: datetime.date, date_to: datetime.date, work_center_id: int | None = None

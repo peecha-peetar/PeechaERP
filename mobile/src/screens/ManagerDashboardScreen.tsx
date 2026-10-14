@@ -116,11 +116,11 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
             <Kpi label="فروش" value={formatAmount(data.sales_amount)} tone="success" />
             <Kpi label="سفارش" value={String(data.order_count)} />
-            <Kpi label="میانگین سفارش" value={formatAmount(data.average_order_value)} />
+            <Kpi label="میانگین سفارش" value={data.average_order_value == null ? "—" : formatAmount(data.average_order_value)} />
             <Kpi label="وصول" value={formatAmount(data.collection_amount)} tone="info" />
-            <Kpi label="نرخ وصول" value={`${(Number(data.collection_rate) * 100).toFixed(0)}%`} />
+            <Kpi label="نرخ وصول" value={ratePercent(data.collection_rate)} />
             <Kpi label="ویزیت" value={`${data.visit_completed_count}/${data.visit_count}`} />
-            <Kpi label="تبدیل ویزیت به سفارش" value={`${(Number(data.visit_to_order_conversion) * 100).toFixed(0)}%`} />
+            <Kpi label="تبدیل ویزیت به سفارش" value={ratePercent(data.visit_to_order_conversion)} />
             <Kpi label="مشتری جدید" value={String(data.new_customer_count)} />
             <Kpi label="مشتری بدون‌خرید" value={String(data.customers_without_purchase_count)} tone="danger" />
           </View>
@@ -156,6 +156,11 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
       ) : null}
     </ScrollView>
   );
+}
+
+// بدون مخرج (null) یعنی داده‌ای برای این شاخص نیست، نه صفر
+function ratePercent(value: string | null): string {
+  return value == null ? "—" : `${(Number(value) * 100).toFixed(0)}%`;
 }
 
 function Kpi({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "success" | "info" | "danger" }) {

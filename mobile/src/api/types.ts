@@ -581,12 +581,12 @@ export interface ManagerDashboardResponse {
   date_to: string;
   sales_amount: string;
   order_count: number;
-  average_order_value: string;
+  average_order_value: string | null;
   collection_amount: string;
-  collection_rate: string;
+  collection_rate: string | null;
   visit_count: number;
   visit_completed_count: number;
-  visit_to_order_conversion: string;
+  visit_to_order_conversion: string | null;
   new_customer_count: number;
   customers_without_purchase_count: number;
   by_visitor: VisitorPerformanceRow[];

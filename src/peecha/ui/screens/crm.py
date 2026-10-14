@@ -1202,7 +1202,7 @@ class PipelineScreen(QWidget):
         s = opp_service.pipeline_summary(cid, pid, owner)
         for key, value in (("value", money(s["pipeline_value"])), ("weighted", money(s["weighted_value"])), ("open", P(s["open_count"])),
                            ("won", P(f"{s['won_count']} — {money(s['won_value'])}")), ("lost", P(s["lost_count"])),
-                           ("rate", P(f"{s['conversion_rate'].normalize()}٪"))):
+                           ("rate", "—" if s["conversion_rate"] is None else P(f"{s['conversion_rate'].normalize()}٪"))):
             self.cards[key].setText(value)
 
     def selected_id(self):

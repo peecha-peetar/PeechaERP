@@ -495,7 +495,7 @@ def supplier_price_comparison(company_id: int, f: PurchaseFilters) -> ReportResu
         best = best_last[item_id]
         result.add([
             ctx.item_label(item_id), ctx.names.get(supplier_id, ""), a["last"], a["last_date"],
-            (a["amount"] / a["qty"]) if a["qty"] else _ZERO, a["min"], ((a["last"] - best) * 100 / best) if best else _ZERO,
+            (a["amount"] / a["qty"]) if a["qty"] else None, a["min"], ((a["last"] - best) * 100 / best) if best else None,
             a["qty"], a["count"], "★" if a["last"] == best else "",
         ])
     return result
@@ -541,7 +541,7 @@ def purchase_price_variance(company_id: int, f: PurchaseFilters) -> ReportResult
             continue
         result.add([
             doc.document_date, doc.document_no, ctx.names.get(doc.counterparty_detail_account_id, ""), ctx.item_label(ln.item_id),
-            basis_label, basis, price, diff, (diff * 100 / basis) if basis else _ZERO, ln.quantity_base,
+            basis_label, basis, price, diff, (diff * 100 / basis) if basis else None, ln.quantity_base,
             (diff * ln.quantity_base).quantize(decimal.Decimal("0.01")),
         ], (doc.document_id, doc.document_type_code))
     return result
@@ -597,8 +597,8 @@ def fill_rate(company_id: int, f: PurchaseFilters) -> ReportResult:
     for supplier_id, a in sorted(agg.items(), key=lambda kv: ctx.names.get(kv[0], "")):
         result.add([
             ctx.names.get(supplier_id, ""), len(a["docs"]), a["lines"], a["ordered"], a["received"],
-            (a["received"] * 100 / a["ordered"]) if a["ordered"] else _ZERO, a["full"],
-            decimal.Decimal(a["full"] * 100) / a["lines"] if a["lines"] else _ZERO,
+            (a["received"] * 100 / a["ordered"]) if a["ordered"] else None, a["full"],
+            decimal.Decimal(a["full"] * 100) / a["lines"] if a["lines"] else None,
         ])
     return result
 
@@ -1110,7 +1110,7 @@ def landed_costs(company_id: int, f: PurchaseFilters) -> ReportResult:
         result.add([
             doc.document_date, doc.document_no, ctx.names.get(doc.counterparty_detail_account_id, ""),
             _COST_TYPES.get(alloc.cost_type_code or "", alloc.cost_type_code or ""), alloc.amount, goods,
-            (alloc.amount * 100 / goods) if goods else _ZERO,
+            (alloc.amount * 100 / goods) if goods else None,
             ctx.names.get(alloc.credit_detail_account_id, "") if alloc.credit_detail_account_id else "", alloc.notes or "",
         ], (doc.document_id, doc.document_type_code))
     return result
@@ -1145,7 +1145,7 @@ def discounts_and_rebates(company_id: int, f: PurchaseFilters) -> ReportResult:
     for supplier_id, a in sorted(agg.items(), key=lambda kv: -(kv[1]["discount"] + kv[1]["accrued"] + kv[1]["settled"])):
         saving = a["discount"] + a["accrued"] + a["settled"]
         result.add([ctx.names.get(supplier_id, ""), a["gross"], a["discount"],
-                    (a["discount"] * 100 / a["gross"]) if a["gross"] else _ZERO, a["accrued"], a["settled"], saving])
+                    (a["discount"] * 100 / a["gross"]) if a["gross"] else None, a["accrued"], a["settled"], saving])
     return result
 
 
@@ -1169,7 +1169,7 @@ def on_time_delivery(company_id: int, f: PurchaseFilters) -> ReportResult:
         on_time = sum(1 for d in delays if d <= 0)
         late = [d for d in delays if d > 0]
         result.add([ctx.names.get(supplier_id, ""), len(delays), on_time, len(late),
-                    decimal.Decimal(on_time * 100) / len(delays) if delays else _ZERO,
+                    decimal.Decimal(on_time * 100) / len(delays) if delays else None,
                     round(sum(late) / len(late)) if late else 0, len(a["no_date"])])
     return result
 
@@ -1177,34 +1177,68 @@ def on_time_delivery(company_id: int, f: PurchaseFilters) -> ReportResult:
 # ۲۴) کیفیت / نرخِ برگشت
 def quality_returns(company_id: int, f: PurchaseFilters) -> ReportResult:
     S = _side(f)
-    from peecha.db.models.inventory import QcInspection
+    from peecha.services import supplier_quality
 
     ctx = _ctx(company_id)
     purchases, returns = _posted_purchase_and_returns(company_id, f, ctx)
-    agg: dict[int, dict] = defaultdict(lambda: {"qty": _ZERO, "ret": _ZERO, "rejected": _ZERO, "inspected": 0})
-    by_stock_line: dict[int, int] = {}
+    agg: dict[int, dict] = defaultdict(lambda: {"qty": _ZERO, "ret": _ZERO, "rejected": _ZERO, "inspected": 0, "inspected_qty": _ZERO})
     for doc, ln in purchases:
         agg[doc.counterparty_detail_account_id]["qty"] += ln.quantity_base
-        if ln.stock_document_line_id:
-            by_stock_line[ln.stock_document_line_id] = doc.counterparty_detail_account_id
     for doc, ln in returns:
         agg[doc.counterparty_detail_account_id]["ret"] += ln.quantity_base
-    if by_stock_line:
+    if S.code == "PURCHASE":
+        # R310: بازرسی‌های همان بازه از روی رسید و تامین‌کنندهٔ رسید (نه فقط رسیدهای وصل به فاکتور)
         with new_session() as session:
-            for stock_line_id, rejected in session.execute(
-                select(QcInspection.stock_document_line_id, QcInspection.rejected_quantity)
-                .where(QcInspection.stock_document_line_id.in_(list(by_stock_line)))
-            ):
-                a = agg[by_stock_line[stock_line_id]]
+            for r in supplier_quality.inspections(session, company_id, f.date_from, f.date_to, f.supplier_id):
+                if not _stock_line_matches(ctx, f, r.item_id, r.warehouse_id):
+                    continue
+                a = agg[r.supplier_id]
                 a["inspected"] += 1
-                a["rejected"] += rejected or _ZERO
+                a["inspected_qty"] += r.inspected
+                a["rejected"] += r.rejected
     result = ReportResult([
         ("تامین‌کننده", TEXT), ("مقدار خرید", QTY), ("مقدار برگشتی", QTY), ("نرخ برگشت", PERCENT),
         ("تعداد بازرسی کیفیت", INT), ("مقدار ردشده در کنترل کیفیت", QTY), ("نرخ ردی", PERCENT),
-    ])
+        ("مقدار بازرسی‌شده", QTY), ("امتیاز کیفیت (از ۱۰)", QTY),
+    ], no_total={8}, note="نرخ ردی = ردشده ÷ بازرسی‌شده. امتیاز کیفیت = پذیرفته ÷ بازرسی‌شده × ۱۰. "
+                                "خانهٔ خالی یعنی داده‌ای برای محاسبه نیست، نه صفر.")
     for supplier_id, a in sorted(agg.items(), key=lambda kv: -(kv[1]["ret"] / kv[1]["qty"] if kv[1]["qty"] else 0)):
-        result.add([ctx.names.get(supplier_id, ""), a["qty"], a["ret"], (a["ret"] * 100 / a["qty"]) if a["qty"] else _ZERO,
-                    a["inspected"], a["rejected"], (a["rejected"] * 100 / a["qty"]) if a["qty"] else _ZERO])
+        result.add([ctx.names.get(supplier_id, ""), a["qty"], a["ret"], (a["ret"] * 100 / a["qty"]) if a["qty"] else None,
+                    a["inspected"], a["rejected"], (a["rejected"] * 100 / a["inspected_qty"]) if a["inspected_qty"] else None,
+                    a["inspected_qty"], supplier_quality.rating(a["inspected_qty"], a["rejected"])])
+    return result
+
+
+def _stock_line_matches(ctx: _Ctx, f: PurchaseFilters, item_id: int, warehouse_id: int | None) -> bool:
+    if f.item_id is not None and item_id != f.item_id:
+        return False
+    if f.category_id is not None:
+        item = ctx.items.get(item_id)
+        if item is None or item.category_id != f.category_id:
+            return False
+    return f.warehouse_id is None or warehouse_id == f.warehouse_id
+
+
+# ۲۴-ب) بازرسی‌های کیفیت رسید (ریز امتیاز کیفیت تامین‌کننده)
+def qc_inspections(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import supplier_quality
+    from peecha.services.users import list_users
+
+    ctx = _ctx(company_id)
+    users = {u.user_id: u.full_name or u.username for u in list_users()}
+    result = ReportResult([
+        ("تاریخ بازرسی", DATE), ("تامین‌کننده", TEXT), ("رسید انبار", TEXT), ("تاریخ رسید", DATE), ("کالا", TEXT),
+        ("انبار", TEXT), ("مقدار بازرسی‌شده", QTY), ("مقدار ردشده", QTY), ("مقدار پذیرفته", QTY), ("نتیجه", TEXT),
+        ("بازرس", TEXT), ("توضیح", TEXT),
+    ], note="امتیاز کیفیت هر تامین‌کننده از همین ردیف‌ها حساب می‌شود.")
+    with new_session() as session:
+        rows = supplier_quality.inspections(session, company_id, f.date_from, f.date_to, f.supplier_id)
+    for r in rows:
+        if not _stock_line_matches(ctx, f, r.item_id, r.warehouse_id):
+            continue
+        result.add([r.inspected_at.date(), ctx.names.get(r.supplier_id, ""), r.document_no, r.document_date, ctx.item_label(r.item_id),
+                    ctx.warehouses.get(r.warehouse_id, ""), r.inspected, r.rejected, max(_ZERO, r.inspected - r.rejected),
+                    supplier_quality.RESULT_LABELS.get(r.result_code, r.result_code), users.get(r.user_id, ""), r.notes or ""])
     return result
 
 
@@ -1225,17 +1259,20 @@ def supplier_scorecard(company_id: int, f: PurchaseFilters) -> ReportResult:
     result = ReportResult([
         ("تامین‌کننده", TEXT), ("خالص خرید", MONEY), ("امتیاز قیمت", PERCENT), ("دقت مقدار", PERCENT),
         ("تحویل به‌موقع", PERCENT), ("امتیاز کیفیت", PERCENT), ("امتیاز کل", PERCENT), ("رتبه", TEXT),
-    ], no_total=set(), note="امتیاز قیمت = ۱۰۰ − میانگین درصد گرانی نسبت به ارزان‌ترین؛ کیفیت = ۱۰۰ − نرخ برگشت. "
-                            "امتیاز کل = میانگین شاخص‌های موجود.")
+        ("پذیرش در کنترل کیفیت", PERCENT),
+    ], no_total=set(), note="امتیاز قیمت = ۱۰۰ − میانگین درصد گرانی نسبت به ارزان‌ترین؛ کیفیت = ۱۰۰ − نرخ برگشت؛ "
+                            "پذیرش در کنترل کیفیت = پذیرفته ÷ بازرسی‌شده. امتیاز کل = میانگین شاخص‌های موجود؛ "
+                            "شاخص بدون داده خالی می‌ماند و در میانگین نمی‌آید.")
     for name in sorted(names):
         price = (100 - sum(price_gap[name]) / len(price_gap[name])) if price_gap.get(name) else None
         fr = fill[name][5] if name in fill else None
         ot = otd[name][4] if name in otd and otd[name][1] else None
-        ql = (100 - quality[name][3]) if name in quality and quality[name][1] else None
-        parts = [decimal.Decimal(v) for v in (price, fr, ot, ql) if v is not None]
+        ql = (100 - quality[name][3]) if name in quality and quality[name][3] is not None else None
+        qc = quality[name][8] * 10 if name in quality and quality[name][8] is not None else None
+        parts = [decimal.Decimal(v) for v in (price, fr, ot, ql, qc) if v is not None]
         overall = sum(parts, _ZERO) / len(parts) if parts else None
         grade = "" if overall is None else "عالی" if overall >= 90 else "خوب" if overall >= 75 else "متوسط" if overall >= 60 else "ضعیف"
-        result.add([name, spend[name][7] if name in spend else _ZERO, price, fr, ot, ql, overall, grade])
+        result.add([name, spend[name][7] if name in spend else _ZERO, price, fr, ot, ql, overall, grade, qc])
     result.rows.sort(key=lambda r: -(r[6] or 0))
     result.refs = [None] * len(result.rows)
     return result
@@ -1494,7 +1531,7 @@ def _register(company_id: int, f: PurchaseFilters, doc_type: str) -> ReportResul
         for doc, lines in docs:
             ordered = sum((ln.quantity_base for ln in lines), _ZERO)
             billed = sum((invoiced.get(ln.line_id, _ZERO) for ln in lines), _ZERO)
-            converted[doc.document_id] = (billed * 100 / ordered) if ordered else _ZERO
+            converted[doc.document_id] = (billed * 100 / ordered) if ordered else None
     result = ReportResult(columns, no_total={0})
     for doc, lines in sorted(docs, key=lambda dl: (dl[0].document_date, dl[0].document_no)):
         row = [
@@ -1507,7 +1544,7 @@ def _register(company_id: int, f: PurchaseFilters, doc_type: str) -> ReportResul
             paid = settled[doc.document_id] if doc.status_code == "POSTED" else _ZERO
             row += [paid, (doc.total_amount - paid) if doc.status_code == "POSTED" else _ZERO, doc.due_date]
         else:
-            row += [converted.get(doc.document_id, _ZERO)]
+            row += [converted.get(doc.document_id)]
         result.add(row, (doc.document_id, doc.document_type_code))
     if not is_invoice:
         result.no_total.add(len(columns) - 1)
@@ -1591,7 +1628,7 @@ def _gross_profit_result(first_header: str, rows) -> ReportResult:
     for label, a in rows:
         profit = a["revenue"] - a["cost"]
         result.add([label, len(a["docs"]), a["qty"], a["revenue"], a["cost"], profit,
-                    (profit * 100 / a["revenue"]) if a["revenue"] else _ZERO])
+                    (profit * 100 / a["revenue"]) if a["revenue"] else None])
     return result
 
 
@@ -1628,7 +1665,7 @@ def sales_by_rep(company_id: int, f: PurchaseFilters) -> ReportResult:
         net = a["amount"] - a["returns"]
         result.add([ctx.names.get(rep_id, "— بدون فروشنده —") if rep_id else "— بدون فروشنده —", len(a["docs"]),
                     len(a["customers"]), a["amount"], a["returns"], net,
-                    (a["amount"] / len(a["docs"])) if a["docs"] else _ZERO, (net * 100 / total) if total else _ZERO])
+                    (a["amount"] / len(a["docs"])) if a["docs"] else None, (net * 100 / total) if total else _ZERO])
     return result
 
 
@@ -1761,6 +1798,8 @@ REPORTS: list[ReportDef] = [
               "مقدار دریافتی در برابر مقدار سفارش، به تفکیک تامین‌کننده.", group=_VP),
     ReportDef("QUALITY", "کیفیت / نرخ برگشت", quality_returns, _ALL,
               "درصد کالای برگشتی و ردشده در کنترل کیفیت، به تفکیک تامین‌کننده.", group=_VP),
+    ReportDef("QC_INSPECTIONS", "بازرسی‌های کیفیت رسید", qc_inspections, _ALL,
+              "تک‌تک بازرسی‌های کنترل کیفیت رسید که امتیاز کیفیت تامین‌کننده از آن‌ها حساب می‌شود.", group=_VP),
     ReportDef("LEAD_TIME", "زمان تحویل", lead_time, _ALL,
               "فاصلهٔ تاریخ سفارش تا رسید (یا اولین فاکتور) — میانگین/کمترین/بیشترین.", group=_VP),
     # --- مالی و بدهی
