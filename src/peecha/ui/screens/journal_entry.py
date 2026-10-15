@@ -1804,7 +1804,11 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self._reset_form()
         draft_note = "به‌صورت پیش‌نویس " if as_draft else ""
         temp_no_text = numerals.to_persian_digits(str(temp_no)) if temp_no is not None else "؟"
-        theme.set_status_label(self.status_label, f"سند {draft_note}با شمارهٔ موقت {temp_no_text} ثبت شد.", ok=True)
+        from peecha.services.opening import finalize as opening_finalize
+
+        cutover = opening_finalize.cutover_message(self.company_id, document_date)  # R314: فقط هشدار
+        theme.set_status_label(self.status_label, f"سند {draft_note}با شمارهٔ موقت {temp_no_text} ثبت شد."
+                               + (f" هشدار: {cutover}" if cutover else ""), ok=True)
 
         if voucher_payload is not None:
             self._prompt_and_export_voucher(voucher_payload)

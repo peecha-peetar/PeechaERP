@@ -142,7 +142,8 @@ def _advanced(company_id: int, start: datetime.datetime, end: datetime.datetime,
         iq = (select(QcInspection, StockDocumentLine.quantity_base, StockDocument.posted_at)
               .join(StockDocumentLine, StockDocumentLine.line_id == QcInspection.stock_document_line_id)
               .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
-              .where(QcInspection.company_id == company_id, QcInspection.inspected_at.between(start, end)))
+              .where(QcInspection.company_id == company_id, QcInspection.status_code == "APPROVED",
+                     QcInspection.inspected_at.between(start, end)))
         if warehouse_id is not None:
             iq = iq.where(StockDocument.destination_warehouse_id == warehouse_id)
         inspections = session.execute(iq).all()
@@ -153,7 +154,10 @@ def _advanced(company_id: int, start: datetime.datetime, end: datetime.datetime,
         reasons[note[1].strip() if len(note) == 2 and note[1].strip() else "بی‌علت"] += 1
     dock = [_hours(posted.get(t.source_stock_document_id), t.completed_at) for t in putaways]
     dock = [h for h in dock if h is not None]
-    inspected = sum((decimal.Decimal(q) for _i, q, _p in inspections), _ZERO)
+    # R311: مقدار تصمیم‌گرفته (پذیرفته + ردشده)؛ «در انتظار» هنوز بازرسی نهایی نشده
+    inspected = sum((decimal.Decimal(i.accepted_quantity if i.accepted_quantity is not None
+                                     else decimal.Decimal(q) - decimal.Decimal(i.rejected_quantity or 0))
+                     + decimal.Decimal(i.rejected_quantity or 0) for i, q, _p in inspections), _ZERO)
     rejected = sum((decimal.Decimal(i.rejected_quantity or 0) for i, _q, _p in inspections), _ZERO)
     waits = [h for h in (_hours(p, i.inspected_at) for i, _q, p in inspections) if h is not None]
     pending_qc = quality_control.pending_by_warehouse(company_id)

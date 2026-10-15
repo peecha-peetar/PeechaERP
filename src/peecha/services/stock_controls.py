@@ -31,9 +31,27 @@ ADVANCED_KPIS = "WMS_ADVANCED_KPIS"  # R308
 TWO_STEP_TRANSFER = "WMS_TWO_STEP_TRANSFER"  # R309
 SLOTTING = "WMS_SLOTTING_SUGGESTIONS"  # R309
 CROSS_DOCK = "WMS_CROSS_DOCK"  # R309
+# R311: کیفیت (گروه «کیفیت» در تنظیمات انبار)
+QC_SEPARATE_APPROVAL = "QC_SEPARATE_APPROVAL"
+QC_QUARANTINE_LOCK = "QC_QUARANTINE_LOCK"
+QC_PRODUCTION = "QC_PRODUCTION"
+QC_SALES_RETURN = "QC_SALES_RETURN"
+QC_ROLE_PERMISSIONS = "QC_ROLE_PERMISSIONS"
 ALL = (RESERVATION, SALES_ORDER_RESERVATION, LOCATION_STATUS, EXPIRED, WAREHOUSE_ACCESS, MOBILE_PERMISSIONS,
        SCAN_CONFIRMATION, PUTAWAY_IN_CARTABLE, PICK_CONTROL, COUNT_RECONCILE, QC_HOLD, SMART_REPLENISH, EXPIRY_ALERTS,
        ADVANCED_KPIS, TWO_STEP_TRANSFER, SLOTTING, CROSS_DOCK)
+QC_ALL = (QC_SEPARATE_APPROVAL, QC_QUARANTINE_LOCK, QC_PRODUCTION, QC_SALES_RETURN, QC_ROLE_PERMISSIONS)
+# R312: نگهداری و تعمیرات (گروه «نگهداری و تعمیرات»)
+MNT_CAPACITY_PLANNED = "MNT_CAPACITY_PLANNED"
+MNT_STATUS_LOCK = "MNT_STATUS_LOCK"
+MNT_SEPARATE_VERIFY = "MNT_SEPARATE_VERIFY"
+MNT_ROLE_PERMISSIONS = "MNT_ROLE_PERMISSIONS"
+MNT_ALL = (MNT_CAPACITY_PLANNED, MNT_STATUS_LOCK, MNT_SEPARATE_VERIFY, MNT_ROLE_PERMISSIONS)
+# R313: بودجه‌ریزی (گروه «بودجه»)
+BUD_ENFORCE = "BUD_ENFORCE"
+BUD_PR_COMMIT = "BUD_PR_COMMIT"
+BUD_SELF_APPROVAL = "BUD_SELF_APPROVAL"
+BUD_ALL = (BUD_ENFORCE, BUD_PR_COMMIT, BUD_SELF_APPROVAL)
 DEFAULT_EXPIRY_ALERT_DAYS = 30
 
 # انواع سندی که رزرو دیگران را نباید مصرف کنند (اصلاح موجودی = واقعیت شمارش، مستثنا)
@@ -62,7 +80,7 @@ class Controls:
 
 def enabled_codes(company_id: int, session=None) -> set[str]:
     q = select(CompanyFeature.feature_code).where(
-        CompanyFeature.company_id == company_id, CompanyFeature.is_enabled.is_(True), CompanyFeature.feature_code.in_(ALL))
+        CompanyFeature.company_id == company_id, CompanyFeature.is_enabled.is_(True), CompanyFeature.feature_code.in_(ALL + QC_ALL + MNT_ALL + BUD_ALL))
     if session is not None:
         return set(session.scalars(q))
     with new_session() as s:

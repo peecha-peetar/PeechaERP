@@ -72,6 +72,10 @@ MAPPING_LABELS: dict[str, str] = {
     "PRODUCTION_OVERHEAD_APPLIED": "سربار جذب‌شدهٔ تولید",
     "PRODUCTION_VARIANCE": "انحراف بهای تولید",
     "PRODUCTION_SCRAP_LOSS": "زیان ضایعات غیرعادی تولید",
+    # R312: قطعهٔ مصرفی دستور کار نگهداری (services/maintenance/parts.py)
+    "MAINTENANCE_EXPENSE": "هزینهٔ قطعات تعمیر و نگهداری",
+    # R314: طرف مقابل ثبت‌های افتتاحیه (services/opening)؛ مانده‌اش پس از افتتاحیه باید صفر شود
+    "OPENING_CLEARING": "حساب واسط افتتاحیه",
 }
 
 

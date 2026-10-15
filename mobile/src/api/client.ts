@@ -1,3 +1,4 @@
+import { MntEquipmentCard, MntRequestPayload, MntWorkOrderDetail, MntWorkOrderRow } from "./maintenanceTypes";
 import { TokenStore } from "../storage/tokenStore";
 import {
   ApprovalsResponse,
@@ -642,5 +643,40 @@ export class ApiClient {
 
   async createCrmTicket(payload: CrmTicketRequest, idempotencyKey?: string): Promise<{ ticket_id: number }> {
     return this.request("/crm/tickets", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  // R312: نگهداری و تعمیرات (تکنسین)
+  async lookupEquipment(code: string): Promise<MntEquipmentCard> {
+    return this.request<MntEquipmentCard>(`/maintenance/equipment/lookup?code=${encodeURIComponent(code)}`);
+  }
+
+  async createMaintenanceRequest(payload: MntRequestPayload, idempotencyKey?: string): Promise<{ request_id: number; request_no: number }> {
+    return this.request("/maintenance/requests", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async addMaintenancePhoto(requestId: number, fileName: string, contentBase64: string): Promise<{ attachment_id: number }> {
+    return this.request(`/maintenance/requests/${requestId}/photos`, {
+      method: "POST", body: { file_name: fileName, content_base64: contentBase64 },
+    });
+  }
+
+  async listMyWorkOrders(): Promise<MntWorkOrderRow[]> {
+    return this.request<MntWorkOrderRow[]>("/maintenance/my-work-orders");
+  }
+
+  async getWorkOrder(workOrderId: number): Promise<MntWorkOrderDetail> {
+    return this.request<MntWorkOrderDetail>(`/maintenance/work-orders/${workOrderId}`);
+  }
+
+  async workOrderAction(
+    workOrderId: number, action: "start" | "hold" | "resume" | "complete" | "labor", body: unknown, idempotencyKey?: string,
+  ): Promise<void> {
+    await this.request<void>(`/maintenance/work-orders/${workOrderId}/${action}`, { method: "POST", body: body ?? {}, idempotencyKey });
+  }
+
+  async recordMaintenanceTask(
+    taskId: number, body: { done: boolean; value_numeric?: string | null; value_text?: string | null }, idempotencyKey?: string,
+  ): Promise<{ ok: boolean; is_ok: boolean | null }> {
+    return this.request(`/maintenance/tasks/${taskId}`, { method: "POST", body, idempotencyKey });
   }
 }

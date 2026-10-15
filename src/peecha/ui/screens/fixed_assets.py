@@ -1136,7 +1136,7 @@ class SetupScreen(QWidget):
         ll.addWidget(self.loc_table)
         lrow = QHBoxLayout()
         self.loc_code, self.loc_name = QLineEdit(), QLineEdit()
-        self.loc_type = combo([("سایت/کارخانه", "SITE"), ("ساختمان", "BUILDING"), ("طبقه", "FLOOR"), ("اتاق", "ROOM"),
+        self.loc_type = combo([("سایت", "SITE"), ("کارخانه", "PLANT"), ("ساختمان", "BUILDING"), ("ناحیه", "AREA"), ("طبقه", "FLOOR"), ("اتاق", "ROOM"),
                                ("خط تولید", "LINE"), ("سایر", "OTHER")])
         self.loc_parent = QComboBox()
         add_loc = QPushButton("ذخیرهٔ محل")
@@ -1213,7 +1213,8 @@ class SetupScreen(QWidget):
 
         with new_session() as session:
             paths = {loc.location_id: fac.location_path(session, loc.location_id) for loc in locs}
-        types = {"SITE": "سایت", "BUILDING": "ساختمان", "FLOOR": "طبقه", "ROOM": "اتاق", "LINE": "خط تولید", "OTHER": "سایر"}
+        types = {"SITE": "سایت", "PLANT": "کارخانه", "BUILDING": "ساختمان", "AREA": "ناحیه", "FLOOR": "طبقه", "ROOM": "اتاق",
+                 "LINE": "خط تولید", "OTHER": "سایر"}
         self._locs = locs
         fill(self.loc_table, [[loc.code, loc.name, types.get(loc.location_type, ""), paths[loc.location_id]] for loc in locs],
              [loc.location_id for loc in locs])

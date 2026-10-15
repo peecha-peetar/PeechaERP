@@ -21,6 +21,8 @@ interface Props {
   onOpenWorkInbox: () => void;
   /** R249: اپِ انباردار (جستجو/اسکنِ محل، وظایف، انتقال). */
   onOpenWarehouse?: () => void;
+  /** R312: تکنسین نگهداری (اسکن تجهیز، ثبت خرابی، کارهای من، چک‌لیست). */
+  onOpenMaintenance?: () => void;
   /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورتِ انتخابی به
    * یک نفر از ۳ نقش واگذار بشه»): فقط برایِ همان یک نفر تعریف می‌شود --
    * undefined یعنی این کاربر مسئولِ تسویهٔ هیچ خودرویی نیست. */
@@ -47,7 +49,7 @@ interface Props {
  * کاربر از چنین حالتی است، بدونِ نیاز به پاک‌کردنِ کاملِ دیتایِ اپ. */
 export function SettingsScreen({
   apiClient, offlineQueue, syncEngine, syncErrorLog, userFullName, onLoggedOut, onBack, onOpenManagerDashboard,
-  onOpenWorkInbox, onOpenWarehouse, onOpenVehicleSettlement, onChangeMode,
+  onOpenWorkInbox, onOpenWarehouse, onOpenMaintenance, onOpenVehicleSettlement, onChangeMode,
 }: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
@@ -163,6 +165,8 @@ export function SettingsScreen({
       <Button label="کارتابل" variant="secondary" onPress={onOpenWorkInbox} />
 
       {onOpenWarehouse ? <Button label="انبار: اسکن، وظایف و انتقال" variant="secondary" onPress={onOpenWarehouse} /> : null}
+
+      {onOpenMaintenance ? <Button label="نگهداری و تعمیرات: اسکن تجهیز و کارهای من" variant="secondary" onPress={onOpenMaintenance} /> : null}
 
       {onOpenVehicleSettlement ? (
         <Button label="تسویهٔ پایان روز خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />

@@ -5157,9 +5157,25 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         from peecha.services import purchase_budgets as budgets_service
 
         warnings = budgets_service.warnings_for_document(self._document_id, self._company_id())
+        # R313: پیام کنترل بودجهٔ سازمانی همین تایید (هشدار، نزدیک به سقف، مصرف مجوز)
+        from peecha.services.budgeting import control as budget_control
+
+        warnings += budget_control.document_messages(self._company_id(), self.document_type_code, self._document_id)
         if warnings:
             QMessageBox.warning(self, "هشدار بودجهٔ خرید", "\n".join(warnings))
         return warnings
+
+    def _cutover_warnings(self) -> list[str]:
+        """R314: سند با تاریخ تا روز برش افتتاحیهٔ ثبت‌شده (فقط هشدار؛ جلوی ثبت را نمی‌گیرد)."""
+        if self._document_id is None:
+            return []
+        from peecha.services.opening import finalize as opening_finalize
+
+        doc, _lines = documents_service.get_document(self._document_id, self._company_id())
+        message = opening_finalize.cutover_message(self._company_id(), doc.document_date)
+        if message:
+            QMessageBox.warning(self, "تاریخ پیش از افتتاحیه", message)
+        return [message] if message else []
 
     def _reservation_warnings(self) -> list[str]:
         """R303: کمبود موجودی آزاد سفارش فروش پس از تایید (فقط هشدار، جلوی ثبت را نمی‌گیرد)."""
@@ -5189,6 +5205,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if confirmed:
             self._budget_warnings()
             self._reservation_warnings()
+            self._cutover_warnings()
         if confirmed and self._is_invoice:
             self._prompt_settlement_after_confirm()
             if self._one_step_invoice_post:

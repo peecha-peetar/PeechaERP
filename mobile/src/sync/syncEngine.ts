@@ -171,6 +171,17 @@ export class SyncEngine {
       case "WF_DELEGATE":
         await this.api.delegateWorkTask(action.payload.taskId, action.payload.toUserId, action.payload.comment, action.idempotencyKey);
         return;
+      case "MNT_CREATE_REQUEST":
+        await this.api.createMaintenanceRequest(action.payload, action.idempotencyKey);
+        return;
+      case "MNT_TASK":
+        await this.api.recordMaintenanceTask(action.payload.taskId, {
+          done: action.payload.done, value_numeric: action.payload.valueNumeric ?? null, value_text: action.payload.valueText ?? null,
+        }, action.idempotencyKey);
+        return;
+      case "MNT_ACTION":
+        await this.api.workOrderAction(action.payload.workOrderId, action.payload.action, action.payload.body, action.idempotencyKey);
+        return;
     }
   }
 

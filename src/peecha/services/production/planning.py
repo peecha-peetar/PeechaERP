@@ -621,7 +621,7 @@ def capacity_load(company_id: int, date_from: datetime.date, date_to: datetime.d
                                        utilization=util, overloaded=used > cap, free_hours=max(ZERO, cap - used),
                                        orders=sorted(orders[wc_id]), nominal_capacity_hours=avail.nominal_hours,
                                        machines_total=avail.machines_total, machines_down=avail.machines_down,
-                                       down_machines=avail.down))
+                                       down_machines=avail.down, maintenance_notices=avail.notices))
         # بار بدون ظرفیت در دسترس اول، بعد بیشترین بهره‌برداری، مرکز بی‌ظرفیت و بی‌بار آخر
         return sorted(out, key=lambda x: (1, -x.utilization) if x.utilization is not None else (0 if x.overloaded else 2, 0))
 

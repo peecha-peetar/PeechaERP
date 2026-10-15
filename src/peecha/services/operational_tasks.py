@@ -42,6 +42,21 @@ KIND_LABELS = {
     "EXPIRED_STOCK": "کالای منقضی در انبار",
     "TRANSIT_ARRIVING": "ارسال در راه به انبار",
     "CROSS_DOCK": "ارسال مستقیم از رسید",
+    # R312: نگهداری و تعمیرات
+    "MNT_MY_WORK": "دستور کار نگهداری",
+    "MNT_TO_VERIFY": "آزمون دستور کار نگهداری",
+    "MNT_NEW_REQUEST": "درخواست تعمیر بررسی‌نشده",
+    "MNT_APPROVAL": "تأیید نگهداری",
+    # R313: بودجه‌ریزی
+    "BUD_REVIEW": "بررسی نسخهٔ بودجه",
+    "BUD_APPROVE": "تأیید نسخهٔ بودجه",
+    "BUD_PUBLISH": "انتشار نسخهٔ بودجه",
+    "BUD_REVISE": "اصلاح نسخهٔ ردشدهٔ بودجه",
+    "BUD_EXCEPTION": "مجوز تجاوز از بودجه",
+    "OPN_ENTER": "ورود اطلاعات افتتاحیه",
+    "OPN_APPROVE": "بررسی و تأیید اطلاعات افتتاحیه",
+    "OPN_POST": "ثبت قطعی افتتاحیه",
+    "OPN_LOCK": "قفل نهایی افتتاحیه",
 }
 
 
@@ -157,6 +172,9 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _qc_pending(company_id, user_id, is_manager)
     tasks += _expiry_alerts(company_id, user_id, is_manager)
     tasks += _flow_tasks(company_id, user_id, is_manager)
+    tasks += _maintenance_tasks(company_id, user_id, is_manager)
+    tasks += _budget_tasks(company_id, user_id)
+    tasks += _opening_tasks(company_id, user_id)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -220,6 +238,144 @@ def _qc_pending(company_id: int, user_id: int, is_manager: bool) -> list[Operati
         out.append(OperationalTask(
             "QC_PENDING", KIND_LABELS["QC_PENDING"], 0, "", f"{n} ردیف رسید در «{w.name}» منتظر کنترل کیفیت است", w.name, None, "",
         ))
+    return out
+
+
+def _maintenance_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R312: کارهای واگذارشده به من، آزمون منتظر، درخواست بررسی‌نشده و تأییدهای نگهداری.
+
+    کارهای تجمیعی برای مدیر، و با کلید «دسترسی‌های جداگانهٔ نگهداری» برای دارندهٔ همان گام.
+    """
+    from sqlalchemy import func
+
+    from peecha.db.models.maintenance import CapacityRestriction, PlannedDowntime, PmPlan, PmPostponement, WorkRequest
+    from peecha.services import stock_controls
+    from peecha.services.maintenance import common as mc
+    from peecha.services.maintenance import work_orders as wos
+
+    try:
+        mine = wos.my_work(company_id, user_id)
+    except Exception:  # noqa: BLE001 -- کارتابل نباید به‌خاطر ماژول اختیاری از کار بیفتد
+        return []
+    out = [OperationalTask("MNT_MY_WORK", KIND_LABELS["MNT_MY_WORK"], r.work_order_id, "MNT_WORK_ORDER",
+                           f"دستور کار {r.wo_no}: {r.title}", r.asset_label,
+                           r.planned_start.date() if r.planned_start else None, r.status_code)
+           for r in mine if r.status_code not in ("COMPLETED", "VERIFIED")]
+    roles_on = stock_controls.is_on(company_id, stock_controls.MNT_ROLE_PERMISSIONS)
+
+    def may(form: str) -> bool:
+        return is_manager or (roles_on and mc.can(company_id, user_id, form))
+
+    with new_session() as session:
+        if may(mc.FORM_VERIFY):
+            n = len(wos.board(company_id, status_codes=("COMPLETED",)))
+            if n:
+                out.append(OperationalTask("MNT_TO_VERIFY", KIND_LABELS["MNT_TO_VERIFY"], 0, "", f"{n} دستور کار انجام‌شده منتظر آزمون "
+                                           "و تأیید است", "", None, ""))
+        if may(mc.FORM_PLAN):
+            n = session.scalar(select(func.count()).where(WorkRequest.company_id == company_id, WorkRequest.status_code == "NEW"))
+            if n:
+                out.append(OperationalTask("MNT_NEW_REQUEST", KIND_LABELS["MNT_NEW_REQUEST"], 0, "", f"{n} درخواست تعمیر تازه منتظر "
+                                           "بررسی است", "", None, ""))
+        for req in session.scalars(select(WorkRequest).where(WorkRequest.company_id == company_id,
+                                                             WorkRequest.assigned_to_user_id == user_id,
+                                                             WorkRequest.status_code.in_(("NEW", "UNDER_REVIEW")))):
+            out.append(OperationalTask("MNT_NEW_REQUEST", "درخواست تعمیر ارجاع‌شده به شما", req.request_id, "MNT_REQUEST",
+                                       f"درخواست {req.request_no}: {req.title}", "", req.reported_at.date() if req.reported_at else None,
+                                       req.status_code))
+        if may(mc.FORM_APPROVE):
+            n = (session.scalar(select(func.count()).where(PlannedDowntime.company_id == company_id,
+                                                           PlannedDowntime.status_code == "PROPOSED")) or 0) \
+                + (session.scalar(select(func.count()).where(CapacityRestriction.company_id == company_id,
+                                                             CapacityRestriction.status_code == "PROPOSED")) or 0) \
+                + (session.scalar(select(func.count()).select_from(PmPostponement).join(
+                    PmPlan, PmPlan.plan_id == PmPostponement.plan_id).where(PmPlan.company_id == company_id,
+                                                                            PmPostponement.status_code == "PENDING")) or 0)
+            if n:
+                out.append(OperationalTask("MNT_APPROVAL", KIND_LABELS["MNT_APPROVAL"], 0, "", f"{n} توقف برنامه‌ریزی‌شده، ظرفیت محدود "
+                                           "یا تعویق منتظر تأیید است", "", None, ""))
+    return out
+
+
+def _budget_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R313: گام‌های نسخهٔ بودجه و مجوزهای تجاوز که این کاربر اجازهٔ انجامشان را دارد (همان قاعدهٔ دکمه‌های پرونده).
+
+    گامی که فرایند فعال «با دروازه» دارد از کارتابل گردش کار می‌آید و این‌جا تکرار نمی‌شود.
+    """
+    from peecha.db.models.budgeting import Budget, BudgetVersion
+    from peecha.services.budgeting import approval as bap
+    from peecha.services.budgeting import exceptions as bex
+    from peecha.services.workflow import model_events
+
+    steps = {"SUBMITTED": ("BUD_REVIEW", "review"), "REVIEWED": ("BUD_APPROVE", "approve"), "APPROVED": ("BUD_PUBLISH", "publish")}
+    out: list[OperationalTask] = []
+    try:
+        with new_session() as session:
+            rows = list(session.execute(select(BudgetVersion, Budget).join(Budget, Budget.budget_id == BudgetVersion.budget_id).where(
+                Budget.company_id == company_id, BudgetVersion.status_code.in_((*steps, "REJECTED")))))
+            gated = {et for et in ("BUDGET_VERSION", "BUDGET_EXCEPTION")
+                     if model_events.gate_definitions(session.connection(), company_id, et)}
+        for v, b in rows:
+            if v.status_code == "REJECTED":
+                if v.prepared_by_user_id == user_id:
+                    out.append(OperationalTask("BUD_REVISE", KIND_LABELS["BUD_REVISE"], v.version_id, "BUDGET_VERSION",
+                                               f"بودجهٔ {b.code} — {b.name}، نسخهٔ {v.version_no}", v.reject_reason or "",
+                                               v.created_at.date() if v.created_at else None, v.status_code))
+                continue
+            kind, action = steps[v.status_code]
+            if kind == "BUD_APPROVE" and "BUDGET_VERSION" in gated:
+                continue
+            if bap.allowed_actions(company_id, user_id, v).get(action):
+                when = v.approved_at or v.reviewed_at or v.submitted_at or v.created_at
+                out.append(OperationalTask(kind, KIND_LABELS[kind], v.version_id, "BUDGET_VERSION",
+                                           f"بودجهٔ {b.code} — {b.name}، نسخهٔ {v.version_no}: {v.title or ''}".rstrip(": "), "",
+                                           when.date() if when else None, v.status_code))
+        if "BUDGET_EXCEPTION" not in gated:
+            for e in bex.list_exceptions(company_id, "PENDING", user_id):
+                if e.can_decide:
+                    out.append(OperationalTask("BUD_EXCEPTION", KIND_LABELS["BUD_EXCEPTION"], e.exception_id, "BUDGET_EXCEPTION",
+                                               f"{e.source_label} — {e.key_label}", e.requested_by, e.requested_at.date(), e.status_code))
+    except Exception:  # noqa: BLE001 -- کارتابل نباید به‌خاطر ماژول اختیاری از کار بیفتد
+        return []
+    return out
+
+
+def _opening_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R314: گام بعدی هر ماژول افتتاحیه برای همان کسی که انجامش با اوست (مسئول ورود، تأییدکننده، ثبت‌کننده)."""
+    from peecha.db.models.opening import OpeningRun, RunModule
+    from peecha.services.opening import common as oc
+
+    out: list[OperationalTask] = []
+    try:
+        with new_session() as session:
+            rows = list(session.execute(select(RunModule, OpeningRun).join(OpeningRun, OpeningRun.run_id == RunModule.run_id).where(
+                OpeningRun.company_id == company_id, OpeningRun.status_code.in_(("DRAFT", "IN_PROGRESS", "POSTING")))))
+            to_lock = list(session.scalars(select(OpeningRun).where(OpeningRun.company_id == company_id,
+                                                                    OpeningRun.status_code == "POSTED")))
+        can_approve = oc.can(company_id, user_id, oc.FORM_APPROVE)
+        can_post = oc.can(company_id, user_id, oc.FORM_POST)
+        for m, run in rows:
+            title = f"افتتاحیهٔ {run.code} — {oc.MODULE_LABELS[m.module_code]}"
+            if m.status_code in ("NOT_STARTED", "ENTERING", "HAS_ERRORS") and m.owner_user_id == user_id:
+                kind = "OPN_ENTER"
+            elif m.status_code == "READY" and can_approve and m.approver_user_id in (None, user_id) \
+                    and m.submitted_by_user_id != user_id:
+                kind = "OPN_APPROVE"
+            elif m.status_code in ("APPROVED", "POSTING") and can_post:
+                kind = "OPN_POST"
+            else:
+                continue
+            note = m.reject_reason if kind == "OPN_ENTER" and m.reject_reason else oc.MODULE_STATUS_LABELS[m.status_code]
+            when = m.approved_at or m.submitted_at or run.created_at
+            out.append(OperationalTask(kind, KIND_LABELS[kind], run.run_id, "OPENING_RUN", title, note,
+                                       when.date() if when else None, m.module_code))
+        if can_post:
+            for run in to_lock:
+                out.append(OperationalTask("OPN_LOCK", KIND_LABELS["OPN_LOCK"], run.run_id, "OPENING_RUN",
+                                           f"افتتاحیهٔ {run.code} — {run.title}", "ثبت قطعی کامل شد؛ تطبیق را ببینید و قفل کنید",
+                                           run.posted_at.date() if run.posted_at else None, ""))
+    except Exception:  # noqa: BLE001 -- کارتابل نباید به‌خاطر ماژول اختیاری از کار بیفتد
+        return []
     return out
 
 

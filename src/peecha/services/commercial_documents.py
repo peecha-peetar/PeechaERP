@@ -50,6 +50,7 @@ from peecha.services import inventory_locations as locations_service
 from peecha.services import journal_entries as je_service
 from peecha.services import roles as roles_service
 from peecha.services import treasury as treasury_service
+from peecha.services.budgeting import hooks as budget_hooks
 
 DOCUMENT_TYPE_CODES = (
     "SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN",
@@ -839,6 +840,12 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
     نه."""
     with new_session() as session:
         draft = session.get(CommercialDocument, document_id)
+        correcting = draft.corrects_document_id if draft is not None and draft.company_id == company_id else None
+    if correcting is not None:  # R313: پیش‌بررسی بودجه پیش از هر اثر انبار و حسابداری
+        budget_hooks.precheck(company_id, document_id, "CORRECTION", posted_by_user_id,
+                              {document_id: "POSTED", correcting: "CORRECTED"})
+    with new_session() as session:
+        draft = session.get(CommercialDocument, document_id)
         if draft is None or draft.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if draft.corrects_document_id is None:
@@ -1095,6 +1102,7 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
         draft.posted_at = datetime.datetime.now()
         original = session.get(CommercialDocument, draft.corrects_document_id)
         original.status_code = "CORRECTED"
+        budget_hooks.document_changed(session, draft, "CORRECTION", posted_by_user_id, record_only=True)  # R313
         session.commit()
 
     return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=journal_entry_id)
@@ -1891,6 +1899,7 @@ def update_document_dimensions(
             raise ValueError("مرکز هزینه/پروژهٔ سند ثبت‌شده/لغوشده قابل‌تغییر نیست.")
         doc.cost_center_detail_account_id = cost_center_detail_account_id
         doc.project_detail_account_id = project_detail_account_id
+        budget_hooks.document_changed(session, doc, "DIMENSION", _actor())  # R313
         session.commit()
 
 
@@ -1948,10 +1957,14 @@ def delete_document(document_id: int, company_id: int) -> None:
     settlements_service.delete_settlement_plan(document_id, company_id)
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
+        budget_sources = budget_hooks.sources_of(session, doc)  # R313: پیش از حذف ردیف‌ها
         session.query(CreditHold).filter(CreditHold.related_document_id == document_id).delete()
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.document_id == document_id).delete()
         session.delete(doc)
         try:
+            if budget_sources:
+                session.flush()
+                budget_hooks.document_changed(session, doc, "DELETE", _actor(), deleted=True, sources=budget_sources)
             session.commit()
         except IntegrityError as exc:
             session.rollback()
@@ -1993,6 +2006,7 @@ def confirm_document(document_id: int, company_id: int, confirmed_by_user_id: in
                 )
         doc.status_code = "CONFIRMED"
         _log_status(session, doc, "DRAFT", confirmed_by_user_id)
+        budget_hooks.document_changed(session, doc, "CONFIRM", confirmed_by_user_id)  # R313
         document_type_code = doc.document_type_code
         counterparty_id = doc.counterparty_detail_account_id
         total_amount = doc.total_amount
@@ -2026,6 +2040,7 @@ def approve_document(document_id: int, company_id: int, approved_by_user_id: int
         doc.approved_by_user_id = _actor(approved_by_user_id)
         doc.approved_at = datetime.datetime.now()
         _log_status(session, doc, "CONFIRMED", approved_by_user_id)
+        budget_hooks.document_changed(session, doc, "APPROVE_DOC", _actor(approved_by_user_id))  # R313
         session.commit()
 
 
@@ -2563,6 +2578,7 @@ def revert_to_draft(document_id: int, company_id: int) -> None:
         _old_status = doc.status_code
         doc.status_code = "DRAFT"
         _log_status(session, doc, _old_status)
+        budget_hooks.document_changed(session, doc, "REVERT", _actor())  # R313
         session.commit()
     from peecha.services import stock_reservations
 
@@ -2690,6 +2706,7 @@ def cancel_document(
             original = session.get(CommercialDocument, doc.corrects_document_id)
             if original is not None and original.corrected_by_document_id == document_id:
                 original.corrected_by_document_id = None
+        budget_hooks.document_changed(session, doc, "CANCEL", _actor(cancelled_by_user_id))  # R313
         session.commit()
     from peecha.services import stock_reservations
 
@@ -3001,6 +3018,8 @@ def post_document(
     document_id: int, company_id: int, posted_by_user_id: int, *, from_field_sales: bool = False,
 ) -> PostResult:
     """from_field_sales: فروش موبایل (کالا تحویل شده) — تصویب مدیر فروش مانعش نمی‌شود."""
+    # R313: پیش‌بررسی بودجه پیش از ساخت سند انبار و حسابداری (گام پایانی دیگر رد نمی‌کند)
+    budget_hooks.precheck(company_id, document_id, "POST", posted_by_user_id, {document_id: "POSTED"})
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -3054,6 +3073,7 @@ def post_document(
             doc.status_code = "POSTED"
             doc.posted_by_user_id = posted_by_user_id
             doc.posted_at = datetime.datetime.now()
+            budget_hooks.document_changed(session, doc, "POST", posted_by_user_id, record_only=True)  # R313
             session.commit()
             return PostResult(document_id=document_id, stock_document_id=None, journal_entry_id=None)
 
@@ -3355,6 +3375,7 @@ def post_document(
         doc.status_code = "POSTED"
         doc.posted_by_user_id = posted_by_user_id
         doc.posted_at = datetime.datetime.now()
+        budget_hooks.document_changed(session, doc, "POST", posted_by_user_id, record_only=True)  # R313
         session.commit()
 
     return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=journal_entry_id)

@@ -495,7 +495,7 @@ class _MethodDetailsDialog(QDialog):
                     continue
                 if counterparty_detail_account_id is not None and doc.counterparty_detail_account_id != counterparty_detail_account_id:
                     continue
-                label = f"فاکتور #{numerals.to_persian_digits(str(doc.document_no))} — مانده: {numerals.format_money(status.remaining_amount, decimal_places)}"
+                label = f"فاکتور #{numerals.to_persian_digits(settlements_service.open_item_number(doc))} — مانده: {numerals.format_money(status.remaining_amount, decimal_places)}"
                 options.append((status.document_id, label))
             self.installment_document_combo = _make_searchable_combo(options)
             if current.get("installment_document_id") is not None:
@@ -1687,8 +1687,8 @@ class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
         for row_index, status in enumerate(statuses):
             doc = docs_by_id[status.document_id]
             values = [
-                invoice_title,
-                numerals.to_persian_digits(str(doc.document_no)),
+                settlements_service.OPENING_ITEM_LABELS.get(doc.document_type_code, invoice_title),
+                numerals.to_persian_digits(settlements_service.open_item_number(doc)),
                 numerals.format_jalali_date(status.due_date) if status.due_date else "—",
                 numerals.format_company_amount(status.total_amount),
                 numerals.format_company_amount(status.remaining_amount),

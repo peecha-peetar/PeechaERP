@@ -188,24 +188,31 @@ def available_capacity(session, wc: WorkCenter, date_from: datetime.date, date_t
 
     مرکزی که ماشین تعریف‌شده ندارد همان ظرفیت اسمی را دارد (دادهٔ ماشین برای کسر نیست).
     """
+    from peecha.services.maintenance import availability as mnt
+
     nominal = capacity_hours(wc, date_from, date_to)
     machines, _linked = _machines(session, wc)
     today = today or datetime.date.today()
     total = len(machines)
+    # R312: توقف برنامه‌ریزی‌شده و ظرفیت محدود همیشه هشدار دارند (اثر عددی فقط با کلید نگهداری)
+    notices = mnt.notices(session, wc.company_id, [a.asset_id for a in machines], date_from, date_to)
     if not machines or nominal <= 0:
-        return SimpleNamespace(hours=nominal, nominal_hours=nominal, machines_total=total, machines_down=0, down=[])
+        return SimpleNamespace(hours=nominal, nominal_hours=nominal, machines_total=total, machines_down=0, down=[],
+                               notices=notices)
     span = (date_to - date_from).days + 1
     days = [d for d in (date_from + datetime.timedelta(days=i) for i in range(span)) if (d.weekday() + 2) % 7 < wc.working_days_per_week]
-    down, machine_days = [], 0
+    factors = mnt.capacity_factors(session, wc.company_id, [a.asset_id for a in machines], days, wc.daily_hours)
+    down, machine_days = [], ZERO
     for a in machines:
         dd = _down_days(session, a, days, today)
-        machine_days += len(days) - len(dd)
+        machine_days += sum((factors.get((a.asset_id, d), ONE) for d in days if d not in dd), ZERO)
         if dd:
             down.append(SimpleNamespace(asset_id=a.asset_id, code=a.asset_code, name=a.name, status_code=a.status_code,
                                         status_label=ASSET_STATUS_LABELS.get(a.status_code, a.status_code), down_days=len(dd)))
     share = decimal.Decimal(machine_days) / decimal.Decimal(total)
     hours = (share * wc.daily_hours * decimal.Decimal(wc.efficiency_percent) / _HUNDRED).quantize(decimal.Decimal("0.01"))
-    return SimpleNamespace(hours=hours, nominal_hours=nominal, machines_total=total, machines_down=len(down), down=down)
+    return SimpleNamespace(hours=hours, nominal_hours=nominal, machines_total=total, machines_down=len(down), down=down,
+                           notices=notices)
 
 
 def save_labor_rate(company_id: int, code: str, name: str, hourly_rate, employee_id: int | None = None,

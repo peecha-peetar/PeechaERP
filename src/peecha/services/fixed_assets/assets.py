@@ -393,20 +393,34 @@ def put_in_service(company_id: int, user_id: int, asset_id: int, date: datetime.
 
 def set_status(company_id: int, user_id: int, asset_id: int, status: str, date: datetime.date, reason: str | None = None) -> None:
     """وضعیت‌های عملیاتی (در تعمیر/متوقف/بهره‌برداری)؛ واگذاری فقط از عملیات فروش/اسقاط."""
+    with new_session() as session:
+        set_status_in_session(session, company_id, user_id, asset_id, status, date, reason)
+        session.commit()
+
+
+def set_status_in_session(session, company_id: int, user_id: int | None, asset_id: int, status: str, date: datetime.date,
+                          reason: str | None = None, source: str | None = None) -> str:
+    """همان تغییر وضعیت در تراکنش فراخواننده (R312: توقف و آماده‌به‌کاری نگهداری). خروجی = وضعیت قبلی."""
     if status not in ("UNDER_MAINTENANCE", "SUSPENDED", "IN_SERVICE"):
         raise ValueError("این وضعیت را فقط عملیات مربوط تعیین می‌کند.")
-    with new_session() as session:
-        asset = c.lock_asset(session, asset_id, company_id)
-        c.ensure_open(asset)
-        if asset.status_code in ("DRAFT", "ACQUIRED", "UNDER_CONSTRUCTION"):
-            raise ValueError("دارایی سرمایه‌ای‌نشده وضعیت عملیاتی ندارد.")
-        previous = asset.status_code
-        asset.status_code = status
-        session.add(AssetEvent(company_id=company_id, asset_id=asset_id, event_type="STATUS", event_date=date, status_code="POSTED",
-                               reason=reason, details={"from": previous, "to": status}, created_by_user_id=user_id,
-                               posted_at=datetime.datetime.now()))
-        c.audit(session, company_id, user_id, asset_id, "STATUS", {"status_code": [previous, status], "reason": reason})
-        session.commit()
+    asset = c.lock_asset(session, asset_id, company_id)
+    c.ensure_open(asset)
+    if asset.status_code in ("DRAFT", "ACQUIRED", "UNDER_CONSTRUCTION"):
+        raise ValueError("دارایی سرمایه‌ای‌نشده وضعیت عملیاتی ندارد.")
+    if source != "MAINTENANCE":
+        from peecha.services.maintenance import availability
+
+        availability.check_manual_status_change(session, asset, status)
+    previous = asset.status_code
+    asset.status_code = status
+    details = {"from": previous, "to": status}
+    if source:
+        details["source"] = source
+    session.add(AssetEvent(company_id=company_id, asset_id=asset_id, event_type="STATUS", event_date=date, status_code="POSTED",
+                           reason=reason, details=details, created_by_user_id=user_id, posted_at=datetime.datetime.now()))
+    c.audit(session, company_id, user_id, asset_id, "STATUS", {"status_code": [previous, status], "reason": reason,
+                                                              "source": source})
+    return previous
 
 
 # --- انتقال و تغییرِ طبقه --------------------------------------------------------------------------

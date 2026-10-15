@@ -42,7 +42,7 @@ STATUS_LABELS = {"DRAFT": "پیش‌نویس", "PLANNED": "برنامه‌ریز
                  "ON_HOLD": "متوقف", "COMPLETED": "تکمیل‌شده", "CLOSED": "بسته‌شده", "CANCELLED": "لغوشده"}
 TXN_LABELS = {"ISSUE": "مصرف مواد", "RETURN": "برگشت مواد", "RECEIPT": "رسید محصول", "BY_PRODUCT": "محصول جانبی",
               "CO_PRODUCT": "محصول مشترک", "SCRAP": "ضایعات", "LABOR": "دستمزد", "MACHINE": "ماشین", "OVERHEAD": "سربار",
-              "VARIANCE": "انحراف", "REVERSAL": "برگشت تولید"}
+              "VARIANCE": "انحراف", "REVERSAL": "برگشت تولید", "OPENING": "افتتاحیه (کالای در جریان ساخت)"}
 ACTIVE_STATUSES = ("RELEASED", "IN_PROGRESS", "ON_HOLD")
 WORKING_STATUSES = ("RELEASED", "IN_PROGRESS")
 EDITABLE_STATUSES = ("DRAFT", "PLANNED")
@@ -601,6 +601,10 @@ def set_operation_status(company_id: int, user_id: int, order_operation_id: int,
             raise ValueError("عملیات دستور نامعتبر است.")
         if order.status_code not in WORKING_STATUSES:
             raise ValueError("دستور فعال نیست.")
+        if status == "DONE" and op.status_code != "DONE":
+            from peecha.services.qms import production as qms_production
+
+            qms_production.check_operation_gate(session, order, op)   # R311
         op.status_code = status
         if status == "IN_PROGRESS" and op.started_at is None:
             op.started_at = datetime.datetime.now()
@@ -945,6 +949,9 @@ def _receive(session, order: ProductionOrder, data: ReceiptInput, date: datetime
     result, line_ids = inv_docs.create_and_post_in_session(
         session, order.company_id, user_id, "RECEIPT", date, _header(order, "رسید محصول تولید", destination_warehouse_id=order.fg_warehouse_id),
         lines, role_overrides=_RECEIPT_ROLES, tracking=tracking)
+    from peecha.services import quality_control
+
+    quality_control.hold_production_receipt(session, order, result.stock_document_id)  # R311: کلید «کنترل کیفیت تولید»
     first = None
     for i, (o, v, amount, ttype) in enumerate(owners):
         unit = c.qty(amount / v) if v else ZERO
@@ -1144,9 +1151,14 @@ def complete_order(company_id: int, user_id: int, order_id: int, final: ReceiptI
 
             pcost.apply_standard_conversion(session, order, decimal.Decimal(order.produced_qty), date, user_id,
                                             f"{idempotency_key}:cmp" if idempotency_key else None)
+        from peecha.services.qms import production as qms_production
+
+        open_ops = list(session.scalars(select(OrderOperation).where(OrderOperation.order_id == order_id,
+                                                                     OrderOperation.status_code.in_(("PENDING", "IN_PROGRESS")))))
+        for op in open_ops:
+            qms_production.check_operation_gate(session, order, op)   # R311
         _release_all(session, order_id)
-        for op in session.scalars(select(OrderOperation).where(OrderOperation.order_id == order_id,
-                                                               OrderOperation.status_code.in_(("PENDING", "IN_PROGRESS")))):
+        for op in open_ops:
             op.status_code, op.finished_at = "DONE", datetime.datetime.now()
         order.status_code, order.completed_at = "COMPLETED", datetime.datetime.now()
         order.actual_end_date = date
@@ -1188,10 +1200,21 @@ def _checklist(session, order: ProductionOrder) -> list[SimpleNamespace]:
         item("OVERHEAD", "سربار تخصیص یافته", "OVERHEAD" in types or not has_ops, ""),
         item("ACCOUNTING", "اسناد حسابداری کامل", not missing_je, f"{len(missing_je)} تراکنش بی‌سند" if missing_je else ""),
         item("VARIANCE", "انحراف‌ها محاسبه شده", True, ""),
-    ]
+    ] + _quality_check(session, order, item)
+
+
+def _quality_check(session, order: ProductionOrder, item) -> list[SimpleNamespace]:
+    """R311: با کلید «کنترل کیفیت تولید»، بازرسی باز یا محصول نگه‌داشته مانع بستن دستور است."""
+    from peecha.services.qms import production as qms_production
+
+    if not qms_production.enabled(order.company_id, session):
+        return []
+    issues = qms_production.order_quality_issues(session, order)
+    return [item("QUALITY", "کنترل کیفیت تعیین تکلیف شده", not issues, "، ".join(issues))]
 
 
 BLOCKING_CHECKS = ("STATUS", "CONSUMPTION", "RECEIPT", "ACCOUNTING")
+_QUALITY_BLOCKING = BLOCKING_CHECKS + ("QUALITY",)
 
 
 def close_order(company_id: int, user_id: int, order_id: int, date: datetime.date | None = None,
@@ -1202,7 +1225,7 @@ def close_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
         order = lock_order(session, company_id, order_id)
         if order.status_code == "CLOSED":
             raise ValueError("دستور قبلاً بسته شده است.")
-        failed = [x for x in _checklist(session, order) if not x.ok and x.key in BLOCKING_CHECKS]
+        failed = [x for x in _checklist(session, order) if not x.ok and x.key in _QUALITY_BLOCKING]
         if failed:
             raise ValueError("پیش از بستن: " + "، ".join(x.label for x in failed))
         _release_all(session, order_id)

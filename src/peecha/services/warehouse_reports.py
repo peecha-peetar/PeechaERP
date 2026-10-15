@@ -1924,4 +1924,19 @@ WAREHOUSE_REPORTS += CRM_REPORTS
 from peecha.services.workflow.monitor import WF_REPORTS  # noqa: E402
 
 WAREHOUSE_REPORTS += WF_REPORTS
+# R311: گزارش‌های کنترل کیفیت
+from peecha.services.qms.reports import QC_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += QC_REPORTS
+# R312: گزارش‌های نگهداری و تعمیرات
+from peecha.services.maintenance.reports import MNT_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += MNT_REPORTS
+from peecha.services.budgeting.reports import BUD_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += BUD_REPORTS
+# R314: گزارش‌های افتتاحیه
+from peecha.services.opening.reports import OPN_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += OPN_REPORTS
 WAREHOUSE_REPORTS_BY_CODE = {r.code: r for r in WAREHOUSE_REPORTS}

@@ -279,6 +279,46 @@ WF_REPORT_MENU = [
     ]),
 ]
 
+# R311: «گزارش‌ها ‹ کنترل کیفیت» -- services/qms/reports.QC_REPORTS
+QC_REPORT_MENU = [
+    ("QC", "کنترل کیفیت", [
+        ("QC_INSPECTION_LOG", "دفتر بازرسی‌های کیفیت"), ("QC_PARAMETER_RESULTS", "نتایج پارامترهای کیفیت"),
+        ("QC_QUARANTINE", "موجودی قرنطینه و مردود"), ("QC_NCR", "عدم‌انطباق‌ها"), ("QC_CAPA", "اقدام‌های اصلاحی و پیشگیرانه"),
+        ("QC_SUPPLIER_CARD", "کارت کیفیت تامین‌کننده"), ("QC_ITEM_CARD", "کارت کیفیت کالا"), ("QC_PRODUCTION", "کیفیت تولید"),
+    ]),
+]
+
+# R312: «گزارش‌ها ‹ نگهداری و تعمیرات» -- services/maintenance/reports.MNT_REPORTS
+MNT_REPORT_MENU = [
+    ("MNT", "نگهداری و تعمیرات", [
+        ("MNT_WORK_ORDERS", "دفتر دستورهای کار"), ("MNT_REQUESTS", "درخواست‌های تعمیر"), ("MNT_DOWNTIME", "توقف‌ها و آماده‌به‌کاری"),
+        ("MNT_PM_COMPLIANCE", "انجام نگهداری پیشگیرانه"), ("MNT_RELIABILITY", "قابلیت اطمینان تجهیزات"),
+        ("MNT_COST", "هزینهٔ نگهداری تجهیزات"), ("MNT_PARTS", "مصرف قطعات"), ("MNT_FAILURES", "علل و نشانه‌های خرابی"),
+    ]),
+]
+
+# R313: «گزارش‌ها ‹ بودجه» -- services/budgeting/reports.BUD_REPORTS
+BUD_REPORT_MENU = [
+    ("BUD", "بودجه‌ریزی و کنترل بودجه", [
+        ("BUD_VS_ACTUAL", "بودجه در برابر واقعی و تعهد"), ("BUD_AVAILABLE", "ماندهٔ قابل تعهد"),
+        ("BUD_MONTHLY", "عملکرد دوره‌ای و انحراف"), ("BUD_FORECAST", "پیش‌بینی پایان دوره"),
+        ("BUD_STATUS", "بی‌مصرف، نزدیک به سقف، عبورکرده و منتظر اصلاحیه"),
+        ("BUD_BY_DIMENSION", "بودجه به تفکیک حساب، مرکز هزینه، پروژه، شعبه و مسئول"),
+        ("BUD_DETAIL", "ریز مصرف تا سند منبع"), ("BUD_RELEASES", "مبالغ آزادشده"), ("BUD_EXCEPTIONS", "مجوزهای تجاوز از بودجه"),
+        ("BUD_VERSIONS", "نسخه‌ها و اصلاحیه‌ها"), ("BUD_CONTROL_LOG", "ردپای کنترل بودجه روی اسناد"),
+    ]),
+]
+
+# R314: «گزارش‌ها ‹ افتتاحیه» -- services/opening/reports.OPN_REPORTS
+OPN_REPORT_MENU = [
+    ("OPN", "افتتاحیه و انتقال اطلاعات", [
+        ("OPN_RUNS", "فرایندهای افتتاحیه و پیشرفت"), ("OPN_MODULES", "وضعیت ماژول‌ها و مسئولان"),
+        ("OPN_RECONCILE", "تطبیق زیرسیستم‌ها با تراز افتتاحیه"), ("OPN_ROWS", "ردیف‌های واردشده و خطاها"),
+        ("OPN_DOCUMENTS", "اسناد ساخته‌شده و گام‌های ثبت"), ("OPN_IMPORTS", "نسخه‌های بارگذاری فایل"),
+        ("OPN_EVENTS", "تاریخچه و ردپای افتتاحیه"), ("OPN_OPEN_ITEMS", "اسناد باز افتتاحیهٔ دریافتنی و پرداختنی"),
+    ]),
+]
+
 # R270: «گزارش‌ها ‹ تولید» -- services/production/reports.PRODUCTION_REPORTS
 PRD_REPORT_MENU = [
     ("PRD", "تولید", [
@@ -574,6 +614,62 @@ NAV_ITEMS = [
             {"code": "WF_SETTINGS", "label": "تنظیمات گردش کار", "screen": "wf_settings", "hidden_from_sidebar": True},
         ],
     },
+    # R311: کنترل کیفیت -- همان بازرسی انبار (inv.qc_inspections) با طرح، تأیید، قرنطینه، عدم‌انطباق و اقدام اصلاحی
+    {
+        "code": "QC",
+        "label": "کنترل کیفیت",
+        "children": [
+            {"code": "QC_DASHBOARD", "label": "داشبورد کیفیت", "screen": "qc_dashboard"},
+            {"code": "QC_QUEUE", "label": "صف بازرسی و تأیید", "screen": "qc_queue"},
+            {"code": "QC_QUARANTINE_STOCK", "label": "قرنطینه و کالای مردود", "screen": "qc_quarantine"},
+            {"code": "QC_NCR", "label": "عدم‌انطباق‌ها", "screen": "qc_ncr"},
+            {"code": "QC_CAPA", "label": "اقدام‌های اصلاحی و پیشگیرانه", "screen": "qc_capa"},
+            {"code": "QC_PLANS", "label": "طرح‌های کنترل کیفیت", "screen": "qc_plans"},
+            {"code": "QC_CARDS", "label": "کارت کیفیت کالا و تامین‌کننده", "screen": "qc_cards"},
+            {"code": "QC_REPORTS", "label": "گزارش‌ها", "children": _report_menu("QC_RPT", "warehouse_report_", QC_REPORT_MENU)},
+            {"code": "QC_SETTINGS", "label": "تنظیمات کنترل کیفیت", "screen": "qc_settings", "hidden_from_sidebar": True},
+        ],
+    },
+    # R312: نگهداری و تعمیرات -- تجهیز همان دارایی ثابت؛ وضعیت ماشین منبع ظرفیت تولید
+    {
+        "code": "MNT",
+        "label": "نگهداری و تعمیرات",
+        "children": [
+            {"code": "MNT_DASHBOARD", "label": "داشبورد نگهداری", "screen": "mnt_dashboard"},
+            {"code": "MNT_REQUEST_QUEUE", "label": "درخواست‌های تعمیر", "screen": "mnt_requests"},
+            {"code": "MNT_BOARD", "label": "دستورهای کار", "screen": "mnt_work_orders"},
+            {"code": "MNT_PM", "label": "نگهداری پیشگیرانه", "screen": "mnt_pm"},
+            {"code": "MNT_EQUIPMENT", "label": "تجهیزات", "screen": "mnt_equipment"},
+            {"code": "MNT_AVAILABILITY", "label": "توقف‌ها و ظرفیت ماشین", "screen": "mnt_availability"},
+            {"code": "MNT_REPORTS", "label": "گزارش‌ها", "children": _report_menu("MNT_RPT", "warehouse_report_", MNT_REPORT_MENU)},
+            {"code": "MNT_SETTINGS", "label": "تنظیمات نگهداری", "screen": "mnt_settings", "hidden_from_sidebar": True},
+        ],
+    },
+    # R313: بودجه‌ریزی و کنترل بودجه و تعهدات -- روی اسناد خرید، دفتر کل و گردش کار موجود
+    {
+        "code": "BUD",
+        "label": "بودجه‌ریزی",
+        "children": [
+            {"code": "BUD_CENTER", "label": "داشبورد کنترل بودجه", "screen": "bud_center"},
+            {"code": "BUD_BUDGETS", "label": "بودجه‌ها و نسخه‌ها", "screen": "bud_budgets"},
+            {"code": "BUD_EXCEPTIONS", "label": "مجوزهای تجاوز از بودجه", "screen": "bud_exceptions"},
+            {"code": "BUD_COMMITMENTS", "label": "بستن تعهد سفارش", "screen": "bud_commitments"},
+            {"code": "BUD_REPORTS", "label": "گزارش‌ها", "children": _report_menu("BUD_RPT", "warehouse_report_", BUD_REPORT_MENU)},
+            {"code": "BUD_SETTINGS", "label": "تنظیمات بودجه", "screen": "bud_config", "hidden_from_sidebar": True},
+        ],
+    },
+    # R314: افتتاحیه و انتقال اطلاعات از سیستم قبلی -- ثبت فقط با سرویس رسمی هر ماژول
+    {
+        "code": "OPN",
+        "label": "افتتاحیه و انتقال اطلاعات",
+        "children": [
+            {"code": "OPN_CENTER", "label": "مرکز افتتاحیه", "screen": "opn_center"},
+            {"code": "OPN_DATA", "label": "ورود و بارگذاری اطلاعات", "screen": "opn_data"},
+            {"code": "OPN_RECONCILE", "label": "تطبیق با تراز افتتاحیه", "screen": "opn_reconcile"},
+            {"code": "OPN_REPORTS", "label": "گزارش‌ها", "children": _report_menu("OPN_RPT", "warehouse_report_", OPN_REPORT_MENU)},
+            {"code": "OPN_SETTINGS", "label": "تنظیمات افتتاحیه", "screen": "opn_config", "hidden_from_sidebar": True},
+        ],
+    },
     {
         "code": "PURCH",
         "label": "خرید و تدارکات",
@@ -647,6 +743,10 @@ NAV_ITEMS = [
             {"code": "REPORTS_PRD", "label": "تولید", "children": _report_menu("INV_RPT", "warehouse_report_", PRD_REPORT_MENU)},
             {"code": "REPORTS_CRM", "label": "ارتباط با مشتری", "children": _report_menu("INV_RPT", "warehouse_report_", CRM_REPORT_MENU)},
             {"code": "REPORTS_WF", "label": "گردش کار و تایید", "children": _report_menu("INV_RPT", "warehouse_report_", WF_REPORT_MENU)},
+            {"code": "REPORTS_QC", "label": "کنترل کیفیت", "children": _report_menu("INV_RPT", "warehouse_report_", QC_REPORT_MENU)},
+            {"code": "REPORTS_MNT", "label": "نگهداری و تعمیرات", "children": _report_menu("INV_RPT", "warehouse_report_", MNT_REPORT_MENU)},
+            {"code": "REPORTS_BUD", "label": "بودجه‌ریزی", "children": _report_menu("INV_RPT", "warehouse_report_", BUD_REPORT_MENU)},
+            {"code": "REPORTS_OPN", "label": "افتتاحیه", "children": _report_menu("INV_RPT", "warehouse_report_", OPN_REPORT_MENU)},
             # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
             {"code": "REPORTS_PURCHASE", "label": "گزارشات خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
             {"code": "REPORTS_SALES", "label": "گزارشات فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
@@ -839,6 +939,40 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("WF_PROCESSES", "🔀"),
         ("WF_MONITOR", "📊"),
     ],
+    # R311: ریبون کنترل کیفیت
+    "QC": [
+        ("QC_DASHBOARD", "📊"),
+        ("QC_QUEUE", "🧪"),
+        ("QC_QUARANTINE_STOCK", "🚧"),
+        ("QC_NCR", "⚠️"),
+        ("QC_CAPA", "🛠️"),
+        ("QC_PLANS", "📋"),
+        ("QC_CARDS", "🏅"),
+    ],
+    # R312: ریبون نگهداری و تعمیرات
+    "MNT": [
+        ("MNT_DASHBOARD", "📊"),
+        ("MNT_REQUEST_QUEUE", "📝"),
+        ("MNT_BOARD", "🧰"),
+        ("MNT_PM", "🗓️"),
+        ("MNT_EQUIPMENT", "⚙️"),
+        ("MNT_AVAILABILITY", "⏱️"),
+    ],
+    # R313: ریبون بودجه‌ریزی
+    "BUD": [
+        ("BUD_CENTER", "📊"),
+        ("BUD_BUDGETS", "💰"),
+        ("BUD_EXCEPTIONS", "🛂"),
+        ("BUD_COMMITMENTS", "🔒"),
+        ("BUD_RPT_BUD_VS_ACTUAL", "📈"),
+        ("BUD_RPT_BUD_DETAIL", "🔎"),
+    ],
+    "OPN": [
+        ("OPN_CENTER", "🧭"),
+        ("OPN_DATA", "📥"),
+        ("OPN_RECONCILE", "⚖️"),
+        ("OPN_RPT_OPN_ROWS", "📋"),
+    ],
     "SETTINGS": [],
 }
 
@@ -889,6 +1023,25 @@ _EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
     ("prd_allocation", "PRD", "تولید: مدیریت سرشکن هزینه"),
     # R281: دسترسی‌های CRM بدون صفحهٔ جدا (CRM_EXPORT = اکشن EXPORT روی هر فرم CRM؛ CRM_ADMIN = فرم crm_settings)
     ("crm_activities", "CRM", "ارتباط با مشتری: فعالیت‌ها و پیگیری‌ها"), ("crm_assign", "CRM", "ارتباط با مشتری: واگذاری سرنخ و فرصت"),
+    # R311: نقش‌های کیفیت (بازرس، مسئول کیفیت، مدیر کیفیت، تأییدکننده) -- با کلید «دسترسی‌های جداگانهٔ کیفیت» اعمال می‌شوند
+    ("qc_inspect", "QC", "کیفیت: ثبت نتیجهٔ بازرسی"), ("qc_approve", "QC", "کیفیت: تأیید نهایی نتیجه"),
+    ("qc_release", "QC", "کیفیت: آزادسازی قرنطینه و مصرف مشروط"), ("qc_manage", "QC", "کیفیت: مدیریت طرح‌ها و تنظیمات"),
+    # R312: گام‌های نگهداری (درخواست‌کننده، برنامه‌ریز، تکنسین، سرپرست، انباردار، تأییدکننده) -- با کلید «دسترسی‌های جداگانهٔ نگهداری»
+    ("mnt_request", "MNT", "نگهداری: ثبت درخواست تعمیر"), ("mnt_plan", "MNT", "نگهداری: بررسی درخواست و برنامه‌ریزی دستور کار"),
+    ("mnt_execute", "MNT", "نگهداری: اجرای دستور کار"), ("mnt_verify", "MNT", "نگهداری: آزمون، تأیید و بستن دستور کار"),
+    ("mnt_parts", "MNT", "نگهداری: صدور و برگشت قطعه"), ("mnt_cost", "MNT", "نگهداری: ثبت مالی هزینه‌ها"),
+    ("mnt_approve", "MNT", "نگهداری: تأیید توقف، ظرفیت محدود و تعویق"), ("mnt_manage", "MNT", "نگهداری: تجهیزات، برنامه‌ها و تنظیمات"),
+    # R313: گام‌های بودجه (تهیه‌کننده، مسئول بودجه، تأییدکننده، ...) -- همیشه اعمال می‌شوند
+    ("bud_prepare", "BUD", "بودجه: تهیه و ارسال"), ("bud_review", "BUD", "بودجه: بررسی (مسئول بودجه)"),
+    ("bud_approve", "BUD", "بودجه: تأیید (مدیر مجاز)"), ("bud_publish", "BUD", "بودجه: انتشار نسخهٔ مصوب و تطبیق با اسناد"),
+    ("bud_period", "BUD", "بودجه: بستن و بازگشایی دوره"), ("bud_settings", "BUD", "بودجه: سیاست کنترل"),
+    ("bud_exception", "BUD", "بودجه: تأیید مجوز تجاوز"), ("bud_override", "BUD", "بودجه: مجوز استثنای ویژه"),
+    ("bud_commitment", "BUD", "بودجه: بستن و بازگشایی تعهد سفارش"),
+    # R314: گام‌های افتتاحیه (تعریف، ورود، تأیید، ثبت قطعی، اصلاح) -- همیشه اعمال می‌شوند
+    ("opn_setup", "OPN", "افتتاحیه: تعریف فرایند و مسئولان"), ("opn_enter", "OPN", "افتتاحیه: ورود و بارگذاری اطلاعات"),
+    ("opn_approve", "OPN", "افتتاحیه: بررسی و تأیید اطلاعات"), ("opn_post", "OPN", "افتتاحیه: ثبت قطعی و قفل"),
+    ("opn_correct", "OPN", "افتتاحیه: افتتاحیهٔ اصلاحی"), ("opn_settings", "OPN", "افتتاحیه: حساب واسط و سیاست اختلاف"),
+    ("opn_difference", "OPN", "افتتاحیه: مجوز قفل با اختلاف"),
 ]
 
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط

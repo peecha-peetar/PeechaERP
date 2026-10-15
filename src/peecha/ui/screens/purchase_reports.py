@@ -180,8 +180,8 @@ _FILTER_FIXES: dict[tuple[str, str], tuple[tuple[str, ...], tuple[str, ...]]] = 
     ("SALES", "CUSTOMERS"): ((), ("item", "category", "warehouse")),
     ("SALES", "PRICE_COMPARE"): ((), ("warehouse",)),
 }
-_FILTER_ORDER = ("supplier", "item", "category", "brand", "fa_category", "fa_location", "warehouse", "branch", "cost_center",
-                 "account", "detail")
+_FILTER_ORDER = ("budget", "bud_version", "supplier", "item", "category", "brand", "fa_category", "fa_location", "warehouse", "branch",
+                 "cost_center", "project", "work_center", "inspector", "equipment", "responsible", "account", "detail", "currency")
 
 
 def effective_filters(side: str, report_def) -> tuple[str, ...]:
@@ -225,16 +225,34 @@ class PurchaseReportScreen(ReportScreenBase):
         self.fa_category_combo = _searchable_combo()
         self.fa_location_combo = _searchable_combo()
         self.cost_center_combo_f = _searchable_combo()
+        self.work_center_combo_f = _searchable_combo()
+        self.inspector_combo = _searchable_combo()
+        self.equipment_combo = _searchable_combo()
+        self.responsible_combo = _searchable_combo()
+        self.budget_combo = _searchable_combo()
+        self.bud_version_combo = _searchable_combo()
+        self.project_combo_f = _searchable_combo()
+        self.currency_combo = _searchable_combo()
+        self._extra_options: dict = {}  # R313: پیش‌تنظیم پنهان (مثلاً یک ردیف بودجه از Drill-down)
         self._filters_used = effective_filters(side, self._def)
         self._filter_widgets = {
             "fa_category": ("طبقه:", self.fa_category_combo),
             "fa_location": ("محل:", self.fa_location_combo),
             "cost_center": ("مرکز هزینه:", self.cost_center_combo_f),
+            "work_center": ("مرکز کاری:", self.work_center_combo_f),
+            "inspector": ("بازرس:", self.inspector_combo),
+            "equipment": ("تجهیز:", self.equipment_combo),
+            "responsible": ("مسئول:", self.responsible_combo),
+            "budget": ("بودجه:", self.budget_combo),
+            "bud_version": ("نسخه:", self.bud_version_combo),
+            "project": ("پروژه:", self.project_combo_f),
+            "currency": ("ارز سند:", self.currency_combo),
             "account": ("حساب:", self.account_combo),
             "detail": ("تفصیلی:", self.detail_combo),
             "brand": ("برند:", self.brand_combo),
             "branch": ("شعبه:", self.branch_combo),
-            "supplier": ("تامین‌کننده:" if side == "PURCHASE" else "مشتری:", self.supplier_combo),
+            "supplier": ("تامین‌کننده:" if side == "PURCHASE" else "طرف‌حساب:" if side == "INVENTORY" else "مشتری:",
+                         self.supplier_combo),
             "item": ("کالا:", self.item_combo),
             "category": ("گروه کالا:", self.category_combo),
             "warehouse": ("انبار:", self.warehouse_combo),
@@ -384,6 +402,29 @@ class PurchaseReportScreen(ReportScreenBase):
                     cc_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
                     _fill(self.cost_center_combo_f, [(f"{d.code} — {d.name or ''}", d.detail_account_id)
                                                      for d in dimensions_service.list_leaf_detail_accounts(company_id, cc_type)])
+                if "supplier" in self._filters_used:
+                    seen: dict = {}
+                    for s in dimensions_service.list_suppliers(company_id) + dimensions_service.list_customers(company_id):
+                        seen.setdefault(s["detail_account_id"], f"{s['code']} — {s['name'] or ''}")
+                    _fill(self.supplier_combo, [(label, key) for key, label in seen.items()])
+                if "work_center" in self._filters_used:
+                    from peecha.services.production import master as prd_master
+
+                    _fill(self.work_center_combo_f, [(f"{w.code} — {w.name}", w.work_center_id)
+                                                     for w in prd_master.list_work_centers(company_id)])
+                if "inspector" in self._filters_used:
+                    from peecha.services.crm.common import list_company_users
+
+                    _fill(self.inspector_combo, [(name, uid) for uid, name in list_company_users(company_id)])
+                if "equipment" in self._filters_used:
+                    from peecha.services.maintenance import equipment as mnt_equipment
+
+                    _fill(self.equipment_combo, [(e.label, e.asset_id) for e in mnt_equipment.list_equipment(company_id)])
+                if "responsible" in self._filters_used:
+                    from peecha.services.crm.common import list_company_users
+
+                    _fill(self.responsible_combo, [(name, uid) for uid, name in list_company_users(company_id)])
+                self._fill_budget_filters(company_id)
             else:
                 parties = dimensions_service.list_suppliers(company_id) if self._side == "PURCHASE" \
                     else dimensions_service.list_customers(company_id)
@@ -426,8 +467,43 @@ class PurchaseReportScreen(ReportScreenBase):
             account_id=value("account"), detail_account_id=value("detail"),
             brand_id=value("brand"), branch_id=value("branch"),
             fa_category_id=value("fa_category"), fa_location_id=value("fa_location"), cost_center_id=value("cost_center"),
-            options={key: combo.currentData() for key, (_label, combo) in self._option_combos.items()},
+            work_center_id=value("work_center"), inspector_id=value("inspector"),
+            asset_id=value("equipment"), responsible_id=value("responsible"),
+            budget_id=value("budget"), budget_version_id=value("bud_version"), project_id=value("project"), currency_id=value("currency"),
+            options={**{key: combo.currentData() for key, (_label, combo) in self._option_combos.items()}, **self._extra_options},
         )
+
+    def _fill_budget_filters(self, company_id: int) -> None:
+        """R313: فیلترهای گزارش‌های بودجه."""
+        used = set(self._filters_used)
+        if "budget" in used or "bud_version" in used:
+            from peecha.services.budgeting import budgets as bud_service
+            from peecha.services.budgeting import common as bud_common
+
+            budgets = bud_service.list_budgets(company_id)
+            _fill(self.budget_combo, [(f"{b.code} — {b.name}", b.budget_id) for b in budgets])
+            versions = []
+            for b in budgets:
+                for v in bud_service.get_budget(company_id, b.budget_id).versions:
+                    versions.append((f"{b.code} — {v.kind_label} {v.version_no} ({bud_common.VERSION_STATUS_LABELS[v.status_code]})", v.version_id))
+            _fill(self.bud_version_combo, versions)
+        if "project" in used:
+            pj_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+            _fill(self.project_combo_f, [(f"{d.code} — {d.name or ''}", d.detail_account_id)
+                                         for d in dimensions_service.list_leaf_detail_accounts(company_id, pj_type)])
+        if "currency" in used:
+            from peecha.services import currencies as currencies_service
+
+            _fill(self.currency_combo, [(cur.iso_code, cur.currency_id) for cur in currencies_service.list_transactable_currencies(company_id)])
+        if "account" in used:
+            from peecha.services import chart_of_accounts as coa_service
+
+            _fill(self.account_combo, [(f"{a.full_code} — {a.name}", a.account_id) for a in coa_service.list_accounts(company_id)])
+
+    def apply_budget_key(self, key_id: int, date_from: datetime.date | None = None, date_to: datetime.date | None = None) -> None:
+        """R313: Drill-down از ردیف تجمیعی بودجه به ریز مصرف همان ردیف."""
+        self._extra_options = {"key": key_id}
+        self.apply_preset(date_from, date_to)
 
     def _fmt(self, value, kind: str) -> str:
         if value is None or value == "":
@@ -748,6 +824,11 @@ class PurchaseReportScreen(ReportScreenBase):
                 return
             if doc_type == "WF_INSTANCE":  # R296: ریز اجرای فرایند در صفحهٔ پایش
                 self._main_window.open_screen("WF_MONITOR", then=lambda screen: screen.open_instance(document_id))
+                return
+            if doc_type == "BUD_KEY":  # R313: ردیف بودجه ← ریز مصرف همان ردیف
+                d0 = self.date_from.date() if self._def.date_mode == "range" else None
+                d1 = self.date_to.date()
+                self._main_window.open_screen("BUD_RPT_BUD_DETAIL", then=lambda screen: screen.apply_budget_key(document_id, d0, d1))
                 return
             if doc_type == "PRD_ORDER":  # R270: صفحهٔ مرکزیِ دستورِ تولید
                 self._main_window.open_screen("PRD_ORDERS", then=lambda screen: screen.open_order(document_id))

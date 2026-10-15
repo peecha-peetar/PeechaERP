@@ -822,7 +822,8 @@ class QcInspection(Base):
     __tablename__ = "qc_inspections"
     __table_args__ = (
         CheckConstraint(
-            "(stock_document_line_id IS NOT NULL)::int + (batch_id IS NOT NULL)::int = 1",
+            "(stock_document_line_id IS NOT NULL)::int + (batch_id IS NOT NULL)::int <= 1 AND "
+            "(stock_document_line_id IS NOT NULL OR batch_id IS NOT NULL OR production_order_id IS NOT NULL)",
             name="ck_inv_qc_inspections_one_target",
         ),
         {"schema": "inv"},
@@ -840,6 +841,22 @@ class QcInspection(Base):
     sampled_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     rejected_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     notes: Mapped[str | None] = mapped_column(Text)
+    # R311: مرحله، وضعیت (ثبت‌شده/تأییدشده/لغو)، مقادیر تعیین تکلیف، طرح و منبع تولیدی
+    stage_code: Mapped[str] = mapped_column(String(20), default="RECEIPT")
+    status_code: Mapped[str] = mapped_column(String(12), default="APPROVED")
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("qms.inspection_plans.plan_id"))
+    lot_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    accepted_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    pending_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
+    disposition_code: Mapped[str | None] = mapped_column(String(20))
+    production_order_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("prd.production_orders.order_id"))
+    order_operation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("prd.order_operations.order_operation_id"))
+    reinspection_of_id: Mapped[int | None] = mapped_column(ForeignKey("inv.qc_inspections.qc_inspection_id"))
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    approved_at: Mapped[datetime.datetime | None]
+    decision_notes: Mapped[str | None] = mapped_column(Text)
+    transfer_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    idempotency_key: Mapped[str | None] = mapped_column(String(80))
 
 
 # =======================================================================

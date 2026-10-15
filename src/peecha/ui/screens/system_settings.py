@@ -79,6 +79,10 @@ _TAB_FORMS: dict[str, tuple[str, ...]] = {
     "تولید": ("prd_settings",),
     "ارتباط با مشتری": ("crm_settings",),
     "گردش کار": ("wf_settings",),
+    "کنترل کیفیت": ("qc_settings",),
+    "نگهداری و تعمیرات": ("mnt_settings",),
+    "بودجه‌ریزی": ("bud_config",),
+    "افتتاحیه": ("opn_config",),
 }
 _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
     ("کدینگ حسابداری", "تعداد رقم سطوح تفصیلی"): ("detail_level_digits",),
@@ -215,6 +219,14 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self._add_outer_tab("ارتباط با مشتری", self._build_crm_tab())
         # R293: قواعد، تقویم کاری، تعهد زمانی، اعلان‌ها و مدیران (چرخ‌دندهٔ کنار منوی «گردش کار و تایید»)
         self._add_outer_tab("گردش کار", self._build_workflow_tab())
+        # R311: امتیاز تامین‌کننده و ثبت خودکار عدم‌انطباق (چرخ‌دندهٔ کنار منوی «کنترل کیفیت»)
+        self._add_outer_tab("کنترل کیفیت", self._build_quality_tab())
+        # R312: کلیدهای نگهداری و نقش‌های آماده (چرخ‌دندهٔ کنار منوی «نگهداری و تعمیرات»)
+        self._add_outer_tab("نگهداری و تعمیرات", self._build_maintenance_tab())
+        # R313: سیاست کنترل بودجه، کلیدها و نقش‌های آماده (چرخ‌دندهٔ کنار منوی «بودجه‌ریزی»)
+        self._add_outer_tab("بودجه‌ریزی", self._build_budget_tab())
+        # R314: حساب واسط، سیاست اختلاف و نقش‌های افتتاحیه (چرخ‌دندهٔ کنار منوی «افتتاحیه و انتقال اطلاعات»)
+        self._add_outer_tab("افتتاحیه", self._build_opening_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         # R301: ۱۴ بخش در نوار تب جا نمی‌شدند (فلش اسکرول)؛ فهرست بخش‌ها ستونی کنار صفحه است
         self.section_list = QListWidget()
@@ -470,6 +482,26 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         from peecha.ui.screens import workflow_center as wf
 
         return self._sub_tabs(list(wf.SETTINGS_PANELS))
+
+    def _build_quality_tab(self):
+        from peecha.ui.screens.quality import QcSettingsScreen
+
+        return self._sub_tabs([("امتیاز تامین‌کننده و عدم‌انطباق", QcSettingsScreen)])
+
+    def _build_maintenance_tab(self):
+        from peecha.ui.screens.maintenance import MntSettingsScreen
+
+        return self._sub_tabs([("کلیدها و نقش‌ها", MntSettingsScreen)])
+
+    def _build_budget_tab(self):
+        from peecha.ui.screens.budgeting import BudSettingsScreen
+
+        return self._sub_tabs([("سیاست کنترل، کلیدها و نقش‌ها", BudSettingsScreen)])
+
+    def _build_opening_tab(self):
+        from peecha.ui.screens.opening import OpeningSettingsScreen
+
+        return self._sub_tabs([("حساب واسط، سیاست اختلاف و نقش‌ها", OpeningSettingsScreen)])
 
     def apply_permissions(self) -> None:
         cache: dict[str, bool] = {}

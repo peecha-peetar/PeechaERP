@@ -109,6 +109,11 @@ def _run_delete_sequence(company_id: int, statements: list[str]) -> int:
 # ۱) اسناد — فروش/خرید + انبار + مالی/حسابداری، با هم، یک تراکنشِ واحد.
 # ---------------------------------------------------------------------
 _DOCUMENT_DELETE_STATEMENTS = [
+    # R314: فرایندهای افتتاحیه (ماژول، فایل، ردیف، گام ثبت و رویداد با ON DELETE CASCADE) پیش از اسنادی که به آن‌ها اشاره
+    # می‌کنند؛ نگهبان ردیف ثبت‌شده موقتاً خاموش
+    "ALTER TABLE opn.staged_rows DISABLE TRIGGER tr_opn_rows_guard",
+    "DELETE FROM opn.runs WHERE company_id = :company_id",
+    "ALTER TABLE opn.staged_rows ENABLE TRIGGER tr_opn_rows_guard",
     # R284: تراکنش باشگاه مشتریان به سند فروش وصل است (امتیاز خرید از CRM و فروش حضوری)
     "DELETE FROM comm.loyalty_transactions WHERE loyalty_account_id IN (SELECT loyalty_account_id FROM comm.loyalty_accounts "
     "WHERE customer_detail_account_id IN (SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id))",
@@ -162,6 +167,36 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM inv.line_tracking_entries WHERE company_id = :company_id",
     "DELETE FROM inv.serial_movements WHERE serial_id IN "
     "(SELECT serial_id FROM inv.serial_numbers WHERE company_id = :company_id)",
+    # R313: دفتر مصرف بودجه (تغییرناپذیر)، مجوزها و بستن تعهد -- به اسناد خرید و درخواست‌ها وصل‌اند
+    "DELETE FROM bud.control_events WHERE company_id = :company_id",
+    "DELETE FROM bud.exceptions WHERE company_id = :company_id",
+    "ALTER TABLE bud.consumption_entries DISABLE TRIGGER tr_bud_consumption_immutable",
+    "DELETE FROM bud.consumption_entries WHERE company_id = :company_id",
+    "ALTER TABLE bud.consumption_entries ENABLE TRIGGER tr_bud_consumption_immutable",
+    "DELETE FROM bud.commitment_closures WHERE company_id = :company_id",
+    # R312: نگهداری و تعمیرات -- به دارایی، سند انبار، فاکتور خرید و رویداد دارایی وصل است؛ پیش از همهٔ آن‌ها
+    "DELETE FROM mnt.work_order_part_moves WHERE part_id IN (SELECT p.part_id FROM mnt.work_order_parts p "
+    "JOIN mnt.work_orders w ON w.work_order_id = p.work_order_id WHERE w.company_id = :company_id)",
+    "DELETE FROM mnt.work_order_parts WHERE work_order_id IN (SELECT work_order_id FROM mnt.work_orders WHERE company_id = :company_id)",
+    "DELETE FROM mnt.work_order_labor WHERE work_order_id IN (SELECT work_order_id FROM mnt.work_orders WHERE company_id = :company_id)",
+    "DELETE FROM mnt.work_order_tasks WHERE work_order_id IN (SELECT work_order_id FROM mnt.work_orders WHERE company_id = :company_id)",
+    "DELETE FROM mnt.work_order_technicians WHERE work_order_id IN "
+    "(SELECT work_order_id FROM mnt.work_orders WHERE company_id = :company_id)",
+    "DELETE FROM mnt.work_order_costs WHERE work_order_id IN (SELECT work_order_id FROM mnt.work_orders WHERE company_id = :company_id)",
+    "DELETE FROM mnt.downtime_events WHERE company_id = :company_id",
+    "DELETE FROM mnt.planned_downtime WHERE company_id = :company_id",
+    "DELETE FROM mnt.capacity_restrictions WHERE company_id = :company_id",
+    "DELETE FROM mnt.pm_postponements WHERE plan_id IN (SELECT plan_id FROM mnt.pm_plans WHERE company_id = :company_id)",
+    "DELETE FROM mnt.work_orders WHERE company_id = :company_id",
+    "DELETE FROM mnt.work_requests WHERE company_id = :company_id",
+    "DELETE FROM mnt.pm_plan_tasks WHERE plan_id IN (SELECT plan_id FROM mnt.pm_plans WHERE company_id = :company_id)",
+    "DELETE FROM mnt.pm_plan_parts WHERE plan_id IN (SELECT plan_id FROM mnt.pm_plans WHERE company_id = :company_id)",
+    "DELETE FROM mnt.pm_plans WHERE company_id = :company_id",
+    "DELETE FROM mnt.equipment_profiles WHERE company_id = :company_id",
+    # R311: عدم‌انطباق/اقدام و نتایج پارامترها پیش از خود بازرسی‌ها
+    "DELETE FROM qms.capa_actions WHERE company_id = :company_id",
+    "DELETE FROM qms.nonconformances WHERE company_id = :company_id",
+    "DELETE FROM qms.inspection_results WHERE company_id = :company_id",
     "DELETE FROM inv.qc_inspections WHERE company_id = :company_id",
     "DELETE FROM inv.serial_numbers WHERE company_id = :company_id",
     "DELETE FROM inv.batches WHERE company_id = :company_id",
@@ -401,6 +436,25 @@ def wipe_documents(company_id: int) -> int:
 # ۲) اطلاعاتِ پایه — فقط وقتی هیچ سندی نمانده باشد (وگرنه FK رد می‌کند).
 # ---------------------------------------------------------------------
 _MASTER_DATA_DELETE_STATEMENTS = [
+    "DELETE FROM opn.settings WHERE company_id = :company_id",  # R314: به حساب اختلاف افتتاحیه اشاره می‌کند
+    # R311: طرح‌های کیفیت (پارامترها با ON DELETE CASCADE) پیش از کالا/مرکز کاری/عملیات
+    "DELETE FROM qms.inspection_plans WHERE company_id = :company_id",
+    "DELETE FROM mnt.failure_codes WHERE company_id = :company_id",  # R312
+    # R313: بودجه‌ها (نسخه، ردیف، دوره) به حساب، مرکز هزینه، شعبه و گروه کالا وصل‌اند؛ نگهبان نسخهٔ مصوب موقتاً خاموش.
+    # دفتر مصرف هم این‌جا تکرار شده: حذف تک‌تک اسناد ردیف‌های خالص صفر را در دفتر نگه می‌دارد.
+    "DELETE FROM bud.control_events WHERE company_id = :company_id",
+    "DELETE FROM bud.exceptions WHERE company_id = :company_id",
+    "ALTER TABLE bud.consumption_entries DISABLE TRIGGER tr_bud_consumption_immutable",
+    "DELETE FROM bud.consumption_entries WHERE company_id = :company_id",
+    "ALTER TABLE bud.consumption_entries ENABLE TRIGGER tr_bud_consumption_immutable",
+    "DELETE FROM bud.commitment_closures WHERE company_id = :company_id",
+    "ALTER TABLE bud.budget_versions DISABLE TRIGGER tr_bud_versions_guard",
+    "ALTER TABLE bud.budget_lines DISABLE TRIGGER tr_bud_lines_guard",
+    "ALTER TABLE bud.line_period_amounts DISABLE TRIGGER tr_bud_period_amounts_guard",
+    "DELETE FROM bud.budgets WHERE company_id = :company_id",
+    "ALTER TABLE bud.budget_versions ENABLE TRIGGER tr_bud_versions_guard",
+    "ALTER TABLE bud.budget_lines ENABLE TRIGGER tr_bud_lines_guard",
+    "ALTER TABLE bud.line_period_amounts ENABLE TRIGGER tr_bud_period_amounts_guard",
     # R278: اطلاعات پایهٔ ماژول‌های جدیدتر (شعبه، صندوق، کارکنان و ساختار سازمانی، طبقه و محل دارایی، ...)
     "DELETE FROM comm.cms_articles WHERE company_id = :company_id",
     "DELETE FROM comm.online_coupons WHERE company_id = :company_id",
@@ -575,6 +629,7 @@ def wipe_master_data(company_id: int) -> int:
 # ۳) تنظیمات — نگاشتِ حساب‌ها، سطح‌بندی، شماره‌گذاری، Toggleهایِ ماژول.
 # ---------------------------------------------------------------------
 _SETTINGS_DELETE_STATEMENTS = [
+    "DELETE FROM opn.settings WHERE company_id = :company_id",  # R314: سیاست اختلاف افتتاحیه
     # R281: قیف فروش و منابع سرنخ اختصاصی شرکت (منابع پیش‌فرض سیستم شرکت ندارند و می‌مانند)
     "DELETE FROM crm.pipeline_stages WHERE pipeline_id IN (SELECT pipeline_id FROM crm.pipelines WHERE company_id = :company_id)",
     "DELETE FROM crm.pipelines WHERE company_id = :company_id",
@@ -605,6 +660,8 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM inv.company_costing_settings WHERE company_id = :company_id",
     "DELETE FROM inv.company_features WHERE company_id = :company_id",
     "DELETE FROM inv.wms_settings WHERE company_id = :company_id",
+    "DELETE FROM qms.settings WHERE company_id = :company_id",  # R311
+    "DELETE FROM bud.settings WHERE company_id = :company_id",  # R313
     "DELETE FROM inv.reorder_policies WHERE company_id = :company_id",
     "DELETE FROM comm.account_mappings WHERE company_id = :company_id",
     "DELETE FROM comm.company_features WHERE company_id = :company_id",

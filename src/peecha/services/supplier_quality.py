@@ -10,9 +10,12 @@ import datetime
 import decimal
 from types import SimpleNamespace
 
-from sqlalchemy import select
+from sqlalchemy import exists, func, select
+from sqlalchemy.orm import aliased
 
 from peecha.db.models.inventory import QcInspection, StockDocument, StockDocumentLine
+
+_Rev = aliased(StockDocument)  # سند برگشت (reference_no = REVERSAL-<شناسه>)
 
 _ZERO = decimal.Decimal(0)
 _TEN = decimal.Decimal(10)
@@ -33,7 +36,12 @@ def inspections(session, company_id: int, date_from: datetime.date | None = None
     q = (select(QcInspection, StockDocumentLine, StockDocument)
          .join(StockDocumentLine, StockDocumentLine.line_id == QcInspection.stock_document_line_id)
          .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
-         .where(QcInspection.company_id == company_id, StockDocument.counterparty_detail_account_id.is_not(None))
+         .where(QcInspection.company_id == company_id, StockDocument.counterparty_detail_account_id.is_not(None),
+                # R311: فقط تصمیم نهایی رسید خرید؛ رسید برگشت‌خورده و مرجوعی مشتری و تولید حساب نمی‌شوند
+                QcInspection.status_code == "APPROVED", QcInspection.stage_code == "RECEIPT",
+                StockDocument.status_code == "POSTED",
+                ~exists().where(_Rev.company_id == company_id,
+                                _Rev.reference_no == func.concat("REVERSAL-", StockDocument.stock_document_id)))
          .order_by(QcInspection.inspected_at, QcInspection.qc_inspection_id))
     if date_from is not None:
         q = q.where(QcInspection.inspected_at >= datetime.datetime.combine(date_from, datetime.time.min))
@@ -47,9 +55,17 @@ def inspections(session, company_id: int, date_from: datetime.date | None = None
             inspection_id=qc.qc_inspection_id, inspected_at=qc.inspected_at, supplier_id=doc.counterparty_detail_account_id,
             stock_document_id=doc.stock_document_id, document_no=doc.document_no, document_date=doc.document_date,
             line_id=ln.line_id, item_id=ln.item_id, warehouse_id=doc.destination_warehouse_id,
-            inspected=decimal.Decimal(ln.quantity_base), rejected=decimal.Decimal(qc.rejected_quantity or 0),
+            inspected=_decided(qc, ln), rejected=decimal.Decimal(qc.rejected_quantity or 0),
+            approved_at=qc.approved_at or qc.inspected_at, posted_at=doc.posted_at,
             result_code=qc.result_code, user_id=qc.inspected_by_user_id, notes=qc.notes))
     return out
+
+
+def _decided(qc: QcInspection, ln: StockDocumentLine) -> decimal.Decimal:
+    """مقدار تصمیم‌گرفته = پذیرفته + ردشده («در انتظار» در بازرسی بعدی حساب می‌شود)."""
+    rejected = decimal.Decimal(qc.rejected_quantity or 0)
+    accepted = decimal.Decimal(qc.accepted_quantity) if qc.accepted_quantity is not None else decimal.Decimal(ln.quantity_base) - rejected
+    return accepted + rejected
 
 
 def by_supplier(session, company_id: int, date_from: datetime.date | None = None, date_to: datetime.date | None = None,

@@ -65,6 +65,17 @@ class PurchaseFilters:
     fa_category_id: int | None = None
     fa_location_id: int | None = None
     cost_center_id: int | None = None
+    # R311: گزارش‌های کیفیت (مرکز کاری، بازرس)
+    work_center_id: int | None = None
+    inspector_id: int | None = None
+    # R312: گزارش‌های نگهداری (تجهیز، مسئول دستور کار)
+    asset_id: int | None = None
+    responsible_id: int | None = None
+    # R313: گزارش‌های بودجه (بودجه، نسخه، پروژه، ارز سند)
+    budget_id: int | None = None
+    budget_version_id: int | None = None
+    project_id: int | None = None
+    currency_id: int | None = None
 
 
 ReportFilters = PurchaseFilters
@@ -722,13 +733,16 @@ _BUCKETS = ((0, "جاری"), (30, "۱–۳۰"), (60, "۳۱–۶۰"), (90, "۶۱�
 
 
 def ap_aging(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import commercial_settlements as settlements_service
+
     S = _side(f)
     ctx = _ctx(company_id)
     as_of = f.date_to
     with new_session() as session:
         docs = list(session.scalars(
             select(CommercialDocument).where(
-                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == S.invoice,
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code.in_(settlements_service.open_item_types(S.invoice)),
                 CommercialDocument.status_code == "POSTED", CommercialDocument.document_date <= as_of,
             )
         ))
@@ -1290,7 +1304,7 @@ def payment_forecast(company_id: int, f: PurchaseFilters) -> ReportResult:
     with new_session() as session:
         docs = {d.document_id: d for d in session.scalars(
             select(CommercialDocument).where(CommercialDocument.company_id == company_id,
-                                             CommercialDocument.document_type_code == S.invoice,
+                                             CommercialDocument.document_type_code.in_(settlements_service.open_item_types(S.invoice)),
                                              CommercialDocument.status_code == "POSTED"))}
         if S.code == "PURCHASE":
             checks = session.execute(
@@ -1306,9 +1320,12 @@ def payment_forecast(company_id: int, f: PurchaseFilters) -> ReportResult:
         doc = docs.get(status.document_id)
         if doc is None or (f.supplier_id is not None and doc.counterparty_detail_account_id != f.supplier_id):
             continue
-        entries.append((status.due_date or doc.document_date, "فاکتور تسویه‌نشده", f"فاکتور {doc.document_no}",
+        opening = doc.document_type_code in settlements_service.OPENING_ITEM_LABELS
+        entries.append((status.due_date or doc.document_date, "سند باز افتتاحیه" if opening else "فاکتور تسویه‌نشده",
+                        settlements_service.open_item_number(doc) if opening else f"فاکتور {doc.document_no}",
                         ctx.names.get(doc.counterparty_detail_account_id, ""), status.remaining_amount,
-                        (doc.document_id, doc.document_type_code)))
+                        (doc.journal_entry_id, "JOURNAL_ENTRY") if opening and doc.journal_entry_id
+                        else (doc.document_id, doc.document_type_code)))
     for chk in checks:
         if f.supplier_id is not None and chk.counterparty_detail_account_id != f.supplier_id:
             continue

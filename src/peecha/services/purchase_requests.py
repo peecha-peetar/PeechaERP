@@ -22,6 +22,7 @@ from peecha.db.models.commercial import (
 )
 from peecha.services import commercial_documents as documents_service
 from peecha.services import unit_conversion as uc
+from peecha.services.budgeting import hooks as budget_hooks
 
 _ZERO = decimal.Decimal(0)
 STATUS_LABELS = {
@@ -196,6 +197,7 @@ def approve_request(request_id: int, company_id: int, approved_by_user_id: int) 
         row.status_code = "APPROVED"
         row.approved_by_user_id = approved_by_user_id
         row.approved_at = datetime.datetime.now()
+        budget_hooks.request_changed(session, row, "APPROVE", approved_by_user_id)  # R313
         session.commit()
 
 
@@ -221,6 +223,7 @@ def cancel_request(request_id: int, company_id: int, reason_id: int | None = Non
             raise ValueError("از این درخواست سفارش خرید ساخته شده — ابتدا آن سفارش‌ها را لغو کنید.")
         row.status_code = "CANCELLED"
         row.cancellation_reason_id = reason_id
+        budget_hooks.request_changed(session, row, "CANCEL", None)  # R313
         session.commit()
 
 

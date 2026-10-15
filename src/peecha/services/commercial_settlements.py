@@ -34,6 +34,24 @@ from peecha.services import roles as roles_service
 
 _ZERO = decimal.Decimal("0")
 _INVOICE_TYPES = ("SALES_INVOICE", "PURCHASE_INVOICE")
+# R314: سند باز افتتاحیه (ریز دریافتنی/پرداختنی سیستم قبلی) هم‌ردیف فاکتور در تسویه و فهرست اسناد باز
+OPENING_ITEM_TYPE_BY_INVOICE = {"SALES_INVOICE": "OPENING_RECEIVABLE", "PURCHASE_INVOICE": "OPENING_PAYABLE"}
+OPENING_ITEM_LABELS = {"OPENING_RECEIVABLE": "سند باز افتتاحیه (دریافتنی)", "OPENING_PAYABLE": "سند باز افتتاحیه (پرداختنی)"}
+_OPEN_ITEM_TYPES = _INVOICE_TYPES + tuple(OPENING_ITEM_TYPE_BY_INVOICE.values())
+
+
+def open_item_number(doc) -> str:
+    """شمارهٔ نمایشی سند باز: فاکتور با شمارهٔ خودش، سند باز افتتاحیه با برچسب و شمارهٔ سیستم قبلی."""
+    if doc.document_type_code in OPENING_ITEM_LABELS:
+        legacy = f" ({doc.reference_no})" if doc.reference_no else ""
+        return f"افتتاحیه {doc.document_no}{legacy}"
+    return str(doc.document_no)
+
+
+def open_item_types(document_type_code: str) -> tuple[str, ...]:
+    """نوع فاکتور ← خودش و سند باز افتتاحیهٔ هم‌جهت."""
+    opening = OPENING_ITEM_TYPE_BY_INVOICE.get(document_type_code)
+    return (document_type_code, opening) if opening else (document_type_code,)
 
 # طبقِ درخواستِ صریح («نقد/نسیه/بانک یا همون کارتخوان/بن/کالابرگ/تخفیف»):
 # «نسیه» ردیفِ روش نیست -- همان مانده‌یِ پوشش‌داده‌نشده‌یِ فاکتور است که
@@ -624,9 +642,9 @@ def list_unsettled_invoices(company_id: int, document_type_code: str | None = No
             CommercialDocument.status_code == "POSTED",
         )
         if document_type_code:
-            stmt = stmt.where(CommercialDocument.document_type_code == document_type_code)
+            stmt = stmt.where(CommercialDocument.document_type_code.in_(open_item_types(document_type_code)))
         else:
-            stmt = stmt.where(CommercialDocument.document_type_code.in_(_INVOICE_TYPES))
+            stmt = stmt.where(CommercialDocument.document_type_code.in_(_OPEN_ITEM_TYPES))
         docs = session.scalars(stmt.order_by(CommercialDocument.document_id.desc())).all()
         result = []
         for doc in docs:
@@ -654,7 +672,7 @@ def list_unsettled_invoices_bulk(
                        CommercialDocument.due_date, CommercialDocument.counterparty_detail_account_id)
                 .outerjoin(settled, settled.c.invoice_document_id == CommercialDocument.document_id)
                 .where(CommercialDocument.company_id == company_id, CommercialDocument.status_code == "POSTED",
-                       CommercialDocument.document_type_code == document_type_code,
+                       CommercialDocument.document_type_code.in_(open_item_types(document_type_code)),
                        CommercialDocument.total_amount > func.coalesce(settled.c.settled, 0)))
         if counterparty_ids is not None:
             stmt = stmt.where(CommercialDocument.counterparty_detail_account_id.in_(counterparty_ids or [-1]))
@@ -719,8 +737,8 @@ def allocate_settlement(
         doc = session.get(CommercialDocument, invoice_document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("فاکتور نامعتبر است.")
-        if doc.document_type_code not in _INVOICE_TYPES:
-            raise ValueError("تسویه فقط برای فاکتور خرید/فروش ممکن است.")
+        if doc.document_type_code not in _OPEN_ITEM_TYPES:
+            raise ValueError("تسویه فقط برای فاکتور خرید/فروش یا سند باز افتتاحیه ممکن است.")
         if doc.status_code != "POSTED":
             raise ValueError("فقط فاکتور ثبت‌نهایی‌شده (و نه اصلاح‌شده/لغوشده) قابل‌تسویه است.")
         if journal_entry_id is not None:
@@ -772,3 +790,41 @@ def set_alarm_settings(company_id: int, is_enabled: bool, alarm_days_before: int
             settings.is_enabled = is_enabled
             settings.alarm_days_before = alarm_days_before
         session.commit()
+
+
+def create_opening_open_item(
+    session, company_id: int, user_id: int, document_type_code: str, document_date: datetime.date, counterparty_detail_account_id: int,
+    currency_id: int, exchange_rate: decimal.Decimal, original_amount: decimal.Decimal, settled_amount: decimal.Decimal,
+    due_date: datetime.date | None, legacy_no: str, legacy_date: datetime.date | None = None, description: str | None = None,
+    cost_center_detail_account_id: int | None = None, project_detail_account_id: int | None = None, branch_id: int | None = None,
+    journal_entry_id: int | None = None,
+) -> int:
+    """R314: سند باز افتتاحیه در تراکنش فراخوان — فقط سربرگ و «ثبت‌شده»، بدون ردیف کالا (اثری بر فروش/خرید/مالیات/انبار
+    ندارد). بخش تسویه‌شدهٔ پیش از برش یک تسویهٔ بدون سند می‌شود تا «مبلغ اصلی − تسویه‌ها = ماندهٔ باز» بماند."""
+    from peecha.services.commercial_documents import _resolve_fiscal_year_id
+
+    if document_type_code not in OPENING_ITEM_LABELS:
+        raise ValueError("نوع سند باز افتتاحیه نامعتبر است.")
+    if original_amount <= _ZERO or settled_amount < _ZERO or settled_amount >= original_amount:
+        raise ValueError("مبلغ اصلی باید مثبت و بیشتر از مبلغ تسویه‌شده باشد.")
+    fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
+    next_no = (session.scalar(select(func.max(CommercialDocument.document_no)).where(
+        CommercialDocument.company_id == company_id, CommercialDocument.fiscal_year_id == fiscal_year_id,
+        CommercialDocument.document_type_code == document_type_code)) or 0) + 1
+    doc = CommercialDocument(
+        company_id=company_id, fiscal_year_id=fiscal_year_id, document_type_code=document_type_code, document_no=next_no,
+        document_date=document_date, status_code="POSTED", counterparty_detail_account_id=counterparty_detail_account_id,
+        currency_id=currency_id, exchange_rate=exchange_rate, due_date=due_date, reference_no=(legacy_no or None)[:50] if legacy_no else None,
+        description=description or None, subtotal_amount=original_amount, cost_center_detail_account_id=cost_center_detail_account_id,
+        project_detail_account_id=project_detail_account_id, branch_id=branch_id, journal_entry_id=journal_entry_id,
+        created_by_user_id=user_id, posted_by_user_id=user_id, posted_at=datetime.datetime.now(),
+    )
+    session.add(doc)
+    session.flush()
+    if settled_amount > _ZERO:
+        session.add(InvoiceSettlement(
+            company_id=company_id, invoice_document_id=doc.document_id, journal_entry_id=None,
+            settlement_date=legacy_date or document_date, amount=settled_amount, reference_no=(legacy_no or None),
+            description="تسویه‌شده پیش از برش در سیستم قبلی", created_by_user_id=user_id))
+        session.flush()
+    return doc.document_id

@@ -540,13 +540,15 @@ def capacity(company_id: int, f) -> ReportResult:
 
     r = ReportResult([("مرکز کاری", TEXT), ("ظرفیت (ساعت)", QTY), ("بار (ساعت)", QTY), ("آزاد (ساعت)", QTY), ("بهره‌برداری٪", PERCENT),
                       ("وضعیت", TEXT), ("دستورها", TEXT), ("ظرفیت اسمی (ساعت)", QTY), ("ماشین در دسترس", TEXT),
-                      ("ماشین خارج از دسترس", TEXT)], no_total={4},
+                      ("ماشین خارج از دسترس", TEXT), ("هشدار نگهداری", TEXT)], no_total={4},
                      note="ظرفیت = روزهای کاری × شیفت × ساعت × راندمان، به نسبت ماشین‌های در دسترس هر روز "
-                          "(ماشین در تعمیر، متوقف یا واگذارشده حساب نمی‌شود).")
+                          "(ماشین در تعمیر، متوقف یا واگذارشده حساب نمی‌شود). توقف برنامه‌ریزی‌شده و ظرفیت محدود نگهداری "
+                          "همیشه در «هشدار نگهداری» می‌آید و فقط با کلید مربوط از عدد ظرفیت کم می‌شود.")
     for x in capacity_load(company_id, f.date_from, f.date_to):
         r.add([f"{x.code} -- {x.name}", x.capacity_hours, x.load_hours, x.free_hours, x.utilization,
                "اضافه‌بار" if x.overloaded else "عادی", "، ".join(x.orders[:8]), x.nominal_capacity_hours,
-               machines_label(x), "، ".join(f"{m.code} ({m.status_label})" for m in x.down_machines)])
+               machines_label(x), "، ".join(f"{m.code} ({m.status_label})" for m in x.down_machines),
+               "؛ ".join(n.message for n in x.maintenance_notices)])
     return r
 
 

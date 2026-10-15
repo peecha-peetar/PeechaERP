@@ -76,6 +76,10 @@ _NAV_ICONS = {
     "SALES": "🛒",
     "CRM": "🤝",
     "WF": "🔀",
+    "QC": "🔬",
+    "MNT": "🔧",
+    "BUD": "💹",
+    "OPN": "🧭",
     "PURCH": "🧺",
     "HR": "👥",
     "INVOICES": "🧾",
@@ -87,7 +91,7 @@ _NAV_ICONS = {
 _NAV_ALIASES = {"WF_MY_WORK": "MY_TASKS", "WF_APPROVALS": "MY_TASKS"}
 # R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11, "CRM": 12,
-                               "WF": 13}
+                               "WF": 13, "QC": 14, "MNT": 15, "BUD": 16, "OPN": 17}
 # زیرتبِ مقصد برایِ ماژول‌هایی که تنظیماتشان درونِ تبِ ماژولِ دیگری است
 _SETTINGS_SUBTAB_BY_GROUP_CODE = {"COSTING": (7, "قیمت‌گذاری")}
 
@@ -2073,6 +2077,42 @@ class MainWindow(QMainWindow):
         self.register_screen("wf_processes", lambda: wf_studio.ProcessListScreen(self))
         self.register_screen("wf_monitor", lambda: _wf_monitor_screen(self))  # R296
         self.register_screen("wf_designer", lambda: wf_studio.DesignerScreen(self))
+        # R311: کنترل کیفیت
+        from peecha.ui.screens import quality as qc_screens
+
+        self.register_screen("qc_dashboard", lambda: qc_screens.QcDashboardScreen(self))
+        self.register_screen("qc_queue", lambda: qc_screens.InspectionQueueScreen(self))
+        self.register_screen("qc_quarantine", lambda: qc_screens.QuarantineScreen(self))
+        self.register_screen("qc_ncr", lambda: qc_screens.NcrScreen(self))
+        self.register_screen("qc_capa", lambda: qc_screens.CapaScreen(self))
+        self.register_screen("qc_plans", lambda: qc_screens.PlansScreen(self))
+        self.register_screen("qc_cards", lambda: qc_screens.QualityCardsScreen(self))
+        self.register_screen("qc_settings", lambda: qc_screens.QcSettingsScreen(self))
+        # R312: نگهداری و تعمیرات
+        from peecha.ui.screens import maintenance as mnt_screens
+
+        self.register_screen("mnt_dashboard", lambda: mnt_screens.MntDashboardScreen(self))
+        self.register_screen("mnt_requests", lambda: mnt_screens.RequestQueueScreen(self))
+        self.register_screen("mnt_work_orders", lambda: mnt_screens.WorkOrderBoardScreen(self))
+        self.register_screen("mnt_pm", lambda: mnt_screens.PmScreen(self))
+        self.register_screen("mnt_equipment", lambda: mnt_screens.EquipmentScreen(self))
+        self.register_screen("mnt_availability", lambda: mnt_screens.AvailabilityScreen(self))
+        self.register_screen("mnt_settings", lambda: mnt_screens.MntSettingsScreen(self))
+        # R313: بودجه‌ریزی و کنترل بودجه
+        from peecha.ui.screens import budgeting as bud_screens
+
+        self.register_screen("bud_center", lambda: bud_screens.BudgetCenterScreen(self))
+        self.register_screen("bud_budgets", lambda: bud_screens.BudgetsScreen(self))
+        self.register_screen("bud_exceptions", lambda: bud_screens.ExceptionsScreen(self))
+        self.register_screen("bud_commitments", lambda: bud_screens.CommitmentsScreen(self))
+        self.register_screen("bud_config", lambda: bud_screens.BudSettingsScreen(self))
+        # R314: افتتاحیه و انتقال اطلاعات
+        from peecha.ui.screens import opening as opn_screens
+
+        self.register_screen("opn_center", lambda: opn_screens.OpeningCenterScreen(self))
+        self.register_screen("opn_data", lambda: opn_screens.OpeningDataScreen(self))
+        self.register_screen("opn_reconcile", lambda: opn_screens.OpeningReconcileScreen(self))
+        self.register_screen("opn_config", lambda: opn_screens.OpeningSettingsScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())

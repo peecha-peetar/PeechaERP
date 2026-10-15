@@ -22,6 +22,7 @@ from peecha.db.models.inventory import (
     StockDocument,
     StockDocumentLine,
     StockLedger,
+    Warehouse,
 )
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
@@ -682,6 +683,26 @@ def _before_engine(session, doc: StockDocument, user_id: int, controls) -> None:
         for message in check.errors:
             controls.violate(message)
     stock_reservations.consume_for_stock_document(session, doc.stock_document_id, include_picks=controls.reservation)
+    _quarantine_lock(session, doc, controls)
+
+
+def _quarantine_lock(session, doc: StockDocument, controls) -> None:
+    """R311 (کلید «قفل انبار قرنطینه»): حواله یا انتقال عادی از انبار قرنطینه فقط از مسیر سرویس کیفیت.
+    برگشت به تامین‌کننده و انتقال به ضایعات/قرنطینهٔ دیگر آزاد است."""
+    from peecha.services import stock_controls
+
+    if doc.document_type_code not in ("ISSUE", "TRANSFER") or doc.source_warehouse_id is None or session.info.get("qc_release"):
+        return
+    if not stock_controls.is_on(doc.company_id, stock_controls.QC_QUARANTINE_LOCK, session):
+        return
+    source = session.get(Warehouse, doc.source_warehouse_id)
+    if source is None or source.warehouse_type_code != "QUARANTINE":
+        return
+    if doc.document_type_code == "TRANSFER":
+        target = session.get(Warehouse, doc.destination_warehouse_id)
+        if target is not None and target.warehouse_type_code in stock_controls.DISPOSAL_WAREHOUSE_TYPES:
+            return
+    controls.violate(f"کالای انبار قرنطینهٔ «{source.name}» فقط با آزادسازی مجاز در صفحهٔ کنترل کیفیت خارج می‌شود.")
 
 
 def _log_post(session, doc: StockDocument, user_id: int, result) -> None:

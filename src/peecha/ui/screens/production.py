@@ -1347,7 +1347,7 @@ class PlanningScreen(QWidget):
         ml.addWidget(self.t_mrp)
         self.tabs.addTab(mrp, "MRP و نیاز مواد")
         self.t_capacity = table(["مرکز کاری", "ظرفیت (ساعت)", "بار (ساعت)", "آزاد", "بهره‌برداری٪", "وضعیت", "دستورها",
-                                 "ظرفیت اسمی", "ماشین در دسترس", "ماشین خارج از دسترس"])
+                                 "ظرفیت اسمی", "ماشین در دسترس", "ماشین خارج از دسترس", "هشدار نگهداری"])
         self.tabs.addTab(self.t_capacity, "ظرفیت")
         self.t_calendar = table(["تاریخ", "مرکز کاری", "محصول", "مقدار", "دستور/برنامه", "وضعیت"])
         self.tabs.addTab(self.t_calendar, "تقویم تولید")
@@ -1364,7 +1364,8 @@ class PlanningScreen(QWidget):
         df, dt = self.date_from.date(), self.date_to.date()
         fill(self.t_capacity, [[f"{x.code} — {x.name}", qty(x.capacity_hours), qty(x.load_hours), qty(x.free_hours), "—" if x.utilization is None else qty(x.utilization),
                                 "🔴 اضافه‌بار" if x.overloaded else "🟢 عادی", "، ".join(x.orders[:6]), qty(x.nominal_capacity_hours),
-                                pp.machines_label(x), "، ".join(f"{m.code} ({m.status_label})" for m in x.down_machines)]
+                                pp.machines_label(x), "، ".join(f"{m.code} ({m.status_label})" for m in x.down_machines),
+                                "؛ ".join(n.message for n in x.maintenance_notices)]
                                for x in pp.capacity_load(cid, df, dt)])
         fill(self.t_calendar, [[e.date, e.work_center, e.item_label, qty(e.quantity, e.item_id), e.ref, ("⚠ " if e.late else "") + e.status]
                                for e in pp.calendar(cid, df, dt)])

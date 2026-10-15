@@ -35,6 +35,7 @@ import { VehicleSettlementScreen } from "./screens/VehicleSettlementScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { WarehouseScreen } from "./screens/WarehouseScreen";
+import { MaintenanceScreen } from "./screens/MaintenanceScreen";
 import { createServices } from "./services";
 import { SignaturePadProvider, useSignaturePad } from "./signature/SignaturePadProvider";
 import { applyRtlLayout, ThemeProvider, useTheme } from "./theme";
@@ -83,6 +84,7 @@ export type RootStackParamList = {
   ManagerDashboard: undefined;
   VehicleSettlement: undefined;
   Warehouse: undefined;
+  Maintenance: undefined;
   CrmTasks: undefined;
   WorkInbox: undefined;
   WorkTask: { taskId: number };
@@ -643,6 +645,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
                 onOpenWorkInbox={() => navigation.navigate("WorkInbox")}
                 onOpenWarehouse={() => navigation.navigate("Warehouse")}
+                onOpenMaintenance={() => navigation.navigate("Maintenance")}
                 onOpenVehicleSettlement={
                   settlementVehicleWarehouseId != null ? () => navigation.navigate("VehicleSettlement") : undefined
                 }
@@ -669,6 +672,20 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 apiClient={services.apiClient}
                 offlineQueue={services.offlineQueue}
                 syncEngine={services.syncEngine}
+                onBack={() => navigation.navigate("Settings")}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="Maintenance">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <MaintenanceScreen
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                syncEngine={services.syncEngine}
+                captureProvider={resolvedCaptureProvider}
                 onBack={() => navigation.navigate("Settings")}
               />
             </SafeAreaView>

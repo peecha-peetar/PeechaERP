@@ -376,7 +376,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
             overdue = status.due_date is not None and status.due_date < today
             due_soon = not overdue and status.due_date is not None and status.due_date <= due_soon_threshold
             values = [
-                numerals.to_persian_digits(str(doc.document_no)) if doc else "—",
+                numerals.to_persian_digits(settlements_service.open_item_number(doc)) if doc else "—",
                 self._parties_by_id.get(doc.counterparty_detail_account_id, "—") if doc else "—",
                 numerals.format_jalali_date(status.due_date) if status.due_date else "—",
                 numerals.format_company_amount(status.total_amount),
