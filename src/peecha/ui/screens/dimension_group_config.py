@@ -1,25 +1,25 @@
-"""پیکربندیِ گروه‌هایِ تفصیلی — ساختِ گروهِ تازه + تنظیمِ تعدادِ سطح/بازه‌یِ
-از-تا/فیلدهایِ اختصاصیِ هر گروه (تا ۴ سطح). طبقِ درخواستِ صریح، تعدادِ رقمِ
-هر سطح سراسری شده (تنظیماتِ «کدینگِ حسابداری») و اینجا فقط بازه و سقفِ
-تعدادِ سطحِ هر گروه تنظیم می‌شود.
+"""پیکربندی گروه‌های تفصیلی — ساخت گروه تازه + تنظیم تعداد سطح/بازهٔ
+از-تا/فیلدهای اختصاصی هر گروه (تا ۴ سطح). طبق درخواست صریح، تعداد رقم
+هر سطح سراسری شده (تنظیمات «کدینگ حسابداری») و اینجا فقط بازه و سقف
+تعداد سطح هر گروه تنظیم می‌شود.
 
-طبقِ درخواستِ صریح: این بخش از صفحه‌ی قدیمیِ سه‌ستونیِ «مراکزِ هزینه و
-ابعادِ تفصیلی» جدا شده — آن صفحه فقط به ثبتِ خودِ حساب‌هایِ تفصیلیِ
-گروه‌هایِ «ساده» (بدونِ صفحه‌ی اختصاصی) محدود شده، و ساختِ گروه/پیکربندیِ
-سطوح این‌جا آمده. گروه‌هایِ «فرمِ خاص» (کالا/دارایی‌ثابت/بانک/صندوق/
-تنخواه/مرکزِ هزینه/پروژه) هم این‌جا قابلِ‌پیکربندی‌اند (چون سطوح/فیلدهایِ
-اختصاصیِ آن‌ها هم از همین acc.detail_group_levels/detail_group_fields
-می‌آید)، فقط ثبتِ خودِ حساب‌هایشان در صفحه‌ی اختصاصیِ خودشان انجام می‌شود.
+طبق درخواست صریح: این بخش از صفحهٔ قدیمی سه‌ستونی «مراکز هزینه و
+ابعاد تفصیلی» جدا شده — آن صفحه فقط به ثبت خود حساب‌های تفصیلی
+گروه‌های «ساده» (بدون صفحهٔ اختصاصی) محدود شده، و ساخت گروه/پیکربندی
+سطوح این‌جا آمده. گروه‌های «فرم خاص» (کالا/دارایی‌ثابت/بانک/صندوق/
+تنخواه/مرکز هزینه/پروژه) هم این‌جا قابل‌پیکربندی‌اند (چون سطوح/فیلدهای
+اختصاصی آن‌ها هم از همین acc.detail_group_levels/detail_group_fields
+می‌آید)، فقط ثبت خود حساب‌هایشان در صفحهٔ اختصاصی خودشان انجام می‌شود.
 
-طبقِ درخواستِ صریحِ بعدی: «همه گروه‌های تفصیلی حتی مشتری/تامین‌کننده/
-پرسنل» هم باید این‌جا قابلِ‌پیکربندی باشند. مشکل: این سه، برخلافِ بقیه،
-یک نوع‌بُعدِ مستقل نیستند — هرسه زیرِ همان نوع‌بُعدِ سیستمیِ PERSON‌اند و
+طبق درخواست صریح بعدی: «همه گروه‌های تفصیلی حتی مشتری/تامین‌کننده/
+پرسنل» هم باید این‌جا قابل‌پیکربندی باشند. مشکل: این سه، برخلاف بقیه،
+یک نوع‌بُعد مستقل نیستند — هرسه زیر همان نوع‌بُعد سیستمی PERSON‌اند و
 فقط با person_group_id از هم جدا می‌شوند (acc.person_groups). پس هر
-آیتمِ این فهرست حالا یک سه‌تایی نگه می‌دارد: (dimension_type_id,
-person_group_id, برچسبِ نمایشی) — برایِ گروه‌هایِ معمولی person_group_id
-همیشه ۰ (بدونِ محدودیت) است؛ برایِ مشتری/تامین‌کننده/پرسنل، همه
-dimension_type_id یکسان (PERSON) ولی person_group_id واقعیِ خودشان را
-دارند تا acc.detail_group_levels/detail_group_fields (که با ستونِ تازه‌ی
+آیتم این فهرست حالا یک سه‌تایی نگه می‌دارد: (dimension_type_id,
+person_group_id, برچسب نمایشی) — برای گروه‌های معمولی person_group_id
+همیشه ۰ (بدون محدودیت) است؛ برای مشتری/تامین‌کننده/پرسنل، همه
+dimension_type_id یکسان (PERSON) ولی person_group_id واقعی خودشان را
+دارند تا acc.detail_group_levels/detail_group_fields (که با ستون تازه‌ی
 person_group_id کلید می‌خورند) مستقل از هم پیکربندی شوند."""
 
 from __future__ import annotations
@@ -55,8 +55,8 @@ _FIELD_KIND_OPTIONS = [
     ("decimal", "عدد اعشاری"),
     ("date", "تاریخ"),
     ("boolean", "بله/خیر"),
-    ("bank", "بانک (از فهرستِ بانک‌ها)"),
-    ("account_type", "نوعِ حساب (جاری/پس‌انداز)"),
+    ("bank", "بانک (از فهرست بانک‌ها)"),
+    ("account_type", "نوع حساب (جاری/پس‌انداز)"),
 ]
 _LEVEL_COUNT = 4
 
@@ -139,37 +139,42 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         level_help = [
             (
                 widgets[0],
-                f"کمترین کدِ مجاز برایِ سطحِ {level_no} از این گروه. صفر یعنی بدونِ محدودیتِ ابتدا.",
+                f"کمترین کد مجاز برای سطح {level_no} از این گروه. صفر یعنی بدون محدودیت ابتدا.",
             )
             for level_no, widgets in self._level_widgets.items()
         ] + [
             (
                 widgets[1],
-                f"بیشترین کدِ مجاز برایِ سطحِ {level_no} از این گروه. صفر یعنی بدونِ محدودیتِ انتها.",
+                f"بیشترین کد مجاز برای سطح {level_no} از این گروه. صفر یعنی بدون محدودیت انتها.",
             )
             for level_no, widgets in self._level_widgets.items()
         ]
         self.set_field_help([
             (
                 self.new_type_code_field,
-                "کدِ گروهِ تفصیلیِ تازه‌ای که می‌خواهید بسازید، مثلاً «مرکزِ فروش». بعدِ کلیکِ «افزودنِ گروه» ساخته می‌شود.",
+                "کد گروه تفصیلی تازه‌ای که می‌خواهید بسازید، مثلاً «مرکز فروش». بعد کلیک «افزودن گروه» ساخته می‌شود.",
             ),
             (
                 self.types_list,
-                "فهرستِ همه‌یِ گروه‌هایِ تفصیلی — کالا، بانک، مرکزِ هزینه، مشتری و مانندِ آن. "
-                "رویِ هرکدام کلیک کنید تا پیکربندی‌اش را پایین ببینید و تغییر دهید.",
+                "فهرست همهٔ گروه‌های تفصیلی — کالا، بانک، مرکز هزینه، مشتری و مانند آن. "
+                "روی هرکدام کلیک کنید تا پیکربندی‌اش را پایین ببینید و تغییر دهید.",
             ),
             (
                 self.title_field,
-                "نامِ نمایشیِ این گروه. برایِ گروه‌هایِ سیستمی مثلِ کالا و بانک قابلِ‌تغییر نیست، "
-                "چون نامشان ثابت است. برایِ گروه‌هایِ دلخواه همیشه قابلِ‌تغییر است.",
+                "نام نمایشی این گروه. برای گروه‌های سیستمی مثل کالا و بانک قابل‌تغییر نیست، "
+                "چون نامشان ثابت است. برای گروه‌های دلخواه همیشه قابل‌تغییر است.",
             ),
             (
                 self.max_level_spin,
-                "این گروه چند سطح دارد، حداکثر تا ۴ سطح. مثلاً «مرکزِ هزینه» می‌تواند دو سطح داشته باشد: "
-                "دسته‌یِ کلی و زیرِمجموعه‌اش. اگر حساب‌هایِ این گروه سند داشته باشند، این عدد دیگر قابلِ‌تغییر نیست.",
+                "این گروه چند سطح دارد، حداکثر تا ۴ سطح. مثلاً «مرکز هزینه» می‌تواند دو سطح داشته باشد: "
+                "دستهٔ کلی و زیرمجموعه‌اش. اگر حساب‌های این گروه سند داشته باشند، این عدد دیگر قابل‌تغییر نیست.",
             ),
             *level_help,
+            (
+                self.is_personnel_checkbox,
+                "فقط برای گروه‌های سیستمی اشخاص (مشتری/تامین‌کننده/پرسنل) نمایان است — تعیین می‌کند تعریف کارکنان از همین گروه انجام شود.",
+            ),
+            (self.photo_enabled_checkbox, "با روشن‌کردنش، فرم حساب‌های تفصیلی این گروه امکان بارگذاری عکس پیدا می‌کند."),
         ])
 
     # --- نوارِ بالا: گروه‌ها (افقی) ------------------------------------------
@@ -182,24 +187,24 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         layout.setSpacing(8)
 
         header_row = QHBoxLayout()
-        title = QLabel("گروه‌هایِ تفصیلی")
+        title = QLabel("گروه‌های تفصیلی")
         title.setObjectName("pageTitle")
         header_row.addWidget(title)
         header_row.addStretch(1)
-        header_row.addWidget(QLabel("کدِ گروهِ تازه"))
+        header_row.addWidget(QLabel("کد گروه تازه"))
         self.new_type_code_field = QLineEdit()
         self.new_type_code_field.setFixedWidth(160)
         header_row.addWidget(self.new_type_code_field)
         create_button = QPushButton("➕")
         create_button.setObjectName("primaryIconButton")
         create_button.setFixedWidth(48)
-        create_button.setToolTip("افزودنِ گروه")
+        create_button.setToolTip("افزودن گروه")
         create_button.clicked.connect(self._create_type)
         header_row.addWidget(create_button)
         layout.addLayout(header_row)
 
         hint = QLabel(
-            "کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکزِ هزینه/پروژه + مشتری/تامین‌کننده/پرسنل + گروه‌هایِ ساده‌یِ دلخواه."
+            "کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکز هزینه/پروژه + مشتری/تامین‌کننده/پرسنل + گروه‌های سادهٔ دلخواه."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -245,7 +250,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.config_title = QLabel("پیکربندیِ گروه")
+        self.config_title = QLabel("پیکربندی گروه")
         self.config_title.setObjectName("pageTitle")
         layout.addWidget(self.config_title)
 
@@ -260,13 +265,13 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         # سیستمی (کالا/بانک/...) این فیلد غیرفعال می‌ماند چون عنوانشان
         # ثابت/سیستمی است (نه چیزی که مدیر تعریف کرده باشد).
         title_row = QHBoxLayout()
-        title_row.addWidget(QLabel("عنوانِ گروه"))
+        title_row.addWidget(QLabel("عنوان گروه"))
         self.title_field = QLineEdit()
         title_row.addWidget(self.title_field, stretch=1)
         save_title_button = QPushButton("💾")
         save_title_button.setObjectName("iconButton")
         save_title_button.setFixedWidth(44)
-        save_title_button.setToolTip("ذخیره‌یِ عنوان")
+        save_title_button.setToolTip("ذخیرهٔ عنوان")
         save_title_button.clicked.connect(self._save_title)
         title_row.addWidget(save_title_button)
         layout.addLayout(title_row)
@@ -286,7 +291,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.delete_group_button = QPushButton("🗑️")
         self.delete_group_button.setObjectName("dangerIconButton")
         self.delete_group_button.setFixedWidth(44)
-        self.delete_group_button.setToolTip("حذفِ کاملِ این گروه")
+        self.delete_group_button.setToolTip("حذف کامل این گروه")
         self.delete_group_button.clicked.connect(self._delete_group)
         delete_row.addWidget(self.delete_group_button)
         layout.addLayout(delete_row)
@@ -295,7 +300,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         # داشته باشد — این رنگ در فهرستِ تفصیلی‌ها (نمایِ درختی) و کمبویِ
         # تفصیلیِ فرمِ صدورِ سند هم استفاده می‌شود.
         color_row = QHBoxLayout()
-        color_row.addWidget(QLabel("رنگِ این گروه"))
+        color_row.addWidget(QLabel("رنگ این گروه"))
         self.color_button = QPushButton("")
         self.color_button.setFixedSize(30, 26)
         self.color_button.clicked.connect(self._pick_color)
@@ -303,7 +308,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         clear_color_button = QPushButton("🚫")
         clear_color_button.setObjectName("iconButton")
         clear_color_button.setFixedWidth(44)
-        clear_color_button.setToolTip("حذفِ رنگ")
+        clear_color_button.setToolTip("حذف رنگ")
         clear_color_button.clicked.connect(self._clear_color)
         color_row.addWidget(clear_color_button)
         color_row.addStretch(1)
@@ -314,10 +319,17 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         # کد — فقط برایِ گروه‌هایِ سیستمیِ اشخاص (مشتری/تامین‌کننده/پرسنل)
         # معنی دارد، پس فقط برایِ آن‌ها نمایان می‌شود.
         self.is_personnel_checkbox = QCheckBox(
-            "این گروه پرسنل است (تعریفِ کارکنان از همین گروه انجام می‌شود)"
+            "این گروه پرسنل است (تعریف کارکنان از همین گروه انجام می‌شود)"
         )
         self.is_personnel_checkbox.toggled.connect(self._on_is_personnel_toggled)
         layout.addWidget(self.is_personnel_checkbox)
+
+        # طبقِ درخواستِ صریح («برایِ گروه‌هایی که تیک می‌زنیم عکس آپلود
+        # کرد»): برخلافِ is_personnel، این یکی برایِ همه‌یِ گروه‌ها معنا
+        # دارد (نه فقط زیرگروه‌هایِ اشخاص)، پس همیشه نمایان است.
+        self.photo_enabled_checkbox = QCheckBox("امکان بارگذاری عکس برای حساب‌های تفصیلی این گروه فعال باشد")
+        self.photo_enabled_checkbox.toggled.connect(self._on_photo_enabled_toggled)
+        layout.addWidget(self.photo_enabled_checkbox)
 
         # طبقِ بازخوردِ کاربر: قبلاً «تعدادِ سطح» و «بازه‌ی سطوح» دو دکمه‌ی
         # ذخیره‌یِ جدا داشتند — کاربر با کلیک‌کردنِ فقط دکمه‌یِ کنارِ «تعدادِ
@@ -326,7 +338,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         # ذخیره نشده بود. حالا فقط یک دکمه‌ی ذخیره برایِ کلِ این بخش هست تا
         # دیگر امکانِ «ذخیره‌ی نصفه» وجود نداشته باشد.
         max_level_row = QHBoxLayout()
-        max_level_row.addWidget(QLabel("تعدادِ سطحِ این گروه"))
+        max_level_row.addWidget(QLabel("تعداد سطح این گروه"))
         self.max_level_spin = QSpinBox()
         self.max_level_spin.setRange(1, _LEVEL_COUNT)
         self.max_level_spin.valueChanged.connect(self._on_max_level_changed)
@@ -338,8 +350,8 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         # کلِ پنل را (برایِ جادادنِ متن در یک خط) بیش‌ازحد زیاد می‌کرد —
         # همان علتِ اسکرولِ افقیِ ناخواسته.
         range_hint = QLabel(
-            "بازه‌ی از-تا برایِ هر سطح (صفر = بدونِ محدودیت) — تعدادِ رقمِ هر سطح سراسری است و در "
-            "تنظیماتِ «کدینگِ حسابداری» مشخص می‌شود، این‌جا فقط بازه مخصوصِ همین گروه است."
+            "بازهٔ از-تا برای هر سطح (صفر = بدون محدودیت) — تعداد رقم هر سطح سراسری است و در "
+            "تنظیمات «کدینگ حسابداری» مشخص می‌شود، این‌جا فقط بازه مخصوص همین گروه است."
         )
         range_hint.setWordWrap(True)
         layout.addWidget(range_hint)
@@ -350,7 +362,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         levels_grid.addWidget(QLabel("تا"), 0, 2)
         self._level_widgets: dict[int, tuple[ZeroPaddedSpinBox, ZeroPaddedSpinBox]] = {}
         for row, level_no in enumerate(range(1, _LEVEL_COUNT + 1), start=1):
-            levels_grid.addWidget(QLabel(f"سطحِ {level_no}"), row, 0)
+            levels_grid.addWidget(QLabel(f"سطح {level_no}"), row, 0)
             range_from = ZeroPaddedSpinBox()
             range_from.setRange(0, 999_999_999)
             range_to = ZeroPaddedSpinBox()
@@ -368,11 +380,11 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.save_levels_button = QPushButton("💾")
         self.save_levels_button.setObjectName("primaryIconButton")
         self.save_levels_button.setFixedWidth(48)
-        self.save_levels_button.setToolTip("ذخیره‌یِ تعدادِ سطح و بازه‌یِ سطوح")
+        self.save_levels_button.setToolTip("ذخیرهٔ تعداد سطح و بازهٔ سطوح")
         self.save_levels_button.clicked.connect(self._save_levels)
         layout.addWidget(self.save_levels_button)
 
-        layout.addWidget(QLabel("فیلدهایِ اختصاصیِ این گروه"))
+        layout.addWidget(QLabel("فیلدهای اختصاصی این گروه"))
         self.fields_container = QVBoxLayout()
         fields_widget = QWidget()
         fields_widget.setLayout(self.fields_container)
@@ -381,14 +393,14 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         add_field_button = QPushButton("➕")
         add_field_button.setObjectName("iconButton")
         add_field_button.setFixedWidth(44)
-        add_field_button.setToolTip("افزودنِ فیلد")
+        add_field_button.setToolTip("افزودن فیلد")
         add_field_button.clicked.connect(lambda: self._add_field_row())
         layout.addWidget(add_field_button)
 
         save_fields_button = QPushButton("💾")
         save_fields_button.setObjectName("primaryIconButton")
         save_fields_button.setFixedWidth(48)
-        save_fields_button.setToolTip("ذخیره‌ی فیلدها")
+        save_fields_button.setToolTip("ذخیرهٔ فیلدها")
         save_fields_button.clicked.connect(self._save_fields)
         layout.addWidget(save_fields_button)
 
@@ -439,7 +451,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         except ValueError as exc:
             self._show_type_status(str(exc), ok=False)
             return
-        self._show_type_status("گروهِ تازه ایجاد شد.", ok=True)
+        self._show_type_status("گروه تازه ایجاد شد.", ok=True)
         self.new_type_code_field.clear()
         self.refresh()
         label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(new_type.code, new_type.code)
@@ -459,7 +471,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
                 if dim_type is not None
                 else str(dimension_type_id)
             )
-        self.config_title.setText(f"پیکربندیِ گروهِ «{label}»")
+        self.config_title.setText(f"پیکربندی گروه «{label}»")
         self.config_panel.setEnabled(True)
         self._current_color = dimensions_service.get_group_color(dimension_type_id, person_group_id)
         self._apply_color_swatch(self._current_color)
@@ -479,6 +491,10 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self.is_personnel_checkbox.blockSignals(True)
             self.is_personnel_checkbox.setChecked(dimensions_service.is_personnel_group(person_group_id))
             self.is_personnel_checkbox.blockSignals(False)
+
+        self.photo_enabled_checkbox.blockSignals(True)
+        self.photo_enabled_checkbox.setChecked(dimensions_service.get_group_photo_enabled(dimension_type_id, person_group_id))
+        self.photo_enabled_checkbox.blockSignals(False)
 
         company_id = self._company_id()
         digit_config_by_level = (
@@ -505,7 +521,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
                 person_group_id=person_group_id or None,
             )
             self.linked_accounts_label.setText(
-                "معین‌هایِ متصل به این گروه: " + ("، ".join(linked) if linked else "هیچ‌کدام")
+                "معین‌های متصل به این گروه: " + ("، ".join(linked) if linked else "هیچ‌کدام")
             )
         else:
             self.linked_accounts_label.setText("")
@@ -524,7 +540,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.save_levels_button.setEnabled(not locked)
         self.max_level_spin.setEnabled(not locked)
         self.lock_hint_label.setText(
-            "حساب‌هایِ تفصیلیِ همین گروه سند دارند؛ تنظیماتِ رقم/بازه/تعدادِ سطحِ این گروه دیگر قابلِ‌تغییر نیست."
+            "حساب‌های تفصیلی همین گروه سند دارند؛ تنظیمات رقم/بازه/تعداد سطح این گروه دیگر قابل‌تغییر نیست."
             if locked
             else ""
         )
@@ -548,7 +564,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             f"border: 2px solid {theme.WARNING}; font-weight: bold;" if unsaved else ""
         )
         self.save_levels_button.setToolTip(
-            "تعدادِ سطح تغییر کرده ولی هنوز ذخیره نشده — تا این دکمه را نزنید، فیلدهایِ اختصاصیِ سطحِ آخر درست نمایش داده نمی‌شوند."
+            "تعداد سطح تغییر کرده ولی هنوز ذخیره نشده — تا این دکمه را نزنید، فیلدهای اختصاصی سطح آخر درست نمایش داده نمی‌شوند."
             if unsaved else ""
         )
 
@@ -621,7 +637,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self._show_type_status(str(exc), ok=False)
             return
         except Exception as exc:  # noqa: BLE001 — هیچ خطایی نباید بدونِ پیام به کاربر بی‌صدا بمونه
-            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ سقفِ سطح: {exc}", ok=False)
+            self._show_type_status(f"خطای غیرمنتظره در ذخیرهٔ سقف سطح: {exc}", ok=False)
             return
         max_level_no = self.max_level_spin.value()
         levels = {
@@ -640,9 +656,9 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self._show_type_status(str(exc), ok=False)
             return
         except Exception as exc:  # noqa: BLE001
-            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ بازه‌یِ سطوح: {exc}", ok=False)
+            self._show_type_status(f"خطای غیرمنتظره در ذخیرهٔ بازهٔ سطوح: {exc}", ok=False)
             return
-        self._show_type_status("تعدادِ سطح و بازه‌یِ سطوح ذخیره شد.", ok=True)
+        self._show_type_status("تعداد سطح و بازهٔ سطوح ذخیره شد.", ok=True)
         self._saved_max_level_no = max_level_no
         self._update_level_save_hint()
         for level_no in self._level_widgets:
@@ -684,15 +700,29 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         dimensions_service.set_group_is_personnel(self._selected_person_group_id, checked)
         self._show_type_status("ذخیره شد.", ok=True)
 
+    def _on_photo_enabled_toggled(self, checked: bool) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        try:
+            if self._selected_person_group_id:
+                dimensions_service.set_person_group_photo_enabled(self._selected_person_group_id, company_id, checked)
+            else:
+                dimensions_service.set_dimension_type_photo_enabled(self._selected_type_id, company_id, checked)
+        except ValueError as exc:
+            self._show_type_status(str(exc), ok=False)
+            return
+        self._show_type_status("ذخیره شد.", ok=True)
+
     def _delete_group(self) -> None:
         company_id = self._company_id()
         if company_id is None or self._selected_type_id is None:
             return
         confirm = QMessageBox.question(
             self,
-            "حذفِ کاملِ گروه",
-            "این گروه به‌همراهِ همه‌یِ حساب‌هایِ تفصیلی/سطوح/فیلدهایِ اختصاصی‌اش حذف شود؟ "
-            "الزامِ این گروه رویِ معین‌هایِ کدینگ (اگر بود) هم برداشته می‌شود. این کار قابلِ‌بازگشت نیست.",
+            "حذف کامل گروه",
+            "این گروه به‌همراه همهٔ حساب‌های تفصیلی/سطوح/فیلدهای اختصاصی‌اش حذف شود؟ "
+            "الزام این گروه روی معین‌های کدینگ (اگر بود) هم برداشته می‌شود. این کار قابل‌بازگشت نیست.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -717,7 +747,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         if self._selected_type_id is None:
             return
         initial = QColor(self._current_color) if self._current_color else QColor(Qt.white)
-        color = QColorDialog.getColor(initial, self, "انتخابِ رنگِ گروه")
+        color = QColorDialog.getColor(initial, self, "انتخاب رنگ گروه")
         if not color.isValid():
             return
         self._save_color(color.name())
@@ -741,7 +771,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             return
         self._current_color = color
         self._apply_color_swatch(color)
-        self._show_type_status("رنگِ گروه ذخیره شد.", ok=True)
+        self._show_type_status("رنگ گروه ذخیره شد.", ok=True)
         selected_type_id, selected_person_group_id = self._selected_type_id, self._selected_person_group_id
         self.refresh()
         self._select_type(selected_type_id, selected_person_group_id)
@@ -773,7 +803,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         fields = [row.to_field_dict(i) for i, row in enumerate(self._field_rows)]
         for f in fields:
             if not f["field_key"] or not f["label"]:
-                self._show_type_status("کلید و عنوانِ همه‌ی فیلدها را پر کنید.", ok=False)
+                self._show_type_status("کلید و عنوان همهٔ فیلدها را پر کنید.", ok=False)
                 return
         try:
             dimensions_service.set_group_fields(
@@ -783,7 +813,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self._show_type_status(str(exc), ok=False)
             return
         except Exception as exc:  # noqa: BLE001
-            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ فیلدها: {exc}", ok=False)
+            self._show_type_status(f"خطای غیرمنتظره در ذخیرهٔ فیلدها: {exc}", ok=False)
             return
         self._show_type_status("فیلدها ذخیره شد.", ok=True)
         self._load_fields()

@@ -1,21 +1,21 @@
-"""موتورِ محاسبه‌یِ خامِ گزارش‌هایِ حسابداری — بدونِ هیچ UI.
+"""موتور محاسبهٔ خام گزارش‌های حسابداری — بدون هیچ UI.
 
-هیچ کوئریِ balance/aggregation‌ای در کدِ قبلی وجود نداشت (فقط CRUD/اعتبارسنجیِ
-ساختاری در chart_of_accounts.py/detail_dimensions.py)؛ این ماژول از رویِ
-acc.journal_entry_lines (ستون‌هایِ GENERATED محاسبه‌شده‌یِ debit_amount_base/
-credit_amount_base) مانده/گردشِ حساب‌ها را می‌سازد.
+هیچ کوئری balance/aggregation‌ای در کد قبلی وجود نداشت (فقط CRUD/اعتبارسنجی
+ساختاری در chart_of_accounts.py/detail_dimensions.py)؛ این ماژول از روی
+acc.journal_entry_lines (ستون‌های GENERATED محاسبه‌شدهٔ debit_amount_base/
+credit_amount_base) مانده/گردش حساب‌ها را می‌سازد.
 
-طبقِ محدودیتِ شناخته‌شده: در سیستمِ فعلی هیچ سندِ اختتامیه‌ای وجود ندارد، پس
-«مانده‌ی اول» همیشه یعنی «جمعِ همه‌چیز پیش از تاریخِ شروعِ بازه» (نه مانده‌ی
-بعدِ یک بستنِ رسمی).
+طبق محدودیت شناخته‌شده: در سیستم فعلی هیچ سند اختتامیه‌ای وجود ندارد، پس
+«ماندهٔ اول» همیشه یعنی «جمع همه‌چیز پیش از تاریخ شروع بازه» (نه مانده‌ی
+بعد یک بستن رسمی).
 
-طبقِ درخواستِ صریح، هر تابعِ سطحِ سند/گردش سه فیلترِ پیشرفته‌یِ مشترک را
+طبق درخواست صریح، هر تابع سطح سند/گردش سه فیلتر پیشرفتهٔ مشترک را
 می‌پذیرد:
-- status_filter: "EXCLUDE_DRAFT" (پیش‌فرض، بدونِ پیش‌نویس) | "ALL" (شاملِ
+- status_filter: "EXCLUDE_DRAFT" (پیش‌فرض، بدون پیش‌نویس) | "ALL" (شامل
   پیش‌نویس) | "DRAFT_ONLY" (فقط پیش‌نویس).
-- cost_center_id: محدودکردنِ گردش به یک حسابِ تفصیلیِ مشخص (معمولاً مرکزِ
-  هزینه یا پروژه) — از رویِ acc.journal_entry_line_details.
-- document_no_filter: محدودکردن به یک شماره‌یِ سندِ (temporary_no) مشخص.
+- cost_center_id: محدودکردن گردش به یک حساب تفصیلی مشخص (معمولاً مرکز
+  هزینه یا پروژه) — از روی acc.journal_entry_line_details.
+- document_no_filter: محدودکردن به یک شمارهٔ سند (temporary_no) مشخص.
 """
 
 from __future__ import annotations
@@ -47,9 +47,9 @@ _ZERO = decimal.Decimal("0")
 
 
 def code_in_range(full_code: str, code_from: str, code_to: str) -> bool:
-    """بررسیِ اینکه یک کدِ کامل در بازه‌یِ [code_from, code_to] است — رشته‌ای
+    """بررسی اینکه یک کد کامل در بازهٔ [code_from, code_to] است — رشته‌ای
     (نه عددی)، چون کدها هم‌طول/zero-padded ذخیره می‌شوند. اگر یکی از دو
-    سرِ بازه خالی باشد، همان طرف بدونِ محدودیت است."""
+    سر بازه خالی باشد، همان طرف بدون محدودیت است."""
     if code_from and full_code < code_from:
         return False
     if code_to and full_code > code_to:
@@ -70,9 +70,9 @@ def _apply_status_filter(query, status_filter: str):
 
 @dataclass
 class AccountBalanceRow:
-    """مانده/گردشِ یک حساب (یا یک حسابِ تفصیلی) در یک بازه — دو تابعِ
+    """مانده/گردش یک حساب (یا یک حساب تفصیلی) در یک بازه — دو تابع
     compute_account_balances/compute_detail_balances هردو همین شکل را
-    برمی‌گردانند تا صفحه‌یِ گزارش بتواند بدونِ دانستنِ منبع، یکسان رندر کند."""
+    برمی‌گردانند تا صفحهٔ گزارش بتواند بدون دانستن منبع، یکسان رندر کند."""
 
     account_id: int
     full_code: str
@@ -179,9 +179,9 @@ def _rollup_sums(
     parent_map: dict[int, int | None],
     leaf_sums: dict[int, tuple[decimal.Decimal, decimal.Decimal]],
 ) -> dict[int, tuple[decimal.Decimal, decimal.Decimal]]:
-    """جمعِ هر گره = مانده‌یِ مستقیمِ خودش (اگر برگ باشد) + جمعِ رول‌آپ‌شده‌یِ
-    همه‌یِ فرزندانش — یک‌بار برایِ درختِ حساب‌ها (گروه/کل/معین) و یک‌بار برایِ
-    درختِ حساب‌هایِ تفصیلی (تا ۴ سطح) استفاده می‌شود، چون هردو ساختارِ
+    """جمع هر گره = ماندهٔ مستقیم خودش (اگر برگ باشد) + جمع رول‌آپ‌شدهٔ
+    همهٔ فرزندانش — یک‌بار برای درخت حساب‌ها (گروه/کل/معین) و یک‌بار برای
+    درخت حساب‌های تفصیلی (تا ۴ سطح) استفاده می‌شود، چون هردو ساختار
     parent_id یکسانی دارند."""
     children: dict[int, list[int]] = {}
     for node_id in ids:
@@ -217,9 +217,9 @@ def compute_account_balances(
     document_no_from: int | None = None,
     document_no_to: int | None = None,
 ) -> list[AccountBalanceRow]:
-    """مانده/گردشِ همه‌یِ حساب‌ها (هر سه سطحِ گروه/کل/معین)، رول‌آپ‌شده از
-    رویِ حساب‌هایِ قابلِ‌ثبتِ سند (سطحِ معین) که تنها سطحی هستند که مستقیماً
-    رویِ journal_entry_lines رخ می‌دهند."""
+    """مانده/گردش همهٔ حساب‌ها (هر سه سطح گروه/کل/معین)، رول‌آپ‌شده از
+    روی حساب‌های قابل‌ثبت سند (سطح معین) که تنها سطحی هستند که مستقیماً
+    روی journal_entry_lines رخ می‌دهند."""
     accounts = coa_service.list_accounts(company_id)
     ids = [a.account_id for a in accounts]
     with new_session() as session:
@@ -296,14 +296,36 @@ def compute_detail_balances(
     document_no_from: int | None = None,
     document_no_to: int | None = None,
 ) -> list[AccountBalanceRow]:
-    """معادلِ compute_account_balances ولی در سطحِ حساب‌هایِ تفصیلیِ یک
-    نوع‌بُعدِ مشخص (مثلاً مشتریان یا مراکزِ هزینه)، رول‌آپ‌شده رویِ سلسله‌مراتبِ
-    تا ۴سطحیِ acc.detail_accounts.parent_detail_account_id."""
-    detail_rows = [
-        r for r in dimensions_service.list_all_detail_accounts(company_id) if r.dimension_type_id == dimension_type_id
+    """معادل compute_account_balances ولی در سطح حساب‌های تفصیلی یک
+    نوع‌بُعد مشخص (مثلاً مشتریان یا مراکز هزینه)، رول‌آپ‌شده روی سلسله‌مراتب
+    تا ۴سطحی acc.detail_accounts.parent_detail_account_id."""
+    # طبقِ گزارشِ صریح («سندِ حسابداری غیرِاستاندارد و برایِ خیلی از
+    # شرکت‌ها غیرِقابلِ‌قبول است»): ردیفِ سیستمیِ «بدون تفصیل» (که
+    # journal_entries._resolve_lines برایِ هر ردیفی که واقعاً به شخصی
+    # مرتبط نیست، خودکار می‌گذارد تا الزامِ همیشگیِ تفصیلیِ اشخاص برآورده
+    # شود) یک حسابِ واقعی نیست و نباید در ترازِ تفصیلی به‌عنوانِ یک
+    # «تفصیلیِ دیگر با گردشِ نامربوط» ظاهر شود -- هم‌الگو با
+    # detail_dimensions.detail_level_has_accounts که همین ردیف را کنار
+    # می‌گذارد.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    all_type_rows = [
+        r
+        for r in dimensions_service.list_all_detail_accounts(company_id)
+        if r.dimension_type_id == dimension_type_id
+        and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     ]
-    ids = [r.detail_account_id for r in detail_rows]
-    parent_map = {r.detail_account_id: r.parent_detail_account_id for r in detail_rows}
+    ids = [r.detail_account_id for r in all_type_rows]
+    parent_map = {r.detail_account_id: r.parent_detail_account_id for r in all_type_rows}
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («تراز تفصیلی گردشِ اضافی دارد و
+    # جمعِ کل با گردشِ واقعی نمی‌خواند»): _rollup_sums مانده‌یِ هر گره
+    # (چه برگ چه والد) را با احتسابِ همه‌یِ فرزندانش حساب می‌کند -- پس
+    # اگر ردیفِ والد (مثلاً «۹۹۹») و ردیفِ فرزندش («۹۹۹-۹۹۹۹۹۹۹») هردو در
+    # جدولِ خروجی باشند، جمعِ‌کلِ پایینِ گزارش دوبار همان گردش را می‌شمارد.
+    # چون تفصیلی برخلافِ حساب (که سطحِ گروه/کل/معین را کاربر جداگانه
+    # انتخاب می‌کند) این‌جا یک سطحِ واحد ندارد، فقط برگ‌هایِ درخت -- یعنی
+    # حساب‌هایِ تفصیلیِ واقعاً قابلِ‌ثبتِ سند -- باید نمایش داده شوند.
+    parent_ids = {p for p in parent_map.values() if p is not None}
+    detail_rows = [r for r in all_type_rows if r.detail_account_id not in parent_ids]
 
     with new_session() as session:
         opening_leaf = (
@@ -361,11 +383,11 @@ def compute_detail_balances(
 
 @dataclass
 class DetailAccountBreakdownRow:
-    """طبقِ درخواستِ صریح («تراز تفصیلی را در سطحِ معین/کل/گروه هم به‌تفکیک
+    """طبق درخواست صریح («تراز تفصیلی را در سطح معین/کل/گروه هم به‌تفکیک
     بگیریم که تفصیلی در چه حساب‌هایی گردش داشته») — یک ردیف یعنی یک
-    حسابِ تفصیلی در یک حسابِ کدینگیِ مشخص (در سطحِ خواسته‌شده) چقدر گردش
-    داشته. برخلافِ AccountBalanceRow، این گزارش «گردش» است نه «مانده»
-    (بدونِ مانده‌یِ اول/آخر) چون هدف نشان‌دادنِ محلِ گردش است، نه ماندگی."""
+    حساب تفصیلی در یک حساب کدینگی مشخص (در سطح خواسته‌شده) چقدر گردش
+    داشته. برخلاف AccountBalanceRow، این گزارش «گردش» است نه «مانده»
+    (بدون ماندهٔ اول/آخر) چون هدف نشان‌دادن محل گردش است، نه ماندگی."""
 
     detail_full_code: str
     detail_name: str
@@ -394,10 +416,14 @@ def compute_detail_account_breakdown(
             current = accounts_by_id.get(current.parent_account_id)
         return current.account_id if current is not None and current.account_level == gl_level else None
 
+    # طبقِ همان رفعِ باگِ compute_detail_balances -- ردیفِ سیستمیِ «بدون
+    # تفصیل» نباید در این تفکیک هم به‌عنوانِ یک تفصیلیِ واقعی ظاهر شود.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     detail_rows = {
         r.detail_account_id: r
         for r in dimensions_service.list_all_detail_accounts(company_id)
         if r.dimension_type_id == dimension_type_id
+        and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     }
 
     with new_session() as session:
@@ -467,9 +493,16 @@ class JournalBookLineRow:
     # دارند (هم‌الگو با ستون‌بندیِ journal_entry.py)؛ بقیه‌یِ بُعدهایِ
     # ردیف (تفصیلیِ شخص، بانک، کالا، گروه‌هایِ سفارشی، ...) در یک ستونِ
     # واحدِ «تفصیلی» با کاما جمع می‌شوند.
+    # رفعِ باگِ واقعیِ کشف‌شده (با عکسِ دفترِ روزنامه‌یِ کاربر): «مرکزِ سود»
+    # هم -- درست مثلِ مرکزِ هزینه/پروژه -- به‌طورِ خودکار از انبارِ سند به
+    # *هر* ردیف وصل می‌شود، اما قبلاً ستونِ اختصاصیِ خودش را نداشت و در
+    # همین ستونِ «تفصیلی» با تفصیلیِ واقعیِ ردیف (کالا/تامین‌کننده) قاطی
+    # می‌شد -- یعنی کاربر برایِ هر ردیف دو مقدار در ستونِ «تفصیلی» می‌دید
+    # و آن را «دو تفصیلیِ اضافه» تعبیر می‌کرد.
     detail_name: str
     cost_center_name: str
     project_name: str
+    profit_center_name: str
 
 
 def list_journal_book_lines(
@@ -482,8 +515,8 @@ def list_journal_book_lines(
     document_no_from: int | None = None,
     document_no_to: int | None = None,
 ) -> list[JournalBookLineRow]:
-    """دفترِ روزنامه: ردیف‌هایِ سند+سطر به‌ترتیبِ تاریخ/شماره/شماره‌یِ ردیف —
-    برایِ تحریرِ دفاترِ قانونی."""
+    """دفتر روزنامه: ردیف‌های سند+سطر به‌ترتیب تاریخ/شماره/شمارهٔ ردیف —
+    برای تحریر دفاتر قانونی."""
     accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
     with new_session() as session:
         query = (
@@ -522,12 +555,14 @@ def list_journal_book_lines(
     detail_names_by_id = {d.detail_account_id: (d.name or d.code) for d in dimensions_service.list_all_detail_accounts(company_id)}
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
     project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+    profit_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)
 
     result: list[JournalBookLineRow] = []
     for line, document_date, temporary_no, entry_description in rows:
         account = accounts_by_id.get(line.account_id)
         cost_center_name = ""
         project_name = ""
+        profit_center_name = ""
         other_names: list[str] = []
         for dimension_type_id, detail_account_id in details_by_line.get(line.line_id, []):
             name = detail_names_by_id.get(detail_account_id)
@@ -537,6 +572,8 @@ def list_journal_book_lines(
                 cost_center_name = name
             elif dimension_type_id == project_type_id:
                 project_name = name
+            elif dimension_type_id == profit_center_type_id:
+                profit_center_name = name
             else:
                 other_names.append(name)
         result.append(
@@ -551,6 +588,7 @@ def list_journal_book_lines(
                 detail_name="، ".join(other_names),
                 cost_center_name=cost_center_name,
                 project_name=project_name,
+                profit_center_name=profit_center_name,
             )
         )
     return result
@@ -592,9 +630,9 @@ def list_ledger_entries(
     document_no_from: int | None = None,
     document_no_to: int | None = None,
 ) -> tuple[decimal.Decimal, decimal.Decimal, list[LedgerLineRow]]:
-    """گردشِ زمانیِ یک حسابِ کدینگیِ مشخص (account_id) یا یک حسابِ تفصیلیِ
-    مشخص (detail_account_id)، با مانده‌یِ رواگرد — برایِ دفترِ کل/معین/تفصیلی
-    و مرورِ حساب‌ها. دقیقاً یکی از این دو پارامتر باید داده شود."""
+    """گردش زمانی یک حساب کدینگی مشخص (account_id) یا یک حساب تفصیلی
+    مشخص (detail_account_id)، با ماندهٔ رواگرد — برای دفتر کل/معین/تفصیلی
+    و مرور حساب‌ها. دقیقاً یکی از این دو پارامتر باید داده شود."""
     if (account_id is None) == (detail_account_id is None):
         raise ValueError("دقیقاً یکی از account_id یا detail_account_id باید داده شود.")
 
@@ -689,12 +727,12 @@ def list_rollup_ledger_entries(
     document_no_from: int | None = None,
     document_no_to: int | None = None,
 ) -> tuple[decimal.Decimal, decimal.Decimal, list[LedgerLineRow]]:
-    """طبقِ آیتمِ ۴ («در هر مرحله‌ای گروه/کل بشه گردشِ حساب هم دید») —
-    چون هیچ سندی مستقیم رویِ حسابِ گروه/کل (غیرِقابلِ‌ثبت) نمی‌رود، این
-    گردشِ «رول‌آپ‌شده»یِ همه‌یِ معین‌هایِ زیرمجموعه‌یِ آن گروه/کل است (کاربر
-    این رفتار را طبقِ پرسشِ روشن‌سازی تایید کرد): ردیف‌هایِ همه‌یِ آن
-    معین‌ها با هم، به‌ترتیبِ تاریخ، در یک گردشِ واحد ترکیب می‌شوند؛ نامِ
-    حسابِ هر ردیف هم (چون از چند معینِ متفاوت می‌آید) نمایش داده می‌شود."""
+    """طبق آیتم ۴ («در هر مرحله‌ای گروه/کل بشه گردش حساب هم دید») —
+    چون هیچ سندی مستقیم روی حساب گروه/کل (غیرقابل‌ثبت) نمی‌رود، این
+    گردش «رول‌آپ‌شده»ی همهٔ معین‌های زیرمجموعهٔ آن گروه/کل است (کاربر
+    این رفتار را طبق پرسش روشن‌سازی تایید کرد): ردیف‌های همهٔ آن
+    معین‌ها با هم، به‌ترتیب تاریخ، در یک گردش واحد ترکیب می‌شوند؛ نام
+    حساب هر ردیف هم (چون از چند معین متفاوت می‌آید) نمایش داده می‌شود."""
     accounts = coa_service.list_accounts(company_id)
     accounts_by_id = {a.account_id: a for a in accounts}
     group_account = accounts_by_id.get(group_account_id)
@@ -784,9 +822,9 @@ def list_rollup_ledger_entries(
 def _net_income(
     company_id: int, date_from: datetime.date | None, date_to: datetime.date, status_filter: str
 ) -> decimal.Decimal:
-    """سودِ خالصِ یک بازه — جمعِ سطحِ گروه (۱) کافی است، چون رول‌آپِ گروه
-    از قبل شاملِ همه‌یِ زیرمجموعه‌هایِ همان دسته‌بندی است (دوباره‌شماری در
-    سطوحِ پایین‌تر رخ نمی‌دهد). بهایِ تمام‌شده (COGS) هم مثلِ هزینه
+    """سود خالص یک بازه — جمع سطح گروه (۱) کافی است، چون رول‌آپ گروه
+    از قبل شامل همهٔ زیرمجموعه‌های همان دسته‌بندی است (دوباره‌شماری در
+    سطوح پایین‌تر رخ نمی‌دهد). بهای تمام‌شده (COGS) هم مثل هزینه
     بدهکار-پایه است و از سود کم می‌شود."""
     balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
     total_revenue = sum(
@@ -831,12 +869,12 @@ def compute_income_statement(
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
 ) -> IncomeStatementResult:
-    """صورتِ سود و زیان — حساب‌هایِ REVENUE/COGS/EXPENSE در سطحِ کل، به‌همراهِ
-    مقایسه با همان بازه در یک سالِ پیش (برایِ مقایسه‌یِ روندی، نه سالِ مالیِ
-    قانونی — چون سیستم مفهومِ صریحِ «سالِ مالیِ قبل» را جدول‌بندی‌شده ندارد).
-    طبقِ درخواستِ صریح، «بهایِ تمام‌شده» دسته‌یِ جداگانه‌ای از «هزینه» است
-    (هردو بدهکار-پایه‌اند)، با یک جمعِ سطرِ خودش و «سودِ ناخالص» (درآمد
-    منهایِ بهایِ تمام‌شده) پیش از رسیدن به سودِ خالص."""
+    """صورت سود و زیان — حساب‌های REVENUE/COGS/EXPENSE در سطح کل، به‌همراه
+    مقایسه با همان بازه در یک سال پیش (برای مقایسهٔ روندی، نه سال مالی
+    قانونی — چون سیستم مفهوم صریح «سال مالی قبل» را جدول‌بندی‌شده ندارد).
+    طبق درخواست صریح، «بهای تمام‌شده» دستهٔ جداگانه‌ای از «هزینه» است
+    (هردو بدهکار-پایه‌اند)، با یک جمع سطر خودش و «سود ناخالص» (درآمد
+    منهای بهای تمام‌شده) پیش از رسیدن به سود خالص."""
     previous_from = date_from - datetime.timedelta(days=365)
     previous_to = date_to - datetime.timedelta(days=365)
 
@@ -933,9 +971,9 @@ class BalanceSheetResult:
 
 
 def _balance_sheet_side(r: "AccountBalanceRow") -> str:
-    """اگرکاربر در تنظیماتِ گروه صریحاً سمت را مشخص کرده باشد همان اعمال
-    می‌شود؛ وگرنه طبقِ قراردادِ کلاسیک از رویِ دسته‌یِ حساب تعیین می‌شود
-    (دارایی=راست، بدهی/حقوقِ‌صاحبانِ‌سهام=چپ)."""
+    """اگرکاربر در تنظیمات گروه صریحاً سمت را مشخص کرده باشد همان اعمال
+    می‌شود؛ وگرنه طبق قرارداد کلاسیک از روی دستهٔ حساب تعیین می‌شود
+    (دارایی=راست، بدهی/حقوق‌صاحبان‌سهام=چپ)."""
     if r.balance_sheet_side_code in ("RIGHT", "LEFT"):
         return r.balance_sheet_side_code
     return "RIGHT" if r.category_code == "ASSET" else "LEFT"
@@ -948,12 +986,12 @@ def compute_balance_sheet(
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
 ) -> BalanceSheetResult:
-    """ترازنامه — حساب‌هایِ ترازنامه‌ای (account_type=PERMANENT) در سطحِ کل،
-    تا as_of_date. چون سیستم سندِ اختتامیه ندارد و هیچ حسابِ «سودِ انباشته»یِ
-    واقعی هرگز بستانکار نمی‌شود، سودِ خالصِ *تجمعیِ از ابتدا* (نه فقط سالِ
-    مالیِ جاری — چون مرزِ سالِ مالی این‌جا معنایِ حسابداریِ واقعی ندارد) به‌عنوانِ
-    یک ردیفِ محاسبه‌شده به حقوقِ صاحبانِ سهام اضافه می‌شود؛ این تنها راهی است
-    که ترازنامه همیشه (دارایی = بدهی + حقوقِ صاحبانِ سهام) بماند."""
+    """ترازنامه — حساب‌های ترازنامه‌ای (account_type=PERMANENT) در سطح کل،
+    تا as_of_date. چون سیستم سند اختتامیه ندارد و هیچ حساب «سود انباشته»ی
+    واقعی هرگز بستانکار نمی‌شود، سود خالص *تجمعی از ابتدا* (نه فقط سال
+    مالی جاری — چون مرز سال مالی این‌جا معنای حسابداری واقعی ندارد) به‌عنوان
+    یک ردیف محاسبه‌شده به حقوق صاحبان سهام اضافه می‌شود؛ این تنها راهی است
+    که ترازنامه همیشه (دارایی = بدهی + حقوق صاحبان سهام) بماند."""
     balances = compute_account_balances(
         company_id, None, as_of_date, status_filter=status_filter, cost_center_id=cost_center_id
     )
@@ -1019,10 +1057,10 @@ def compute_cash_flow_direct(
     document_no_from: int | None = None,
     document_no_to: int | None = None,
 ) -> tuple[decimal.Decimal, list[CashFlowLineRow]]:
-    """صورتِ گردشِ وجوهِ نقد به روشِ مستقیم — از رویِ حساب‌هایِ نیازمندِ بُعدِ
-    صندوق/بانک: دریافت=بدهکار، پرداخت=بستانکار، شرح از طرفِ مقابلِ سند.
-    طبقِ محدودیتِ شناخته‌شده: چون طبقه‌بندیِ عملیاتی/سرمایه‌گذاری/تامینِ
-    مالی رویِ حساب‌ها وجود ندارد، روشِ غیرمستقیم پیاده نشده."""
+    """صورت گردش وجوه نقد به روش مستقیم — از روی حساب‌های نیازمند بُعد
+    صندوق/بانک: دریافت=بدهکار، پرداخت=بستانکار، شرح از طرف مقابل سند.
+    طبق محدودیت شناخته‌شده: چون طبقه‌بندی عملیاتی/سرمایه‌گذاری/تامین
+    مالی روی حساب‌ها وجود ندارد، روش غیرمستقیم پیاده نشده."""
     accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
     with new_session() as session:
         cash_type_ids = list(
@@ -1136,11 +1174,11 @@ class CashFlowIndirectSectionRow:
 
 @dataclass
 class CashFlowIndirectResult:
-    """طبقِ آیتمِ ۵ («صورتِ وجوهِ نقد استاندارد نیست») و پاسخِ تاییدشده‌یِ
-    کاربر: پنج طبقه‌یِ استانداردِ حسابداریِ ایران (استانداردِ شماره‌یِ ۲)،
-    به‌جایِ سه‌بخشیِ ساده‌شده‌یِ قبلی — به همین ترتیب: عملیاتی، بازده‌یِ
-    سرمایه‌گذاری‌ها و سودِ پرداختیِ تامینِ مالی، مالیات بر درآمد،
-    سرمایه‌گذاری، تامینِ مالی."""
+    """طبق آیتم ۵ («صورت وجوه نقد استاندارد نیست») و پاسخ تاییدشدهٔ
+    کاربر: پنج طبقهٔ استاندارد حسابداری ایران (استاندارد شمارهٔ ۲)،
+    به‌جای سه‌بخشی ساده‌شدهٔ قبلی — به همین ترتیب: عملیاتی، بازدهٔ
+    سرمایه‌گذاری‌ها و سود پرداختی تامین مالی، مالیات بر درآمد،
+    سرمایه‌گذاری، تامین مالی."""
 
     net_income: decimal.Decimal
     operating_rows: list[CashFlowIndirectSectionRow]
@@ -1163,15 +1201,15 @@ def compute_cash_flow_indirect(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> CashFlowIndirectResult:
-    """صورتِ گردشِ وجوهِ نقد به روشِ غیرمستقیم، در پنج طبقه‌یِ استانداردِ
-    ایران — از سودِ خالص شروع می‌شود و با تغییرِ حساب‌هایِ ترازنامه‌ایِ
-    برچسب‌خورده با یک بخشِ وجوهِ نقد (acc.cash_flow_sections، از
+    """صورت گردش وجوه نقد به روش غیرمستقیم، در پنج طبقهٔ استاندارد
+    ایران — از سود خالص شروع می‌شود و با تغییر حساب‌های ترازنامه‌ای
+    برچسب‌خورده با یک بخش وجوه نقد (acc.cash_flow_sections، از
     `financial_statement_mapping.py` تنظیم می‌شود) تعدیل می‌کند.
-    حساب‌هایِ بدونِ برچسب (از‌جمله خودِ صندوق/بانک، که مبنایِ نقد است نه
-    یک تغییرِ نقدی) نادیده گرفته می‌شوند.
+    حساب‌های بدون برچسب (از‌جمله خود صندوق/بانک، که مبنای نقد است نه
+    یک تغییر نقدی) نادیده گرفته می‌شوند.
 
-    قراردادِ علامت (هر پنج بخش با همین قاعده): افزایشِ بدهی/حقوقِ صاحبانِ
-    سهام = ورودِ نقد (+)، افزایشِ دارایی = خروجِ نقد (-)."""
+    قرارداد علامت (هر پنج بخش با همین قاعده): افزایش بدهی/حقوق صاحبان
+    سهام = ورود نقد (+)، افزایش دارایی = خروج نقد (-)."""
     net_income = _net_income(company_id, date_from, date_to, status_filter)
     balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
 
@@ -1247,8 +1285,8 @@ def compute_equity_changes(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[EquityChangeRow]:
-    """صورتِ تغییراتِ حقوقِ صاحبانِ سهام — حساب‌هایِ EQUITY در سطحِ کل:
-    مانده‌ی اول + افزایش (گردشِ بستانکار) - کاهش (گردشِ بدهکار) = مانده‌ی آخر."""
+    """صورت تغییرات حقوق صاحبان سهام — حساب‌های EQUITY در سطح کل:
+    ماندهٔ اول + افزایش (گردش بستانکار) - کاهش (گردش بدهکار) = ماندهٔ آخر."""
     balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
     rows: list[EquityChangeRow] = []
     for r in balances:
@@ -1280,16 +1318,16 @@ _CREDIT_NORMAL_CATEGORIES = ("LIABILITY", "EQUITY", "REVENUE")
 
 
 def _natural_signed_balance(b: AccountBalanceRow) -> decimal.Decimal:
-    """مقدارِ «طبیعی/مثبتِ معمول» یک حساب، هم‌الگو با قراردادِ همین فایل در
+    """مقدار «طبیعی/مثبت معمول» یک حساب، هم‌الگو با قرارداد همین فایل در
     compute_balance_sheet/compute_income_statement: دارایی/هزینه بدهکار-پایه‌اند
-    (closing/period دبیت منهایِ کردیت)، بدهی/سرمایه/درآمد بستانکار-پایه‌اند
-    (closing/period کردیت منهایِ دبیت). پیش از این تابع، compute_custom_statement
-    برایِ *همه‌ی* حساب‌هایِ PERMANENT همیشه closing_debit-closing_credit و برایِ
+    (closing/period دبیت منهای کردیت)، بدهی/سرمایه/درآمد بستانکار-پایه‌اند
+    (closing/period کردیت منهای دبیت). پیش از این تابع، compute_custom_statement
+    برای *همه‌ی* حساب‌های PERMANENT همیشه closing_debit-closing_credit و برای
     همه‌ی TEMPORARY همیشه period_debit-period_credit حساب می‌کرد — یعنی هر
-    ردیفِ گزارشِ سفارشی که به یک حسابِ بدهی/سرمایه/درآمد اشاره می‌کرد، عددِ
-    منفیِ نمایشِ معمولش را می‌داد (چون این حساب‌ها ذاتاً بستانکار-پایه‌اند)،
-    درحالی‌که کاربر در طراحِ گزارش فقط علامتِ +/− را برایِ جمع/کسرِ ردیف‌ها
-    نسبت به هم انتخاب می‌کند (نه برایِ جبرانِ قراردادِ داخلیِ بدهکار/بستانکار)."""
+    ردیف گزارش سفارشی که به یک حساب بدهی/سرمایه/درآمد اشاره می‌کرد، عدد
+    منفی نمایش معمولش را می‌داد (چون این حساب‌ها ذاتاً بستانکار-پایه‌اند)،
+    درحالی‌که کاربر در طراح گزارش فقط علامت +/− را برای جمع/کسر ردیف‌ها
+    نسبت به هم انتخاب می‌کند (نه برای جبران قرارداد داخلی بدهکار/بستانکار)."""
     if b.account_type_code == "PERMANENT":
         debit, credit = b.closing_debit, b.closing_credit
     else:
@@ -1307,24 +1345,24 @@ def compute_custom_statement(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[CustomStatementLine]:
-    """گزارشِ سفارشی (طراحِ گزارش، فازِ ۲ + گزارش‌سازِ پیشرفته) — هر ردیفِ
-    ACCOUNTS از جمعِ چند جزء ساخته می‌شود که هرکدام می‌تواند یک حسابِ
-    مشخص (ACCOUNT، هر سطحی: گروه/کل/معین)، یک بازه‌یِ کد در یک سطحِ
-    مشخص (RANGE) یا کلِ یک طبقه — دارایی/بدهی/سرمایه/درآمد/هزینه — در
-    یک سطحِ مشخص (CATEGORY) باشد، هرکدام با علامتِ +/−. مانده/گردشِ هر
-    حساب از `compute_account_balances` می‌آید که خودش برایِ همه‌یِ سطوح
-    رول‌آپ‌شده است، پس نیازی به کوئریِ تازه نیست. حسابِ PERMANENT
-    (ترازنامه‌ای) → مانده‌یِ تجمعی تا date_to؛ TEMPORARY (موقت) → گردشِ
-    همان دوره — دقیقاً همان قراردادِ compute_balance_sheet/
-    compute_income_statement. هر ردیفِ FORMULA از جمعِ چند ردیفِ دیگرِ
-    همین الگو ساخته می‌شود؛ حلِ بازگشتی+memo باعث می‌شود ترتیبِ row_order
-    برایِ محاسبه مهم نباشد (فقط برایِ نمایش) و حلقه‌هایِ فرمولی با
-    ValueError روشن رد شوند، نه کرش/بازگشتِ بی‌نهایت.
+    """گزارش سفارشی (طراح گزارش، فاز ۲ + گزارش‌ساز پیشرفته) — هر ردیف
+    ACCOUNTS از جمع چند جزء ساخته می‌شود که هرکدام می‌تواند یک حساب
+    مشخص (ACCOUNT، هر سطحی: گروه/کل/معین)، یک بازهٔ کد در یک سطح
+    مشخص (RANGE) یا کل یک طبقه — دارایی/بدهی/سرمایه/درآمد/هزینه — در
+    یک سطح مشخص (CATEGORY) باشد، هرکدام با علامت +/−. مانده/گردش هر
+    حساب از `compute_account_balances` می‌آید که خودش برای همهٔ سطوح
+    رول‌آپ‌شده است، پس نیازی به کوئری تازه نیست. حساب PERMANENT
+    (ترازنامه‌ای) → ماندهٔ تجمعی تا date_to؛ TEMPORARY (موقت) → گردش
+    همان دوره — دقیقاً همان قرارداد compute_balance_sheet/
+    compute_income_statement. هر ردیف FORMULA از جمع چند ردیف دیگر
+    همین الگو ساخته می‌شود؛ حل بازگشتی+memo باعث می‌شود ترتیب row_order
+    برای محاسبه مهم نباشد (فقط برای نمایش) و حلقه‌های فرمولی با
+    ValueError روشن رد شوند، نه کرش/بازگشت بی‌نهایت.
 
-    توجه برایِ RANGE/CATEGORY: چون compute_account_balances رول‌آپِ همه‌یِ
-    سطوح را برمی‌گرداند (یک حسابِ تفصیلی هم در بالانسِ حسابِ کل/گروهِ
-    والدش جمع شده)، جمع‌زدنِ بازه/طبقه فقط رویِ حساب‌هایِ همان یک سطحِ
-    مشخص‌شده انجام می‌شود — نه همه‌یِ سطوح با هم — تا دوبار-شماری رخ ندهد."""
+    توجه برای RANGE/CATEGORY: چون compute_account_balances رول‌آپ همهٔ
+    سطوح را برمی‌گرداند (یک حساب تفصیلی هم در بالانس حساب کل/گروه
+    والدش جمع شده)، جمع‌زدن بازه/طبقه فقط روی حساب‌های همان یک سطح
+    مشخص‌شده انجام می‌شود — نه همهٔ سطوح با هم — تا دوبار-شماری رخ ندهد."""
     rows = statement_templates_service.list_rows(template_id)
     rows_by_id = {r.row_id: r for r in rows}
     all_balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
@@ -1337,7 +1375,7 @@ def compute_custom_statement(
         if row_id in memo:
             return memo[row_id]
         if row_id in resolving:
-            raise ValueError("حلقه در فرمولِ ردیف‌هایِ الگویِ گزارش.")
+            raise ValueError("حلقه در فرمول ردیف‌های الگوی گزارش.")
         resolving.add(row_id)
         row = rows_by_id[row_id]
         if row.row_type == "ACCOUNTS":
@@ -1395,10 +1433,10 @@ def _safe_div(numerator: decimal.Decimal, denominator: decimal.Decimal) -> decim
 def _liquidity_totals(
     company_id: int, date_to: datetime.date, status_filter: str
 ) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal]:
-    """دارایی‌هایِ جاری، سهمِ موجودی از آن‌ها، و بدهی‌هایِ جاری — از رویِ
-    liquidity_class_code که در «نگاشتِ صورت‌هایِ مالی»/کدینگِ حسابداری
-    تنظیم می‌شود (CURRENT/CURRENT_INVENTORY برایِ دارایی، CURRENT برایِ
-    بدهی؛ NULL یعنی در نسبتِ جاری/آنی دیده نمی‌شود)."""
+    """دارایی‌های جاری، سهم موجودی از آن‌ها، و بدهی‌های جاری — از روی
+    liquidity_class_code که در «نگاشت صورت‌های مالی»/کدینگ حسابداری
+    تنظیم می‌شود (CURRENT/CURRENT_INVENTORY برای دارایی، CURRENT برای
+    بدهی؛ NULL یعنی در نسبت جاری/آنی دیده نمی‌شود)."""
     balances = compute_account_balances(company_id, None, date_to, status_filter=status_filter)
     current_assets = _ZERO
     inventory_assets = _ZERO
@@ -1423,30 +1461,30 @@ def compute_financial_ratios(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[FinancialRatioRow]:
-    """نسبت‌هایِ سودآوری/اهرمی/نقدینگی — رویِ compute_balance_sheet/
-    compute_income_statement موجود سوار می‌شود. نسبت‌هایِ نقدینگی (جاری/
-    آنی) فقط برایِ حساب‌هایی محاسبه می‌شوند که liquidity_class_code‌شان
-    در کدینگِ حسابداری/نگاشتِ صورت‌هایِ مالی تنظیم شده باشد — اگر هیچ
-    حسابی طبقه‌بندی نشده باشد، این دو نسبت None برمی‌گردند (نه صفرِ
+    """نسبت‌های سودآوری/اهرمی/نقدینگی — روی compute_balance_sheet/
+    compute_income_statement موجود سوار می‌شود. نسبت‌های نقدینگی (جاری/
+    آنی) فقط برای حساب‌هایی محاسبه می‌شوند که liquidity_class_code‌شان
+    در کدینگ حسابداری/نگاشت صورت‌های مالی تنظیم شده باشد — اگر هیچ
+    حسابی طبقه‌بندی نشده باشد، این دو نسبت None برمی‌گردند (نه صفر
     گمراه‌کننده)."""
     bs = compute_balance_sheet(company_id, date_to, status_filter=status_filter)
     inc = compute_income_statement(company_id, date_from, date_to, status_filter=status_filter)
     current_assets, inventory_assets, current_liabilities = _liquidity_totals(company_id, date_to, status_filter)
     quick_assets = current_assets - inventory_assets
     return [
-        FinancialRatioRow("حاشیه‌یِ سودِ خالص", _safe_div(inc.net_income, inc.total_revenue), "PERCENTAGE"),
-        FinancialRatioRow("بازده‌یِ دارایی‌ها (ROA)", _safe_div(inc.net_income, bs.total_assets), "PERCENTAGE"),
+        FinancialRatioRow("حاشیهٔ سود خالص", _safe_div(inc.net_income, inc.total_revenue), "PERCENTAGE"),
+        FinancialRatioRow("بازدهٔ دارایی‌ها (ROA)", _safe_div(inc.net_income, bs.total_assets), "PERCENTAGE"),
         FinancialRatioRow(
-            "بازده‌یِ حقوقِ صاحبانِ سهام (ROE)", _safe_div(inc.net_income, bs.total_equity), "PERCENTAGE"
+            "بازدهٔ حقوق صاحبان سهام (ROE)", _safe_div(inc.net_income, bs.total_equity), "PERCENTAGE"
         ),
-        FinancialRatioRow("نسبتِ بدهی", _safe_div(bs.total_liabilities, bs.total_assets), "PERCENTAGE"),
+        FinancialRatioRow("نسبت بدهی", _safe_div(bs.total_liabilities, bs.total_assets), "PERCENTAGE"),
         FinancialRatioRow(
-            "نسبتِ بدهی به حقوقِ صاحبانِ سهام", _safe_div(bs.total_liabilities, bs.total_equity), "RATIO"
+            "نسبت بدهی به حقوق صاحبان سهام", _safe_div(bs.total_liabilities, bs.total_equity), "RATIO"
         ),
-        FinancialRatioRow("نسبتِ مالکانه", _safe_div(bs.total_equity, bs.total_assets), "PERCENTAGE"),
-        FinancialRatioRow("نسبتِ جاری", _safe_div(current_assets, current_liabilities), "RATIO"),
-        FinancialRatioRow("نسبتِ آنی", _safe_div(quick_assets, current_liabilities), "RATIO"),
-        FinancialRatioRow("سرمایه‌یِ در گردش", current_assets - current_liabilities, "CURRENCY"),
+        FinancialRatioRow("نسبت مالکانه", _safe_div(bs.total_equity, bs.total_assets), "PERCENTAGE"),
+        FinancialRatioRow("نسبت جاری", _safe_div(current_assets, current_liabilities), "RATIO"),
+        FinancialRatioRow("نسبت آنی", _safe_div(quick_assets, current_liabilities), "RATIO"),
+        FinancialRatioRow("سرمایهٔ در گردش", current_assets - current_liabilities, "CURRENCY"),
     ]
 
 
@@ -1461,16 +1499,16 @@ def _jalali_period_label(year: int, month: int, granularity: str) -> str:
         return str(year)
     if granularity == "QUARTERLY":
         quarter = (month - 1) // 3 + 1
-        return f"فصلِ {quarter} {year}"
+        return f"فصل {quarter} {year}"
     return f"{_JALALI_MONTH_NAMES[month - 1]} {year}"
 
 
 def generate_jalali_periods(
     end_date: datetime.date, granularity: str, count: int
 ) -> list[tuple[datetime.date, datetime.date, str]]:
-    """`count` دوره‌یِ متوالیِ جلالی (ماهانه/فصلی/سالانه) که به دوره‌یِ
-    شاملِ end_date ختم می‌شوند؛ قدیمی‌ترین دوره اول. هر دوره یک تاپلِ
-    (تاریخِ میلادیِ شروع، تاریخِ میلادیِ پایان، برچسبِ فارسی) است."""
+    """`count` دورهٔ متوالی جلالی (ماهانه/فصلی/سالانه) که به دورهٔ
+    شامل end_date ختم می‌شوند؛ قدیمی‌ترین دوره اول. هر دوره یک تاپل
+    (تاریخ میلادی شروع، تاریخ میلادی پایان، برچسب فارسی) است."""
     step = {"MONTHLY": 1, "QUARTERLY": 3, "YEARLY": 12}[granularity]
     end_jalali = jdatetime.date.fromgregorian(date=end_date)
 
@@ -1522,8 +1560,8 @@ def compute_period_comparison(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> PeriodComparisonResult:
-    """مقایسه‌یِ دوره‌ای (ماه‌به‌ماه/فصل‌به‌فصل/سال‌به‌سال) — برایِ هر دوره،
-    مانده/گردشِ حساب‌هایِ REVENUE/EXPENSهِ سطحِ ۱ را رول‌آپ‌شده می‌گیرد
+    """مقایسهٔ دوره‌ای (ماه‌به‌ماه/فصل‌به‌فصل/سال‌به‌سال) — برای هر دوره،
+    مانده/گردش حساب‌های REVENUE/EXPENSهٔ سطح ۱ را رول‌آپ‌شده می‌گیرد
     (هم‌الگو با compute_income_statement)."""
     balances_by_period = [
         compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
@@ -1593,11 +1631,11 @@ def _stale_draft_anomalies(
         age_days = (now - entry.created_at).days
         rows.append(
             AnomalyRow(
-                kind_label="اسنادِ موقتِ معوق",
+                kind_label="اسناد موقت معوق",
                 document_date=entry.document_date,
                 temporary_no=entry.temporary_no,
                 description=entry.description or "—",
-                detail=f"{age_days} روز در وضعیتِ پیش‌نویس مانده است.",
+                detail=f"{age_days} روز در وضعیت پیش‌نویس مانده است.",
             )
         )
     return rows
@@ -1627,7 +1665,7 @@ def _missing_description_anomalies(
             continue
         rows.append(
             AnomalyRow(
-                kind_label="سندهایِ بدونِ شرح",
+                kind_label="سندهای بدون شرح",
                 document_date=entry.document_date,
                 temporary_no=entry.temporary_no,
                 description="—",
@@ -1665,11 +1703,11 @@ def _possible_duplicate_anomalies(
         for entry in group_entries:
             rows.append(
                 AnomalyRow(
-                    kind_label="احتمالِ سندِ تکراری",
+                    kind_label="احتمال سند تکراری",
                     document_date=entry.document_date,
                     temporary_no=entry.temporary_no,
                     description=entry.description or "—",
-                    detail=f"با شماره‌هایِ {numbers} هم‌تاریخ، هم‌مبلغ و هم‌حساب است.",
+                    detail=f"با شماره‌های {numbers} هم‌تاریخ، هم‌مبلغ و هم‌حساب است.",
                 )
             )
     return rows
@@ -1723,13 +1761,13 @@ def _outlier_transaction_anomalies(
             account = accounts_by_id.get(account_id)
             rows.append(
                 AnomalyRow(
-                    kind_label="تراکنشِ نامتعارف",
+                    kind_label="تراکنش نامتعارف",
                     document_date=document_date,
                     temporary_no=temporary_no,
                     description=line.description or entry_description or "—",
                     detail=(
-                        f"مبلغِ {amount:,.0f} برایِ حسابِ «{account.name if account else ''}» نسبت به میانگینِ "
-                        f"سایرِ تراکنش‌هایِ آن حساب ({mean:,.0f}) بسیار بزرگ است."
+                        f"مبلغ {amount:,.0f} برای حساب «{account.name if account else ''}» نسبت به میانگین "
+                        f"سایر تراکنش‌های آن حساب ({mean:,.0f}) بسیار بزرگ است."
                     ),
                 )
             )
@@ -1745,10 +1783,10 @@ def detect_document_anomalies(
     detect_outliers: bool = True,
     outlier_z: float = 3.0,
 ) -> list[AnomalyRow]:
-    """چهار بررسیِ مشخص و صادقانه (نه یک «موتورِ AI مبهم»): اسنادِ موقتِ
-    معوق، سندهایِ بدونِ شرح، احتمالِ سندِ تکراری، تراکنشِ نامتعارفِ آماری.
-    عمداً بدونِ status_filter — این چک‌ها ذاتاً رویِ همه‌یِ وضعیت‌ها کار
-    می‌کنند (چکِ اول دقیقاً هدفش خودِ پیش‌نویس‌هاست)."""
+    """چهار بررسی مشخص و صادقانه (نه یک «موتور AI مبهم»): اسناد موقت
+    معوق، سندهای بدون شرح، احتمال سند تکراری، تراکنش نامتعارف آماری.
+    عمداً بدون status_filter — این چک‌ها ذاتاً روی همهٔ وضعیت‌ها کار
+    می‌کنند (چک اول دقیقاً هدفش خود پیش‌نویس‌هاست)."""
     with new_session() as session:
         rows: list[AnomalyRow] = []
         rows.extend(_stale_draft_anomalies(session, company_id, date_from, date_to, stale_draft_days))

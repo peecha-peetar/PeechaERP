@@ -1,10 +1,10 @@
-"""پایه‌ی مشترک مدل‌های SQLAlchemy + engine/session.
+"""پایهٔ مشترک مدل‌های SQLAlchemy + engine/session.
 
 هر ماژول (core, sec, acc, wf, doc) دقیقاً به همان schema متناظرش در
 db/schema/*.sql نگاشت می‌شود؛ نام جدول/ستون‌ها هم عیناً همان snake_case
-دیتابیس است (بدون نگاشت دستی)، چون خودِ اسکیمای Postgres snake_case نوشته شده.
+دیتابیس است (بدون نگاشت دستی)، چون خود اسکیمای Postgres snake_case نوشته شده.
 
-توجه: db/schema/*.sql مرجعِ ساختار دیتابیس است، نه این مدل‌ها — یعنی هرگز
+توجه: db/schema/*.sql مرجع ساختار دیتابیس است، نه این مدل‌ها — یعنی هرگز
 از Base.metadata.create_all() برای ساخت دیتابیس استفاده نمی‌کنیم (چیزهایی
 مثل تریگر تاریخچه و ستون‌های GENERATED در ORM قابل‌بیان نیستند). تغییرات
 ساختاری بعدی با Alembic migration نوشته می‌شوند که مستقیماً همان اسکریپت‌های
@@ -41,8 +41,8 @@ def get_engine():
 
 
 def reset_engine() -> None:
-    """بعد از ذخیره‌ی تنظیمات اتصال جدید از فرم UI صدا زده می‌شود تا
-    engine/session بعدی با مقادیر تازه ساخته شوند، نه نسخه‌ی cache‌شده‌ی قبلی."""
+    """بعد از ذخیرهٔ تنظیمات اتصال جدید از فرم UI صدا زده می‌شود تا
+    engine/session بعدی با مقادیر تازه ساخته شوند، نه نسخه‌ی cache‌شدهٔ قبلی."""
     global _engine, _SessionFactory
     if _engine is not None:
         _engine.dispose()

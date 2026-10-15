@@ -1,8 +1,8 @@
-"""سرویسِ حضوروغیابِ واقعی (ورود/خروجِ روزانهٔ پرسنل) + خلاصهٔ کارکرد +
-الگوهایِ ذخیره‌شدهٔ ایمپورتِ فایلِ اکسل/CSVِ دستگاه‌هایِ حضوروغیاب.
+"""سرویس حضور و غیاب واقعی (ورود/خروج روزانهٔ پرسنل) + خلاصهٔ کارکرد +
+الگوهای ذخیره‌شدهٔ ورود فایل اکسل/CSV دستگاه‌های حضور و غیاب.
 
-طبقِ گزارشِ صریحِ کاربر: تا این نسخه فقط ثبتِ دستیِ ساعاتِ اضافه‌کاری
-(services/payroll_overtime.py) وجود داشت، نه ثبتِ واقعیِ ورود/خروجِ
+طبق گزارش صریح کاربر: تا این نسخه فقط ثبت دستی ساعات اضافه‌کاری
+(services/payroll_overtime.py) وجود داشت، نه ثبت واقعی ورود/خروج
 روزانه یا خلاصهٔ کارکرد؛ این ماژول همان زیرساخت را می‌سازد."""
 
 from __future__ import annotations
@@ -37,9 +37,9 @@ def _validate_attendance_input(
     clock_in: datetime.time | None, clock_out: datetime.time | None, worked_hours: decimal.Decimal | None
 ) -> None:
     if clock_in is not None and clock_out is not None and clock_out <= clock_in:
-        raise ValueError("ساعتِ خروج باید بعد از ساعتِ ورود باشد.")
+        raise ValueError("ساعت خروج باید بعد از ساعت ورود باشد.")
     if worked_hours is None and (clock_in is None or clock_out is None):
-        raise ValueError("یا ساعتِ ورود و خروج، یا مجموعِ ساعاتِ کارکرد را وارد کنید.")
+        raise ValueError("یا ساعت ورود و خروج، یا مجموع ساعات کارکرد را وارد کنید.")
 
 
 # ---------------------------------------------------------------------
@@ -81,7 +81,7 @@ def create_attendance_record(
             )
         )
         if exists is not None:
-            raise ValueError("برایِ این کارمند در این تاریخ قبلاً رکوردِ حضوروغیاب ثبت شده است.")
+            raise ValueError("برای این کارمند در این تاریخ قبلاً رکورد حضور و غیاب ثبت شده است.")
         record = AttendanceRecord(
             company_id=company_id,
             employee_id=employee_id,
@@ -119,7 +119,7 @@ def update_attendance_record(
 
 def set_attendance_status(attendance_id: int, status: str) -> None:
     if status not in _VALID_STATUSES:
-        raise ValueError("وضعیتِ نامعتبر.")
+        raise ValueError("وضعیت نامعتبر.")
     with new_session() as session:
         record = session.get(AttendanceRecord, attendance_id)
         if record is None:
@@ -247,7 +247,7 @@ def create_attendance_import_template(
 ) -> int:
     name = name.strip()
     if not name:
-        raise ValueError("نامِ الگو الزامی است.")
+        raise ValueError("نام الگو الزامی است.")
     with new_session() as session:
         exists = session.scalar(
             select(AttendanceImportTemplate).where(
@@ -274,7 +274,7 @@ def update_attendance_import_template(
 ) -> None:
     name = name.strip()
     if not name:
-        raise ValueError("نامِ الگو الزامی است.")
+        raise ValueError("نام الگو الزامی است.")
     with new_session() as session:
         template = session.get(AttendanceImportTemplate, template_id)
         if template is None:
@@ -340,7 +340,7 @@ def import_attendance_rows(
             employee_code = str(row[mapping["employee_code"]]).strip()
             employee_id = employees_by_code.get(employee_code)
             if employee_id is None:
-                raise ValueError(f"کارمندی با کدِ «{employee_code}» یافت نشد.")
+                raise ValueError(f"کارمندی با کد «{employee_code}» یافت نشد.")
 
             work_date = _parse_date_cell(row[mapping["work_date"]], date_format)
 
@@ -370,5 +370,5 @@ def import_attendance_rows(
             )
             created += 1
         except (ValueError, IndexError, KeyError, decimal.InvalidOperation) as exc:
-            errors.append(f"ردیفِ {row_no}: {exc}")
+            errors.append(f"ردیف {row_no}: {exc}")
     return created, errors

@@ -1,5 +1,5 @@
-"""خدماتِ پس‌ازفروش و گارانتی (مرحلهٔ ۹) — گارانتیِ سریالی، تیکتِ خدماتی،
-و RMA به‌عنوانِ دروازهٔ پیشِ‌از برگشتِ فروش."""
+"""خدمات پس‌ازفروش و گارانتی (مرحلهٔ ۹) — گارانتی سریالی، تیکت خدماتی،
+و مجوز مرجوعی به‌عنوان دروازهٔ پیش‌از برگشت فروش."""
 
 from __future__ import annotations
 
@@ -23,30 +23,31 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import decimals, numerals
 from peecha import session as app_session
 from peecha.services import commercial_aftersales as aftersales_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _WARRANTY_STATUS_LABELS = {"ACTIVE": "معتبر", "EXPIRED": "منقضی", "VOIDED": "باطل‌شده"}
-_TICKET_STATUS_LABELS = {"OPEN": "باز", "IN_PROGRESS": "درحالِ انجام", "RESOLVED": "حل‌شده", "CLOSED": "بسته"}
+_TICKET_STATUS_LABELS = {"OPEN": "باز", "IN_PROGRESS": "درحال انجام", "RESOLVED": "حل‌شده", "CLOSED": "بسته"}
 _TICKET_STATUS_ORDER = ("OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED")
 _RMA_STATUS_LABELS = {"REQUESTED": "درخواست‌شده", "APPROVED": "تاییدشده", "REJECTED": "ردشده", "COMPLETED": "تکمیل‌شده"}
-_RMA_REASON_LABELS = {"DEFECTIVE": "معیوب", "WRONG_ITEM": "کالایِ اشتباه", "NOT_SATISFIED": "عدمِ رضایت", "DAMAGED_IN_TRANSIT": "آسیب‌دیده در حمل"}
+_RMA_REASON_LABELS = {"DEFECTIVE": "معیوب", "WRONG_ITEM": "کالای اشتباه", "NOT_SATISFIED": "عدم رضایت", "DAMAGED_IN_TRANSIT": "آسیب‌دیده در حمل"}
 
 
 class _TabLayoutController(LayoutEditMixin):
-    """کنترلرِ سبکِ ویرایشِ‌چیدمانِ مستقل برایِ هر تب — چون LayoutEditMixin
-    وضعیتِ screen_code/grids را رویِ self نگه می‌دارد (نه هر گرید
-    به‌تنهایی)، و این صفحه دو تبِ مستقل (تیکت/RMA) با دو کدِ صفحهٔ جدا
-    دارد، هر تب کنترلرِ خودش را می‌گیرد تا ذخیره/بازنشانیِ چیدمانِ یک تب
-    رویِ دیگری اثر نگذارد."""
+    """کنترلر سبک ویرایش‌چیدمان مستقل برای هر تب — چون LayoutEditMixin
+    وضعیت screen_code/grids را روی self نگه می‌دارد (نه هر گرید
+    به‌تنهایی)، و این صفحه دو تب مستقل (تیکت/RMA) با دو کد صفحهٔ جدا
+    دارد، هر تب کنترلر خودش را می‌گیرد تا ذخیره/بازنشانی چیدمان یک تب
+    روی دیگری اثر نگذارد."""
 
 
-class CommercialAftersalesScreen(QWidget):
+class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._items: list[catalog_service.ItemRow] = []
@@ -59,15 +60,36 @@ class CommercialAftersalesScreen(QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("خدماتِ پس‌ازفروش و گارانتی")
+        title = QLabel("خدمات پس‌ازفروش و گارانتی")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
         tabs = QTabWidget()
         tabs.addTab(self._build_warranty_tab(), "گارانتی")
-        tabs.addTab(self._build_ticket_tab(), "تیکتِ خدماتی")
-        tabs.addTab(self._build_rma_tab(), "RMA (برگشتِ کالا)")
+        tabs.addTab(self._build_ticket_tab(), "تیکت خدماتی")
+        tabs.addTab(self._build_rma_tab(), "مجوز مرجوعی (برگشت کالا)")
         outer.addWidget(tabs, stretch=1)
+
+        self.set_field_help([
+            (self.warranty_invoice_combo, "فاکتور فروش ثبت‌شده‌ای که این کالا در آن فروخته شده."),
+            (self.warranty_line_combo, "ردیف مشخص همان فاکتور که گارانتی برای کالای آن صادر می‌شود."),
+            (self.warranty_duration_field, "مدت اعتبار گارانتی از تاریخ فروش، به ماه."),
+            (self.warranty_terms_field, "شرایط متنی گارانتی — اختیاری."),
+            (self.ticket_customer_combo, "مشتری‌ای که این تیکت خدماتی برای او باز می‌شود."),
+            (self.ticket_subject_field, "موضوع کوتاه تیکت."),
+            (self.ticket_item_combo, "کالای مرتبط با این تیکت — اختیاری."),
+            (self.ticket_warranty_combo, "گارانتی مرتبط با این تیکت، اگر موجود باشد."),
+            (self.ticket_description_field, "شرح کامل مشکل/درخواست مشتری."),
+            (self.ticket_status_combo, "وضعیت تازه‌ای که برای تیکت انتخاب‌شده اعمال می‌شود."),
+            (self.ticket_invoice_combo, "فاکتور فروشی که هزینهٔ خدمات این تیکت هزینه‌بردار در آن تسویه می‌شود."),
+            (self.ticket_part_item_combo, "قطعه/کالایی که در رفع این تیکت مصرف شده."),
+            (self.ticket_part_qty_field, "مقدار مصرف‌شده از این قطعه."),
+            (self.rma_customer_combo, "مشتری‌ای که درخواست برگشت کالا (RMA) داده."),
+            (self.rma_document_combo, "فاکتور فروش اصلی‌ای که کالا در آن فروخته شده بود."),
+            (self.rma_reason_combo, "دلیل درخواست برگشت کالا."),
+            (self.rma_quantity_field, "مقدار درخواستی برای برگشت."),
+            (self.rma_warehouse_combo, "انباری که کالای برگشتی هنگام تایید مجوز مرجوعی به آن وارد می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -78,7 +100,7 @@ class CommercialAftersalesScreen(QWidget):
         outer = QVBoxLayout(page)
 
         self.warranty_table = QTableWidget(0, 5)
-        self.warranty_table.setHorizontalHeaderLabels(["کالا", "تاریخِ شروع", "تاریخِ پایان", "وضعیت", ""])
+        self.warranty_table.setHorizontalHeaderLabels(["کالا", "تاریخ شروع", "تاریخ پایان", "وضعیت", ""])
         self.warranty_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.warranty_table.verticalHeader().setVisible(False)
         self.warranty_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -96,12 +118,12 @@ class CommercialAftersalesScreen(QWidget):
         self.warranty_duration_field.setSuffix(" ماه")
         form.addWidget(self.warranty_duration_field)
         self.warranty_terms_field = QLineEdit()
-        self.warranty_terms_field.setPlaceholderText("شرایطِ گارانتی (اختیاری)")
+        self.warranty_terms_field.setPlaceholderText("شرایط گارانتی (اختیاری)")
         form.addWidget(self.warranty_terms_field, stretch=2)
         add_warranty_button = QPushButton("🛡️")
         add_warranty_button.setObjectName("primaryIconButton")
         add_warranty_button.setFixedWidth(48)
-        add_warranty_button.setToolTip("صدورِ گارانتی")
+        add_warranty_button.setToolTip("صدور گارانتی")
         add_warranty_button.clicked.connect(self._add_warranty)
         form.addWidget(add_warranty_button)
         outer.addLayout(form)
@@ -128,7 +150,7 @@ class CommercialAftersalesScreen(QWidget):
     def _add_warranty(self) -> None:
         line_id = self.warranty_line_combo.currentData()
         if line_id is None:
-            self.warranty_status_label.setText("ابتدا یک فاکتورِ فروش و ردیفِ آن را انتخاب کنید.")
+            self.warranty_status_label.setText("ابتدا یک فاکتور فروش و ردیف آن را انتخاب کنید.")
             return
         line = next((l for l in self._invoice_lines if l.line_id == line_id), None)
         if line is None:
@@ -156,8 +178,8 @@ class CommercialAftersalesScreen(QWidget):
             item = items_by_id.get(w.item_id)
             status = aftersales_service.get_effective_warranty_status(w.warranty_id)
             self.warranty_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(w.item_id)))
-            self.warranty_table.setItem(row_index, 1, QTableWidgetItem(str(w.start_date)))
-            self.warranty_table.setItem(row_index, 2, QTableWidgetItem(str(w.end_date)))
+            self.warranty_table.setItem(row_index, 1, QTableWidgetItem(numerals.format_jalali_date(w.start_date)))
+            self.warranty_table.setItem(row_index, 2, QTableWidgetItem(numerals.format_jalali_date(w.end_date)))
             self.warranty_table.setItem(row_index, 3, QTableWidgetItem(_WARRANTY_STATUS_LABELS.get(status, status)))
             void_button = QPushButton("🚫")
             void_button.setObjectName("iconButton")
@@ -168,7 +190,7 @@ class CommercialAftersalesScreen(QWidget):
             self.warranty_table.setCellWidget(row_index, 4, void_button)
 
     def _void_warranty(self, warranty_id: int) -> None:
-        aftersales_service.void_warranty(warranty_id, "ابطال از طریقِ فرم")
+        aftersales_service.void_warranty(warranty_id, "ابطال از طریق فرم")
         self.refresh()
 
     # --- تیکتِ خدماتی --------------------------------------------------------
@@ -188,16 +210,16 @@ class CommercialAftersalesScreen(QWidget):
 
         self.ticket_customer_combo = QComboBox()
         self.ticket_subject_field = QLineEdit()
-        self.ticket_subject_field.setPlaceholderText("موضوعِ تیکت")
+        self.ticket_subject_field.setPlaceholderText("موضوع تیکت")
         self.ticket_item_combo = QComboBox()
-        self.ticket_item_combo.addItem("(بدونِ کالایِ مشخص)", None)
+        self.ticket_item_combo.addItem("(بدون کالای مشخص)", None)
         self.ticket_warranty_combo = QComboBox()
-        self.ticket_warranty_combo.addItem("(بدونِ گارانتی)", None)
+        self.ticket_warranty_combo.addItem("(بدون گارانتی)", None)
         self.ticket_description_field = QLineEdit()
         self.ticket_description_field.setPlaceholderText("توضیحات (اختیاری)")
         self.ticket_form_grid = FieldGrid([
             FieldSpec("customer", "مشتری", self.ticket_customer_combo, span=2),
-            FieldSpec("subject", "موضوعِ تیکت", self.ticket_subject_field, span=3),
+            FieldSpec("subject", "موضوع تیکت", self.ticket_subject_field, span=3),
             FieldSpec("item", "کالا", self.ticket_item_combo, span=2),
             FieldSpec("warranty", "گارانتی", self.ticket_warranty_combo, span=2),
             FieldSpec("description", "توضیحات", self.ticket_description_field, span=3),
@@ -209,14 +231,14 @@ class CommercialAftersalesScreen(QWidget):
         add_ticket_button = QPushButton("🎫")
         add_ticket_button.setObjectName("primaryIconButton")
         add_ticket_button.setFixedWidth(48)
-        add_ticket_button.setToolTip("تیکتِ تازه")
+        add_ticket_button.setToolTip("تیکت تازه")
         add_ticket_button.clicked.connect(self._add_ticket)
         ticket_form.addWidget(add_ticket_button)
         left.addLayout(ticket_form)
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("تغییرِ وضعیتِ تیکتِ انتخاب‌شده"))
+        right.addWidget(QLabel("تغییر وضعیت تیکت انتخاب‌شده"))
         status_row = QHBoxLayout()
         self.ticket_status_combo = QComboBox()
         for code in _TICKET_STATUS_ORDER:
@@ -230,7 +252,7 @@ class CommercialAftersalesScreen(QWidget):
         status_row.addWidget(apply_status_button)
         right.addLayout(status_row)
 
-        right.addWidget(QLabel("فاکتورِ تسویهٔ تیکتِ هزینه‌بردار"))
+        right.addWidget(QLabel("فاکتور تسویهٔ تیکت هزینه‌بردار"))
         invoice_row = QHBoxLayout()
         self.ticket_invoice_combo = QComboBox()
         invoice_row.addWidget(self.ticket_invoice_combo, stretch=1)
@@ -242,7 +264,7 @@ class CommercialAftersalesScreen(QWidget):
         invoice_row.addWidget(link_invoice_button)
         right.addLayout(invoice_row)
 
-        right.addWidget(QLabel("قطعاتِ مصرف‌شده"))
+        right.addWidget(QLabel("قطعات مصرف‌شده"))
         self.ticket_parts_table = QTableWidget(0, 2)
         self.ticket_parts_table.setHorizontalHeaderLabels(["کالا", "مقدار"])
         self.ticket_parts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -260,7 +282,7 @@ class CommercialAftersalesScreen(QWidget):
         add_part_button = QPushButton("📦")
         add_part_button.setObjectName("iconButton")
         add_part_button.setFixedWidth(44)
-        add_part_button.setToolTip("ثبتِ مصرف")
+        add_part_button.setToolTip("ثبت مصرف")
         add_part_button.clicked.connect(self._add_part_used)
         part_form.addWidget(add_part_button)
         right.addLayout(part_form)
@@ -306,7 +328,7 @@ class CommercialAftersalesScreen(QWidget):
         for row_index, p in enumerate(parts):
             item = items_by_id.get(p.item_id)
             self.ticket_parts_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(p.item_id)))
-            self.ticket_parts_table.setItem(row_index, 1, QTableWidgetItem(str(p.quantity)))
+            self.ticket_parts_table.setItem(row_index, 1, QTableWidgetItem(decimals.format_qty(p.quantity)))
 
     def _apply_ticket_status(self) -> None:
         if self._selected_ticket_id is None:
@@ -372,7 +394,7 @@ class CommercialAftersalesScreen(QWidget):
 
         left = QVBoxLayout()
         self.rma_table = QTableWidget(0, 4)
-        self.rma_table.setHorizontalHeaderLabels(["مشتری", "دلیل", "مقدارِ درخواستی", "وضعیت"])
+        self.rma_table.setHorizontalHeaderLabels(["مشتری", "دلیل", "مقدار درخواستی", "وضعیت"])
         self.rma_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.rma_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.rma_table.verticalHeader().setVisible(False)
@@ -387,12 +409,12 @@ class CommercialAftersalesScreen(QWidget):
         for code, label in _RMA_REASON_LABELS.items():
             self.rma_reason_combo.addItem(label, code)
         self.rma_quantity_field = QLineEdit()
-        self.rma_quantity_field.setPlaceholderText("مقدارِ درخواستی")
+        self.rma_quantity_field.setPlaceholderText("مقدار درخواستی")
         self.rma_form_grid = FieldGrid([
             FieldSpec("customer", "مشتری", self.rma_customer_combo, span=2),
-            FieldSpec("document", "فاکتورِ اصلی", self.rma_document_combo, span=2),
+            FieldSpec("document", "فاکتور اصلی", self.rma_document_combo, span=2),
             FieldSpec("reason", "دلیل", self.rma_reason_combo, span=1),
-            FieldSpec("quantity", "مقدارِ درخواستی", self.rma_quantity_field, span=1),
+            FieldSpec("quantity", "مقدار درخواستی", self.rma_quantity_field, span=1),
         ])
         self._rma_layout_controller = _TabLayoutController()
         self._rma_layout_controller.register_field_grids("commercial_aftersales_rma", [self.rma_form_grid])
@@ -401,27 +423,27 @@ class CommercialAftersalesScreen(QWidget):
         add_rma_button = QPushButton("🔁")
         add_rma_button.setObjectName("primaryIconButton")
         add_rma_button.setFixedWidth(48)
-        add_rma_button.setToolTip("درخواستِ RMA")
+        add_rma_button.setToolTip("درخواست مجوز مرجوعی")
         add_rma_button.clicked.connect(self._add_rma)
         rma_form.addWidget(add_rma_button)
         left.addLayout(rma_form)
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("تاییدِ RMAیِ انتخاب‌شده (سندِ برگشت‌ازفروش خودکار ساخته می‌شود)"))
+        right.addWidget(QLabel("تایید مجوز مرجوعی انتخاب‌شده (سند برگشت‌ازفروش خودکار ساخته می‌شود)"))
         self.rma_warehouse_combo = QComboBox()
         right.addWidget(self.rma_warehouse_combo)
         approve_row = QHBoxLayout()
         approve_button = QPushButton("✅")
         approve_button.setObjectName("primaryIconButton")
         approve_button.setFixedWidth(48)
-        approve_button.setToolTip("تاییدِ RMA")
+        approve_button.setToolTip("تایید مجوز مرجوعی")
         approve_button.clicked.connect(self._approve_rma)
         approve_row.addWidget(approve_button)
         reject_button = QPushButton("❌")
         reject_button.setObjectName("dangerIconButton")
         reject_button.setFixedWidth(44)
-        reject_button.setToolTip("ردِ RMA")
+        reject_button.setToolTip("رد مجوز مرجوعی")
         reject_button.clicked.connect(self._reject_rma)
         approve_row.addWidget(reject_button)
         right.addLayout(approve_row)
@@ -442,13 +464,13 @@ class CommercialAftersalesScreen(QWidget):
         documents = documents_service.list_documents(company_id, document_type_code="SALES_INVOICE", status_code="POSTED")
         for d in documents:
             if d.counterparty_detail_account_id == customer_id:
-                self.rma_document_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
+                self.rma_document_combo.addItem(f"فاکتور شمارهٔ {d.document_no}", d.document_id)
 
     def _add_rma(self) -> None:
         customer_id = self.rma_customer_combo.currentData()
         document_id = self.rma_document_combo.currentData()
         if customer_id is None or document_id is None:
-            self.rma_status_label.setText("مشتری و فاکتورِ اصلی را انتخاب کنید.")
+            self.rma_status_label.setText("مشتری و فاکتور اصلی را انتخاب کنید.")
             return
         try:
             quantity = decimal.Decimal(self.rma_quantity_field.text().strip() or "0")
@@ -474,7 +496,7 @@ class CommercialAftersalesScreen(QWidget):
         company_id = self._company_id()
         warehouse_id = self.rma_warehouse_combo.currentData()
         if self._selected_rma_id is None:
-            self.rma_status_label.setText("ابتدا یک RMA را از فهرست انتخاب کنید.")
+            self.rma_status_label.setText("ابتدا یک مجوز مرجوعی را از فهرست انتخاب کنید.")
             return
         if company_id is None or warehouse_id is None:
             self.rma_status_label.setText("انبار را انتخاب کنید.")
@@ -492,7 +514,7 @@ class CommercialAftersalesScreen(QWidget):
 
     def _reject_rma(self) -> None:
         if self._selected_rma_id is None:
-            self.rma_status_label.setText("ابتدا یک RMA را از فهرست انتخاب کنید.")
+            self.rma_status_label.setText("ابتدا یک مجوز مرجوعی را از فهرست انتخاب کنید.")
             return
         try:
             aftersales_service.reject_rma(self._selected_rma_id)
@@ -513,7 +535,7 @@ class CommercialAftersalesScreen(QWidget):
             customer = customers_by_id.get(r.customer_detail_account_id)
             values = [
                 f"{customer['code']} — {customer['name'] or ''}" if customer else str(r.customer_detail_account_id),
-                _RMA_REASON_LABELS.get(r.reason_code, r.reason_code), str(r.requested_quantity),
+                _RMA_REASON_LABELS.get(r.reason_code, r.reason_code), decimals.format_qty(r.requested_quantity),
                 _RMA_STATUS_LABELS.get(r.status_code, r.status_code),
             ]
             for col_index, value in enumerate(values):
@@ -532,7 +554,7 @@ class CommercialAftersalesScreen(QWidget):
         self.warranty_invoice_combo.blockSignals(True)
         self.warranty_invoice_combo.clear()
         for d in documents_service.list_documents(company_id, document_type_code="SALES_INVOICE", status_code="POSTED"):
-            self.warranty_invoice_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
+            self.warranty_invoice_combo.addItem(f"فاکتور شمارهٔ {d.document_no}", d.document_id)
         self.warranty_invoice_combo.blockSignals(False)
         self._on_warranty_invoice_selected()
 
@@ -547,7 +569,7 @@ class CommercialAftersalesScreen(QWidget):
         self._on_rma_customer_selected()
 
         self.ticket_item_combo.clear()
-        self.ticket_item_combo.addItem("(بدونِ کالایِ مشخص)", None)
+        self.ticket_item_combo.addItem("(بدون کالای مشخص)", None)
         self.ticket_part_item_combo.clear()
         for it in self._items:
             label = f"{it.code} — {it.name or ''}"
@@ -555,13 +577,13 @@ class CommercialAftersalesScreen(QWidget):
             self.ticket_part_item_combo.addItem(label, it.item_id)
 
         self.ticket_warranty_combo.clear()
-        self.ticket_warranty_combo.addItem("(بدونِ گارانتی)", None)
+        self.ticket_warranty_combo.addItem("(بدون گارانتی)", None)
         for w in aftersales_service.list_warranties(company_id):
-            self.ticket_warranty_combo.addItem(f"گارانتیِ #{w.warranty_id}", w.warranty_id)
+            self.ticket_warranty_combo.addItem(f"گارانتی #{w.warranty_id}", w.warranty_id)
 
         self.ticket_invoice_combo.clear()
         for d in documents_service.list_documents(company_id, document_type_code="SALES_INVOICE"):
-            self.ticket_invoice_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
+            self.ticket_invoice_combo.addItem(f"فاکتور شمارهٔ {d.document_no}", d.document_id)
 
         self.rma_warehouse_combo.clear()
         for w in locations_service.list_warehouses(company_id, active_only=True):

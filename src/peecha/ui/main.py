@@ -1,4 +1,4 @@
-"""نقطه‌ی ورودِ برنامه‌ی پیچا (Qt6).
+"""نقطهٔ ورود برنامهٔ پیچا (Qt6).
 
 اجرا: python -m peecha.ui.main
 """
@@ -28,7 +28,7 @@ _font_family_cache: str | None = None
 
 
 def get_font_family() -> str:
-    """نامِ خانواده‌ی فونتِ ثبت‌شده — برایِ صفحاتی (مثلِ صفحه‌ی ورودِ بعدِ
+    """نام خانوادهٔ فونت ثبت‌شده — برای صفحاتی (مثل صفحهٔ ورود بعد
     خروج) که بعد از build اولیه هم به آن نیاز دارند."""
     global _font_family_cache
     if _font_family_cache is None:
@@ -37,10 +37,10 @@ def get_font_family() -> str:
 
 
 def _try_register(regular_path: str, bold_path: str, expected_substring: str) -> str | None:
-    """اگر فایلِ فونت موجود باشد، ثبتش می‌کند و نامِ خانواده‌ی واقعی را
-    برمی‌گرداند؛ فقط اگر نامِ خانواده واقعاً شاملِ expected_substring باشد
-    (وگرنه یعنی فایل placeholder/جعلی است، مثلِ اتفاقی که برایِ
-    Vazirmatn افتاد — یک .ttf با این نام اما محتوایِ DejaVu Sans)."""
+    """اگر فایل فونت موجود باشد، ثبتش می‌کند و نام خانوادهٔ واقعی را
+    برمی‌گرداند؛ فقط اگر نام خانواده واقعاً شامل expected_substring باشد
+    (وگرنه یعنی فایل placeholder/جعلی است، مثل اتفاقی که برای
+    Vazirmatn افتاد — یک .ttf با این نام اما محتوای DejaVu Sans)."""
     if not os.path.exists(regular_path):
         return None
     font_id = QFontDatabase.addApplicationFont(regular_path)
@@ -53,17 +53,23 @@ def _try_register(regular_path: str, bold_path: str, expected_substring: str) ->
 
 
 def _register_font() -> str:
-    """فونتِ ترجیحی را ثبت می‌کند و نامِ خانواده‌ی واقعی‌اش را برمی‌گرداند؛
-    وگرنه فونتِ پیش‌فرضِ سیستم را نگه می‌دارد — برخلافِ Kivy، Qt خودش برایِ
-    گلیفِ فارسی به فونتِ سیستم (که معمولاً پشتیبانی دارد) بازمی‌گردد، پس
-    نبودِ این فونت‌ها اینجا کرش/جعبه‌ی خالی نمی‌سازد، فقط ظاهرِ فونت را
+    """فونت ترجیحی را ثبت می‌کند و نام خانوادهٔ واقعی‌اش را برمی‌گرداند؛
+    وگرنه فونت پیش‌فرض سیستم را نگه می‌دارد — برخلاف Kivy، Qt خودش برای
+    گلیف فارسی به فونت سیستم (که معمولاً پشتیبانی دارد) بازمی‌گردد، پس
+    نبود این فونت‌ها اینجا کرش/جعبهٔ خالی نمی‌سازد، فقط ظاهر فونت را
     عوض می‌کند.
 
-    اولویت: IRANSans (طبقِ استایلِ مرجعِ کاربر) -> Vazirmatn -> Tahoma.
-    هر دویِ IRANSans/Vazirmatn قبل از پذیرفته‌شدن با نامِ خانواده‌شان
-    اعتبارسنجی می‌شوند (نکته: فایلِ فعلیِ Vazirmatn-Regular.ttf در واقع
-    یک placeholder اشتباهاً commit‌شده است، نه فونتِ واقعی — پس عملاً به
-    Tahoma برمی‌گردد تا وقتی فایل‌هایِ واقعی جایگزین شوند)."""
+    اولویت: IRANSans (طبق استایل مرجع کاربر، اگر بعداً اضافه شود) ->
+    Vazirmatn -> Tahoma. هر دوی IRANSans/Vazirmatn قبل از پذیرفته‌شدن با
+    نام خانواده‌شان اعتبارسنجی می‌شوند (تا فایل placeholder/جعلی، مثل
+    اتفاقی که یک‌بار برای Vazirmatn افتاده بود، پذیرفته نشود). طبق
+    درخواست صریح کاربر برای فونت استاندارد و خواناتر: چون «Tahoma»ی
+    واقعی یک فونت اختصاصی مایکروسافت است و نه روی این سرور نصب است و
+    نه مجاز به bundle‌شدن، عملاً فقط یک رشتهٔ نام فونت است که روی
+    لینوکس به فونت جایگزین سیستم (مثلاً DejaVu Sans) برمی‌گردد — به‌جایش
+    فونت Vazirmatn (متن‌باز، مجوز SIL OFL، طراحی‌شده برای فارسی) که از
+    نسخهٔ ۱۰۹ در assets/fonts/ به‌صورت واقعی commit شده، به‌عنوان
+    استاندارد فونت برنامه استفاده می‌شود."""
     iran_sans = _try_register(_IRANSANS_REGULAR, _IRANSANS_BOLD, "iran")
     if iran_sans:
         return iran_sans
@@ -83,6 +89,10 @@ def main() -> None:
     # طبقِ خواسته‌یِ صریح: لوگویِ برند به‌عنوانِ آیکونِ اپ/تسک‌بار — همه‌یِ
     # پنجره‌هایِ بی‌آیکونِ اختصاصی (ورود، شِلِ اصلی) این را به ارث می‌برند.
     app.setWindowIcon(theme.app_icon())
+    # R247: گزارش‌هایِ سنگین در رشتهٔ پس‌زمینه اجرا شوند تا رابط قفل نشود
+    from peecha.ui.screens import purchase_reports as report_screens
+
+    report_screens.BACKGROUND_REPORTS = True
 
     font_family = get_font_family()
     app.setFont(QFont(font_family, 11.5))

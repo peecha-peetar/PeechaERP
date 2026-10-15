@@ -1,7 +1,7 @@
-"""نسبت‌هایِ مالی — سودآوری/اهرمی/نقدینگی، رویِ compute_balance_sheet/
-compute_income_statement موجود سوار می‌شود. نسبت‌هایِ نقدینگی (جاری/آنی)
-فقط برایِ حساب‌هایی محاسبه می‌شوند که «طبقه‌یِ نقدینگی»شان در کدینگِ
-حسابداری/نگاشتِ صورت‌هایِ مالی تنظیم شده باشد."""
+"""نسبت‌های مالی — سودآوری/اهرمی/نقدینگی، روی compute_balance_sheet/
+compute_income_statement موجود سوار می‌شود. نسبت‌های نقدینگی (جاری/آنی)
+فقط برای حساب‌هایی محاسبه می‌شوند که «طبقهٔ نقدینگی»شان در کدینگ
+حسابداری/نگاشت صورت‌های مالی تنظیم شده باشد."""
 
 from __future__ import annotations
 
@@ -10,19 +10,20 @@ import decimal
 
 from PySide6.QtWidgets import QLabel
 
+from peecha import numerals
 from peecha.services import reports as reports_service
 from peecha.ui.screens.reports_common import ReportScreenBase
 
 
 class FinancialRatiosScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("نسبت‌هایِ مالی")
+        super().__init__("نسبت‌های مالی")
 
         hint = QLabel(
-            "نسبتِ جاری/آنی فقط برایِ حساب‌هایی محاسبه می‌شود که «طبقه‌یِ نقدینگی»شان در کدینگِ حسابداری یا "
-            "نگاشتِ صورت‌هایِ مالی تنظیم شده باشد (جاری/جاری-موجودی برایِ دارایی، جاری برایِ بدهی)؛ اگر هیچ "
-            "حسابی طبقه‌بندی نشده باشد، این دو نسبت «—» نشان داده می‌شوند. «تا تاریخ» = تاریخِ ترازنامه؛ "
-            "بازه‌یِ «از–تا تاریخ» = دوره‌یِ سود-زیان."
+            "نسبت جاری/آنی فقط برای حساب‌هایی محاسبه می‌شود که «طبقهٔ نقدینگی»شان در کدینگ حسابداری یا "
+            "نگاشت صورت‌های مالی تنظیم شده باشد (جاری/جاری-موجودی برای دارایی، جاری برای بدهی)؛ اگر هیچ "
+            "حسابی طبقه‌بندی نشده باشد، این دو نسبت «—» نشان داده می‌شوند. «تا تاریخ» = تاریخ ترازنامه؛ "
+            "بازهٔ «از–تا تاریخ» = دورهٔ سود-زیان."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -38,10 +39,10 @@ class FinancialRatiosScreen(ReportScreenBase):
             if r.value is None:
                 value_text = "—"
             elif r.kind == "PERCENTAGE":
-                value_text = f"{r.value * decimal.Decimal(100):,.1f}٪"
+                value_text = numerals.to_persian_digits(f"{r.value * decimal.Decimal(100):,.1f}") + "٪"
             elif r.kind == "CURRENCY":
-                value_text = f"{r.value:,.0f}"
+                value_text = numerals.format_company_amount(r.value)
             else:  # RATIO
-                value_text = f"{r.value:,.2f}"
+                value_text = numerals.to_persian_digits(f"{r.value:,.2f}")
             rows.append([r.label, value_text])
         return headers, rows, None

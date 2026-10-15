@@ -1,4 +1,4 @@
-"""مدیریتِ کاربران — معادلِ Qt برایِ users.py/.kv در Kivy."""
+"""مدیریت کاربران — معادل Qt برای users.py/.kv در Kivy."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -21,10 +22,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import session as app_session
+from peecha.services import commercial_pos as pos_service
+from peecha.services import commercial_pricing as pricing_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable_with_footer
+from peecha.db.models.security import User, UserCompany, UserModuleRole, UserRole
+from peecha.ui.widgets import (
+    FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable_with_footer,
+)
 
-_COLUMNS = ["فعال", "مدیرِ کل", "شرکت‌ها", "نامِ کامل", "نامِ کاربری"]
+_COLUMNS = ["فعال", "مدیر کل", "شرکت‌ها", "نام کامل", "نام کاربری"]
 
 
 class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -38,40 +46,52 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="کاربر جدید")
 
         self.set_field_help([
             (
                 self.username_field,
-                "نامِ کاربری برایِ ورود به سیستم. بعدِ ساختنِ کاربر قابلِ‌تغییر نیست.",
+                "نام کاربری برای ورود به سیستم. بعد ساختن کاربر قابل‌تغییر نیست.",
             ),
-            (self.full_name_field, "نامِ کاملِ کاربر — همان‌جایی که در فهرست‌ها و رخدادنگارِ سیستم نشان داده می‌شود."),
-            (self.email_field, "ایمیلِ کاربر. اختیاری است و فعلاً فقط جنبه‌یِ اطلاعاتی دارد."),
+            (self.full_name_field, "نام کامل کاربر — همان‌جایی که در فهرست‌ها و رخدادنگار سیستم نشان داده می‌شود."),
+            (self.email_field, "ایمیل کاربر. اختیاری است و فعلاً فقط جنبهٔ اطلاعاتی دارد."),
             (
                 self.language_combo,
-                "زبانی که رابطِ کاربری برایِ این کاربر با آن نمایش داده می‌شود.",
+                "زبانی که رابط کاربری برای این کاربر با آن نمایش داده می‌شود.",
             ),
             (
                 self.password_field,
-                "رمزِ عبورِ کاربر. برایِ کاربرِ تازه اجباری است و باید حداقل ۶ کاراکتر باشد. "
-                "هنگامِ ویرایش، اگر خالی بگذارید رمزِ قبلی همان‌طور می‌ماند.",
+                "رمز عبور کاربر. برای کاربر تازه اجباری است و باید حداقل ۶ کاراکتر باشد. "
+                "هنگام ویرایش، اگر خالی بگذارید رمز قبلی همان‌طور می‌ماند.",
             ),
             (
                 self.is_super_admin_checkbox,
-                "مدیرِ کلِ سیستم است یا نه. این وضعیت معمولاً فقط برایِ کاربرِ اولِ سیستم استفاده می‌شود.",
+                "مدیر کل سیستم است یا نه. این وضعیت معمولاً فقط برای کاربر اول سیستم استفاده می‌شود.",
             ),
             (
                 self.is_active_checkbox,
-                "کاربرِ غیرِفعال دیگر نمی‌تواند وارد سیستم شود. حساب و سابقه‌اش پاک نمی‌شود.",
+                "کاربر غیرفعال دیگر نمی‌تواند وارد سیستم شود. حساب و سابقه‌اش پاک نمی‌شود.",
             ),
             (
                 self.company_list,
                 "این کاربر به کدام شرکت‌ها دسترسی دارد را تیک بزنید. سیستم چندشرکتی است و هر کاربر فقط "
-                "شرکت‌هایِ تیک‌خورده را در انتخابِ شرکتِ بالایِ برنامه می‌بیند.",
+                "شرکت‌های تیک‌خورده را در انتخاب شرکت بالای برنامه می‌بیند.",
             ),
             (
                 self.default_company_combo,
-                "شرکتی که هنگامِ ورود به سیستم به‌طورِ پیش‌فرض برایِ این کاربر انتخاب می‌شود.",
+                "شرکتی که هنگام ورود به سیستم به‌طور پیش‌فرض برای این کاربر انتخاب می‌شود.",
+            ),
+            (self.pos_default_terminal_combo, "ترمینال صندوقی که در فروش حضوری برای این کاربر پیش‌فرض انتخاب می‌شود."),
+            (self.pos_default_price_list_combo, "فهرست قیمتی که در فروش حضوری برای این کاربر پیش‌فرض انتخاب می‌شود."),
+            (self.pos_default_customer_combo, "مشتری‌ای که در فروش حضوری برای این کاربر پیش‌فرض انتخاب می‌شود."),
+            (self.voip_extension_field, "شمارهٔ داخلی این کاربر در سیستم سانترال/وویپ — برای تماس مستقیم از داخل برنامه."),
+            (
+                self.mobile_channel_type_combo,
+                "این ویزیتور در برنامهٔ موبایل فقط پخش گرم (فاکتور آنی) یا فقط پخش سرد (صرفاً سفارش‌گیری) می‌بیند -- "
+                "بدون تعیین این مقدار، برنامهٔ موبایل او قابل‌استفاده نیست.",
             ),
         ])
 
@@ -102,7 +122,7 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("کاربرِ جدید")
+        self.form_title = QLabel("کاربر جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -116,24 +136,23 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.password_field = QLineEdit()
         self.password_field.setEchoMode(QLineEdit.Password)
-        self.password_field.setPlaceholderText("(برایِ عدمِ تغییر، خالی بگذارید)")
+        self.password_field.setPlaceholderText("(برای عدم تغییر، خالی بگذارید)")
 
-        self.is_super_admin_checkbox = QCheckBox("مدیرِ کلِ سیستم")
+        self.is_super_admin_checkbox = QCheckBox("مدیر کل سیستم")
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
 
         self.basic_grid = FieldGrid([
-            FieldSpec("username", "نامِ کاربری", self.username_field, span=1),
-            FieldSpec("full_name", "نامِ کامل", self.full_name_field, span=2),
+            FieldSpec("username", "نام کاربری", self.username_field, span=1),
+            FieldSpec("full_name", "نام کامل", self.full_name_field, span=2),
             FieldSpec("email", "ایمیل", self.email_field, span=3),
-            FieldSpec("language", "زبانِ پیش‌فرض", self.language_combo, span=1),
-            FieldSpec("password", "رمزِ عبور", self.password_field, span=2),
+            FieldSpec("language", "زبان پیش‌فرض", self.language_combo, span=1),
+            FieldSpec("password", "رمز عبور", self.password_field, span=2),
             FieldSpec("is_super_admin", "", self.is_super_admin_checkbox, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=1),
         ])
         layout.addWidget(self.basic_grid)
-        self.register_field_grids("users", [self.basic_grid])
 
         layout.addWidget(QLabel("دسترسی به شرکت‌ها"))
         self.company_list = QListWidget()
@@ -141,10 +160,57 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.company_list)
 
         grid2 = QGridLayout()
-        grid2.addWidget(QLabel("شرکتِ پیش‌فرض"), 0, 0)
+        grid2.addWidget(QLabel("شرکت پیش‌فرض"), 0, 0)
         self.default_company_combo = QComboBox()
         grid2.addWidget(self.default_company_combo, 0, 1)
         layout.addLayout(grid2)
+
+        # طبقِ درخواستِ صریح («این تنظیمات در قسمتِ تنظیماتِ کاربر با نقشِ
+        # صندوق‌دار باید تعریف بشه»): ترمینال/فهرستِ‌قیمت/مشتریِ پیش‌فرضِ
+        # این کاربر برایِ صفحه‌یِ فروشِ حضوری -- برایِ شرکتِ فعلاً
+        # انتخاب‌شده (چون این‌ها هرکدام شرکت‌محورند).
+        pos_title = QLabel("تنظیمات صندوق فروش (POS) — برای شرکت فعلی")
+        pos_title.setObjectName("sectionTitle")
+        layout.addWidget(pos_title)
+        self.pos_default_terminal_combo = QComboBox()
+        self.pos_default_price_list_combo = QComboBox()
+        self.pos_default_customer_combo = QComboBox()
+        self.pos_grid = FieldGrid([
+            FieldSpec("pos_terminal", "ترمینال پیش‌فرض", self.pos_default_terminal_combo, span=1),
+            FieldSpec("pos_price_list", "فهرست‌قیمت پیش‌فرض", self.pos_default_price_list_combo, span=1),
+            FieldSpec("pos_customer", "مشتری پیش‌فرض", self.pos_default_customer_combo, span=1),
+        ])
+        layout.addWidget(self.pos_grid)
+
+        # طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال»): داخلیِ این
+        # کاربر در سانترال -- هم‌الگو با تنظیماتِ POS بالا (برایِ شرکتِ
+        # فعلاً انتخاب‌شده ذخیره می‌شود، چون سانترال هم شرکت‌محور است).
+        voip_title = QLabel("سانترال/وویپ — برای شرکت فعلی")
+        voip_title.setObjectName("sectionTitle")
+        layout.addWidget(voip_title)
+        self.voip_extension_field = QLineEdit()
+        self.voip_extension_field.setPlaceholderText("مثلاً 1001")
+        self.voip_grid = FieldGrid([
+            FieldSpec("voip_extension", "داخلی سانترال", self.voip_extension_field, span=1),
+        ])
+        layout.addWidget(self.voip_grid)
+
+        # طبقِ درخواستِ صریح («تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم»):
+        # اپِ موبایل قبلاً برایِ همه‌یِ ویزیتورها بدونِ استثنا فقط مسیرِ
+        # پخشِ گرم را نشان می‌داد -- این ترکیب مشخص می‌کند این کاربر در
+        # موبایل کدام مسیر را ببیند (برایِ شرکتِ فعلاً انتخاب‌شده).
+        mobile_title = QLabel("برنامهٔ موبایل — برای شرکت فعلی")
+        mobile_title.setObjectName("sectionTitle")
+        layout.addWidget(mobile_title)
+        self.mobile_channel_type_combo = QComboBox()
+        self.mobile_channel_type_combo.addItem("(تعیین نشده)", None)
+        self.mobile_channel_type_combo.addItem("پخش گرم (فاکتور آنی)", "VAN_SALES")
+        self.mobile_channel_type_combo.addItem("پخش سرد (فقط سفارش‌گیری)", "PRE_SALES")
+        self.mobile_grid = FieldGrid([
+            FieldSpec("mobile_channel_type", "نوع کانال موبایل", self.mobile_channel_type_combo, span=1),
+        ])
+        layout.addWidget(self.mobile_grid)
+        self.register_field_grids("users", [self.basic_grid, self.pos_grid, self.voip_grid, self.mobile_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -164,7 +230,10 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         cancel_button.clicked.connect(self._reset_form)
 
         layout.addStretch(1)
-        return wrap_scrollable_with_footer(panel, [save_button, cancel_button])
+        # R276: حذف (اگر سابقه دارد غیرفعال می‌شود)
+        delete = delete_button()
+        delete.clicked.connect(self._delete)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, delete])
 
     def refresh(self) -> None:
         self._company_options = users_service.list_companies_for_picker()
@@ -174,6 +243,22 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.language_combo.addItem("—", None)
         for lang_id, name in self._language_options:
             self.language_combo.addItem(name, lang_id)
+
+        current_company_id = app_session.current_company.company_id if app_session.current_company else None
+        self.pos_default_terminal_combo.clear()
+        self.pos_default_price_list_combo.clear()
+        self.pos_default_customer_combo.clear()
+        self.pos_default_terminal_combo.addItem("(تعیین‌نشده)", None)
+        self.pos_default_price_list_combo.addItem("(تعیین‌نشده)", None)
+        self.pos_default_customer_combo.addItem("(تعیین‌نشده)", None)
+        if current_company_id is not None:
+            for t in pos_service.list_terminals(current_company_id):
+                self.pos_default_terminal_combo.addItem(f"{t.code} — {t.name}", t.terminal_id)
+            for pl in pricing_service.list_price_lists(current_company_id, "SALES"):
+                self.pos_default_price_list_combo.addItem(f"{pl.code} — {pl.name}", pl.price_list_id)
+            for c in dimensions_service.list_customers(current_company_id):
+                self.pos_default_customer_combo.addItem(f"{c['code']} — {c['name'] or ''}", c["detail_account_id"])
+        self.pos_grid.setEnabled(current_company_id is not None)
 
         self._reset_form()
         self._rows = users_service.list_users()
@@ -217,7 +302,7 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, user: users_service.UserRow) -> None:
         self._editing_id = user.user_id
-        self.form_title.setText(f"ویرایشِ کاربر — {user.username}")
+        self.form_title.setText(f"ویرایش کاربر — {user.username}")
         self.status_label.setText("")
         self.username_field.setText(user.username)
         self.username_field.setEnabled(False)
@@ -236,9 +321,30 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             index = self.default_company_combo.findData(user.default_company_id)
             self.default_company_combo.setCurrentIndex(index if index >= 0 else 0)
 
+        current_company_id = app_session.current_company.company_id if app_session.current_company else None
+        cashier_settings = pos_service.get_cashier_settings(user.user_id, current_company_id) if current_company_id is not None else None
+        for combo, value in (
+            (self.pos_default_terminal_combo, cashier_settings.default_terminal_id if cashier_settings else None),
+            (self.pos_default_price_list_combo, cashier_settings.default_price_list_id if cashier_settings else None),
+            (self.pos_default_customer_combo, cashier_settings.default_customer_detail_account_id if cashier_settings else None),
+        ):
+            index = combo.findData(value)
+            combo.setCurrentIndex(index if index >= 0 else 0)
+
+        extension = users_service.get_voip_extension(user.user_id, current_company_id) if current_company_id is not None else None
+        self.voip_extension_field.setText(extension or "")
+        self.voip_grid.setEnabled(current_company_id is not None and current_company_id in user.company_ids)
+
+        mobile_channel_type = (
+            users_service.get_mobile_channel_type(user.user_id, current_company_id) if current_company_id is not None else None
+        )
+        index = self.mobile_channel_type_combo.findData(mobile_channel_type)
+        self.mobile_channel_type_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.mobile_grid.setEnabled(current_company_id is not None and current_company_id in user.company_ids)
+
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("کاربرِ جدید")
+        self.form_title.setText("کاربر جدید")
         self.status_label.setText("")
         self.username_field.clear()
         self.username_field.setEnabled(True)
@@ -248,6 +354,13 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.language_combo.setCurrentIndex(0)
         self.is_super_admin_checkbox.setChecked(False)
         self.is_active_checkbox.setChecked(True)
+        self.pos_default_terminal_combo.setCurrentIndex(0)
+        self.pos_default_price_list_combo.setCurrentIndex(0)
+        self.pos_default_customer_combo.setCurrentIndex(0)
+        self.voip_extension_field.clear()
+        self.voip_grid.setEnabled(False)
+        self.mobile_channel_type_combo.setCurrentIndex(0)
+        self.mobile_grid.setEnabled(False)
         self._rebuild_company_widgets(set())
         self.table.clearSelection()
 
@@ -259,10 +372,20 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 ids.append(item.data(Qt.UserRole))
         return ids
 
+    def _delete(self) -> None:
+        current = app_session.current_user
+        if current is not None and self._editing_id == current.user_id:
+            QMessageBox.warning(self, "کاربر", "کاربر واردشده نمی‌تواند خودش را حذف کند.")
+            return
+        if confirm_and_delete(self, "کاربر", self.username_field.text(), User, self._editing_id, None,
+                              children=((UserCompany, "user_id"), (UserRole, "user_id"), (UserModuleRole, "user_id"))):
+            self._reset_form()
+            self.refresh()
+
     def _save(self) -> None:
         full_name = self.full_name_field.text().strip()
         if not full_name:
-            self.status_label.setText("نامِ کامل را وارد کنید.")
+            self.status_label.setText("نام کامل را وارد کنید.")
             return
 
         email = self.email_field.text().strip() or None
@@ -286,15 +409,16 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     default_company_id,
                     new_password=password or None,
                 )
+                saved_user_id = self._editing_id
             else:
                 username = self.username_field.text().strip()
                 if not username:
-                    self.status_label.setText("نامِ کاربری را وارد کنید.")
+                    self.status_label.setText("نام کاربری را وارد کنید.")
                     return
                 if len(password) < 6:
-                    self.status_label.setText("رمزِ عبور باید حداقل ۶ کاراکتر باشد.")
+                    self.status_label.setText("رمز عبور باید حداقل ۶ کاراکتر باشد.")
                     return
-                users_service.create_user(
+                new_user = users_service.create_user(
                     username,
                     full_name,
                     password,
@@ -304,8 +428,21 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     company_ids,
                     default_company_id,
                 )
+                saved_user_id = new_user.user_id
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
+
+        current_company_id = app_session.current_company.company_id if app_session.current_company else None
+        if current_company_id is not None:
+            pos_service.set_cashier_settings(
+                saved_user_id, current_company_id, self.pos_default_terminal_combo.currentData(),
+                self.pos_default_price_list_combo.currentData(), self.pos_default_customer_combo.currentData(),
+            )
+            if current_company_id in company_ids:
+                users_service.set_voip_extension(saved_user_id, current_company_id, self.voip_extension_field.text())
+                users_service.set_mobile_channel_type(
+                    saved_user_id, current_company_id, self.mobile_channel_type_combo.currentData()
+                )
 
         self.refresh()

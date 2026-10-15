@@ -1,5 +1,5 @@
-"""فهرستِ اسنادِ عملیاتیِ انبار — فیلترِ نوع/وضعیت، بازکردنِ سندِ انتخاب‌شده
-در فرمِ مخصوصِ همان نوع (inventory_document.py)."""
+"""فهرست اسناد عملیاتی انبار — فیلتر نوع/وضعیت، بازکردن سند انتخاب‌شده
+در فرم مخصوص همان نوع (inventory_document.py)."""
 
 from __future__ import annotations
 
@@ -22,8 +22,9 @@ from peecha import numerals, session as app_session
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES, STATUS_LABELS
+from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
-_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "انبارِ مبدا", "انبارِ مقصد", "وضعیت", "شمارهٔ مرجع", "عملیات"]
+_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "انبار مبدا", "انبار مقصد", "وضعیت", "شمارهٔ مرجع", "عملیات"]
 
 # طبقِ رفعِ باگِ واقعی: این‌جا باید کدهایِ ناوبریِ nav_catalog.py باشد
 # (همان‌ها که MainWindow.open_screen ازشان می‌خواند)، نه نامِ داخلیِ
@@ -40,7 +41,7 @@ _TYPE_TO_NAV_CODE = {
 }
 
 
-class InventoryDocumentsListScreen(QWidget):
+class InventoryDocumentsListScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
@@ -51,7 +52,7 @@ class InventoryDocumentsListScreen(QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("اسنادِ انبار")
+        title = QLabel("اسناد انبار")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -75,16 +76,25 @@ class InventoryDocumentsListScreen(QWidget):
         layout.addLayout(filters)
 
         new_buttons = QHBoxLayout()
+        # طبقِ تصمیمِ صریح («برگشت از فروش/به تامین‌کننده از منویِ انبار
+        # حذف شود»): ساختنِ دستیِ سندِ RETURN_IN/RETURN_OUT از این‌جا هم
+        # دیگر پیشنهاد نمی‌شود -- مسیرِ درست، سندِ تجاریِ SALES_RETURN/
+        # PURCHASE_RETURN است که خودش این سند را می‌سازد. ردیف‌هایِ
+        # ازقبل‌موجود (خودکار ساخته‌شده) همچنان در این لیست دیده و
+        # ویرایش/مشاهده می‌شوند.
         for code, label in DOC_TYPE_TITLES.items():
+            if code in ("RETURN_IN", "RETURN_OUT"):
+                continue
             button = QPushButton(f"➕ {label}")
             button.setObjectName("primaryButton")
-            button.setToolTip(f"سندِ {label}یِ تازه")
+            button.setToolTip(f"سند {label}ی تازه")
             button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
             new_buttons.addWidget(button)
         layout.addLayout(new_buttons)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
+        persist_column_widths(self.table, "inventoryDocumentsList")
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -96,6 +106,11 @@ class InventoryDocumentsListScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(len(_COLUMNS) - 1, QHeaderView.ResizeToContents)
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (self.type_filter, "فقط اسناد همین نوع نشان داده شوند."),
+            (self.status_filter, "فقط اسناد همین وضعیت نشان داده شوند."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -125,6 +140,7 @@ class InventoryDocumentsListScreen(QWidget):
                 item.setData(Qt.UserRole, d.stock_document_id)
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d))
+        self.table.resizeColumnToContents(len(_COLUMNS) - 1)
         self.table.resizeRowsToContents()
 
     def _build_row_actions(self, d: documents_service.StockDocumentRow) -> QWidget:
@@ -148,26 +164,31 @@ class InventoryDocumentsListScreen(QWidget):
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedSize(44, 32)
         is_admin = bool(app_session.current_user and app_session.current_user.is_super_admin)
-        if d.posted_at is None:
+        if d.origin_label is not None:
+            # R226: سندِ صادرشده از فاکتور/برگشت فقط از خودِ همان سند تغییر می‌کند.
+            delete_button.setEnabled(False)
+            delete_button.setToolTip(f"صادرشده از «{d.origin_label}» — حذف/ویرایش فقط از خود همان سند.")
+            edit_button.setToolTip("مشاهده")
+        elif d.posted_at is None:
             # هرگز ثبتِ‌نهایی نشده (DRAFT/CONFIRMED/لغوشدهٔ پیش از ثبت) —
             # هیچ ردیفی در دفترِ انبار ندارد، پس حذفِ مستقیم بی‌خطر است.
-            delete_button.setToolTip("حذفِ سند")
+            delete_button.setToolTip("حذف سند")
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.stock_document_id: self._delete_document(doc_id))
         elif d.status_code == "POSTED" and is_admin:
             delete_button.setToolTip(
-                "حذفِ سندِ ثبت‌شده (مدیر): یک سندِ برگشتیِ خودکار ساخته می‌شود تا اثرش را خنثی کند، "
-                "سپس خودِ این سند «لغوشده» علامت می‌خورد."
+                "حذف سند ثبت‌شده (مدیر): یک سند برگشتی خودکار ساخته می‌شود تا اثرش را خنثی کند، "
+                "سپس خود این سند «لغوشده» علامت می‌خورد."
             )
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.stock_document_id: self._reverse_and_delete_document(doc_id))
         elif d.status_code == "POSTED":
             delete_button.setEnabled(False)
             delete_button.setToolTip(
-                "این سند ثبتِ‌نهایی شده و اثری در دفترِ انبار/حسابداری دارد — فقط مدیرِ سیستم می‌تواند "
-                "آن را (با ساختِ خودکارِ سندِ برگشتی) حذف کند."
+                "این سند ثبت‌نهایی شده و اثری در دفتر انبار/حسابداری دارد — فقط مدیر سیستم می‌تواند "
+                "آن را (با ساخت خودکار سند برگشتی) حذف کند."
             )
         else:
             delete_button.setEnabled(False)
-            delete_button.setToolTip("اثرِ این سند قبلاً با یک سندِ برگشتیِ خودکار خنثی و خودش لغو شده است.")
+            delete_button.setToolTip("اثر این سند قبلاً با یک سند برگشتی خودکار خنثی و خودش لغو شده است.")
         actions_layout.addWidget(delete_button)
         actions_layout.addStretch(1)
         return actions
@@ -185,7 +206,7 @@ class InventoryDocumentsListScreen(QWidget):
 
     def _delete_document(self, stock_document_id: int) -> None:
         confirm = QMessageBox.question(
-            self, "حذف", "این سندِ پیش‌نویس حذف شود؟ این کار قابلِ‌بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
+            self, "حذف", "این سند پیش‌نویس حذف شود؟ این کار قابل‌بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return
@@ -201,9 +222,9 @@ class InventoryDocumentsListScreen(QWidget):
 
     def _reverse_and_delete_document(self, stock_document_id: int) -> None:
         confirm = QMessageBox.question(
-            self, "حذفِ سندِ ثبت‌شده",
-            "این سند قبلاً در دفترِ انبار و حسابداری اثر گذاشته — حذفِ مستقیمِ آن ممکن نیست.\n"
-            "به‌جایش یک سندِ برگشتیِ خودکار ساخته و ثبتِ‌نهایی می‌شود تا اثرش خنثی شود، سپس خودِ این سند "
+            self, "حذف سند ثبت‌شده",
+            "این سند قبلاً در دفتر انبار و حسابداری اثر گذاشته — حذف مستقیم آن ممکن نیست.\n"
+            "به‌جایش یک سند برگشتی خودکار ساخته و ثبت‌نهایی می‌شود تا اثرش خنثی شود، سپس خود این سند "
             "«لغوشده» علامت می‌خورد.\n\nادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )

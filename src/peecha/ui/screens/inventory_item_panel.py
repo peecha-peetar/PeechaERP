@@ -1,8 +1,8 @@
-"""پنلِ اختصاصیِ «کالا» — طبقِ ادغامِ فرمِ مستقلِ کالا/خدمت در گروهِ تفصیلیِ
-INVENTORY_ITEM (هم‌الگو با یکپارچه‌سازیِ HR/PERSONNEL): این ویجت فقط
-تب‌هایِ اختصاصیِ کالا را می‌سازد (کد/نام/فعال/والد و دکمه‌هایِ ذخیره/حذف
-در فرمِ میزبان — detail_dimensions.py — هستند) و توسطِ آن فرم، فقط در
-سطحِ‌آخرِ گروهِ کالا embed و نمایان می‌شود."""
+"""پنل اختصاصی «کالا» — طبق ادغام فرم مستقل کالا/خدمت در گروه تفصیلی
+INVENTORY_ITEM (هم‌الگو با یکپارچه‌سازی HR/PERSONNEL): این ویجت فقط
+تب‌های اختصاصی کالا را می‌سازد (کد/نام/فعال/والد و دکمه‌های ذخیره/حذف
+در فرم میزبان — detail_dimensions.py — هستند) و توسط آن فرم، فقط در
+سطح‌آخر گروه کالا embed و نمایان می‌شود."""
 
 from __future__ import annotations
 
@@ -10,13 +10,17 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QColorDialog,
     QComboBox,
-    QDateEdit,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -31,27 +35,42 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import decimals, numerals, session as app_session
+from peecha.services import commercial_ecommerce as ecommerce_service
+from peecha.services import commercial_pos as pos_service
+from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_extended as extended_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
+from peecha.services import item_variants as variants_service
+from peecha.services import supplier_price_import as spi_service
+from peecha.services import unit_conversion as uc
+from peecha.ui.barcode_print import print_barcode_labels
+from peecha.ui import theme
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, build_section_layout
+
+_SUPPLIER_CODE_TYPE_LABELS = {"CODE": "کد", "NAME": "نام"}
 
 _KIND_LABELS = {
     "GOOD": "کالا", "SERVICE": "خدمت", "RAW_MATERIAL": "مادهٔ اولیه", "SEMI_FINISHED": "نیمه‌ساخته",
     "FINISHED_GOOD": "ساخته‌شده", "ASSET": "دارایی", "BUNDLE": "بسته", "KIT": "کیت",
 }
 _LIFECYCLE_LABELS = {"DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "DISCONTINUED": "متوقف‌شده"}
-_COSTING_LABELS = {"": "(پیش‌فرضِ شرکت)", "FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
+from peecha.services.costing.strategies import METHOD_LABELS as _METHOD_LABELS  # noqa: E402
+
+_COSTING_LABELS = {"": "(پیش‌فرض شرکت)", **_METHOD_LABELS}
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
 _RELATION_LABELS = {"SUBSTITUTE": "جایگزین", "COMPLEMENTARY": "مکمل"}
-_DEPRECIATION_LABELS = {"STRAIGHT_LINE": "خطِ‌مستقیم", "DECLINING_BALANCE": "نزولی"}
+_UNIT_COLUMNS = ["واحد", "ضریب", "خرید", "فروش", "پیش‌فرض خرید", "پیش‌فرض فروش", "بارکدها", "قیمت", "وضعیت"]
+_DEPRECIATION_LABELS = {"STRAIGHT_LINE": "خط‌مستقیم", "DECLINING_BALANCE": "نزولی"}
 _CONSUMER_FACING_KINDS = ("GOOD", "FINISHED_GOOD", "BUNDLE", "KIT")
+_ECOMMERCE_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
 
 
 def _decimal_or_none(text: str) -> decimal.Decimal | None:
-    text = text.strip()
+    text = numerals.to_ascii_digits(text).replace(",", "").replace("٬", "").replace("٫", ".").strip()
     if not text:
         return None
     try:
@@ -79,6 +98,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._categories: list[catalog_service.ItemCategoryRow] = []
         self._enabled_features: set[str] = set()
         self._current_bom_id: int | None = None
+        self._item_units: list = []
+        self._unit_barcode_rows: list = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -87,28 +108,114 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.tabs = QTabWidget()
         self.tab_indexes: dict[str, int] = {}
         tab_defs = [
-            ("basic", self._build_basic_info_tab(), "اطلاعاتِ پایه"),
+            ("basic", self._build_basic_info_tab(), "اطلاعات پایه"),
             ("tracking", self._build_sales_tracking_tab(), "فروش/خرید و ردیابی"),
             ("grouping", self._build_grouping_tab(), "گروه‌بندی و شناسه"),
+            ("units", self._build_units_tab(), "واحدها و بسته‌بندی"),
             ("purchasing", self._build_purchasing_tab(), "خرید"),
-            ("sales_extra", self._build_sales_extra_tab(), "فروشِ تکمیلی"),
+            ("variants", self._build_variants_tab(), "ویژگی‌ها و متغیرها"),
+            ("sales_extra", self._build_sales_extra_tab(), "فروش تکمیلی"),
             ("production", self._build_production_tab(), "تولید (BOM)"),
-            ("ecommerce", self._build_ecommerce_tab(), "فروشگاهِ اینترنتی"),
-            ("pos", self._build_pos_tab(), "POS"),
+            ("ecommerce", self._build_ecommerce_tab(), "فروشگاه اینترنتی"),
+            ("pos", self._build_pos_tab(), "فروش حضوری (POS)"),
             ("shipping", self._build_shipping_tab(), "حمل‌ونقل"),
-            ("qc", self._build_qc_tab(), "کنترلِ کیفیت"),
+            ("qc", self._build_qc_tab(), "کنترل کیفیت"),
             ("asset", self._build_asset_tab(), "دارایی"),
+            ("locations", self._build_locations_tab(), "محل‌های انبار"),  # R248
+            ("cost", self._build_cost_tab(), "اطلاعات بها"),  # R259
         ]
         for key, widget, label in tab_defs:
             self.tab_indexes[key] = self.tabs.addTab(widget, label)
         layout.addWidget(self.tabs)
 
         self.set_field_help([
-            (self.kind_combo, "نوعِ کالا؛ تب‌هایِ مرتبط بر اساسِ همین انتخاب نمایان می‌شوند."),
-            (self.uom_combo, "واحدِ پایه — پس از اولین حرکتِ انبار دیگر قابلِ‌تغییر نیست."),
-            (self.costing_combo, "روشِ قیمت‌گذاریِ اختصاصیِ این کالا؛ خالی یعنی از تنظیماتِ شرکت پیروی می‌کند."),
-            (self.is_stock_tracked_checkbox, "خدمت نمی‌تواند موجودی‌محور باشد."),
-            (self.track_expiry_checkbox, "ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است."),
+            # اطلاعاتِ پایه
+            (self.latin_name_field, "نام لاتین کالا — برای فاکتور/برچسب صادراتی یا مشتریان خارجی."),
+            (self.short_name_field, "نام کوتاه — در جاهایی که فضای نمایش محدود است (مثلاً دکمه‌های POS) به‌جای نام کامل نمایش داده می‌شود."),
+            (self.kind_combo, "نوع کالا؛ تب‌های مرتبط بر اساس همین انتخاب نمایان می‌شوند."),
+            (self.uom_combo, "واحد پایه — پس از اولین حرکت انبار دیگر قابل‌تغییر نیست."),
+            (self.brand_combo, "برند سازنده/عرضه‌کننده — اختیاری، برای فیلتر گزارش‌ها."),
+            (self.manufacturer_combo, "تولیدکنندهٔ اصلی کالا — اختیاری، برای فیلتر گزارش‌ها."),
+            (self.country_of_origin_field, "کشور سازنده — برای فاکتور/فرم‌های گمرکی."),
+            (self.costing_combo, "روش قیمت‌گذاری اختصاصی این کالا؛ خالی یعنی از تنظیمات شرکت پیروی می‌کند."),
+            (self.lifecycle_combo, "وضعیت چرخهٔ‌عمر کالا (مثلاً فعال/درحال‌توقف‌تولید) — صرفاً اطلاعاتی."),
+            (self.notes_field, "یادداشت آزاد داخلی دربارهٔ این کالا — در فاکتور/گزارش نمایش داده نمی‌شود."),
+            # فروش/خرید و ردیابی
+            (self.is_sellable_checkbox, "این کالا در فاکتور/فرم فروش قابل‌انتخاب است."),
+            (self.is_purchasable_checkbox, "این کالا در فاکتور/فرم خرید قابل‌انتخاب است."),
+            (self.is_stock_tracked_checkbox, "موجودی این کالا در انبار پیگیری می‌شود؛ خدمت نمی‌تواند موجودی‌محور باشد."),
+            (self.track_batch_checkbox, "هر رسید/حواله باید بچ/پارتی مشخصی را ثبت کند — برای ردیابی تولید/تامین‌کننده."),
+            (self.track_expiry_checkbox, "ردیابی انقضا نیازمند فعال‌بودن ردیابی بچ است — هر بچ تاریخ انقضای خودش را دارد."),
+            (self.track_serial_checkbox, "هر واحد این کالا با شماره‌سریال منحصربه‌فرد خودش ردیابی می‌شود."),
+            # گروه‌بندی و شناسه
+            (self.default_warehouse_combo, "انباری که در فرم‌های سند، اگر انبار دیگری انتخاب نشود، برای این کالا پیشنهاد می‌شود."),
+            (self.barcode_field, "بارکد اصلی کالا — با اسکنر در فروش حضوری/انبار قابل‌جست‌وجوست."),
+            (self.qr_code_field, "محتوای کد QR (در صورت نیاز به بارکد متفاوت از بارکد خطی)."),
+            (self.sku_field, "کد داخلی کالا (SKU) — مستقل از کد حسابداری کالا، برای انبارداری/فروشگاه اینترنتی."),
+            # خرید
+            (self.purchase_lead_time_field, "میانگین روزهای لازم از ثبت سفارش خرید تا رسیدن کالا — برای محاسبهٔ نقطهٔ سفارش."),
+            (self.purchase_min_order_field, "کمترین مقداری که در یک سفارش خرید از این کالا قابل‌ثبت است."),
+            (self.purchase_package_qty_field, "تعداد هر بسته‌بندی خرید تامین‌کننده (مثلاً کارتن) — سفارش‌ها بهتر است مضربی از این عدد باشند."),
+            # فروشِ تکمیلی
+            (self.max_discount_field, "بیشترین درصد تخفیفی که فروشنده می‌تواند بدون تایید اضافه روی این کالا بدهد."),
+            (self.sales_commission_field, "درصد کمیسیون فروش این کالا برای نماینده/فروشنده."),
+            (self.warranty_months_field, "مدت گارانتی استاندارد این کالا از تاریخ فروش، به ماه."),
+            (self.default_tax_percent_field, "درصد مالیات این کالا — طبق سیاست اولویتی، فقط وقتی تنظیمات شرکت و انبار هردو خالی باشند اثر می‌کند."),
+            # فروشگاهِ اینترنتی
+            (self.seo_title_field, "عنوان صفحهٔ این کالا در نتایج موتور جست‌وجو — خالی یعنی از نام کالا استفاده می‌شود."),
+            (self.seo_slug_field, "بخش آخر آدرس صفحهٔ این کالا در فروشگاه اینترنتی (باید یکتا و بدون فاصله باشد)."),
+            (self.seo_description_field, "توضیحات کوتاهی که موتورهای جست‌وجو زیر عنوان صفحه نشان می‌دهند."),
+            (self.seo_keywords_field, "کلیدواژه‌های سئو، با کاما جدا — برای کمک به یافته‌شدن کالا در جست‌وجو."),
+            (self.website_category_field, "دسته‌بندی نمایش این کالا در فروشگاه اینترنتی (می‌تواند با دسته‌بندی داخلی ERP فرق کند)."),
+            (self.website_tags_field, "برچسب‌های نمایش این کالا در فروشگاه اینترنتی، با کاما جدا."),
+            (self.ecommerce_stock_mode_combo, "فقط روی نمایش موجودی در فروشگاه اینترنتی اثر دارد — موجودی واقعی ERP/سایر اسناد را تغییر نمی‌دهد."),
+            # فروشِ حضوری (POS)
+            (self.pos_shortcut_field, "کلید میان‌بر صفحه‌کلید برای افزودن سریع این کالا در فروش حضوری."),
+            (self.pos_color_field, "رنگ دکمهٔ این کالا در تب دسترسی‌سریع فروش حضوری — با دکمهٔ کنارش از پالت انتخاب می‌شود."),
+            (self.pos_menu_group_combo, "تب دسترسی‌سریعی که این کالا در صفحهٔ فروش حضوری زیرش نمایش داده می‌شود — مستقل از دسته‌بندی عمومی کالا."),
+            (self.pos_requires_weight_checkbox, "این کالا در فروش حضوری با ترازو توزین می‌شود (مثلاً بارکد وزنی)."),
+            (self.pos_requires_serial_checkbox, "فروش این کالا در POS ثبت شماره‌سریال را الزامی می‌کند."),
+            # حمل‌ونقل
+            (self.length_field, "طول بسته‌بندی این کالا، به سانتی‌متر — برای محاسبهٔ هزینه/ظرفیت حمل."),
+            (self.width_field, "عرض بسته‌بندی این کالا، به سانتی‌متر."),
+            (self.height_field, "ارتفاع بسته‌بندی این کالا، به سانتی‌متر."),
+            (self.package_type_field, "نوع بسته‌بندی حمل (مثلاً کارتن، پالت)."),
+            (self.freight_class_field, "کلاس حمل باربری — برای محاسبهٔ نرخ حمل‌ونقل باری."),
+            # کنترلِ کیفیت
+            (self.requires_qc_checkbox, "رسید این کالا پیش از افزوده‌شدن به موجودی قابل‌فروش، نیازمند بازرسی کیفیت است."),
+            (self.qc_standard_field, "استاندارد/مرجع کیفیتی که این کالا باید مطابقش بازرسی شود."),
+            (self.qc_interval_field, "فاصلهٔ زمانی بازرسی دوره‌ای برای کالای موجود در انبار، به روز."),
+            (self.qc_test_spec_field, "شرح کامل آزمون/معیارهای پذیرش کیفیت برای این کالا."),
+            # دارایی
+            (self.asset_tag_field, "شمارهٔ برچسب فیزیکی/اموال این قلم دارایی."),
+            (self.depreciation_group_field, "گروه استهلاکی که نرخ/روش استهلاک این دارایی از آن پیروی می‌کند."),
+            (self.useful_life_field, "عمر مفید برآوردی‌شدهٔ این دارایی، به ماه — مبنای محاسبهٔ استهلاک."),
+            (self.depreciation_method_combo, "روش محاسبهٔ استهلاک این دارایی (خط‌مستقیم/نزولی)."),
+            (self.acquisition_date_field, "تاریخ خرید/تحصیل این دارایی — مبدأ محاسبهٔ استهلاک."),
+            (self.acquisition_cost_field, "بهای تمام‌شدهٔ خرید این دارایی."),
+            (self.salvage_value_field, "ارزش برآوردی این دارایی در پایان عمر مفیدش — از مبلغ مستهلک‌شونده کسر می‌شود."),
+            # گروه‌بندی -- کالاهایِ مرتبط
+            (self.category_combo, "دسته‌بندی داخلی این کالا — برای فیلتر فهرست‌ها و نگاشت حساب‌های گروهی."),
+            (self.related_item_combo, "کالای دیگری که با این کالا رابطه دارد (جایگزین یا مکمل)."),
+            (self.relation_type_combo, "نوع رابطه با کالای انتخاب‌شده — جایگزین (می‌تواند به‌جایش فروخته شود) یا مکمل (معمولاً همراهش پیشنهاد می‌شود)."),
+            (self.uom_conversion_combo, "واحد دیگری که این کالا می‌تواند با آن هم سنجیده شود (مثلاً کارتن/بسته) — واحد پایه در این فهرست نیست."),
+            (self.uom_conversion_factor_field, "یک واحد انتخاب‌شده معادل چند واحد پایه است (مثلاً اگر واحد پایه «عدد» و این واحد «کارتن» باشد و هر کارتن ۲۴ عدد داشته باشد، عدد ۲۴ را وارد کنید)."),
+            (self.uom_conversion_purchase_default_checkbox, "در فرم سفارش/فاکتور خرید، این واحد به‌صورت پیش‌فرض برای این کالا پیشنهاد شود."),
+            (self.uom_conversion_sales_default_checkbox, "در فرم سفارش/فاکتور فروش، این واحد به‌صورت پیش‌فرض برای این کالا پیشنهاد شود."),
+            # خرید -- کدهایِ تامین‌کننده
+            (self.supplier_combo, "تامین‌کننده‌ای که این کالا از او خریداری می‌شود."),
+            (self.item_code_type_combo, "نوع کد ثبت‌شده نزد این تامین‌کننده — کد کالای اوست یا نام کالا نزد اوست."),
+            (self.item_code_supplier_combo, "تامین‌کننده‌ای که این کد/نام نزد اوست."),
+            (self.item_code_value_field, "خود کد یا نام این کالا نزد همان تامین‌کننده — برای تطبیق سریع‌تر هنگام ثبت فاکتور خرید."),
+            # ویژگی‌ها و متغیرها
+            (self.variant_attribute_combo, "ویژگی‌ای که برای این کالا متغیر تعریف می‌شود (مثلاً «سایز» یا «رنگ»)."),
+            (self.variant_value_field, "مقدار تازه‌ای که به فهرست مقادیر همین ویژگی اضافه می‌شود (مثلاً M یا قرمز)."),
+            (self.variant_notes_field, "توضیحات اختصاصی همین متغیر — جدا از یادداشت کالای اصلی."),
+            (self.variant_price_list_combo, "فهرست قیمتی که قیمت زیر رویش تنظیم می‌شود."),
+            (self.variant_price_field, "قیمت فروش این متغیر مشخص در همان فهرست قیمت انتخاب‌شده."),
+            # تولید (BOM)
+            (self.bom_component_combo, "کالایی که به‌عنوان مادهٔ مصرفی در ساخت این کالا به‌کار می‌رود."),
+            (self.bom_qty_field, "مقدار مصرفی این جزء برای تولید یک واحد از کالای نهایی."),
         ])
         self.register_field_grids("inventory_item_panel", [
             self.basic_info_grid, self.sales_tracking_grid, self.grouping_grid, self.purchasing_grid,
@@ -120,9 +227,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ اطلاعاتِ پایه (بدونِ کد/نام/فعال — این‌ها در فرمِ میزبان‌اند) ------
     def _build_basic_info_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.latin_name_field = QLineEdit()
         self.short_name_field = QLineEdit()
@@ -133,7 +238,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.kind_combo.currentIndexChanged.connect(self._on_kind_changed)
 
         self.uom_combo = QComboBox()
-        uom_row = self._make_combo_with_add_row("واحدِ پایه", self.uom_combo, self._quick_add_uom)
+        self.uom_combo.currentIndexChanged.connect(self._rebuild_uom_conversion_combo)
+        uom_row = self._make_combo_with_add_row("واحد پایه", self.uom_combo, self._quick_add_uom)
 
         self.brand_combo = QComboBox()
         brand_row = self._make_combo_with_add_row("برند", self.brand_combo, self._quick_add_brand)
@@ -144,8 +250,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.country_of_origin_field = QLineEdit()
 
         self.costing_combo = QComboBox()
+        from peecha.services.costing.engine import NOT_YET_AVAILABLE
+
         for code, label in _COSTING_LABELS.items():
-            self.costing_combo.addItem(label, code or None)
+            if code not in NOT_YET_AVAILABLE:
+                self.costing_combo.addItem(label, code or None)
 
         self.lifecycle_combo = QComboBox()
         for code, label in _LIFECYCLE_LABELS.items():
@@ -155,15 +264,15 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.notes_field.setMaximumHeight(60)
 
         self.basic_info_grid = FieldGrid([
-            FieldSpec("latin_name", "نامِ لاتین", self.latin_name_field, span=1),
-            FieldSpec("short_name", "نامِ کوتاه", self.short_name_field, span=1),
+            FieldSpec("latin_name", "نام لاتین", self.latin_name_field, span=1),
+            FieldSpec("short_name", "نام کوتاه", self.short_name_field, span=1),
             FieldSpec("kind", "نوع", self.kind_combo, span=1),
             FieldSpec("uom", "", uom_row, span=1),
             FieldSpec("brand", "", brand_row, span=1),
             FieldSpec("manufacturer", "", manufacturer_row, span=1),
-            FieldSpec("country_of_origin", "کشورِ سازنده", self.country_of_origin_field, span=1),
-            FieldSpec("costing", "روشِ قیمت‌گذاری", self.costing_combo, span=1),
-            FieldSpec("lifecycle", "وضعیتِ چرخهٔ‌عمر", self.lifecycle_combo, span=1),
+            FieldSpec("country_of_origin", "کشور سازنده", self.country_of_origin_field, span=1),
+            FieldSpec("costing", "روش قیمت‌گذاری", self.costing_combo, span=1),
+            FieldSpec("lifecycle", "وضعیت چرخهٔ‌عمر", self.lifecycle_combo, span=1),
             FieldSpec("notes", "یادداشت", self.notes_field, span=3),
         ])
         layout.addWidget(self.basic_info_grid)
@@ -174,22 +283,21 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ فروش/خرید و ردیابی ------------------------------------------
     def _build_sales_tracking_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
-        self.is_sellable_checkbox = QCheckBox("قابلِ‌فروش")
+        self.is_sellable_checkbox = QCheckBox("قابل‌فروش")
         self.is_sellable_checkbox.setChecked(True)
+        self.is_sellable_checkbox.toggled.connect(self._apply_visibility)
 
-        self.is_purchasable_checkbox = QCheckBox("قابلِ‌خرید")
+        self.is_purchasable_checkbox = QCheckBox("قابل‌خرید")
         self.is_purchasable_checkbox.setChecked(True)
 
         self.is_stock_tracked_checkbox = QCheckBox("موجودی‌محور")
         self.is_stock_tracked_checkbox.setChecked(True)
 
-        self.track_batch_checkbox = QCheckBox("ردیابیِ بچ")
-        self.track_expiry_checkbox = QCheckBox("ردیابیِ انقضا")
-        self.track_serial_checkbox = QCheckBox("ردیابیِ سریال")
+        self.track_batch_checkbox = QCheckBox("ردیابی بچ")
+        self.track_expiry_checkbox = QCheckBox("ردیابی انقضا")
+        self.track_serial_checkbox = QCheckBox("ردیابی سریال")
 
         self.sales_tracking_grid = FieldGrid([
             FieldSpec("is_sellable", "", self.is_sellable_checkbox, span=1),
@@ -207,9 +315,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ گروه‌بندی و شناسه -----------------------------------------------
     def _build_grouping_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.category_combo = QComboBox()
         category_row = self._make_combo_with_add_row("دسته‌بندی", self.category_combo, self._quick_add_category)
@@ -221,14 +327,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.grouping_grid = FieldGrid([
             FieldSpec("category", "", category_row, span=1),
-            FieldSpec("default_warehouse", "انبارِ پیش‌فرض", self.default_warehouse_combo, span=1),
+            FieldSpec("default_warehouse", "انبار پیش‌فرض", self.default_warehouse_combo, span=1),
             FieldSpec("barcode", "بارکد", self.barcode_field, span=1),
-            FieldSpec("qr_code", "محتوایِ QR", self.qr_code_field, span=1),
+            FieldSpec("qr_code", "محتوای QR", self.qr_code_field, span=1),
             FieldSpec("sku", "SKU", self.sku_field, span=1),
         ])
         layout.addWidget(self.grouping_grid)
 
-        layout.addWidget(QLabel("کالاهایِ مرتبط (جایگزین/مکمل)"))
+        layout.addWidget(QLabel("کالاهای مرتبط (جایگزین/مکمل)"))
         self.related_item_combo = QComboBox()
         self.relation_type_combo = QComboBox()
         for code, label in _RELATION_LABELS.items():
@@ -237,6 +343,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         related_row.addWidget(self.related_item_combo, stretch=2)
         related_row.addWidget(self.relation_type_combo, stretch=1)
         add_related_button = QPushButton("+")
+        add_related_button.setObjectName("iconButton")
         add_related_button.setFixedWidth(28)
         add_related_button.clicked.connect(self._add_related_item)
         related_row.addWidget(add_related_button)
@@ -247,33 +354,152 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.related_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.related_table.verticalHeader().setVisible(False)
         self.related_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.related_table.setMaximumHeight(120)
-        layout.addWidget(self.related_table)
+        self.related_table.setMinimumHeight(120)
+        layout.addWidget(self.related_table, stretch=1)
         remove_related_button = QPushButton("🗑️")
         remove_related_button.setObjectName("dangerIconButton")
         remove_related_button.setFixedWidth(44)
-        remove_related_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_related_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_related_button.clicked.connect(self._remove_related_item)
         layout.addWidget(remove_related_button)
-
-        layout.addStretch(1)
         return tab
 
     # --- تبِ خرید -------------------------------------------------------------
+    # --- تبِ واحدها و بسته‌بندی (R225) ----------------------------------------
+    def _build_units_tab(self) -> QWidget:
+        """واحدهای مجاز کالا (پایه + بسته‌بندی‌ها)، ضریب تبدیل، مجاز برای
+        خرید/فروش، پیش‌فرض‌ها، قیمت هر واحد و بارکدهای هر واحد. همهٔ منطق در
+        services/unit_conversion.py است؛ این‌جا فقط UI."""
+        tab = QWidget()
+        layout = build_section_layout(tab)
+        self.base_unit_label = QLabel("")
+        self.base_unit_label.setObjectName("sectionHint")
+        self.base_unit_label.setWordWrap(True)
+        layout.addWidget(self.base_unit_label)
+
+        layout.addWidget(QLabel("افزودن واحد (مثلاً ۱ کارتن = ۲۴ عدد)"))
+        self.uom_conversion_combo = QComboBox()
+        self.uom_conversion_factor_field = QLineEdit()
+        self.uom_conversion_factor_field.setPlaceholderText("ضریب تبدیل به واحد پایه")
+        self.uom_conversion_purchase_unit_checkbox = QCheckBox("خرید")
+        self.uom_conversion_purchase_unit_checkbox.setChecked(True)
+        self.uom_conversion_sales_unit_checkbox = QCheckBox("فروش")
+        self.uom_conversion_sales_unit_checkbox.setChecked(True)
+        self.uom_conversion_purchase_default_checkbox = QCheckBox("پیش‌فرض خرید")
+        self.uom_conversion_sales_default_checkbox = QCheckBox("پیش‌فرض فروش")
+        conversion_row = QHBoxLayout()
+        conversion_row.addWidget(self.uom_conversion_combo, stretch=2)
+        conversion_row.addWidget(self.uom_conversion_factor_field, stretch=1)
+        for w in (
+            self.uom_conversion_purchase_unit_checkbox, self.uom_conversion_sales_unit_checkbox,
+            self.uom_conversion_purchase_default_checkbox, self.uom_conversion_sales_default_checkbox,
+        ):
+            conversion_row.addWidget(w)
+        add_conversion_button = QPushButton("+")
+        add_conversion_button.setObjectName("iconButton")
+        add_conversion_button.setFixedWidth(28)
+        add_conversion_button.setToolTip("افزودن واحد")
+        add_conversion_button.clicked.connect(self._add_uom_conversion)
+        conversion_row.addWidget(add_conversion_button)
+        layout.addLayout(conversion_row)
+
+        price_row = QHBoxLayout()
+        price_row.addWidget(QLabel("فهرست قیمت نمایش/ثبت قیمت واحد"))
+        self.unit_price_list_combo = QComboBox()
+        self.unit_price_list_combo.currentIndexChanged.connect(lambda _i=0: self._refresh_uom_conversions_table())
+        price_row.addWidget(self.unit_price_list_combo, stretch=1)
+        layout.addLayout(price_row)
+
+        self.uom_conversion_table = QTableWidget(0, len(_UNIT_COLUMNS))
+        self.uom_conversion_table.setHorizontalHeaderLabels(_UNIT_COLUMNS)
+        self.uom_conversion_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.uom_conversion_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.uom_conversion_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.uom_conversion_table.verticalHeader().setVisible(False)
+        self.uom_conversion_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.uom_conversion_table.setMinimumHeight(150)
+        self.uom_conversion_table.setToolTip("برای ویرایش واحد (ضریب، مجاز/پیش‌فرض، حداقل/حداکثر، وزن/حجم، فعال) دوبار کلیک کنید.")
+        self.uom_conversion_table.cellDoubleClicked.connect(lambda _r, _c: self._edit_item_unit())
+        self.uom_conversion_table.itemSelectionChanged.connect(self._refresh_unit_barcodes_table)
+        layout.addWidget(self.uom_conversion_table, stretch=1)
+
+        unit_buttons = QHBoxLayout()
+        edit_unit_button = QPushButton("✏️")
+        edit_unit_button.setObjectName("iconButton")
+        edit_unit_button.setFixedWidth(44)
+        edit_unit_button.setToolTip("ویرایش واحد انتخاب‌شده")
+        edit_unit_button.clicked.connect(self._edit_item_unit)
+        unit_buttons.addWidget(edit_unit_button)
+        remove_conversion_button = QPushButton("🗑️")
+        remove_conversion_button.setObjectName("dangerIconButton")
+        remove_conversion_button.setFixedWidth(44)
+        remove_conversion_button.setToolTip("حذف/غیرفعال‌سازی واحد (واحد استفاده‌شده فقط غیرفعال می‌شود)")
+        remove_conversion_button.clicked.connect(self._remove_uom_conversion)
+        unit_buttons.addWidget(remove_conversion_button)
+        self.unit_price_field = QLineEdit()
+        self.unit_price_field.setPlaceholderText("قیمت واحد انتخاب‌شده")
+        unit_buttons.addWidget(self.unit_price_field, stretch=1)
+        set_price_button = QPushButton("💲 ثبت قیمت واحد")
+        set_price_button.clicked.connect(self._set_unit_price)
+        unit_buttons.addWidget(set_price_button)
+        layout.addLayout(unit_buttons)
+
+        layout.addWidget(QLabel("بارکدهای واحد انتخاب‌شده"))
+        barcode_row = QHBoxLayout()
+        self.unit_barcode_field = QLineEdit()
+        self.unit_barcode_field.setPlaceholderText("بارکد را وارد/اسکن کنید")
+        barcode_row.addWidget(self.unit_barcode_field, stretch=2)
+        self.unit_barcode_type_combo = QComboBox()
+        self.unit_barcode_type_combo.addItem("(تشخیص خودکار)", None)
+        for code, label in uc.BARCODE_TYPE_LABELS.items():
+            self.unit_barcode_type_combo.addItem(label, code)
+        barcode_row.addWidget(self.unit_barcode_type_combo, stretch=1)
+        self.unit_barcode_primary_checkbox = QCheckBox("اصلی")
+        barcode_row.addWidget(self.unit_barcode_primary_checkbox)
+        add_barcode_button = QPushButton("➕")
+        add_barcode_button.setObjectName("iconButton")
+        add_barcode_button.setFixedWidth(44)
+        add_barcode_button.setToolTip("افزودن بارکد")
+        add_barcode_button.clicked.connect(self._add_unit_barcode)
+        barcode_row.addWidget(add_barcode_button)
+        layout.addLayout(barcode_row)
+        self.unit_barcodes_table = QTableWidget(0, 5)
+        self.unit_barcodes_table.setHorizontalHeaderLabels(["بارکد", "نوع", "اصلی", "وضعیت", "توضیح"])
+        self.unit_barcodes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.unit_barcodes_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.unit_barcodes_table.verticalHeader().setVisible(False)
+        self.unit_barcodes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.unit_barcodes_table.setMinimumHeight(110)
+        self.unit_barcodes_table.setToolTip("برای ویرایش بارکد دوبار کلیک کنید.")
+        self.unit_barcodes_table.cellDoubleClicked.connect(lambda _r, _c: self._edit_unit_barcode())
+        layout.addWidget(self.unit_barcodes_table, stretch=1)
+        barcode_buttons = QHBoxLayout()
+        primary_button = QPushButton("⭐ اصلی")
+        primary_button.clicked.connect(self._set_primary_unit_barcode)
+        barcode_buttons.addWidget(primary_button)
+        deactivate_button = QPushButton("🚫 غیرفعال")
+        deactivate_button.setObjectName("dangerButton")
+        deactivate_button.clicked.connect(self._deactivate_unit_barcode)
+        barcode_buttons.addWidget(deactivate_button)
+        barcode_buttons.addStretch(1)
+        layout.addLayout(barcode_buttons)
+        self.units_status_label = QLabel("")
+        self.units_status_label.setWordWrap(True)
+        layout.addWidget(self.units_status_label)
+        return tab
+
     def _build_purchasing_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.purchase_lead_time_field = QLineEdit()
         self.purchase_min_order_field = QLineEdit()
         self.purchase_package_qty_field = QLineEdit()
 
         self.purchasing_grid = FieldGrid([
-            FieldSpec("lead_time", "زمانِ تامین (روز)", self.purchase_lead_time_field, span=1),
-            FieldSpec("min_order", "حداقلِ سفارش", self.purchase_min_order_field, span=1),
-            FieldSpec("package_qty", "تعدادِ بسته‌بندیِ خرید", self.purchase_package_qty_field, span=1),
+            FieldSpec("lead_time", "زمان تامین (روز)", self.purchase_lead_time_field, span=1),
+            FieldSpec("min_order", "حداقل سفارش", self.purchase_min_order_field, span=1),
+            FieldSpec("package_qty", "تعداد بسته‌بندی خرید", self.purchase_package_qty_field, span=1),
         ])
         layout.addWidget(self.purchasing_grid)
 
@@ -282,34 +508,537 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         supplier_row = QHBoxLayout()
         supplier_row.addWidget(self.supplier_combo, stretch=1)
         add_supplier_button = QPushButton("+")
+        add_supplier_button.setObjectName("iconButton")
         add_supplier_button.setFixedWidth(28)
         add_supplier_button.clicked.connect(self._add_supplier)
         supplier_row.addWidget(add_supplier_button)
         layout.addLayout(supplier_row)
         self.supplier_table = QTableWidget(0, 3)
-        self.supplier_table.setHorizontalHeaderLabels(["ترجیحی", "زمانِ تامین", "تامین‌کننده"])
+        self.supplier_table.setHorizontalHeaderLabels(["ترجیحی", "زمان تامین", "تامین‌کننده"])
         self.supplier_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.supplier_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.supplier_table.verticalHeader().setVisible(False)
         self.supplier_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.supplier_table.setMaximumHeight(140)
-        layout.addWidget(self.supplier_table)
+        self.supplier_table.setMinimumHeight(160)
+        layout.addWidget(self.supplier_table, stretch=1)
         remove_supplier_button = QPushButton("🗑️")
         remove_supplier_button.setObjectName("dangerIconButton")
         remove_supplier_button.setFixedWidth(44)
-        remove_supplier_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_supplier_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_supplier_button.clicked.connect(self._remove_supplier)
         layout.addWidget(remove_supplier_button)
 
-        layout.addStretch(1)
+        # طبقِ درخواستِ صریح («چندین کد کالایِ تامین‌کننده و حتی نامِ کالا
+        # ... تشخیص باید ترکیبی باشد»): این بخش مستقل از جدولِ بالاست --
+        # آن یکی «کدامین تامین‌کننده‌ها این کالا را می‌فروشند» را نگه
+        # می‌دارد، این یکی «آن تامین‌کننده این کالا را با چه کد/نامی در
+        # فایلِ قیمتِ خودش صدا می‌زند» را -- برایِ شناساییِ خودکار در
+        # وارداتِ قیمتِ تامین‌کننده.
+        layout.addWidget(QLabel("کد/نام کالا نزد تامین‌کننده (برای شناسایی خودکار در واردات قیمت)"))
+        code_form = QHBoxLayout()
+        self.item_code_type_combo = QComboBox()
+        self.item_code_type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["CODE"], "CODE")
+        self.item_code_type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["NAME"], "NAME")
+        code_form.addWidget(self.item_code_type_combo)
+        self.item_code_supplier_combo = QComboBox()
+        code_form.addWidget(self.item_code_supplier_combo, stretch=1)
+        self.item_code_value_field = QLineEdit()
+        self.item_code_value_field.setPlaceholderText("کد یا نام کالا نزد این تامین‌کننده")
+        code_form.addWidget(self.item_code_value_field, stretch=1)
+        add_code_button = QPushButton("➕")
+        add_code_button.setObjectName("iconButton")
+        add_code_button.setFixedWidth(44)
+        add_code_button.setToolTip("افزودن")
+        add_code_button.clicked.connect(self._add_item_supplier_code)
+        code_form.addWidget(add_code_button)
+        layout.addLayout(code_form)
+
+        self.item_codes_table = QTableWidget(0, 3)
+        self.item_codes_table.setHorizontalHeaderLabels(["نوع", "تامین‌کننده", "مقدار"])
+        self.item_codes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.item_codes_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.item_codes_table.verticalHeader().setVisible(False)
+        self.item_codes_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.item_codes_table.setMinimumHeight(180)
+        self.item_codes_table.setToolTip("برای ویرایش، روی ردیف دوبار کلیک کنید.")
+        self.item_codes_table.cellDoubleClicked.connect(self._edit_item_supplier_code)
+        layout.addWidget(self.item_codes_table, stretch=1)
+        remove_code_button = QPushButton("🗑️")
+        remove_code_button.setObjectName("dangerIconButton")
+        remove_code_button.setFixedWidth(44)
+        remove_code_button.setToolTip("حذف ردیف انتخاب‌شده")
+        remove_code_button.clicked.connect(self._remove_item_supplier_code)
+        layout.addWidget(remove_code_button)
         return tab
+
+    # --- تبِ ویژگی‌ها و متغیرها --------------------------------------------------
+    def _build_variants_tab(self) -> QWidget:
+        """طبق درخواست صریح: ویژگی (سایز/وزن/مدل/...) قابل‌تعریف، مقادیر
+        هر ویژگی، تولید ترکیبی‌ متغیرها برای این کالا، بارکد مجزا برای
+        خود کالا و بارکد ترکیبی برای هر متغیر + پرینت."""
+        tab = QWidget()
+        layout = build_section_layout(tab)
+        self._variant_selection: dict[int, set[int]] = {}
+
+        layout.addWidget(QLabel("بارکد کالای اصلی"))
+        own_barcode_row = QHBoxLayout()
+        self.own_barcode_label = QLabel("(بدون بارکد)")
+        own_barcode_row.addWidget(self.own_barcode_label, stretch=1)
+        make_own_barcode_button = QPushButton("🏷️")
+        make_own_barcode_button.setObjectName("iconButton")
+        make_own_barcode_button.setToolTip("ساختن بارکد کالای اصلی")
+        make_own_barcode_button.clicked.connect(self._make_own_barcode)
+        own_barcode_row.addWidget(make_own_barcode_button)
+        print_own_barcode_button = QPushButton("🖨️")
+        print_own_barcode_button.setObjectName("iconButton")
+        print_own_barcode_button.setToolTip("پرینت بارکد کالای اصلی")
+        print_own_barcode_button.clicked.connect(self._print_own_barcode)
+        own_barcode_row.addWidget(print_own_barcode_button)
+        layout.addLayout(own_barcode_row)
+
+        layout.addWidget(
+            QLabel("ویژگی‌ها و مقادیر قابل‌انتخاب برای تولید متغیر — ترتیب زیر همان اولویت نام‌گذاری خودکار متغیر است")
+        )
+        attribute_row = QHBoxLayout()
+        self.variant_attribute_combo = QComboBox()
+        self.variant_attribute_combo.currentIndexChanged.connect(self._load_attribute_values_list)
+        attribute_row.addWidget(self.variant_attribute_combo, stretch=1)
+        # طبقِ درخواستِ صریح («چند ویژگی داریم، الویت و ترتیبشون چجوری
+        # مشخص میشه؟»): این دو دکمه دقیقاً همان سوال را جواب می‌دهند --
+        # اولویتِ ویژگیِ انتخاب‌شده را با همسایه‌اش در فهرست جابه‌جا
+        # می‌کنند (که هم ترتیبِ همین کمبو، هم ترتیبِ بخش‌هایِ نامِ
+        # خودکارِ متغیر را عوض می‌کند).
+        move_up_button = QPushButton("⬆️")
+        move_up_button.setObjectName("iconButton")
+        move_up_button.setFixedWidth(32)
+        move_up_button.setToolTip("افزایش اولویت این ویژگی (بالاتر/زودتر)")
+        move_up_button.clicked.connect(lambda: self._move_item_attribute("UP"))
+        attribute_row.addWidget(move_up_button)
+        move_down_button = QPushButton("⬇️")
+        move_down_button.setObjectName("iconButton")
+        move_down_button.setFixedWidth(32)
+        move_down_button.setToolTip("کاهش اولویت این ویژگی (پایین‌تر/دیرتر)")
+        move_down_button.clicked.connect(lambda: self._move_item_attribute("DOWN"))
+        attribute_row.addWidget(move_down_button)
+        add_attribute_button = QPushButton("+")
+        add_attribute_button.setObjectName("iconButton")
+        add_attribute_button.setFixedWidth(28)
+        add_attribute_button.setToolTip("ویژگی تازه")
+        add_attribute_button.clicked.connect(self._add_item_attribute)
+        attribute_row.addWidget(add_attribute_button)
+        layout.addLayout(attribute_row)
+
+        value_row = QHBoxLayout()
+        self.variant_value_field = QLineEdit()
+        self.variant_value_field.setPlaceholderText("مقدار تازه (مثلاً M یا قرمز)")
+        value_row.addWidget(self.variant_value_field, stretch=1)
+        add_value_button = QPushButton("+")
+        add_value_button.setObjectName("iconButton")
+        add_value_button.setFixedWidth(28)
+        add_value_button.setToolTip("افزودن مقدار به همین ویژگی")
+        add_value_button.clicked.connect(self._add_item_attribute_value)
+        value_row.addWidget(add_value_button)
+        layout.addLayout(value_row)
+
+        self.variant_values_list = QTableWidget(0, 2)
+        self.variant_values_list.setHorizontalHeaderLabels(["انتخاب", "مقدار"])
+        self.variant_values_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.variant_values_list.verticalHeader().setVisible(False)
+        self.variant_values_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.variant_values_list.setMaximumHeight(140)
+        self.variant_values_list.itemChanged.connect(self._on_variant_value_checked)
+        layout.addWidget(self.variant_values_list)
+
+        generate_button = QPushButton("⚙️")
+        generate_button.setObjectName("iconButton")
+        generate_button.setToolTip("تولید متغیرها از ترکیب انتخاب‌شده")
+        generate_button.clicked.connect(self._generate_variants)
+        layout.addWidget(generate_button)
+
+        layout.addWidget(QLabel("متغیرهای ساخته‌شده برای این کالا"))
+        self.variants_table = QTableWidget(0, 4)
+        self.variants_table.setHorizontalHeaderLabels(["کد", "نام", "ویژگی‌ها", "بارکد"])
+        self.variants_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.variants_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.variants_table.verticalHeader().setVisible(False)
+        self.variants_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.variants_table.setMinimumHeight(140)
+        self.variants_table.itemSelectionChanged.connect(self._on_variant_selection_changed)
+        layout.addWidget(self.variants_table, stretch=1)
+
+        # طبقِ درخواستِ صریح («برایِ هر متغیر بتوان توضیحات و قیمتِ مجزا و
+        # عکس هم معرفی کرد»): هرکدام یک ردیفِ فشرده -- عمل رویِ متغیرِ
+        # انتخاب‌شده در جدولِ بالا.
+        layout.addWidget(QLabel("ویرایش متغیر انتخاب‌شده"))
+        notes_row = QHBoxLayout()
+        self.variant_notes_field = QLineEdit()
+        self.variant_notes_field.setPlaceholderText("توضیحات این متغیر")
+        notes_row.addWidget(self.variant_notes_field, stretch=1)
+        save_notes_button = QPushButton("💾")
+        save_notes_button.setObjectName("iconButton")
+        save_notes_button.setToolTip("ذخیرهٔ توضیحات این متغیر")
+        save_notes_button.clicked.connect(self._save_variant_notes)
+        notes_row.addWidget(save_notes_button)
+        layout.addLayout(notes_row)
+
+        price_row = QHBoxLayout()
+        self.variant_price_list_combo = QComboBox()
+        self.variant_price_list_combo.currentIndexChanged.connect(self._load_variant_price)
+        price_row.addWidget(self.variant_price_list_combo, stretch=1)
+        self.variant_price_field = QLineEdit()
+        self.variant_price_field.setPlaceholderText("قیمت فروش")
+        price_row.addWidget(self.variant_price_field, stretch=1)
+        save_price_button = QPushButton("💾")
+        save_price_button.setObjectName("iconButton")
+        save_price_button.setToolTip("ذخیرهٔ قیمت این متغیر در همین لیست قیمت")
+        save_price_button.clicked.connect(self._save_variant_price)
+        price_row.addWidget(save_price_button)
+        add_photo_button = QPushButton("🖼️")
+        add_photo_button.setObjectName("iconButton")
+        add_photo_button.setToolTip("افزودن عکس این متغیر")
+        add_photo_button.clicked.connect(self._add_variant_photo)
+        price_row.addWidget(add_photo_button)
+        layout.addLayout(price_row)
+
+        variants_action_row = QHBoxLayout()
+        print_selected_button = QPushButton("🖨️")
+        print_selected_button.setObjectName("iconButton")
+        print_selected_button.setToolTip("پرینت بارکد انتخاب‌شده")
+        print_selected_button.clicked.connect(self._print_selected_variant_barcode)
+        variants_action_row.addWidget(print_selected_button)
+        print_all_button = QPushButton("📇")
+        print_all_button.setObjectName("iconButton")
+        print_all_button.setToolTip("پرینت بارکد همهٔ متغیرها")
+        print_all_button.clicked.connect(self._print_all_variant_barcodes)
+        variants_action_row.addWidget(print_all_button)
+        remove_variant_button = QPushButton("🗑️")
+        remove_variant_button.setObjectName("dangerIconButton")
+        remove_variant_button.setToolTip("حذف متغیر انتخاب‌شده")
+        remove_variant_button.clicked.connect(self._remove_selected_variant)
+        variants_action_row.addWidget(remove_variant_button)
+        layout.addLayout(variants_action_row)
+
+        self.variants_status_label = QLabel("")
+        self.variants_status_label.setObjectName("statusError")
+        self.variants_status_label.setWordWrap(True)
+        layout.addWidget(self.variants_status_label)
+
+        return tab
+
+    def _reload_item_attributes(self) -> None:
+        if self._company_id is None:
+            return
+        current = self.variant_attribute_combo.currentData()
+        self.variant_attribute_combo.blockSignals(True)
+        self.variant_attribute_combo.clear()
+        for attribute in variants_service.list_item_attributes(self._company_id, active_only=True):
+            self.variant_attribute_combo.addItem(attribute.name, attribute.attribute_id)
+        self.variant_attribute_combo.blockSignals(False)
+        if current is not None:
+            self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(current)))
+        self._load_attribute_values_list()
+
+    def _move_item_attribute(self, direction: str) -> None:
+        attribute_id = self.variant_attribute_combo.currentData()
+        if attribute_id is None or self._company_id is None:
+            return
+        try:
+            variants_service.swap_item_attribute_order(self._company_id, attribute_id, direction)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self._reload_item_attributes()
+        self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(attribute_id)))
+
+    def _add_item_attribute(self) -> None:
+        if self._company_id is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویژگی تازه")
+        form = QVBoxLayout(dialog)
+        code_field = QLineEdit()
+        code_field.setPlaceholderText("کد (مثلاً SIZE)")
+        form.addWidget(code_field)
+        name_field = QLineEdit()
+        name_field.setPlaceholderText("نام (مثلاً سایز)")
+        form.addWidget(name_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            attribute_id = variants_service.create_item_attribute(
+                self._company_id, code_field.text(), name_field.text()
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_item_attributes()
+        self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(attribute_id)))
+
+    def _load_attribute_values_list(self) -> None:
+        attribute_id = self.variant_attribute_combo.currentData()
+        self.variant_values_list.blockSignals(True)
+        self.variant_values_list.setRowCount(0)
+        if attribute_id is not None:
+            selected_values = self._variant_selection.get(attribute_id, set())
+            values = variants_service.list_item_attribute_values(attribute_id)
+            self.variant_values_list.setRowCount(len(values))
+            for row_index, value_row in enumerate(values):
+                checkbox_item = QTableWidgetItem()
+                checkbox_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                checkbox_item.setCheckState(Qt.Checked if value_row.value_id in selected_values else Qt.Unchecked)
+                checkbox_item.setData(Qt.UserRole, value_row.value_id)
+                self.variant_values_list.setItem(row_index, 0, checkbox_item)
+                self.variant_values_list.setItem(row_index, 1, QTableWidgetItem(value_row.value))
+        self.variant_values_list.blockSignals(False)
+
+    def _on_variant_value_checked(self, item: QTableWidgetItem) -> None:
+        if item.column() != 0:
+            return
+        attribute_id = self.variant_attribute_combo.currentData()
+        value_id = item.data(Qt.UserRole)
+        if attribute_id is None or value_id is None:
+            return
+        selected = self._variant_selection.setdefault(attribute_id, set())
+        if item.checkState() == Qt.Checked:
+            selected.add(value_id)
+        else:
+            selected.discard(value_id)
+
+    def _add_item_attribute_value(self) -> None:
+        attribute_id = self.variant_attribute_combo.currentData()
+        if attribute_id is None:
+            self.variants_status_label.setText("ابتدا یک ویژگی انتخاب یا اضافه کنید.")
+            return
+        value_text = self.variant_value_field.text().strip()
+        if not value_text:
+            return
+        try:
+            variants_service.add_item_attribute_value(attribute_id, value_text, value_text)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("")
+        self.variant_value_field.clear()
+        self._load_attribute_values_list()
+
+    def _make_own_barcode(self) -> None:
+        if self._item_id is None or self._company_id is None:
+            self.variants_status_label.setText("ابتدا کالا را ذخیره کنید.")
+            return
+        try:
+            barcode = variants_service.ensure_item_barcode(self._company_id, self._item_id)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.own_barcode_label.setText(barcode)
+        self.barcode_field.setText(barcode)
+        self.variants_status_label.setText("")
+
+    def _print_own_barcode(self) -> None:
+        barcode = self.own_barcode_label.text().strip()
+        if not barcode or not barcode.isdigit():
+            self.variants_status_label.setText("ابتدا بارکد کالا را بسازید.")
+            return
+        title = f"{self.latin_name_field.text().strip() or ''}".strip() or "کالا"
+        print_barcode_labels(self, [(title, "", barcode)])
+
+    def _generate_variants(self) -> None:
+        if self._item_id is None or self._company_id is None:
+            self.variants_status_label.setText("ابتدا کالا را ذخیره کنید.")
+            return
+        selection = {aid: sorted(vals) for aid, vals in self._variant_selection.items() if vals}
+        try:
+            created_ids = variants_service.generate_item_variants(self._company_id, self._item_id, selection)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText(
+            f"{len(created_ids)} متغیر تازه ساخته شد." if created_ids else "همهٔ ترکیب‌ها از قبل موجود بودند."
+        )
+        self._refresh_variants_table()
+        self._sync_transactability_checkboxes()
+
+    def _refresh_variants_table(self) -> None:
+        self.variants_table.setRowCount(0)
+        if self._item_id is None or self._company_id is None:
+            return
+        rows = variants_service.list_item_variants(self._company_id, self._item_id)
+        self.variants_table.setRowCount(len(rows))
+        for row_index, r in enumerate(rows):
+            values = [r.code, r.name or "", r.attribute_labels, r.barcode or ""]
+            for col_index, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, r.variant_item_id)
+                self.variants_table.setItem(row_index, col_index, cell)
+
+    def _print_selected_variant_barcode(self) -> None:
+        selected = self.variants_table.selectedItems()
+        if not selected:
+            self.variants_status_label.setText("یک متغیر از جدول انتخاب کنید.")
+            return
+        row = selected[0].row()
+        name = self.variants_table.item(row, 1).text()
+        attrs = self.variants_table.item(row, 2).text()
+        barcode = self.variants_table.item(row, 3).text()
+        if not barcode:
+            self.variants_status_label.setText("این متغیر هنوز بارکد ندارد.")
+            return
+        print_barcode_labels(self, [(name, attrs, barcode)])
+
+    def _print_all_variant_barcodes(self) -> None:
+        if self._item_id is None or self._company_id is None:
+            return
+        rows = variants_service.list_item_variants(self._company_id, self._item_id)
+        labels = [(r.name or r.code, r.attribute_labels, r.barcode) for r in rows if r.barcode]
+        if not labels:
+            self.variants_status_label.setText("هیچ متغیر بارکددار‌ی برای چاپ وجود ندارد.")
+            return
+        print_barcode_labels(self, labels)
+
+    def _remove_selected_variant(self) -> None:
+        selected = self.variants_table.selectedItems()
+        if not selected or self._company_id is None or self._item_id is None:
+            return
+        variant_item_id = selected[0].data(Qt.UserRole)
+        try:
+            variants_service.delete_item_variant(self._company_id, self._item_id, variant_item_id)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("")
+        self._refresh_variants_table()
+        self._sync_transactability_checkboxes()
+
+    def _sync_transactability_checkboxes(self) -> None:
+        """طبق تصمیم صریح («کالای اصلی دارای متغیر، غیرقابل‌فروش/
+        غیرموجودی‌محور شود»): تولید/حذف متغیر می‌تواند این سه پرچم کالای
+        اصلی را در دیتابیس مستقیماً عوض کند — اگر تیک‌های همین فرم
+        رفرش نشوند، دکمهٔ ذخیرهٔ فرم میزبان با مقدار باسیات چک‌باکس‌ها
+        همان تغییر خودکار را بازنویسی می‌کند."""
+        if self._item_id is None:
+            return
+        item = catalog_service.get_item(self._item_id)
+        if item is None:
+            return
+        self.is_sellable_checkbox.setChecked(item.is_sellable)
+        self.is_purchasable_checkbox.setChecked(item.is_purchasable)
+        self.is_stock_tracked_checkbox.setChecked(item.is_stock_tracked)
+        self._apply_visibility()
+
+    def _selected_variant_item_id(self) -> int | None:
+        selected = self.variants_table.selectedItems()
+        if not selected:
+            return None
+        return self.variants_table.item(selected[0].row(), 0).data(Qt.UserRole)
+
+    def _on_variant_selection_changed(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        if variant_item_id is None:
+            self.variant_notes_field.clear()
+            self.variant_price_field.clear()
+            return
+        item = catalog_service.get_item(variant_item_id)
+        self.variant_notes_field.setText((item.notes or "") if item is not None else "")
+        self._load_variant_price()
+
+    def _save_variant_notes(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        if variant_item_id is None or self._company_id is None:
+            self.variants_status_label.setText("یک متغیر از جدول انتخاب کنید.")
+            return
+        try:
+            variants_service.set_variant_notes(
+                self._company_id, variant_item_id, self.variant_notes_field.text().strip() or None
+            )
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("توضیحات متغیر ذخیره شد.")
+
+    def _reload_variant_price_lists(self) -> None:
+        if self._company_id is None:
+            return
+        current = self.variant_price_list_combo.currentData()
+        self.variant_price_list_combo.blockSignals(True)
+        self.variant_price_list_combo.clear()
+        for price_list in pricing_service.list_price_lists(self._company_id, "SALES"):
+            self.variant_price_list_combo.addItem(f"{price_list.code} — {price_list.name}", price_list.price_list_id)
+        self.variant_price_list_combo.blockSignals(False)
+        if current is not None:
+            self.variant_price_list_combo.setCurrentIndex(max(0, self.variant_price_list_combo.findData(current)))
+        self._load_variant_price()
+
+    def _load_variant_price(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        price_list_id = self.variant_price_list_combo.currentData()
+        if variant_item_id is None or price_list_id is None:
+            self.variant_price_field.clear()
+            return
+        existing = next(
+            (
+                p for p in pricing_service.list_price_list_items(price_list_id)
+                if p.item_id == variant_item_id and p.min_quantity == decimal.Decimal(1)
+            ),
+            None,
+        )
+        self.variant_price_field.setText(str(existing.unit_price) if existing is not None else "")
+
+    def _save_variant_price(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        price_list_id = self.variant_price_list_combo.currentData()
+        if variant_item_id is None or price_list_id is None:
+            self.variants_status_label.setText("یک متغیر و یک لیست قیمت انتخاب کنید.")
+            return
+        price = _decimal_or_none(self.variant_price_field.text())
+        if price is None:
+            self.variants_status_label.setText("قیمت معتبر وارد کنید.")
+            return
+        item = catalog_service.get_item(variant_item_id)
+        if item is None:
+            return
+        pricing_service.set_price_list_item(
+            price_list_id, variant_item_id, item.base_uom_id, price,
+            changed_by_user_id=app_session.current_user.user_id if app_session.current_user else None,
+        )
+        self.variants_status_label.setText("قیمت متغیر ذخیره شد.")
+
+    def _add_variant_photo(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        if variant_item_id is None or self._company_id is None or self._item_id is None:
+            self.variants_status_label.setText("یک متغیر از جدول انتخاب کنید.")
+            return
+        row = next(
+            (
+                r for r in variants_service.list_item_variants(self._company_id, self._item_id)
+                if r.variant_item_id == variant_item_id
+            ),
+            None,
+        )
+        if row is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "انتخاب عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+        )
+        if not path:
+            return
+        try:
+            attachment_id = dimensions_service.attach_detail_account_file(
+                self._company_id, row.item_detail_account_id, app_session.current_user.user_id, path
+            )
+            dimensions_service.set_primary_detail_account_photo(attachment_id, self._company_id)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("عکس متغیر ذخیره شد.")
 
     # --- تبِ فروشِ تکمیلی -------------------------------------------------------
     def _build_sales_extra_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.max_discount_field = QLineEdit()
         self.sales_commission_field = QLineEdit()
@@ -319,10 +1048,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.default_tax_percent_field = QLineEdit()
 
         self.sales_extra_grid = FieldGrid([
-            FieldSpec("max_discount", "حداکثرِ درصدِ تخفیف", self.max_discount_field, span=1),
-            FieldSpec("sales_commission", "درصدِ کمیسیونِ فروش", self.sales_commission_field, span=1),
-            FieldSpec("warranty_months", "مدتِ گارانتی (ماه)", self.warranty_months_field, span=1),
-            FieldSpec("default_tax_percent", "درصدِ مالیات (خالی = تنظیماتِ کلیِ شرکت)", self.default_tax_percent_field, span=1),
+            FieldSpec("max_discount", "حداکثر درصد تخفیف", self.max_discount_field, span=1),
+            FieldSpec("sales_commission", "درصد کمیسیون فروش", self.sales_commission_field, span=1),
+            FieldSpec("warranty_months", "مدت گارانتی (ماه)", self.warranty_months_field, span=1),
+            FieldSpec("default_tax_percent", "درصد مالیات (خالی = تنظیمات کلی شرکت)", self.default_tax_percent_field, span=1),
         ])
         layout.addWidget(self.sales_extra_grid)
 
@@ -332,9 +1061,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ تولید (BOM) — فقط برایِ FINISHED_GOOD --------------------------
     def _build_production_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.bom_status_label = QLabel("ابتدا کالا را ذخیره کنید.")
         layout.addWidget(self.bom_status_label)
@@ -342,24 +1069,25 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         create_bom_button = QPushButton("➕")
         create_bom_button.setObjectName("primaryIconButton")
         create_bom_button.setFixedWidth(48)
-        create_bom_button.setToolTip("نسخهٔ تازهٔ فهرستِ موادِ اولیه")
+        create_bom_button.setToolTip("نسخهٔ تازهٔ فهرست مواد اولیه")
         create_bom_button.clicked.connect(self._create_bom)
         layout.addWidget(create_bom_button, alignment=Qt.AlignLeft)
 
         self.bom_component_combo = QComboBox()
         self.bom_qty_field = QLineEdit()
-        self.bom_qty_field.setPlaceholderText("مقدارِ مصرفی")
+        self.bom_qty_field.setPlaceholderText("مقدار مصرفی")
         bom_row = QHBoxLayout()
         bom_row.addWidget(self.bom_component_combo, stretch=2)
         bom_row.addWidget(self.bom_qty_field, stretch=1)
         add_bom_line_button = QPushButton("+")
+        add_bom_line_button.setObjectName("iconButton")
         add_bom_line_button.setFixedWidth(28)
         add_bom_line_button.clicked.connect(self._add_bom_line)
         bom_row.addWidget(add_bom_line_button)
         layout.addLayout(bom_row)
 
         self.bom_lines_table = QTableWidget(0, 2)
-        self.bom_lines_table.setHorizontalHeaderLabels(["مقدارِ مصرفی", "کالایِ مصرفی"])
+        self.bom_lines_table.setHorizontalHeaderLabels(["مقدار مصرفی", "کالای مصرفی"])
         self.bom_lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.bom_lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.bom_lines_table.verticalHeader().setVisible(False)
@@ -368,7 +1096,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         remove_bom_line_button = QPushButton("🗑️")
         remove_bom_line_button.setObjectName("dangerIconButton")
         remove_bom_line_button.setFixedWidth(44)
-        remove_bom_line_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_bom_line_button.setToolTip("حذف ردیف انتخاب‌شده")
         remove_bom_line_button.clicked.connect(self._remove_bom_line)
         layout.addWidget(remove_bom_line_button)
 
@@ -377,9 +1105,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ فروشگاهِ اینترنتی --------------------------------------------------
     def _build_ecommerce_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.seo_title_field = QLineEdit()
         self.seo_slug_field = QLineEdit()
@@ -388,35 +1114,129 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.website_category_field = QLineEdit()
         self.website_tags_field = QLineEdit()
 
+        # طبقِ درخواستِ صریح («حالت‌هایِ موجودی» برایِ فروشِ اینترنتی):
+        # این تنظیم فقط رویِ سینکِ فروشگاهِ اینترنتی اثر دارد -- روی
+        # موجودیِ واقعیِ خودِ ERP/دیگر اسناد هیچ تاثیری ندارد.
+        self.ecommerce_stock_mode_combo = QComboBox()
+        self.ecommerce_stock_mode_combo.addItem("بر اساس دیتابیس (پیش‌فرض)", "DATABASE")
+        self.ecommerce_stock_mode_combo.addItem("همیشه موجود", "ALWAYS_IN_STOCK")
+        self.ecommerce_stock_mode_combo.addItem("ناموجود (فروش اینترنتی متوقف)", "OUT_OF_STOCK")
+
         self.ecommerce_grid = FieldGrid([
-            FieldSpec("seo_title", "عنوانِ سئو", self.seo_title_field, span=1),
-            FieldSpec("seo_slug", "نامکِ آدرس (Slug)", self.seo_slug_field, span=1),
-            FieldSpec("seo_description", "توضیحاتِ متا", self.seo_description_field, span=1),
-            FieldSpec("seo_keywords", "کلیدواژه‌هایِ متا", self.seo_keywords_field, span=1),
+            FieldSpec("seo_title", "عنوان سئو", self.seo_title_field, span=1),
+            FieldSpec("seo_slug", "نامک آدرس (Slug)", self.seo_slug_field, span=1),
+            FieldSpec("seo_description", "توضیحات متا", self.seo_description_field, span=1),
+            FieldSpec("seo_keywords", "کلیدواژه‌های متا", self.seo_keywords_field, span=1),
             FieldSpec("website_category", "دستهٔ فروشگاهی", self.website_category_field, span=1),
             FieldSpec("website_tags", "برچسب‌ها", self.website_tags_field, span=1),
+            FieldSpec("ecommerce_stock_mode", "حالت موجودی در فروشگاه اینترنتی", self.ecommerce_stock_mode_combo, span=1),
         ])
         layout.addWidget(self.ecommerce_grid)
+
+        # طبقِ بازخوردِ صریحِ کاربر («تطبیقِ کد/SKU بینِ سایت و ERP بهتر
+        # است در فرمِ تعریفِ کالا انجام شود»): به‌ازایِ هر اتصالِ فعالِ
+        # فروشگاهی، یک ردیف با SKUِ سایت و دکمه‌یِ اتصال/جست‌وجو.
+        ecommerce_mapping_label = QLabel("نگاشت کالا در فروشگاه‌های اینترنتی")
+        layout.addWidget(ecommerce_mapping_label)
+        self.ecommerce_mapping_container = QWidget()
+        self.ecommerce_mapping_layout = QVBoxLayout(self.ecommerce_mapping_container)
+        self.ecommerce_mapping_layout.setContentsMargins(0, 0, 0, 0)
+        self.ecommerce_mapping_layout.setSpacing(6)
+        layout.addWidget(self.ecommerce_mapping_container)
+        self.ecommerce_mapping_status_label = QLabel("")
+        self.ecommerce_mapping_status_label.setObjectName("statusError")
+        layout.addWidget(self.ecommerce_mapping_status_label)
 
         layout.addStretch(1)
         return tab
 
+    def _clear_ecommerce_mapping_rows(self) -> None:
+        while self.ecommerce_mapping_layout.count():
+            item = self.ecommerce_mapping_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+
+    def _refresh_ecommerce_mappings(self) -> None:
+        self._clear_ecommerce_mapping_rows()
+        self.ecommerce_mapping_status_label.setText("")
+        if self._item_id is None or self._company_id is None:
+            self.ecommerce_mapping_layout.addWidget(QLabel("ابتدا کالا را ذخیره کنید، سپس نگاشت فروشگاهی را انجام دهید."))
+            return
+        connections = [c for c in ecommerce_service.list_connections(self._company_id) if c.sync_status == "ACTIVE"]
+        if not connections:
+            self.ecommerce_mapping_layout.addWidget(QLabel("هیچ اتصال فروشگاهی فعالی وجود ندارد."))
+            return
+        mappings_by_connection = {m.connection_id: m for m in ecommerce_service.list_item_mappings_for_item(self._item_id)}
+        for connection in connections:
+            row_widget = QWidget()
+            row = QHBoxLayout(row_widget)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(QLabel(f"{_ECOMMERCE_PLATFORM_LABELS.get(connection.platform_code, connection.platform_code)} — {connection.store_url}"), stretch=1)
+            sku_field = QLineEdit()
+            existing = mappings_by_connection.get(connection.connection_id)
+            if existing is not None:
+                sku_field.setText(existing.external_sku)
+            sku_field.setPlaceholderText("کد کالا در سایت")
+            row.addWidget(sku_field, stretch=1)
+            connect_button = QPushButton("🔗 اتصال/جست‌وجو")
+            connect_button.setObjectName("flatButton")
+            connect_button.clicked.connect(lambda _checked=False, cid=connection.connection_id, field=sku_field: self._connect_ecommerce_mapping(cid, field))
+            row.addWidget(connect_button)
+            self.ecommerce_mapping_layout.addWidget(row_widget)
+
+    def _connect_ecommerce_mapping(self, connection_id: int, field: QLineEdit) -> None:
+        sku = field.text().strip()
+        if not sku:
+            self.ecommerce_mapping_status_label.setText("ابتدا کد کالا در سایت را وارد کنید.")
+            return
+        try:
+            product_name = ecommerce_service.search_external_product(connection_id, sku)
+        except Exception as exc:  # noqa: BLE001 -- خطایِ شبکه/اعتبار
+            self.ecommerce_mapping_status_label.setText(str(exc))
+            return
+        if product_name is None:
+            self.ecommerce_mapping_status_label.setText(f"محصولی با کد کالا «{sku}» در فروشگاه پیدا نشد.")
+            return
+        ecommerce_service.map_item(connection_id, sku, self._item_id)
+        theme.set_status_label(self.ecommerce_mapping_status_label, f"به «{product_name}» نگاشته شد.", ok=True)
+
     # --- تبِ POS ---------------------------------------------------------------
     def _build_pos_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.pos_shortcut_field = QLineEdit()
+        # طبقِ درخواستِ صریح («رنگِ دکمه با پالتِ رنگی انتخاب بشه»): فیلدِ
+        # متنیِ هگز فقط برایِ نمایش/ذخیره‌سازی باقی می‌ماند (read-only)؛
+        # انتخابِ واقعیِ رنگ از طریقِ QColorDialog انجام می‌شود.
         self.pos_color_field = QLineEdit()
         self.pos_color_field.setPlaceholderText("#RRGGBB")
-        self.pos_requires_weight_checkbox = QCheckBox("نیازمندِ توزین")
-        self.pos_requires_serial_checkbox = QCheckBox("نیازمندِ سریال")
+        self.pos_color_field.setReadOnly(True)
+        pos_color_button = QPushButton("🎨")
+        pos_color_button.setObjectName("iconButton")
+        pos_color_button.setFixedWidth(32)
+        pos_color_button.setToolTip("انتخاب رنگ از پالت")
+        pos_color_button.clicked.connect(self._pick_pos_color)
+        pos_color_row = QWidget()
+        pos_color_row_layout = QHBoxLayout(pos_color_row)
+        pos_color_row_layout.setContentsMargins(0, 0, 0, 0)
+        pos_color_row_layout.setSpacing(3)
+        pos_color_row_layout.addWidget(self.pos_color_field, stretch=1)
+        pos_color_row_layout.addWidget(pos_color_button)
+        self.pos_requires_weight_checkbox = QCheckBox("نیازمند توزین")
+        self.pos_requires_serial_checkbox = QCheckBox("نیازمند سریال")
+        # طبقِ بازخوردِ صریح («دسته‌بندیِ مخصوصِ POS، جدا از دسته‌بندیِ
+        # عمومیِ کالا»): این گروه فقط تعیین می‌کند این کالا در کدام تبِ
+        # دسترسیِ‌سریعِ صفحه‌یِ فروشِ حضوری نمایش داده شود.
+        self.pos_menu_group_combo = QComboBox()
+        pos_menu_group_row = self._make_combo_with_add_row(
+            "گروه POS (تب دسترسی‌سریع)", self.pos_menu_group_combo, self._quick_add_pos_menu_group,
+        )
 
         self.pos_grid = FieldGrid([
-            FieldSpec("shortcut", "کلیدِ میان‌بر", self.pos_shortcut_field, span=1),
-            FieldSpec("color", "رنگِ دکمه", self.pos_color_field, span=1),
+            FieldSpec("shortcut", "کلید میان‌بر", self.pos_shortcut_field, span=1),
+            FieldSpec("color", "رنگ دکمه", pos_color_row, span=1),
+            FieldSpec("menu_group", "", pos_menu_group_row, span=1),
             FieldSpec("requires_weight", "", self.pos_requires_weight_checkbox, span=1),
             FieldSpec("requires_serial", "", self.pos_requires_serial_checkbox, span=1),
         ])
@@ -428,9 +1248,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ حمل‌ونقل ------------------------------------------------------------
     def _build_shipping_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.length_field = QLineEdit()
         self.width_field = QLineEdit()
@@ -442,8 +1260,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("length", "طول (سانتی‌متر)", self.length_field, span=1),
             FieldSpec("width", "عرض (سانتی‌متر)", self.width_field, span=1),
             FieldSpec("height", "ارتفاع (سانتی‌متر)", self.height_field, span=1),
-            FieldSpec("package_type", "نوعِ بسته‌بندی", self.package_type_field, span=1),
-            FieldSpec("freight_class", "کلاسِ حمل", self.freight_class_field, span=1),
+            FieldSpec("package_type", "نوع بسته‌بندی", self.package_type_field, span=1),
+            FieldSpec("freight_class", "کلاس حمل", self.freight_class_field, span=1),
         ])
         layout.addWidget(self.shipping_grid)
 
@@ -453,11 +1271,9 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ کنترلِ کیفیت -----------------------------------------------------
     def _build_qc_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
-        self.requires_qc_checkbox = QCheckBox("نیازمندِ کنترلِ کیفیت")
+        self.requires_qc_checkbox = QCheckBox("نیازمند کنترل کیفیت")
         self.qc_standard_field = QLineEdit()
         self.qc_test_spec_field = QTextEdit()
         self.qc_test_spec_field.setMaximumHeight(60)
@@ -465,9 +1281,9 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.qc_grid = FieldGrid([
             FieldSpec("requires_qc", "", self.requires_qc_checkbox, span=1),
-            FieldSpec("qc_standard", "استانداردِ کیفیت", self.qc_standard_field, span=1),
+            FieldSpec("qc_standard", "استاندارد کیفیت", self.qc_standard_field, span=1),
             FieldSpec("qc_interval", "فاصلهٔ بازرسی (روز)", self.qc_interval_field, span=1),
-            FieldSpec("qc_test_spec", "مشخصاتِ آزمون", self.qc_test_spec_field, span=3),
+            FieldSpec("qc_test_spec", "مشخصات آزمون", self.qc_test_spec_field, span=3),
         ])
         layout.addWidget(self.qc_grid)
 
@@ -477,9 +1293,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ دارایی — فقط برایِ ASSET ------------------------------------------
     def _build_asset_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.asset_tag_field = QLineEdit()
         self.depreciation_group_field = QLineEdit()
@@ -489,8 +1303,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in _DEPRECIATION_LABELS.items():
             self.depreciation_method_combo.addItem(label, code)
 
-        self.acquisition_date_field = QDateEdit()
-        self.acquisition_date_field.setCalendarPopup(True)
+        self.acquisition_date_field = JalaliDateEdit()
         self.acquisition_date_field.setDate(datetime.date.today())
 
         self.acquisition_cost_field = QLineEdit()
@@ -498,24 +1311,30 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.asset_grid = FieldGrid([
             FieldSpec("asset_tag", "شمارهٔ اموال", self.asset_tag_field, span=1),
-            FieldSpec("depreciation_group", "گروهِ استهلاک", self.depreciation_group_field, span=1),
-            FieldSpec("useful_life", "عمرِ مفید (ماه)", self.useful_life_field, span=1),
-            FieldSpec("depreciation_method", "روشِ استهلاک", self.depreciation_method_combo, span=1),
-            FieldSpec("acquisition_date", "تاریخِ تحصیل", self.acquisition_date_field, span=1),
-            FieldSpec("acquisition_cost", "بهایِ تحصیل", self.acquisition_cost_field, span=1),
-            FieldSpec("salvage_value", "ارزشِ اسقاط", self.salvage_value_field, span=1),
+            FieldSpec("depreciation_group", "گروه استهلاک", self.depreciation_group_field, span=1),
+            FieldSpec("useful_life", "عمر مفید (ماه)", self.useful_life_field, span=1),
+            FieldSpec("depreciation_method", "روش استهلاک", self.depreciation_method_combo, span=1),
+            FieldSpec("acquisition_date", "تاریخ تحصیل", self.acquisition_date_field, span=1),
+            FieldSpec("acquisition_cost", "بهای تحصیل", self.acquisition_cost_field, span=1),
+            FieldSpec("salvage_value", "ارزش اسقاط", self.salvage_value_field, span=1),
         ])
         layout.addWidget(self.asset_grid)
 
         save_asset_button = QPushButton("💾")
         save_asset_button.setObjectName("primaryIconButton")
         save_asset_button.setFixedWidth(48)
-        save_asset_button.setToolTip("ذخیرهٔ اطلاعاتِ دارایی")
+        save_asset_button.setToolTip("ذخیرهٔ اطلاعات دارایی")
         save_asset_button.clicked.connect(self._save_asset_detail)
         layout.addWidget(save_asset_button, alignment=Qt.AlignLeft)
 
         self.asset_status_label = QLabel("")
         layout.addWidget(self.asset_status_label)
+        # R265: مدیریتِ کاملِ دارایی (استهلاکِ دوره‌ای، انتقال، فروش، ...) در ماژولِ «دارایی‌هایِ ثابت»
+        fa_hint = QLabel("مدیریت کامل دارایی (ثبت با ویزارد، استهلاک دوره‌ای، انتقال، فروش و اسقاط) در منوی «دارایی‌های ثابت» است؛ "
+                         "اطلاعات این بخش هنگام نصب به آن منتقل شده است.")
+        fa_hint.setObjectName("sectionHint")
+        fa_hint.setWordWrap(True)
+        layout.addWidget(fa_hint)
 
         layout.addStretch(1)
         return tab
@@ -530,8 +1349,9 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         combo_row = QHBoxLayout()
         combo_row.addWidget(combo, stretch=1)
         add_button = QPushButton("+")
+        add_button.setObjectName("iconButton")
         add_button.setFixedWidth(28)
-        add_button.setToolTip(f"{label_text}ِ تازه")
+        add_button.setToolTip(f"{label_text} تازه")
         add_button.clicked.connect(quick_add)
         combo_row.addWidget(add_button)
         row_layout.addLayout(combo_row)
@@ -541,7 +1361,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("واحدِ تازه")
+        dialog.setWindowTitle("واحد تازه")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("کد"))
         code_field = QLineEdit()
@@ -574,7 +1394,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "برندِ تازه", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
+            "برند تازه", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
         )
         if new_id is None:
             return
@@ -596,12 +1416,63 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "دسته‌بندیِ تازه", lambda code, name: catalog_service.create_category(self._company_id, code, name)
+            "دسته‌بندی تازه", lambda code, name: catalog_service.create_category(self._company_id, code, name)
         )
         if new_id is None:
             return
         self._reload_categories()
         self.category_combo.setCurrentIndex(max(0, self.category_combo.findData(new_id)))
+
+    def _pick_pos_color(self) -> None:
+        current = QColor(self.pos_color_field.text().strip()) if self.pos_color_field.text().strip() else QColor("#4A90D9")
+        if not current.isValid():
+            current = QColor("#4A90D9")
+        color = QColorDialog.getColor(current, self, "رنگ دکمهٔ کالا در POS")
+        if not color.isValid():
+            return
+        self.pos_color_field.setText(color.name())
+        self._apply_pos_color_swatch(color.name())
+
+    def _apply_pos_color_swatch(self, color_text: str) -> None:
+        color = QColor(color_text) if color_text else None
+        if color is not None and color.isValid():
+            self.pos_color_field.setStyleSheet(f"background-color: {color.name()}; color: #ffffff;")
+        else:
+            self.pos_color_field.setStyleSheet("")
+
+    def _quick_add_pos_menu_group(self) -> None:
+        # طبقِ درخواستِ صریح («تعریفِ گروه‌ها از طریقِ کالا و تبِ POS هم
+        # امکان‌پذیر باشد»): دیگر نیازی نیست کاربر برایِ ساختنِ یک گروهِ
+        # تازه از فرمِ کالا خارج شود و به تنظیماتِ تک‌فروشی برود.
+        if self._company_id is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("گروه POS تازه")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("نام"))
+        name_field = QLineEdit()
+        layout.addWidget(name_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted or not name_field.text().strip():
+            return
+        try:
+            new_id = pos_service.create_menu_group(self._company_id, name_field.text().strip())
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_menu_groups()
+        self.pos_menu_group_combo.setCurrentIndex(max(0, self.pos_menu_group_combo.findData(new_id)))
+
+    def _reload_menu_groups(self) -> None:
+        self.pos_menu_group_combo.blockSignals(True)
+        self.pos_menu_group_combo.clear()
+        self.pos_menu_group_combo.addItem("(بدون گروه)", None)
+        for g in pos_service.list_menu_groups(self._company_id):
+            self.pos_menu_group_combo.addItem(g.name, g.group_id)
+        self.pos_menu_group_combo.blockSignals(False)
 
     def _quick_add_code_name_dialog(self, title: str, create_fn) -> int | None:
         dialog = QDialog(self)
@@ -639,7 +1510,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _reload_brands(self) -> None:
         self.brand_combo.blockSignals(True)
         self.brand_combo.clear()
-        self.brand_combo.addItem("(بدونِ برند)", None)
+        self.brand_combo.addItem("(بدون برند)", None)
         for b in catalog_service.list_brands(self._company_id, active_only=True):
             self.brand_combo.addItem(f"{b.code} — {b.name}", b.brand_id)
         self.brand_combo.blockSignals(False)
@@ -647,7 +1518,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _reload_manufacturers(self) -> None:
         self.manufacturer_combo.blockSignals(True)
         self.manufacturer_combo.clear()
-        self.manufacturer_combo.addItem("(بدونِ تولیدکننده)", None)
+        self.manufacturer_combo.addItem("(بدون تولیدکننده)", None)
         for m in catalog_service.list_manufacturers(self._company_id, active_only=True):
             self.manufacturer_combo.addItem(f"{m.code} — {m.name}", m.manufacturer_id)
         self.manufacturer_combo.blockSignals(False)
@@ -656,7 +1527,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._categories = catalog_service.list_categories(self._company_id, active_only=True)
         self.category_combo.blockSignals(True)
         self.category_combo.clear()
-        self.category_combo.addItem("(بدونِ دسته)", None)
+        self.category_combo.addItem("(بدون دسته)", None)
         for c in self._categories:
             self.category_combo.addItem(f"{c.code} — {c.name}", c.category_id)
         self.category_combo.blockSignals(False)
@@ -686,7 +1557,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.tabs.setTabVisible(self.tab_indexes["sales_extra"], kind in _CONSUMER_FACING_KINDS)
         self.tabs.setTabVisible(self.tab_indexes["production"], kind == "FINISHED_GOOD")
         self.tabs.setTabVisible(self.tab_indexes["ecommerce"], kind in _CONSUMER_FACING_KINDS)
-        self.tabs.setTabVisible(self.tab_indexes["pos"], kind in _CONSUMER_FACING_KINDS)
+        self.tabs.setTabVisible(self.tab_indexes["pos"], self.is_sellable_checkbox.isChecked())
         self.tabs.setTabVisible(
             self.tab_indexes["shipping"], kind != "SERVICE" and "LOGISTICS_DIMENSIONS" in self._enabled_features
         )
@@ -697,8 +1568,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     # --- API عمومی برایِ فرمِ میزبان (detail_dimensions.py) -------------------
     def refresh(self, company_id: int) -> None:
-        """بارگذاریِ همه‌یِ کمبوهایِ وابسته به داده — باید هر بار که فرمِ
-        میزبان تفصیلی‌ها را رفرش می‌کند (تغییرِ گروه/شرکت) صدا زده شود."""
+        """بارگذاری همهٔ فهرست‌های وابسته به داده — باید هر بار که فرم
+        میزبان تفصیلی‌ها را رفرش می‌کند (تغییر گروه/شرکت) صدا زده شود."""
         self._company_id = company_id
         self._rows = catalog_service.list_items(company_id)
         self._enabled_features = {f.feature_code for f in engine_service.list_features(company_id) if f.is_enabled}
@@ -710,26 +1581,64 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.default_warehouse_combo.blockSignals(True)
         self.default_warehouse_combo.clear()
-        self.default_warehouse_combo.addItem("(بدونِ انبارِ پیش‌فرض)", None)
+        self.default_warehouse_combo.addItem("(بدون انبار پیش‌فرض)", None)
         for w in locations_service.list_warehouses(company_id, active_only=True):
             self.default_warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
         self.default_warehouse_combo.blockSignals(False)
+
+        self._reload_menu_groups()
 
         self.supplier_combo.clear()
         for s in dimensions_service.list_suppliers(company_id):
             self.supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
 
+        self.item_code_supplier_combo.clear()
+        self.item_code_supplier_combo.addItem("(همهٔ تامین‌کنندگان)", None)
+        for s in dimensions_service.list_suppliers(company_id):
+            self.item_code_supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
+
         self._rebuild_related_item_combo()
+        self._rebuild_uom_conversion_combo()
+        current_price_list = self.unit_price_list_combo.currentData()
+        self.unit_price_list_combo.blockSignals(True)
+        self.unit_price_list_combo.clear()
+        for pl in pricing_service.list_price_lists(company_id):
+            kind = "فروش" if pl.price_list_type_code == "SALES" else "خرید"
+            self.unit_price_list_combo.addItem(f"{pl.code} — {pl.name} ({kind})", pl.price_list_id)
+        if current_price_list is not None:
+            self.unit_price_list_combo.setCurrentIndex(max(0, self.unit_price_list_combo.findData(current_price_list)))
+        self.unit_price_list_combo.blockSignals(False)
+        self._reload_item_attributes()
+        self._reload_variant_price_lists()
 
         self._apply_visibility()
 
+    def _rebuild_uom_conversion_combo(self) -> None:
+        """هم‌الگو با _rebuild_related_item_combo: واحد پایهٔ کالای در
+        حال ویرایش (یا کالای درحال‌تعریف) از فهرست حذف می‌شود — ضریب
+        تبدیل واحد پایه نسبت به خودش همیشه ۱ است و معنایی برای تعریف
+        ندارد. با تغییر واحد پایه (uom_combo) هم دوباره صدا زده می‌شود."""
+        if self._company_id is None:
+            return
+        current_selection = self.uom_conversion_combo.currentData()
+        self.uom_conversion_combo.clear()
+        base_uom_id = self.uom_combo.currentData()
+        for u in catalog_service.list_uoms(self._company_id, active_only=True):
+            if u.uom_id == base_uom_id:
+                continue
+            self.uom_conversion_combo.addItem(f"{u.code} — {u.name}", u.uom_id)
+        if current_selection is not None:
+            idx = self.uom_conversion_combo.findData(current_selection)
+            if idx >= 0:
+                self.uom_conversion_combo.setCurrentIndex(idx)
+
     def _rebuild_related_item_combo(self) -> None:
-        """طبقِ رفعِ باگِ واقعی: قبلاً این کمبو خودِ کالایِ در حالِ ویرایش
-        را هم به‌عنوانِ گزینه‌یِ «جایگزین/مکملِ خودش» نشان می‌داد (فقط در
-        لایه‌ی سرویس رد می‌شد، نه در UI) — این‌جا حذف می‌شود. چون هنگامِ
-        refresh (تعویضِ گروه/شرکت) هنوز self._item_id معلوم نیست، این
-        تابع دوباره در load() هم صدا زده می‌شود تا با شناخته‌شدنِ کالایِ
-        در حالِ ویرایش، خودش از فهرست حذف شود."""
+        """طبق رفع باگ واقعی: قبلاً این فهرست خود کالای در حال ویرایش
+        را هم به‌عنوان گزینهٔ «جایگزین/مکمل خودش» نشان می‌داد (فقط در
+        لایهٔ سرویس رد می‌شد، نه در UI) — این‌جا حذف می‌شود. چون هنگام
+        refresh (تعویض گروه/شرکت) هنوز self._item_id معلوم نیست، این
+        تابع دوباره در load() هم صدا زده می‌شود تا با شناخته‌شدن کالای
+        در حال ویرایش، خودش از فهرست حذف شود."""
         self.related_item_combo.clear()
         self.bom_component_combo.clear()
         for r in self._rows:
@@ -740,8 +1649,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.bom_component_combo.addItem(label, r.item_id)
 
     def load(self, item_row: catalog_service.ItemRow | None) -> None:
-        """پرکردنِ فرم از رویِ یک کالایِ سطحِ‌آخرِ ازپیش‌ذخیره‌شده؛ با
-        None یعنی رکوردِ تازه (reset کاملِ فیلدها)."""
+        """پرکردن فرم از روی یک کالای سطح‌آخر ازپیش‌ذخیره‌شده؛ با
+        None یعنی رکورد تازه (reset کامل فیلدها)."""
         if item_row is None:
             self.reset()
             return
@@ -770,10 +1679,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.barcode_field.setText(it.barcode or "")
         self.qr_code_field.setText(it.qr_code_data or "")
         self.sku_field.setText(it.sku or "")
+        self.own_barcode_label.setText(it.barcode or "(بدون بارکد)")
 
         self.purchase_lead_time_field.setText(str(it.purchase_lead_time_days) if it.purchase_lead_time_days is not None else "")
-        self.purchase_min_order_field.setText(str(it.purchase_min_order_qty) if it.purchase_min_order_qty is not None else "")
-        self.purchase_package_qty_field.setText(str(it.purchase_package_qty) if it.purchase_package_qty is not None else "")
+        self.purchase_min_order_field.setText(decimals.plain(it.purchase_min_order_qty) if it.purchase_min_order_qty is not None else "")
+        self.purchase_package_qty_field.setText(decimals.plain(it.purchase_package_qty) if it.purchase_package_qty is not None else "")
 
         self.max_discount_field.setText(str(it.max_discount_percent) if it.max_discount_percent is not None else "")
         self.sales_commission_field.setText(str(it.sales_commission_percent) if it.sales_commission_percent is not None else "")
@@ -786,9 +1696,13 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.seo_keywords_field.setText(it.seo_meta_keywords or "")
         self.website_category_field.setText(it.website_category or "")
         self.website_tags_field.setText(it.website_tags or "")
+        mode_index = self.ecommerce_stock_mode_combo.findData(it.ecommerce_stock_mode or "DATABASE")
+        self.ecommerce_stock_mode_combo.setCurrentIndex(mode_index if mode_index >= 0 else 0)
 
         self.pos_shortcut_field.setText(it.pos_shortcut_key or "")
         self.pos_color_field.setText(it.pos_button_color or "")
+        self._apply_pos_color_swatch(it.pos_button_color or "")
+        self.pos_menu_group_combo.setCurrentIndex(max(0, self.pos_menu_group_combo.findData(it.pos_menu_group_id)))
         self.pos_requires_weight_checkbox.setChecked(it.pos_requires_weight)
         self.pos_requires_serial_checkbox.setChecked(it.pos_requires_serial)
 
@@ -824,12 +1738,210 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.asset_status_label.setText("")
         self._apply_visibility()
+        self._rebuild_uom_conversion_combo()
+        self._refresh_uom_conversions_table()
         self._refresh_suppliers_table()
+        self._refresh_item_codes_table()
         self._refresh_related_table()
         self._refresh_bom_lines()
+        self._refresh_variants_table()
+        self._refresh_ecommerce_mappings()
+        self._refresh_locations()
+        self._refresh_cost()
+
+    # --- R248: محل‌هایِ انبارِ کالا (از موجودیِ سیستم) ---------------------------
+    def _build_locations_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        hint = QLabel("موجودی این کالا به تفکیک محل نگهداری؛ یک کالا می‌تواند در چند محل و چند انبار باشد. "
+                      "دابل‌کلیک یا «نمایش روی نقشه» محل را روی نقشهٔ انبار نشان می‌دهد.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.locations_table = QTableWidget(0, 8)
+        self.locations_table.setHorizontalHeaderLabels(["انبار", "منطقه", "راهرو", "قفسه", "طبقه", "محل", "کد محل", "مقدار"])
+        self.locations_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.locations_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.locations_table.verticalHeader().setVisible(False)
+        self.locations_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.locations_table.horizontalHeader().setStretchLastSection(True)
+        self.locations_table.cellDoubleClicked.connect(lambda row, _c: self.show_location_on_map(row))
+        layout.addWidget(self.locations_table)
+        button = QPushButton("نمایش روی نقشه")
+        button.setObjectName("flatButton")
+        button.clicked.connect(lambda: self.show_location_on_map(self.locations_table.currentRow()))
+        layout.addWidget(button, alignment=Qt.AlignLeft)
+        layout.addWidget(self._build_storage_profile())
+        self._location_rows = []
+        return tab
+
+    # --- R249: شرایطِ نگهداری (سازگاری با محلِ انبار) -------------------------------
+    def _build_storage_profile(self) -> QWidget:
+        from peecha.services import warehouse_locations as wl_service
+
+        box = QWidget()
+        grid = QHBoxLayout(box)
+        title = QLabel("شرایط نگهداری:")
+        title.setObjectName("cardTitle")
+        grid.addWidget(title)
+        self.storage_temp_min, self.storage_temp_max = QDoubleSpinBox(), QDoubleSpinBox()
+        for spin in (self.storage_temp_min, self.storage_temp_max):
+            spin.setRange(-80.01, 80)
+            spin.setDecimals(1)
+            spin.setSpecialValueText("—")
+            spin.setValue(-80.01)
+        self.storage_hazard_combo = QComboBox()
+        self.storage_hazard_combo.addItem("— غیر خطرناک —", None)
+        for code, label in wl_service.HAZARD_CLASSES.items():
+            self.storage_hazard_combo.addItem(label, code)
+        self.storage_type_combo = QComboBox()
+        self.storage_type_combo.addItem("— هر محل —", None)
+        for code, label in wl_service.LOCATION_TYPES.items():
+            self.storage_type_combo.addItem(label, code)
+        self.storage_fragile_checkbox = QCheckBox("شکستنی")
+        for label, widget in (("دما از", self.storage_temp_min), ("تا", self.storage_temp_max), ("کلاس خطر", self.storage_hazard_combo),
+                              ("فقط در محل", self.storage_type_combo)):
+            grid.addWidget(QLabel(label))
+            grid.addWidget(widget)
+        grid.addWidget(self.storage_fragile_checkbox)
+        save = QPushButton("ذخیرهٔ شرایط نگهداری")
+        save.setObjectName("flatButton")
+        save.clicked.connect(self.save_storage_profile)
+        grid.addWidget(save)
+        grid.addStretch(1)
+        return box
+
+    def _load_storage_profile(self) -> None:
+        from peecha.services import warehouse_locations as wl_service
+
+        p = wl_service.get_storage_profile(self._company_id, self._item_id) \
+            if self._company_id is not None and self._item_id is not None else wl_service.StorageProfile()
+        self.storage_temp_min.setValue(float(p.temperature_min_c) if p.temperature_min_c is not None else -80.01)
+        self.storage_temp_max.setValue(float(p.temperature_max_c) if p.temperature_max_c is not None else -80.01)
+        self.storage_hazard_combo.setCurrentIndex(max(0, self.storage_hazard_combo.findData(p.hazard_class_code)))
+        self.storage_type_combo.setCurrentIndex(max(0, self.storage_type_combo.findData(p.required_location_type_code)))
+        self.storage_fragile_checkbox.setChecked(p.is_fragile)
+
+    def save_storage_profile(self) -> bool:
+        from peecha.services import warehouse_locations as wl_service
+
+        if self._company_id is None or self._item_id is None:
+            QMessageBox.information(self, "شرایط نگهداری", "ابتدا کالا را ذخیره کنید.")
+            return False
+        temp = lambda s: decimal.Decimal(str(round(s.value(), 1))) if s.value() > -80 else None  # noqa: E731
+        try:
+            wl_service.save_storage_profile(self._company_id, self._item_id, wl_service.StorageProfile(
+                temperature_min_c=temp(self.storage_temp_min), temperature_max_c=temp(self.storage_temp_max),
+                hazard_class_code=self.storage_hazard_combo.currentData(), is_fragile=self.storage_fragile_checkbox.isChecked(),
+                required_location_type_code=self.storage_type_combo.currentData()),
+                app_session.current_user.user_id if app_session.current_user else None)
+        except ValueError as exc:
+            QMessageBox.warning(self, "شرایط نگهداری", str(exc))
+            return False
+        return True
+
+    # --- R259: اطلاعاتِ بها (از موتورِ بهایِ تمام‌شده) ---------------------------------
+    _COST_FIELDS = (("method_label", "روش ارزش‌گذاری"), ("current_cost", "بهای جاری"), ("average_cost", "میانگین بها"),
+                    ("last_purchase_cost", "آخرین بهای خرید"), ("replacement_cost", "بهای جایگزینی"),
+                    ("quantity", "موجودی"), ("inventory_value", "ارزش موجودی"), ("pending_allocations", "بهای در انتظار"))
+
+    def _build_cost_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        grid = QGridLayout()
+        self.cost_labels: dict[str, QLabel] = {}
+        for i, (key, title) in enumerate(self._COST_FIELDS):
+            caption = QLabel(title)
+            caption.setObjectName("sectionHint")
+            value = QLabel("—")
+            value.setObjectName("cardTitle")
+            grid.addWidget(caption, (i // 4) * 2, i % 4)
+            grid.addWidget(value, (i // 4) * 2 + 1, i % 4)
+            self.cost_labels[key] = value
+        layout.addLayout(grid)
+        title = QLabel("تاریخچهٔ بها (آخرین حرکت‌ها)")
+        title.setObjectName("cardTitle")
+        layout.addWidget(title)
+        self.cost_history_table = QTableWidget(0, 7)
+        self.cost_history_table.setHorizontalHeaderLabels(["تاریخ", "بها", "نوع", "منبع", "تامین‌کننده", "سند", "روش"])
+        self.cost_history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.cost_history_table.verticalHeader().setVisible(False)
+        self.cost_history_table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(self.cost_history_table, stretch=1)
+        return tab
+
+    def _can_view_cost(self) -> bool:
+        from peecha.services import roles as roles_service
+
+        user = app_session.current_user
+        return user is not None and self._company_id is not None and (
+            bool(getattr(user, "is_super_admin", False))
+            or roles_service.user_has_permission(user.user_id, self._company_id, "costing_dashboard", "VIEW"))
+
+    def _refresh_cost(self) -> None:
+        from peecha.services.costing import strategies as cost_strategies
+        from peecha.services.costing import valuation as cost_valuation
+        from peecha.services.warehouse_reports import DOC_TYPE_TITLES
+
+        allowed = self._can_view_cost()
+        self.tabs.setTabVisible(self.tab_indexes["cost"], allowed)
+        self.cost_history_table.setRowCount(0)
+        if not allowed or self._item_id is None:
+            for label in self.cost_labels.values():
+                label.setText("—")
+            return
+        info = cost_valuation.item_cost_info(self._company_id, self._item_id)
+        for key, label in self.cost_labels.items():
+            value = getattr(info, key)
+            if key == "method_label":
+                text = value
+            elif key in ("quantity", "pending_allocations"):
+                text = decimals.format_qty(value, item_id=self._item_id) if value is not None else "—"
+            else:
+                text = decimals.format_amount(value) if value is not None else "—"
+            if key == "replacement_cost" and info.replacement_source:
+                text += f"  ({info.replacement_source})"
+            label.setText(numerals.to_persian_digits(str(text)))
+        rows = cost_valuation.cost_history(self._company_id, self._item_id)[-20:][::-1]
+        self.cost_history_table.setRowCount(len(rows))
+        for r, h in enumerate(rows):
+            cells = [numerals.format_jalali_date(h.date), decimals.format_amount(h.unit_cost),
+                     "ورود" if h.direction == "IN" else "خروج", DOC_TYPE_TITLES.get(h.source, h.source), h.supplier,
+                     str(h.document_no or ""), cost_strategies.METHOD_LABELS.get(h.method, h.method)]
+            for c, text in enumerate(cells):
+                self.cost_history_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
+
+    def _refresh_locations(self) -> None:
+        from peecha.services import warehouse_locations as wl_service
+
+        self._location_rows = wl_service.product_locations(self._company_id, self._item_id) \
+            if self._company_id is not None and self._item_id is not None else []
+        self.locations_table.setRowCount(len(self._location_rows))
+        for r, loc in enumerate(self._location_rows):
+            cells = [loc.warehouse, loc.zone, loc.aisle, loc.rack, loc.level, loc.bin, loc.location_code,
+                     decimals.format_qty(loc.quantity)]
+            for c, text in enumerate(cells):
+                self.locations_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
+        self._load_storage_profile()
+
+    def show_location_on_map(self, row: int) -> bool:
+        from PySide6.QtWidgets import QApplication
+
+        if not (0 <= row < len(self._location_rows)):
+            return False
+        location_id = self._location_rows[row].location_id
+        main = next((w for w in QApplication.topLevelWidgets() if hasattr(w, "open_screen") and hasattr(w, "_screens")), None)
+        if main is None:
+            return False
+        main.open_screen("INV_WAREHOUSE_MAP", then=lambda screen: screen.focus_location(location_id))
+        return True
 
     def reset(self) -> None:
         self._item_id = None
+        if hasattr(self, "locations_table"):
+            self._location_rows = []
+            self.locations_table.setRowCount(0)
+            self._load_storage_profile()
         self._current_bom_id = None
         self.latin_name_field.clear()
         self.short_name_field.clear()
@@ -854,6 +1966,12 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.barcode_field.clear()
         self.qr_code_field.clear()
         self.sku_field.clear()
+        self.own_barcode_label.setText("(بدون بارکد)")
+        self.variants_table.setRowCount(0)
+        self.variant_notes_field.clear()
+        self.variant_price_field.clear()
+        self._variant_selection = {}
+        self._load_attribute_values_list()
 
         self.purchase_lead_time_field.clear()
         self.purchase_min_order_field.clear()
@@ -870,9 +1988,12 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.seo_keywords_field.clear()
         self.website_category_field.clear()
         self.website_tags_field.clear()
+        self.ecommerce_stock_mode_combo.setCurrentIndex(0)
 
         self.pos_shortcut_field.clear()
         self.pos_color_field.clear()
+        self._apply_pos_color_swatch("")
+        self.pos_menu_group_combo.setCurrentIndex(0)
         self.pos_requires_weight_checkbox.setChecked(False)
         self.pos_requires_serial_checkbox.setChecked(False)
 
@@ -896,9 +2017,19 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.asset_status_label.setText("")
 
         self.supplier_table.setRowCount(0)
+        self.item_codes_table.setRowCount(0)
         self.related_table.setRowCount(0)
+        self.uom_conversion_table.setRowCount(0)
+        self.uom_conversion_factor_field.clear()
+        self.uom_conversion_purchase_default_checkbox.setChecked(False)
+        self.uom_conversion_sales_default_checkbox.setChecked(False)
+        self.unit_barcodes_table.setRowCount(0)
+        self._item_units = []
+        self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهای بسته‌بندی و بارکدها را تعریف کنید.")
+        self.units_status_label.setText("")
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
+        self._refresh_ecommerce_mappings()
         self._apply_visibility()
 
     def lifecycle_status_code(self) -> str:
@@ -906,7 +2037,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def collect_fields(self) -> catalog_service.ItemFields:
         if self.uom_combo.currentData() is None:
-            raise ValueError("ابتدا یک واحدِ اندازه‌گیری تعریف کنید.")
+            raise ValueError("ابتدا یک واحد اندازه‌گیری تعریف کنید.")
         return catalog_service.ItemFields(
             item_kind_code=self.kind_combo.currentData(),
             base_uom_id=self.uom_combo.currentData(),
@@ -941,8 +2072,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             seo_meta_keywords=self.seo_keywords_field.text().strip() or None,
             website_category=self.website_category_field.text().strip() or None,
             website_tags=self.website_tags_field.text().strip() or None,
+            ecommerce_stock_mode=self.ecommerce_stock_mode_combo.currentData() or "DATABASE",
             pos_shortcut_key=self.pos_shortcut_field.text().strip() or None,
             pos_button_color=self.pos_color_field.text().strip() or None,
+            pos_menu_group_id=self.pos_menu_group_combo.currentData(),
             pos_requires_weight=self.pos_requires_weight_checkbox.isChecked(),
             pos_requires_serial=self.pos_requires_serial_checkbox.isChecked(),
             length_cm=_decimal_or_none(self.length_field.text()),
@@ -955,6 +2088,294 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             qc_test_spec=self.qc_test_spec_field.toPlainText().strip() or None,
             qc_inspection_interval_days=_int_or_none(self.qc_interval_field.text()),
         )
+
+    # --- واحدها و بسته‌بندی (R225) ----------------------------------------------
+    def _selected_item_unit(self):
+        rows = self.uom_conversion_table.selectionModel().selectedRows() if self.uom_conversion_table.selectionModel() else []
+        if not rows:
+            items = self.uom_conversion_table.selectedItems()
+            if not items:
+                return None
+            row_index = items[0].row()
+        else:
+            row_index = rows[0].row()
+        cell = self.uom_conversion_table.item(row_index, 0)
+        if cell is None:
+            return None
+        unit_id = cell.data(Qt.UserRole)
+        return next((u for u in self._item_units if u.item_unit_id == unit_id), None)
+
+    def _refresh_uom_conversions_table(self) -> None:
+        self.uom_conversion_table.setRowCount(0)
+        self._item_units = []
+        if self._item_id is None:
+            self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهای بسته‌بندی و بارکدها را تعریف کنید.")
+            self.unit_barcodes_table.setRowCount(0)
+            return
+        self._item_units = uc.get_item_units(self._item_id, active_only=False)
+        base = next((u for u in self._item_units if u.is_base), None)
+        self.base_unit_label.setText(
+            f"واحد پایهٔ موجودی: «{base.label}» — همهٔ موجودی‌ها به این واحد نگه‌داری می‌شوند؛ "
+            "هر واحد دیگر با ضریب تبدیلش به همین واحد تبدیل می‌شود." if base else ""
+        )
+        price_list_id = self.unit_price_list_combo.currentData()
+        self.uom_conversion_table.setRowCount(len(self._item_units))
+        for row_index, u in enumerate(self._item_units):
+            price = uc.get_price_for_unit(self._company_id, self._item_id, u.uom_id, price_list_id) if price_list_id else None
+            values = [
+                u.label + (" (پایه)" if u.is_base else ""),
+                numerals.to_persian_digits(format(u.factor.normalize(), "f")),
+                "✓" if (u.is_purchase_unit or u.is_base) else "",
+                "✓" if (u.is_sales_unit or u.is_base) else "",
+                "✓" if u.is_default_purchase else "",
+                "✓" if u.is_default_sales else "",
+                "، ".join(u.barcodes),
+                decimals.format_amount(price) if price is not None else "",
+                "فعال" if u.is_active else "غیرفعال",
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, u.item_unit_id)
+                self.uom_conversion_table.setItem(row_index, col_index, item)
+        self._refresh_unit_barcodes_table()
+
+    def _add_uom_conversion(self) -> None:
+        if self._item_id is None:
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس واحد بسته‌بندی اضافه کنید.")
+            return
+        uom_id = self.uom_conversion_combo.currentData()
+        if uom_id is None:
+            return
+        factor = _decimal_or_none(self.uom_conversion_factor_field.text())
+        if factor is None:
+            QMessageBox.warning(self, "خطا", "ضریب تبدیل را وارد کنید.")
+            return
+        try:
+            uc.set_item_unit(
+                self._item_id, uom_id, factor,
+                is_purchase_unit=self.uom_conversion_purchase_unit_checkbox.isChecked(),
+                is_sales_unit=self.uom_conversion_sales_unit_checkbox.isChecked(),
+                is_default_purchase=self.uom_conversion_purchase_default_checkbox.isChecked(),
+                is_default_sales=self.uom_conversion_sales_default_checkbox.isChecked(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.uom_conversion_factor_field.clear()
+        self.uom_conversion_purchase_default_checkbox.setChecked(False)
+        self.uom_conversion_sales_default_checkbox.setChecked(False)
+        self._refresh_uom_conversions_table()
+
+    def _remove_uom_conversion(self) -> None:
+        unit = self._selected_item_unit()
+        if self._item_id is None or unit is None:
+            return
+        try:
+            outcome = uc.remove_item_unit(unit.item_unit_id, self._item_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.units_status_label.setText(
+            "واحد حذف شد." if outcome == "DELETED" else "این واحد در اسناد/قیمت‌ها/بارکدها استفاده شده بود و غیرفعال شد (اسناد قبلی دست‌نخورده‌اند)."
+        )
+        self._refresh_uom_conversions_table()
+
+    def _edit_item_unit(self) -> None:
+        unit = self._selected_item_unit()
+        if self._item_id is None or unit is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"ویرایش واحد «{unit.label}»")
+        dlayout = QVBoxLayout(dialog)
+        factor_field = QLineEdit(format(unit.factor.normalize(), "f"))
+        factor_field.setEnabled(not unit.is_base)
+        purchase_cb = QCheckBox("مجاز برای خرید")
+        purchase_cb.setChecked(unit.is_purchase_unit or unit.is_base)
+        sales_cb = QCheckBox("مجاز برای فروش")
+        sales_cb.setChecked(unit.is_sales_unit or unit.is_base)
+        inventory_cb = QCheckBox("واحد انبار/شمارش")
+        inventory_cb.setChecked(unit.is_inventory_unit or unit.is_base)
+        default_purchase_cb = QCheckBox("پیش‌فرض خرید")
+        default_purchase_cb.setChecked(unit.is_default_purchase)
+        default_sales_cb = QCheckBox("پیش‌فرض فروش")
+        default_sales_cb.setChecked(unit.is_default_sales)
+        decimals_field = QLineEdit(str(unit.decimal_places))
+        min_field = QLineEdit(format(unit.min_quantity.normalize(), "f") if unit.min_quantity is not None else "")
+        max_field = QLineEdit(format(unit.max_quantity.normalize(), "f") if unit.max_quantity is not None else "")
+        weight_field = QLineEdit(format(unit.weight_kg.normalize(), "f") if unit.weight_kg is not None else "")
+        volume_field = QLineEdit(format(unit.volume_m3.normalize(), "f") if unit.volume_m3 is not None else "")
+        active_cb = QCheckBox("فعال")
+        active_cb.setChecked(unit.is_active)
+        active_cb.setEnabled(not unit.is_base)
+        dlayout.addWidget(FieldGrid([
+            FieldSpec("factor", "ضریب تبدیل به واحد پایه", factor_field, span=1),
+            FieldSpec("decimals", "تعداد اعشار", decimals_field, span=1),
+            FieldSpec("purchase", "", purchase_cb, span=1),
+            FieldSpec("sales", "", sales_cb, span=1),
+            FieldSpec("inventory", "", inventory_cb, span=1),
+            FieldSpec("default_purchase", "", default_purchase_cb, span=1),
+            FieldSpec("default_sales", "", default_sales_cb, span=1),
+            FieldSpec("min", "حداقل مقدار (همین واحد)", min_field, span=1),
+            FieldSpec("max", "حداکثر مقدار (همین واحد)", max_field, span=1),
+            FieldSpec("weight", "وزن هر واحد (kg)", weight_field, span=1),
+            FieldSpec("volume", "حجم هر واحد (m³)", volume_field, span=1),
+            FieldSpec("active", "", active_cb, span=1),
+        ]))
+        hint = QLabel("تغییر ضریب فقط روی اسناد تازه اثر دارد؛ اسناد ثبت‌شده ضریب لحظهٔ ثبت خودشان را نگه می‌دارند.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        dlayout.addWidget(hint)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dlayout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            factor = _decimal_or_none(factor_field.text()) or decimal.Decimal(1)
+            decimals_text = decimals_field.text().strip()
+            uc.set_item_unit(
+                self._item_id, unit.uom_id, factor,
+                is_purchase_unit=purchase_cb.isChecked(), is_sales_unit=sales_cb.isChecked(),
+                is_inventory_unit=inventory_cb.isChecked(),
+                is_default_purchase=default_purchase_cb.isChecked(), is_default_sales=default_sales_cb.isChecked(),
+                decimal_places=int(numerals.to_ascii_digits(decimals_text)) if decimals_text else None,
+                min_quantity=_decimal_or_none(min_field.text()), max_quantity=_decimal_or_none(max_field.text()),
+                weight_kg=_decimal_or_none(weight_field.text()), volume_m3=_decimal_or_none(volume_field.text()),
+                is_active=active_cb.isChecked(),
+            )
+        except (ValueError, decimal.InvalidOperation) as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_uom_conversions_table()
+
+    def _set_unit_price(self) -> None:
+        unit = self._selected_item_unit()
+        price_list_id = self.unit_price_list_combo.currentData()
+        price = _decimal_or_none(self.unit_price_field.text())
+        if self._item_id is None or unit is None or price_list_id is None or price is None:
+            QMessageBox.information(self, "قیمت واحد", "واحد، فهرست قیمت و مبلغ را مشخص کنید.")
+            return
+        user = app_session.current_user
+        pricing_service.set_price_list_item(
+            price_list_id, self._item_id, unit.uom_id, price, changed_by_user_id=user.user_id if user else None,
+        )
+        self.unit_price_field.clear()
+        self._refresh_uom_conversions_table()
+
+    def _refresh_unit_barcodes_table(self) -> None:
+        unit = self._selected_item_unit()
+        self.unit_barcodes_table.setRowCount(0)
+        self._unit_barcode_rows = []
+        if self._item_id is None or unit is None:
+            return
+        self._unit_barcode_rows = [
+            b for b in uc.list_barcodes(self._company_id, item_id=self._item_id) if b.item_unit_id == unit.item_unit_id
+        ]
+        self.unit_barcodes_table.setRowCount(len(self._unit_barcode_rows))
+        for i, b in enumerate(self._unit_barcode_rows):
+            values = [b.barcode, uc.BARCODE_TYPE_LABELS.get(b.barcode_type, b.barcode_type), "✓" if b.is_primary else "",
+                      "فعال" if b.is_active else "غیرفعال", b.description or ""]
+            for j, v in enumerate(values):
+                cell = QTableWidgetItem(v)
+                cell.setData(Qt.UserRole, b.barcode_id)
+                self.unit_barcodes_table.setItem(i, j, cell)
+
+    def _selected_unit_barcode(self):
+        items = self.unit_barcodes_table.selectedItems()
+        if not items:
+            return None
+        barcode_id = items[0].data(Qt.UserRole)
+        return next((b for b in self._unit_barcode_rows if b.barcode_id == barcode_id), None)
+
+    def _add_unit_barcode(self) -> None:
+        unit = self._selected_item_unit()
+        if self._item_id is None or unit is None:
+            QMessageBox.information(self, "بارکد", "ابتدا واحد مورد نظر را در جدول واحدها انتخاب کنید.")
+            return
+        try:
+            uc.add_barcode(
+                self._company_id, self._item_id, unit.uom_id, self.unit_barcode_field.text(),
+                self.unit_barcode_type_combo.currentData(), self.unit_barcode_primary_checkbox.isChecked(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در ثبت بارکد", str(exc))
+            return
+        self.unit_barcode_field.clear()
+        self.unit_barcode_primary_checkbox.setChecked(False)
+        selected_unit_id = unit.item_unit_id
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(selected_unit_id)
+
+    def _select_unit_row(self, item_unit_id: int) -> None:
+        for r in range(self.uom_conversion_table.rowCount()):
+            cell = self.uom_conversion_table.item(r, 0)
+            if cell is not None and cell.data(Qt.UserRole) == item_unit_id:
+                self.uom_conversion_table.selectRow(r)
+                break
+        self._refresh_unit_barcodes_table()
+
+    def _edit_unit_barcode(self) -> None:
+        b = self._selected_unit_barcode()
+        if b is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویرایش بارکد")
+        dlayout = QVBoxLayout(dialog)
+        code_field = QLineEdit(b.barcode)
+        type_combo = QComboBox()
+        for code, label in uc.BARCODE_TYPE_LABELS.items():
+            type_combo.addItem(label, code)
+        type_combo.setCurrentIndex(max(0, type_combo.findData(b.barcode_type)))
+        primary_cb = QCheckBox("اصلی")
+        primary_cb.setChecked(b.is_primary)
+        active_cb = QCheckBox("فعال")
+        active_cb.setChecked(b.is_active)
+        description_field = QLineEdit(b.description or "")
+        dlayout.addWidget(FieldGrid([
+            FieldSpec("barcode", "بارکد", code_field, span=2),
+            FieldSpec("type", "نوع", type_combo, span=1),
+            FieldSpec("primary", "", primary_cb, span=1),
+            FieldSpec("active", "", active_cb, span=1),
+            FieldSpec("description", "توضیح", description_field, span=3),
+        ]))
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dlayout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            uc.update_barcode(
+                b.barcode_id, self._company_id, code_field.text(), type_combo.currentData(), primary_cb.isChecked(),
+                active_cb.isChecked(), description_field.text().strip() or None,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        unit_id = b.item_unit_id
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(unit_id)
+
+    def _set_primary_unit_barcode(self) -> None:
+        b = self._selected_unit_barcode()
+        if b is None:
+            return
+        try:
+            uc.set_primary_barcode(b.barcode_id, self._company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(b.item_unit_id)
+
+    def _deactivate_unit_barcode(self) -> None:
+        b = self._selected_unit_barcode()
+        if b is None:
+            return
+        uc.deactivate_barcode(b.barcode_id, self._company_id)
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(b.item_unit_id)
 
     # --- تامین‌کنندگان -----------------------------------------------------
     def _refresh_suppliers_table(self) -> None:
@@ -998,6 +2419,93 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         self._refresh_suppliers_table()
 
+    # --- کد/نامِ کالا نزدِ تامین‌کننده -----------------------------------------
+    def _refresh_item_codes_table(self) -> None:
+        self.item_codes_table.setRowCount(0)
+        if self._item_id is None:
+            return
+        rows = spi_service.list_item_supplier_codes(self._item_id)
+        self.item_codes_table.setRowCount(len(rows))
+        for row_index, r in enumerate(rows):
+            if r.supplier_detail_account_id is None:
+                supplier_label = "(همهٔ تامین‌کنندگان)"
+            else:
+                idx = self.item_code_supplier_combo.findData(r.supplier_detail_account_id)
+                supplier_label = self.item_code_supplier_combo.itemText(idx) if idx >= 0 else str(r.supplier_detail_account_id)
+            values = [_SUPPLIER_CODE_TYPE_LABELS.get(r.value_type, r.value_type), supplier_label, r.supplier_code]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, r.item_supplier_code_id)
+                self.item_codes_table.setItem(row_index, col_index, item)
+
+    def _add_item_supplier_code(self) -> None:
+        if self._item_id is None:
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کد/نام تامین‌کننده اضافه کنید.")
+            return
+        value = self.item_code_value_field.text().strip()
+        if not value:
+            return
+        try:
+            spi_service.add_item_supplier_code(
+                self._item_id, value, self.item_code_supplier_combo.currentData(), self.item_code_type_combo.currentData(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.item_code_value_field.clear()
+        self._refresh_item_codes_table()
+
+    def _edit_item_supplier_code(self, row: int, _column: int) -> None:
+        item_supplier_code_id = self.item_codes_table.item(row, 0).data(Qt.UserRole)
+        current = next(
+            (r for r in spi_service.list_item_supplier_codes(self._item_id) if r.item_supplier_code_id == item_supplier_code_id),
+            None,
+        )
+        if current is None:
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویرایش کد/نام تامین‌کننده")
+        form = QVBoxLayout(dialog)
+        type_combo = QComboBox()
+        type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["CODE"], "CODE")
+        type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["NAME"], "NAME")
+        type_combo.setCurrentIndex(max(0, type_combo.findData(current.value_type)))
+        form.addWidget(type_combo)
+        supplier_combo = QComboBox()
+        for i in range(self.item_code_supplier_combo.count()):
+            supplier_combo.addItem(self.item_code_supplier_combo.itemText(i), self.item_code_supplier_combo.itemData(i))
+        supplier_combo.setCurrentIndex(max(0, supplier_combo.findData(current.supplier_detail_account_id)))
+        form.addWidget(supplier_combo)
+        value_field = QLineEdit(current.supplier_code)
+        form.addWidget(value_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            spi_service.update_item_supplier_code(
+                item_supplier_code_id, value_field.text(), supplier_combo.currentData(), type_combo.currentData(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_item_codes_table()
+
+    def _remove_item_supplier_code(self) -> None:
+        selected = self.item_codes_table.selectedItems()
+        if not selected:
+            return
+        try:
+            spi_service.delete_item_supplier_code(selected[0].data(Qt.UserRole))
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_item_codes_table()
+
     # --- کالاهایِ مرتبط ------------------------------------------------------
     def _refresh_related_table(self) -> None:
         self.related_table.setRowCount(0)
@@ -1016,7 +2524,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _add_related_item(self) -> None:
         if self._item_id is None:
-            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کالایِ جایگزین/مکمل اضافه کنید.")
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کالای جایگزین/مکمل اضافه کنید.")
             return
         related_item_id = self.related_item_combo.currentData()
         relation_type_code = self.relation_type_combo.currentData()
@@ -1045,17 +2553,18 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         boms = extended_service.list_boms(self._item_id)
         if not boms:
-            self.bom_status_label.setText("هنوز فهرستِ موادِ اولیه‌ای ثبت نشده است.")
+            self.bom_status_label.setText("هنوز فهرست مواد اولیه‌ای ثبت نشده است.")
             return
         latest = boms[-1]
         self._current_bom_id = latest.bom_id
-        self.bom_status_label.setText(f"نسخهٔ {latest.version_no} — اندازهٔ دسته: {latest.batch_size_qty}")
+        self.bom_status_label.setText(numerals.to_persian_digits(
+            f"نسخهٔ {latest.version_no} — اندازهٔ دسته: {decimals.format_qty(latest.batch_size_qty, item_id=self._item_id)}"))
         lines = extended_service.list_bom_lines(latest.bom_id)
         self.bom_lines_table.setRowCount(len(lines))
         for row_index, line in enumerate(lines):
             other = next((r for r in self._rows if r.item_id == line.component_item_id), None)
             label = f"{other.code} — {other.name or ''}" if other is not None else str(line.component_item_id)
-            values = [str(line.quantity_per), label]
+            values = [decimals.format_qty(line.quantity_per, item_id=line.component_item_id), label]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, line.bom_line_id)
@@ -1077,6 +2586,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         component_id = self.bom_component_combo.currentData()
         qty = _decimal_or_none(self.bom_qty_field.text())
         if component_id is None or qty is None:
+            return
+        dp = decimals.qty_decimals(item_id=component_id)
+        if dp is not None and decimals.trimmed_decimals(qty) > dp:
+            QMessageBox.warning(self, "خطا", "واحد این کالا اعشار ندارد — مقدار باید عدد صحیح باشد." if dp == 0
+                                else f"واحد این کالا حداکثر {numerals.to_persian_digits(dp)} رقم اعشار می‌پذیرد.")
             return
         try:
             extended_service.add_bom_line(self._current_bom_id, component_id, qty)
@@ -1107,13 +2621,13 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         useful_life = _int_or_none(self.useful_life_field.text())
         cost = _decimal_or_none(self.acquisition_cost_field.text())
         if useful_life is None or cost is None:
-            self.asset_status_label.setText("عمرِ مفید و بهایِ تحصیل را وارد کنید.")
+            self.asset_status_label.setText("عمر مفید و بهای تحصیل را وارد کنید.")
             return
         try:
             extended_service.set_asset_detail(
                 self._item_id,
                 useful_life_months=useful_life,
-                acquisition_date=self.acquisition_date_field.date().toPython(),
+                acquisition_date=self.acquisition_date_field.date(),
                 acquisition_cost=cost,
                 depreciation_method_code=self.depreciation_method_combo.currentData(),
                 asset_tag_no=self.asset_tag_field.text().strip() or None,
@@ -1123,4 +2637,4 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.asset_status_label.setText(str(exc))
             return
-        self.asset_status_label.setText("اطلاعاتِ دارایی ذخیره شد.")
+        self.asset_status_label.setText("اطلاعات دارایی ذخیره شد.")

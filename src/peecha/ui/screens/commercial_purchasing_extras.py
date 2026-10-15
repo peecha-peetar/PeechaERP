@@ -1,6 +1,8 @@
-"""بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده (مرحلهٔ ۴) — تسهیمِ
-هزینه‌هایِ جانبیِ خرید رویِ ردیف‌هایِ فاکتور، و قراردادها/تعهداتِ ریبیتِ
-تامین‌کننده."""
+"""تخفیف حجمی تامین‌کننده — قراردادها/پله‌ها/تعهدات تخفیف حجمی تامین‌کننده
+(مرحلهٔ ۴). طبق درخواست صریح («فرم تسهیم هزینه روی خود فاکتور
+خرید»)، هزینه‌های جانبی خرید دیگر این‌جا مدیریت نمی‌شوند — از دکمهٔ
+«🧮 هزینه‌های جانبی» روی خود فرم فاکتور خرید (commercial_document.py)
+قابل‌دسترسی است."""
 
 from __future__ import annotations
 
@@ -11,7 +13,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QDateEdit,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,26 +20,27 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.db.models.commercial import VendorRebateAgreement, VendorRebateTier
+from peecha.ui.widgets import (
+    FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable,
+)
 
-_COST_TYPE_LABELS = {"FREIGHT": "حمل‌ونقل", "CUSTOMS": "حقوقِ گمرکی", "INSURANCE": "بیمه", "HANDLING": "بارگیری/تخلیه", "OTHER": "سایر"}
-_ALLOCATION_METHOD_LABELS = {"BY_VALUE": "به‌نسبتِ ارزش", "BY_QUANTITY": "به‌نسبتِ تعداد", "BY_WEIGHT": "به‌نسبتِ وزن"}
-_REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "پلکانیِ حجمی"}
-_ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
+_REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصد ثابت", "VOLUME_TIER": "پلکانی حجمی"}
+_ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحال تجمیع", "SETTLED": "تسویه‌شده"}
 
 
-class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
+class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._suppliers: list[dict] = []
@@ -50,125 +52,28 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده")
+        title = QLabel("تخفیف حجمی تامین‌کننده")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
-        tabs = QTabWidget()
-        tabs.addTab(self._build_landed_cost_tab(), "بهایِ تمام‌شدهٔ وارداتی")
-        tabs.addTab(self._build_rebate_tab(), "ریبیتِ تامین‌کننده")
-        outer.addWidget(tabs, stretch=1)
+        outer.addWidget(self._build_rebate_tab(), stretch=1)
+
+        self.set_field_help([
+            (self.rebate_supplier_combo, "تامین‌کننده‌ای که این قرارداد تخفیف حجمی با اوست."),
+            (self.rebate_item_combo, "این قرارداد فقط روی یک کالای خاص اعمال شود — خالی یعنی روی همهٔ خریدها از این تامین‌کننده."),
+            (self.rebate_basis_combo, "نحوهٔ محاسبهٔ تخفیف حجمی — درصد ثابت، یا پلکانی بر اساس حجم خرید."),
+            (self.rebate_valid_from_field, "تاریخ شروع اعتبار این قرارداد."),
+            (self.tier_min_field, "حداقل مبلغ خرید دوره که این پله از آن به بعد اعمال می‌شود."),
+            (self.tier_percent_field, "درصد تخفیف حجمی همین پله."),
+            (self.rebate_invoice_combo, "فاکتور خرید ثبت‌نهایی‌شده‌ای که تعهد تخفیف حجمیش محاسبه می‌شود."),
+            (self.rebate_period_from_field, "ابتدای دورهٔ محاسبهٔ تخفیف حجمی."),
+            (self.rebate_period_to_field, "انتهای دورهٔ محاسبهٔ تخفیف حجمی."),
+            (self.rebate_receivable_combo, "حساب طلب تخفیف حجمی که در سند تسویه بدهکار می‌شود."),
+            (self.purchase_discount_combo, "حساب تخفیف خرید که در سند تسویه بستانکار می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
-
-    # --- بهایِ تمام‌شدهٔ وارداتی ---------------------------------------------
-    def _build_landed_cost_tab(self) -> QWidget:
-        page = QWidget()
-        outer = QVBoxLayout(page)
-
-        self.landed_invoice_combo = QComboBox()
-        self.landed_invoice_combo.currentIndexChanged.connect(self._refresh_landed_costs)
-        outer.addWidget(self.landed_invoice_combo)
-
-        self.landed_cost_table = QTableWidget(0, 4)
-        self.landed_cost_table.setHorizontalHeaderLabels(["نوعِ هزینه", "مبلغ", "روشِ تسهیم", "توضیحات"])
-        self.landed_cost_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.landed_cost_table.verticalHeader().setVisible(False)
-        self.landed_cost_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        outer.addWidget(self.landed_cost_table, stretch=1)
-
-        form = QHBoxLayout()
-        self.landed_cost_type_combo = QComboBox()
-        for code, label in _COST_TYPE_LABELS.items():
-            self.landed_cost_type_combo.addItem(label, code)
-        form.addWidget(self.landed_cost_type_combo)
-        self.landed_amount_field = QLineEdit()
-        self.landed_amount_field.setPlaceholderText("مبلغ")
-        form.addWidget(self.landed_amount_field)
-        self.landed_method_combo = QComboBox()
-        for code, label in _ALLOCATION_METHOD_LABELS.items():
-            self.landed_method_combo.addItem(label, code)
-        form.addWidget(self.landed_method_combo)
-        self.landed_notes_field = QLineEdit()
-        self.landed_notes_field.setPlaceholderText("توضیحات (اختیاری)")
-        form.addWidget(self.landed_notes_field, stretch=1)
-        add_button = QPushButton("➕")
-        add_button.setObjectName("primaryIconButton")
-        add_button.setFixedWidth(48)
-        add_button.setToolTip("هزینهٔ تازه")
-        add_button.clicked.connect(self._add_landed_cost)
-        form.addWidget(add_button)
-        outer.addLayout(form)
-
-        apply_row = QHBoxLayout()
-        apply_button = QPushButton("🧮")
-        apply_button.setObjectName("primaryIconButton")
-        apply_button.setFixedWidth(48)
-        apply_button.setToolTip("اعمالِ هزینه‌هایِ تمام‌شده رویِ ردیف‌هایِ فاکتور")
-        apply_button.clicked.connect(self._apply_landed_costs)
-        apply_row.addWidget(apply_button)
-        apply_row.addStretch(1)
-        outer.addLayout(apply_row)
-
-        self.landed_status_label = QLabel("")
-        self.landed_status_label.setObjectName("statusError")
-        outer.addWidget(self.landed_status_label)
-        return wrap_scrollable(page)
-
-    def _refresh_landed_costs(self) -> None:
-        self.landed_cost_table.setRowCount(0)
-        document_id = self.landed_invoice_combo.currentData()
-        if document_id is None:
-            return
-        allocations = purchasing_service.list_landed_cost_allocations(document_id)
-        self.landed_cost_table.setRowCount(len(allocations))
-        for row_index, a in enumerate(allocations):
-            values = [
-                _COST_TYPE_LABELS.get(a.cost_type_code, a.cost_type_code), str(a.amount),
-                _ALLOCATION_METHOD_LABELS.get(a.allocation_method_code, a.allocation_method_code), a.notes or "",
-            ]
-            for col_index, value in enumerate(values):
-                self.landed_cost_table.setItem(row_index, col_index, QTableWidgetItem(value))
-
-    def _add_landed_cost(self) -> None:
-        document_id = self.landed_invoice_combo.currentData()
-        if document_id is None:
-            self.landed_status_label.setText("ابتدا یک فاکتورِ خریدِ پیش‌نویس را انتخاب کنید.")
-            return
-        try:
-            amount = decimal.Decimal(self.landed_amount_field.text().strip() or "0")
-        except decimal.InvalidOperation:
-            self.landed_status_label.setText("مبلغ نامعتبر است.")
-            return
-        if amount <= 0:
-            self.landed_status_label.setText("مبلغ باید بزرگ‌تر از صفر باشد.")
-            return
-        try:
-            purchasing_service.add_landed_cost_allocation(
-                document_id, self.landed_cost_type_combo.currentData(), amount, self.landed_method_combo.currentData(),
-                notes=self.landed_notes_field.text().strip() or None,
-            )
-        except ValueError as exc:
-            self.landed_status_label.setText(str(exc))
-            return
-        self.landed_amount_field.clear()
-        self.landed_notes_field.clear()
-        self.landed_status_label.setText("")
-        self._refresh_landed_costs()
-
-    def _apply_landed_costs(self) -> None:
-        company_id = self._company_id()
-        document_id = self.landed_invoice_combo.currentData()
-        if company_id is None or document_id is None:
-            self.landed_status_label.setText("ابتدا یک فاکتورِ خریدِ پیش‌نویس را انتخاب کنید.")
-            return
-        try:
-            purchasing_service.apply_landed_costs(document_id, company_id)
-        except ValueError as exc:
-            self.landed_status_label.setText(str(exc))
-            return
-        self.landed_status_label.setText("هزینه‌هایِ تمام‌شده رویِ بهایِ واحدِ ردیف‌ها اعمال شد.")
 
     # --- ریبیتِ تامین‌کننده -----------------------------------------------
     def _build_rebate_tab(self) -> QWidget:
@@ -176,7 +81,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         outer = QHBoxLayout(page)
 
         left = QVBoxLayout()
-        left.addWidget(QLabel("قراردادهایِ ریبیت"))
+        left.addWidget(QLabel("قراردادهای تخفیف حجمی"))
         self.agreement_table = QTableWidget(0, 4)
         self.agreement_table.setHorizontalHeaderLabels(["تامین‌کننده", "مبنا", "ازتاریخ", "تاتاریخ"])
         self.agreement_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -192,8 +97,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         self.rebate_basis_combo = QComboBox()
         for code, label in _REBATE_BASIS_LABELS.items():
             self.rebate_basis_combo.addItem(label, code)
-        self.rebate_valid_from_field = QDateEdit()
-        self.rebate_valid_from_field.setCalendarPopup(True)
+        self.rebate_valid_from_field = JalaliDateEdit()
         self.rebate_valid_from_field.setDate(datetime.date.today())
         self.agreement_form_grid = FieldGrid([
             FieldSpec("supplier", "تامین‌کننده", self.rebate_supplier_combo, span=2),
@@ -207,24 +111,38 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         add_agreement_button = QPushButton("➕")
         add_agreement_button.setObjectName("primaryIconButton")
         add_agreement_button.setFixedWidth(48)
-        add_agreement_button.setToolTip("قراردادِ تازه")
+        add_agreement_button.setToolTip("قرارداد تازه")
         add_agreement_button.clicked.connect(self._add_agreement)
-        agreement_form.addWidget(add_agreement_button)
+        # R276: ویرایش/حذفِ قراردادِ انتخاب‌شده
+        agreement_buttons = QHBoxLayout()
+        agreement_buttons.addWidget(add_agreement_button)
+        save_agreement_button = QPushButton("💾")
+        save_agreement_button.setObjectName("iconButton")
+        save_agreement_button.setFixedWidth(44)
+        save_agreement_button.setToolTip("ذخیرهٔ تغییرات قرارداد انتخاب‌شده")
+        save_agreement_button.clicked.connect(self._update_agreement)
+        agreement_buttons.addWidget(save_agreement_button)
+        delete_agreement_button = delete_button("حذف قرارداد انتخاب‌شده (با پله‌هایش)")
+        delete_agreement_button.clicked.connect(self._delete_agreement)
+        agreement_buttons.addWidget(delete_agreement_button)
+        agreement_buttons.addStretch(1)
+        agreement_form.addLayout(agreement_buttons)
         left.addLayout(agreement_form)
 
-        left.addWidget(QLabel("پله‌هایِ قراردادِ انتخاب‌شده"))
+        left.addWidget(QLabel("پله‌های قرارداد انتخاب‌شده"))
         self.tier_table = QTableWidget(0, 2)
-        self.tier_table.setHorizontalHeaderLabels(["حداقلِ خرید", "درصدِ ریبیت"])
+        self.tier_table.setHorizontalHeaderLabels(["حداقل خرید", "درصد تخفیف حجمی"])
         self.tier_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tier_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tier_table.verticalHeader().setVisible(False)
         self.tier_table.setMaximumHeight(120)
         left.addWidget(self.tier_table)
         tier_form = QHBoxLayout()
         self.tier_min_field = QLineEdit()
-        self.tier_min_field.setPlaceholderText("حداقلِ مبلغِ خرید")
+        self.tier_min_field.setPlaceholderText("حداقل مبلغ خرید")
         tier_form.addWidget(self.tier_min_field)
         self.tier_percent_field = QLineEdit()
-        self.tier_percent_field.setPlaceholderText("درصدِ ریبیت")
+        self.tier_percent_field.setPlaceholderText("درصد تخفیف حجمی")
         tier_form.addWidget(self.tier_percent_field)
         add_tier_button = QPushButton("➕")
         add_tier_button.setObjectName("iconButton")
@@ -232,33 +150,34 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         add_tier_button.setToolTip("پله")
         add_tier_button.clicked.connect(self._add_tier)
         tier_form.addWidget(add_tier_button)
+        delete_tier_button = delete_button("حذف پلهٔ انتخاب‌شده")
+        delete_tier_button.clicked.connect(self._delete_tier)
+        tier_form.addWidget(delete_tier_button)
         left.addLayout(tier_form)
         outer.addLayout(left, stretch=3)
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("محاسبهٔ ریبیت برایِ فاکتورِ Postشده"))
+        right.addWidget(QLabel("محاسبهٔ تخفیف حجمی برای فاکتور Postشده"))
         self.rebate_invoice_combo = QComboBox()
         right.addWidget(self.rebate_invoice_combo)
         period_row = QHBoxLayout()
-        self.rebate_period_from_field = QDateEdit()
-        self.rebate_period_from_field.setCalendarPopup(True)
+        self.rebate_period_from_field = JalaliDateEdit()
         self.rebate_period_from_field.setDate(datetime.date.today().replace(day=1))
         period_row.addWidget(self.rebate_period_from_field)
-        self.rebate_period_to_field = QDateEdit()
-        self.rebate_period_to_field.setCalendarPopup(True)
+        self.rebate_period_to_field = JalaliDateEdit()
         self.rebate_period_to_field.setDate(datetime.date.today())
         period_row.addWidget(self.rebate_period_to_field)
         right.addLayout(period_row)
         accrue_button = QPushButton("🧮")
         accrue_button.setObjectName("iconButton")
         accrue_button.setFixedWidth(44)
-        accrue_button.setToolTip("محاسبهٔ تعهدِ ریبیت")
+        accrue_button.setToolTip("محاسبهٔ تعهد تخفیف حجمی")
         accrue_button.clicked.connect(self._accrue_rebate)
         right.addWidget(accrue_button)
 
-        right.addWidget(QLabel("تعهداتِ ریبیتِ درحالِ‌تجمیع/تسویه‌شده"))
+        right.addWidget(QLabel("تعهدات تخفیف حجمی درحال‌تجمیع/تسویه‌شده"))
         self.accrual_table = QTableWidget(0, 3)
-        self.accrual_table.setHorizontalHeaderLabels(["دوره", "مبلغِ تعهد", "وضعیت"])
+        self.accrual_table.setHorizontalHeaderLabels(["دوره", "مبلغ تعهد", "وضعیت"])
         self.accrual_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.accrual_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.accrual_table.verticalHeader().setVisible(False)
@@ -266,7 +185,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         self.accrual_table.cellClicked.connect(self._on_accrual_selected)
         right.addWidget(self.accrual_table, stretch=1)
 
-        right.addWidget(QLabel("تسویهٔ تعهدِ انتخاب‌شده"))
+        right.addWidget(QLabel("تسویهٔ تعهد انتخاب‌شده"))
         self.rebate_receivable_combo = QComboBox()
         right.addWidget(self.rebate_receivable_combo)
         self.purchase_discount_combo = QComboBox()
@@ -274,7 +193,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         settle_button = QPushButton("💳")
         settle_button.setObjectName("primaryIconButton")
         settle_button.setFixedWidth(48)
-        settle_button.setToolTip("تسویه (صدورِ سندِ حسابداری)")
+        settle_button.setToolTip("تسویه (صدور سند حسابداری)")
         settle_button.clicked.connect(self._settle_accrual)
         right.addWidget(settle_button)
 
@@ -287,6 +206,12 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
 
     def _on_agreement_selected(self, row: int, _column: int) -> None:
         self._selected_agreement_id = self.agreement_table.item(row, 0).data(Qt.UserRole)
+        agreement = next((a for a in getattr(self, "_agreements", []) if a.agreement_id == self._selected_agreement_id), None)
+        if agreement is not None:
+            for combo, value in ((self.rebate_supplier_combo, agreement.supplier_detail_account_id),
+                                 (self.rebate_item_combo, agreement.item_id), (self.rebate_basis_combo, agreement.rebate_basis_code)):
+                combo.setCurrentIndex(max(0, combo.findData(value)))
+            self.rebate_valid_from_field.setDate(agreement.valid_from)
         self._refresh_tiers()
         self._refresh_accruals()
 
@@ -297,7 +222,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
             return
         try:
             purchasing_service.create_rebate_agreement(
-                supplier_id, self.rebate_basis_combo.currentData(), self.rebate_valid_from_field.date().toPython(),
+                supplier_id, self.rebate_basis_combo.currentData(), self.rebate_valid_from_field.date(),
                 item_id=self.rebate_item_combo.currentData(),
             )
         except ValueError as exc:
@@ -306,6 +231,32 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         self.rebate_status_label.setText("")
         self.refresh()
 
+    def _update_agreement(self) -> None:
+        if self._selected_agreement_id is None:
+            self.rebate_status_label.setText("ابتدا یک قرارداد را از فهرست انتخاب کنید.")
+            return
+        try:
+            purchasing_service.update_rebate_agreement(
+                self._selected_agreement_id, self.rebate_basis_combo.currentData(), self.rebate_valid_from_field.date(),
+                item_id=self.rebate_item_combo.currentData())
+        except ValueError as exc:
+            self.rebate_status_label.setText(str(exc))
+            return
+        self.rebate_status_label.setText("قرارداد ذخیره شد.")
+        self.refresh()
+
+    def _delete_agreement(self) -> None:
+        if confirm_and_delete(self, "قرارداد تخفیف حجمی", "قرارداد انتخاب‌شده", VendorRebateAgreement, self._selected_agreement_id,
+                              None, children=((VendorRebateTier, "agreement_id"),)):
+            self._selected_agreement_id = None
+            self.refresh()
+            self._refresh_tiers()
+
+    def _delete_tier(self) -> None:
+        row = self.tier_table.currentRow()
+        tier_id = self.tier_table.item(row, 0).data(Qt.UserRole) if row >= 0 and self.tier_table.item(row, 0) else None
+        confirm_and_delete(self, "پلهٔ تخفیف حجمی", "پلهٔ انتخاب‌شده", VendorRebateTier, tier_id, None, self._refresh_tiers)
+
     def _refresh_tiers(self) -> None:
         self.tier_table.setRowCount(0)
         if self._selected_agreement_id is None:
@@ -313,7 +264,9 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         tiers = purchasing_service.list_rebate_tiers(self._selected_agreement_id)
         self.tier_table.setRowCount(len(tiers))
         for row_index, t in enumerate(tiers):
-            self.tier_table.setItem(row_index, 0, QTableWidgetItem(str(t.min_purchase_amount)))
+            first = QTableWidgetItem(str(t.min_purchase_amount))
+            first.setData(Qt.UserRole, t.tier_id)
+            self.tier_table.setItem(row_index, 0, first)
             self.tier_table.setItem(row_index, 1, QTableWidgetItem(str(t.rebate_percent)))
 
     def _add_tier(self) -> None:
@@ -327,7 +280,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
             self.rebate_status_label.setText("مقادیر نامعتبرند.")
             return
         if percent <= 0:
-            self.rebate_status_label.setText("درصدِ ریبیت باید بزرگ‌تر از صفر باشد.")
+            self.rebate_status_label.setText("درصد تخفیف حجمی باید بزرگ‌تر از صفر باشد.")
             return
         purchasing_service.add_rebate_tier(self._selected_agreement_id, min_amount, percent)
         self.tier_min_field.clear()
@@ -355,10 +308,10 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         company_id = self._company_id()
         document_id = self.rebate_invoice_combo.currentData()
         if company_id is None or document_id is None:
-            self.rebate_status_label.setText("یک فاکتورِ Postشده را انتخاب کنید.")
+            self.rebate_status_label.setText("یک فاکتور Postشده را انتخاب کنید.")
             return
-        period_from = self.rebate_period_from_field.date().toPython()
-        period_to = self.rebate_period_to_field.date().toPython()
+        period_from = self.rebate_period_from_field.date()
+        period_to = self.rebate_period_to_field.date()
         try:
             purchasing_service.accrue_rebate_for_invoice(document_id, company_id, period_from, period_to)
         except ValueError as exc:
@@ -375,7 +328,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
             self.rebate_status_label.setText("ابتدا یک تعهد را از فهرست انتخاب کنید.")
             return
         if company_id is None or receivable_id is None or discount_id is None:
-            self.rebate_status_label.setText("حساب‌هایِ طرفینِ سند را انتخاب کنید.")
+            self.rebate_status_label.setText("حساب‌های طرفین سند را انتخاب کنید.")
             return
         try:
             purchasing_service.settle_rebate_accrual(
@@ -395,16 +348,9 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         self._suppliers = dimensions_service.list_suppliers(company_id)
         self._items = catalog_service.list_items(company_id, active_only=True)
 
-        self.landed_invoice_combo.blockSignals(True)
-        self.landed_invoice_combo.clear()
-        for d in documents_service.list_documents(company_id, document_type_code="PURCHASE_INVOICE", status_code="DRAFT"):
-            self.landed_invoice_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
-        self.landed_invoice_combo.blockSignals(False)
-        self._refresh_landed_costs()
-
         self.rebate_invoice_combo.clear()
         for d in documents_service.list_documents(company_id, document_type_code="PURCHASE_INVOICE", status_code="POSTED"):
-            self.rebate_invoice_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
+            self.rebate_invoice_combo.addItem(f"فاکتور شمارهٔ {d.document_no}", d.document_id)
 
         self.rebate_supplier_combo.clear()
         for s in self._suppliers:
@@ -430,12 +376,14 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
             return
         suppliers_by_id = {s["detail_account_id"]: s for s in self._suppliers}
         agreements = purchasing_service.list_rebate_agreements(company_id)
+        self._agreements = agreements
         self.agreement_table.setRowCount(len(agreements))
         for row_index, a in enumerate(agreements):
             supplier = suppliers_by_id.get(a.supplier_detail_account_id)
             values = [
                 f"{supplier['code']} — {supplier['name'] or ''}" if supplier else str(a.supplier_detail_account_id),
-                _REBATE_BASIS_LABELS.get(a.rebate_basis_code, a.rebate_basis_code), str(a.valid_from), str(a.valid_to or ""),
+                _REBATE_BASIS_LABELS.get(a.rebate_basis_code, a.rebate_basis_code),
+                numerals.format_jalali_date(a.valid_from), numerals.format_jalali_date(a.valid_to) if a.valid_to else "",
             ]
             for col_index, value in enumerate(values):
                 cell = QTableWidgetItem(value)

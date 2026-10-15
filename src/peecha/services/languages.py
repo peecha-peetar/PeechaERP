@@ -1,6 +1,6 @@
-"""سرویس مدیریت زبان‌ها (core.languages) — تعریفِ صریح زبان به‌جای
-هاردکد بودنِ «فارسی» در bootstrap؛ فقط یک زبان می‌تواند is_default باشد
-(طبق ایندکس یکتای دیتابیس)، پس ست‌کردنِ پیش‌فرضِ جدید باید بقیه را خاموش کند."""
+"""سرویس مدیریت زبان‌ها (core.languages) — تعریف صریح زبان به‌جای
+هاردکد بودن «فارسی» در bootstrap؛ فقط یک زبان می‌تواند is_default باشد
+(طبق ایندکس یکتای دیتابیس)، پس ست‌کردن پیش‌فرض جدید باید بقیه را خاموش کند."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def list_languages() -> list[LanguageRow]:
 def create_language(code: str, native_name: str, is_rtl: bool, is_default: bool, sort_order: int = 0) -> Language:
     with new_session() as session:
         if session.scalar(select(func.count()).select_from(Language).where(Language.code == code)):
-            raise ValueError("این کدِ زبان قبلاً تعریف شده است.")
+            raise ValueError("این کد زبان قبلاً تعریف شده است.")
         if is_default:
             session.execute(Language.__table__.update().values(is_default=False))
         language = Language(
@@ -67,7 +67,7 @@ def update_language(
         if is_default and not language.is_default:
             session.execute(Language.__table__.update().values(is_default=False))
         elif not is_default and language.is_default:
-            raise ValueError("باید همیشه یک زبانِ پیش‌فرض وجود داشته باشد.")
+            raise ValueError("باید همیشه یک زبان پیش‌فرض وجود داشته باشد.")
         language.native_name = native_name
         language.is_rtl = is_rtl
         language.is_default = is_default
@@ -85,11 +85,11 @@ def delete_language(language_id: int) -> None:
         if language is None:
             raise ValueError("زبان نامعتبر است.")
         if language.is_default:
-            raise ValueError("زبانِ پیش‌فرض قابل حذف نیست.")
+            raise ValueError("زبان پیش‌فرض قابل حذف نیست.")
         in_use = session.scalar(
             select(func.count()).select_from(Company).where(Company.default_language_id == language_id)
         )
         if in_use:
-            raise ValueError("این زبان به‌عنوان زبانِ پیش‌فرضِ یک یا چند شرکت استفاده شده؛ قابل حذف نیست.")
+            raise ValueError("این زبان به‌عنوان زبان پیش‌فرض یک یا چند شرکت استفاده شده؛ قابل حذف نیست.")
         session.delete(language)
         session.commit()

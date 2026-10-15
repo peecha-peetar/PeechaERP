@@ -1,4 +1,4 @@
-"""پست‌هایِ سازمانی — هستهٔ منابع انسانی، فازِ ۱."""
+"""پست‌های سازمانی — هستهٔ منابع انسانی، فاز ۱."""
 
 from __future__ import annotations
 
@@ -26,13 +26,14 @@ from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
     FieldSpec,
+    FormDrawer,
     LayoutEditMixin,
     ZeroPaddedSpinBox,
     wrap_scrollable,
     wrap_scrollable_with_footer,
 )
 
-_COLUMNS = ["فعال", "ظرفیت", "ردهٔ شغلی", "واحدِ سازمانی", "عنوان", "کد"]
+_COLUMNS = ["فعال", "ظرفیت", "ردهٔ شغلی", "واحد سازمانی", "عنوان", "کد"]
 
 
 class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -47,14 +48,18 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="پست سازمانی جدید")
 
         self.set_field_help([
-            (self.code_field, "کدِ یکتایِ این پست در سطحِ شرکت."),
-            (self.title_field, "عنوانِ پست، مثلاً «برنامه‌نویس» یا «حسابدار»."),
-            (self.org_unit_combo, "واحدِ سازمانی‌ای که این پست به آن تعلق دارد."),
-            (self.job_grade_combo, "ردهٔ شغلیِ این پست — اختیاری."),
-            (self.capacity_field, "تعدادِ نفراتی که هم‌زمان می‌توانند این پست را داشته باشند."),
+            (self.code_field, "کد یکتای این پست در سطح شرکت."),
+            (self.title_field, "عنوان پست، مثلاً «برنامه‌نویس» یا «حسابدار»."),
+            (self.org_unit_combo, "واحد سازمانی‌ای که این پست به آن تعلق دارد."),
+            (self.job_grade_combo, "ردهٔ شغلی این پست — اختیاری."),
+            (self.capacity_field, "تعداد نفراتی که هم‌زمان می‌توانند این پست را داشته باشند."),
+            (self.is_active_checkbox, "پست‌های غیرفعال دیگر در فهرست انتخاب پست برای کارمند تازه نشان داده نمی‌شوند."),
         ])
         self.register_field_grids("hr_positions", [self.form_grid])
 
@@ -64,7 +69,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
-        title = QLabel("پست‌هایِ سازمانی")
+        title = QLabel("پست‌های سازمانی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -84,7 +89,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("پستِ جدید")
+        self.form_title = QLabel("پست جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -101,7 +106,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.form_grid = FieldGrid([
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("title", "عنوان", self.title_field, span=2),
-            FieldSpec("org_unit", "واحدِ سازمانی", self.org_unit_combo, span=2),
+            FieldSpec("org_unit", "واحد سازمانی", self.org_unit_combo, span=2),
             FieldSpec("capacity", "ظرفیت", self.capacity_field, span=1),
             FieldSpec("job_grade", "ردهٔ شغلی", self.job_grade_combo, span=3),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
@@ -182,7 +187,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, position: hr_service.PositionRow) -> None:
         self._editing_id = position.position_id
-        self.form_title.setText(f"ویرایشِ پست — {position.title}")
+        self.form_title.setText(f"ویرایش پست — {position.title}")
         self.status_label.setText("")
         self.code_field.setText(position.code)
         self.code_field.setEnabled(False)
@@ -197,7 +202,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("پستِ جدید")
+        self.form_title.setText("پست جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -219,7 +224,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         org_unit_id = self.org_unit_combo.currentData()
         if org_unit_id is None:
-            self.status_label.setText("واحدِ سازمانی را انتخاب کنید.")
+            self.status_label.setText("واحد سازمانی را انتخاب کنید.")
             return
         job_grade_id = self.job_grade_combo.currentData()
         capacity = self.capacity_field.value()
@@ -245,7 +250,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ پست", "این پست حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف پست", "این پست حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

@@ -1,17 +1,17 @@
-"""سرویسِ صدورِ خودکارِ سندِ حسابداریِ حقوق (فصلِ ۱۶) — با استفادهٔ
-مستقیم از je_service.create_journal_entry موجود، بدونِ موتورِ تازه.
+"""سرویس صدور خودکار سند حسابداری حقوق (فصل ۱۶) — با استفادهٔ
+مستقیم از je_service.create_journal_entry موجود، بدون موتور تازه.
 
-سطحِ تجمیع: به‌ازایِ هر gl_account_id (نه به‌ازایِ هر کارمند)؛ ریز در
-payroll.payslips/payslip_lines قابلِ ردیابی می‌ماند.
+سطح تجمیع: به‌ازای هر gl_account_id (نه به‌ازای هر کارمند)؛ ریز در
+payroll.payslips/payslip_lines قابل ردیابی می‌ماند.
 
-⚠ ساده‌سازیِ آگاهانه: تفکیکِ ردیفِ هزینه به‌ازایِ مرکزِهزینه (طبقِ
-سناریویِ سند) پیاده نشده، چون هستهٔ منابعِ انسانیِ فعلی (فازِ ۱) هیچ
-نگاشتی بینِ hr.org_units و مرکزهزینهٔ حسابداری ندارد — افزودنِ آن یک
-فازِ جداگانه است.
+⚠ ساده‌سازی آگاهانه: تفکیک ردیف هزینه به‌ازای مرکز هزینه (طبق
+سناریوی سند) پیاده نشده، چون هستهٔ منابع انسانی فعلی (فاز ۱) هیچ
+نگاشتی بین hr.org_units و مرکزهزینهٔ حسابداری ندارد — افزودن آن یک
+فاز جداگانه است.
 
-سهمِ کارفرمایِ بیمه هرگز به‌صورتِ payslip_line ذخیره نشده (فصلِ ۹/۱۱ فقط
-سهمِ کارمند را ذخیره می‌کند)؛ چون نرخ‌ها برایِ کلِ شرکت/دوره یکسان‌اند
-(نه به‌ازایِ کارمند)، سهمِ کارفرما دقیقاً از رویِ نسبتِ نرخ‌هایِ همان
+سهم کارفرمای بیمه هرگز به‌صورت payslip_line ذخیره نشده (فصل ۹/۱۱ فقط
+سهم کارمند را ذخیره می‌کند)؛ چون نرخ‌ها برای کل شرکت/دوره یکسان‌اند
+(نه به‌ازای کارمند)، سهم کارفرما دقیقاً از روی نسبت نرخ‌های همان
 InsuranceConfig بازمحاسبه می‌شود: employer_share = employee_share ×
 (employer_rate + unemployment_rate) / employee_rate."""
 
@@ -51,9 +51,9 @@ def post_run_to_journal(run_id: int, created_by_user_id: int) -> JournalPostingR
         if run is None:
             raise ValueError("این اجرا یافت نشد.")
         if run.status != "APPROVED":
-            raise ValueError("فقط اجرایِ تاییدشده قابلِ صدورِ سند است.")
+            raise ValueError("فقط اجرای تاییدشده قابل صدور سند است.")
         if session.get(PayrollJournalEntryLink, run_id) is not None:
-            raise ValueError("برایِ این اجرا قبلاً سندِ حسابداری صادر شده است.")
+            raise ValueError("برای این اجرا قبلاً سند حسابداری صادر شده است.")
 
         period = session.get(PayrollPeriod, run.period_id)
         company_id = period.company_id
@@ -76,7 +76,7 @@ def post_run_to_journal(run_id: int, created_by_user_id: int) -> JournalPostingR
         ).all()
         missing = [item.code for item in active_items if item.gl_account_id is None]
         if missing:
-            raise ValueError("این آیتم‌هایِ حقوقیِ فعال بدونِ حسابِ حسابداری‌اند و مانعِ صدورِ سند می‌شوند: " + "، ".join(missing))
+            raise ValueError("این آیتم‌های حقوقی فعال بدون حساب حسابداری‌اند و مانع صدور سند می‌شوند: " + "، ".join(missing))
         item_by_id = {item.pay_item_id: item for item in active_items}
         insurance_item = next((item for item in active_items if item.code == "SOCIAL_INSURANCE_EMPLOYEE"), None)
 
@@ -94,7 +94,7 @@ def post_run_to_journal(run_id: int, created_by_user_id: int) -> JournalPostingR
         for line in payslip_lines:
             item = item_by_id.get(line.pay_item_id)
             if item is None or item.gl_account_id is None:
-                raise ValueError(f"آیتمِ «{line.pay_item_code_snapshot}» حسابِ حسابداریِ فعالی ندارد.")
+                raise ValueError(f"آیتم «{line.pay_item_code_snapshot}» حساب حسابداری فعالی ندارد.")
             key = (item.gl_account_id, item.detail_account_id, resolve_description(item))
             bucket = debit_lines if line.phase == "EARNING_PHASE" else credit_lines
             bucket[key] = bucket.get(key, decimal.Decimal(0)) + line.amount
@@ -103,14 +103,14 @@ def post_run_to_journal(run_id: int, created_by_user_id: int) -> JournalPostingR
         if employee_insurance_total > 0:
             insurance_config = payroll_service.get_insurance_config(company_id, period.period_start_date)
             if insurance_config is None or insurance_config.employee_rate <= 0:
-                raise ValueError("تنظیماتِ بیمه برایِ محاسبهٔ سهمِ کارفرما در دسترس نیست.")
+                raise ValueError("تنظیمات بیمه برای محاسبهٔ سهم کارفرما در دسترس نیست.")
             employer_ratio = (insurance_config.employer_rate + insurance_config.unemployment_rate) / insurance_config.employee_rate
             employer_share_total = employee_insurance_total * employer_ratio
             if employer_share_total > 0:
                 if insurance_config.employer_expense_gl_account_id is None:
-                    raise ValueError("حسابِ هزینهٔ سهمِ کارفرمایِ بیمه در تنظیماتِ بیمه مشخص نشده است.")
+                    raise ValueError("حساب هزینهٔ سهم کارفرمای بیمه در تنظیمات بیمه مشخص نشده است.")
                 if insurance_item is None or insurance_item.gl_account_id is None:
-                    raise ValueError("حسابِ بیمهٔ پرداختنی (آیتمِ سیستمیِ بیمه) مشخص نیست.")
+                    raise ValueError("حساب بیمهٔ پرداختنی (آیتم سیستمی بیمه) مشخص نیست.")
                 insurance_description = payroll_service.render_payroll_description(
                     payroll_service.get_payroll_description_template(company_id, "PAYROLL_INSURANCE_EMPLOYER"),
                     template_context,
@@ -133,7 +133,7 @@ def post_run_to_journal(run_id: int, created_by_user_id: int) -> JournalPostingR
         if total_net_pay > 0:
             settings = payroll_service.get_company_settings(company_id)
             if settings.salary_payable_gl_account_id is None:
-                raise ValueError("حسابِ حقوقِ پرداختنی/بانک در تنظیماتِ حقوق و دستمزد مشخص نشده است.")
+                raise ValueError("حساب حقوق پرداختنی/بانک در تنظیمات حقوق و دستمزد مشخص نشده است.")
             payable_description = payroll_service.render_payroll_description(
                 payroll_service.get_payroll_description_template(company_id, "PAYROLL_PAYABLE"), template_context
             )
@@ -145,7 +145,7 @@ def post_run_to_journal(run_id: int, created_by_user_id: int) -> JournalPostingR
         total_debit = sum(debit_lines.values(), decimal.Decimal(0))
         total_credit = sum(credit_lines.values(), decimal.Decimal(0))
         if total_debit == 0 and total_credit == 0:
-            raise ValueError("این اجرا هیچ مبلغی برایِ صدورِ سند ندارد.")
+            raise ValueError("این اجرا هیچ مبلغی برای صدور سند ندارد.")
 
         def to_details(detail_account_id: int | None) -> dict[int, int]:
             if detail_account_id is None:

@@ -1,10 +1,10 @@
-"""ترجمه‌ها — معادلِ Qt برایِ ترجمه‌یِ برچسب‌هایِ ناوبری (ساید‌بار/ریبون/
-زیرفرم‌هایِ تنظیمات) به زبان‌هایِ غیرِپیش‌فرض.
+"""ترجمه‌ها — معادل Qt برای ترجمهٔ برچسب‌های ناوبری (ساید‌بار/ریبون/
+زیرفرم‌های تنظیمات) به زبان‌های غیرپیش‌فرض.
 
-طبقِ حسابرسیِ صریح، این صفحه قبلاً یک PlaceholderScreen خالی بود (معادلِ
-Qtِ صفحه‌ی قدیمیِ Kivy هرگز ساخته نشده بود). ستونِ «ترجمه» این‌جا مستقیماً
-قابلِ‌ویرایش است؛ با ذخیره، shell_window.py با اولین تغییرِ سوییچرِ زبانِ
-هدر آن‌ها را واقعاً رویِ ساید‌بار/ریبون اعمال می‌کند."""
+طبق حسابرسی صریح، این صفحه قبلاً یک PlaceholderScreen خالی بود (معادل
+Qt صفحهٔ قدیمی Kivy هرگز ساخته نشده بود). ستون «ترجمه» این‌جا مستقیماً
+قابل‌ویرایش است؛ با ذخیره، shell_window.py با اولین تغییر سوییچر زبان
+هدر آن‌ها را واقعاً روی ساید‌بار/ریبون اعمال می‌کند."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from peecha.services import languages as languages_service
 from peecha.services import translations as translations_service
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
-_COLUMNS = ["ترجمه", "متنِ فارسیِ اصلی"]
+_COLUMNS = ["ترجمه", "متن فارسی اصلی"]
 _SOURCE_COL = 1
 _TRANSLATION_COL = 0
 
@@ -50,15 +50,15 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         layout.addWidget(title)
 
         hint = QLabel(
-            "ترجمه‌یِ عنوانِ منوهایِ ناوبری (ساید‌بار/ریبون) و زیرفرم‌هایِ تنظیماتِ سیستم به زبانِ انتخابی. "
-            "با انتخابِ همین زبان از سوییچرِ «زبانِ فعال» در هدرِ برنامه، این ترجمه‌ها واقعاً نمایش داده می‌شوند."
+            "ترجمهٔ عنوان منوهای ناوبری (ساید‌بار/ریبون) و زیرفرم‌های تنظیمات سیستم به زبان انتخابی. "
+            "با انتخاب همین زبان از سوییچر «زبان فعال» در هدر برنامه، این ترجمه‌ها واقعاً نمایش داده می‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         selectors = QHBoxLayout()
-        selectors.addWidget(QLabel("زبانِ مقصد"))
+        selectors.addWidget(QLabel("زبان مقصد"))
         self.language_combo = QComboBox()
         self.language_combo.currentIndexChanged.connect(self._reload_table)
         selectors.addWidget(self.language_combo)
@@ -80,7 +80,7 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
-        save_button.setToolTip("ذخیره‌یِ تغییرات")
+        save_button.setToolTip("ذخیرهٔ تغییرات")
         save_button.clicked.connect(self._save_all)
 
         outer.addWidget(wrap_scrollable_with_footer(panel, [save_button]))
@@ -88,8 +88,8 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.language_combo,
-                "زبانی که برایِ ترجمه ویرایش می‌کنید. برایِ خودِ زبانِ پیش‌فرض (فارسی) ترجمه معنایی ندارد "
-                "چون متنِ اصلیِ منوها همیشه فارسی است.",
+                "زبانی که برای ترجمه ویرایش می‌کنید. برای خود زبان پیش‌فرض (فارسی) ترجمه معنایی ندارد "
+                "چون متن اصلی منوها همیشه فارسی است.",
             ),
         ])
 
@@ -107,7 +107,7 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         self.language_combo.blockSignals(False)
         if not languages:
             self.status_label.setText(
-                "هیچ زبانِ غیرِپیش‌فرضی تعریف نشده — از صفحه‌ی «زبان‌ها» یک زبانِ تازه اضافه کنید."
+                "هیچ زبان غیرپیش‌فرضی تعریف نشده — از صفحهٔ «زبان‌ها» یک زبان تازه اضافه کنید."
             )
         else:
             self.status_label.setText("")
@@ -132,7 +132,7 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
     def _save_all(self) -> None:
         language_id = self.language_combo.currentData()
         if language_id is None:
-            self.status_label.setText("ابتدا یک زبانِ مقصد انتخاب کنید.")
+            self.status_label.setText("ابتدا یک زبان مقصد انتخاب کنید.")
             return
         for row_index in range(self.table.rowCount()):
             item = self.table.item(row_index, _TRANSLATION_COL)

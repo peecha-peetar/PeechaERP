@@ -1,4 +1,4 @@
-"""مدیریتِ شرکت‌ها — معادلِ Qt برایِ companies.py/.kv در Kivy."""
+"""مدیریت شرکت‌ها — معادل Qt برای companies.py/.kv در Kivy."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -32,12 +33,16 @@ from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
     FieldSpec,
+    FormDrawer,
     LayoutEditMixin,
     PersianDigitLineEdit,
+    confirm_and_delete,
+    delete_button,
     wrap_scrollable_with_footer,
 )
+from peecha.db.models.core import Company
 
-_COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
+_COLUMNS = ["فعال", "زبان پیش‌فرض", "ارز پایه", "نام نمایشی", "کد"]
 
 
 class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -52,74 +57,83 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="شرکت جدید")
 
         self.set_field_help([
             (
                 self.code_field,
-                "کدِ یکتایِ این شرکت در کلِ سیستم. بعدِ ساختنِ شرکت دیگر قابلِ‌تغییر نیست. "
-                "چون همه‌جایِ برنامه با همین کد این شرکت را می‌شناسد.",
+                "کد یکتای این شرکت در کل سیستم. بعد ساختن شرکت دیگر قابل‌تغییر نیست. "
+                "چون همه‌جای برنامه با همین کد این شرکت را می‌شناسد.",
             ),
             (
                 self.legal_name_field,
-                "نامِ رسمی و ثبتی‌یِ شرکت. در اسنادِ رسمی و صورت‌هایِ مالیِ چاپی به‌کار می‌رود.",
+                "نام رسمی و ثبتی شرکت. در اسناد رسمی و صورت‌های مالی چاپی به‌کار می‌رود.",
             ),
             (
                 self.display_name_field,
-                "نامِ کوتاهی که در برنامه نمایش داده می‌شود، مثلاً در انتخابِ شرکت بالایِ صفحه. "
-                "لازم نیست با نامِ حقوقی یکی باشد.",
+                "نام کوتاهی که در برنامه نمایش داده می‌شود، مثلاً در انتخاب شرکت بالای صفحه. "
+                "لازم نیست با نام حقوقی یکی باشد.",
             ),
             (
                 self.currency_combo,
-                "ارزِ پایه‌یِ این شرکت. همه‌یِ مبالغِ کدینگِ حساب‌ها و اسنادِ حسابداری با این ارز ثبت می‌شوند. "
-                "هر شرکت ارزِ پایه‌یِ خودش را دارد. بعدِ ثبتِ چند سند بهتر است آن را تغییر ندهید.",
+                "ارز پایهٔ این شرکت. همهٔ مبالغ کدینگ حساب‌ها و اسناد حسابداری با این ارز ثبت می‌شوند. "
+                "هر شرکت ارز پایهٔ خودش را دارد. بعد ثبت چند سند بهتر است آن را تغییر ندهید.",
             ),
             (
                 self.language_combo,
-                "زبانِ پیش‌فرضِ این شرکت. برایِ نمایشِ نامِ حساب‌ها و فیلدهایِ چندزبانه استفاده می‌شود.",
+                "زبان پیش‌فرض این شرکت. برای نمایش نام حساب‌ها و فیلدهای چندزبانه استفاده می‌شود.",
             ),
             (
                 self.fy_month_field,
-                "ماهی که سالِ مالیِ این شرکت از آن شروع می‌شود — ۱ یعنی فروردین. "
-                "بعضی شرکت‌ها (مثلاً پیمانکاری‌ها) سالِ مالی‌شان با سالِ شمسیِ معمولی فرق دارد. "
-                "این عدد پایه‌یِ محاسبه‌یِ بازه‌یِ هر سالِ مالیِ تازه است.",
+                "ماهی که سال مالی این شرکت از آن شروع می‌شود — ۱ یعنی فروردین. "
+                "بعضی شرکت‌ها (مثلاً پیمانکاری‌ها) سال مالی‌شان با سال شمسی معمولی فرق دارد. "
+                "این عدد پایهٔ محاسبهٔ بازهٔ هر سال مالی تازه است.",
             ),
             (
                 self.fy_day_field,
-                "روزِ شروعِ سالِ مالی، در همان ماهِ بالا. "
-                "این دو فیلد با هم اولین روزِ سالِ مالیِ شرکت را می‌سازند.",
+                "روز شروع سال مالی، در همان ماه بالا. "
+                "این دو فیلد با هم اولین روز سال مالی شرکت را می‌سازند.",
             ),
             (
                 self.economic_code_field,
-                "کدِ اقتصادیِ شرکت نزدِ سازمانِ امور مالیاتی. در فاکتورها و گزارش‌هایِ ارزش‌افزوده به‌کار می‌رود. اختیاری است.",
+                "کد اقتصادی شرکت نزد سازمان امور مالیاتی. در فاکتورها و گزارش‌های ارزش‌افزوده به‌کار می‌رود. اختیاری است.",
             ),
             (
                 self.registration_no_field,
-                "شماره‌یِ ثبتِ شرکت نزدِ اداره‌یِ ثبتِ شرکت‌ها. برایِ اسنادِ قانونی لازم است. اختیاری است.",
+                "شمارهٔ ثبت شرکت نزد ادارهٔ ثبت شرکت‌ها. برای اسناد قانونی لازم است. اختیاری است.",
             ),
             (
                 self.national_id_field,
-                "شناسه‌یِ ملیِ شرکت — یک کدِ یکتایِ ۱۱رقمی. در قراردادها و مکاتباتِ رسمی به‌کار می‌رود. اختیاری است.",
+                "شناسهٔ ملی شرکت — یک کد یکتای ۱۱رقمی. در قراردادها و مکاتبات رسمی به‌کار می‌رود. اختیاری است.",
+            ),
+            (
+                self.default_tax_percent_field,
+                "درصد مالیات پیش‌فرض همهٔ کالاهای این شرکت. طبق سیاست اولویتی، اگر این‌جا مقدار داشته باشد، "
+                "بر مالیات انبار و مالیات خود کالا اولویت دارد و برای همه یکسان اعمال می‌شود. خالی بگذارید تا "
+                "نوبت به تنظیمات انبار/کالا برسد.",
             ),
             (
                 self.is_active_checkbox,
-                "شرکت‌هایِ غیرِفعال دیگر در فهرستِ انتخابِ شرکت بالایِ برنامه نشان داده نمی‌شوند. "
-                "داده‌هایِ قبلی‌شان (کدینگ، اسناد) پاک نمی‌شود.",
+                "شرکت‌های غیرفعال دیگر در فهرست انتخاب شرکت بالای برنامه نشان داده نمی‌شوند. "
+                "داده‌های قبلی‌شان (کدینگ، اسناد) پاک نمی‌شود.",
             ),
             (
                 self.clone_checkbox,
-                "به‌جایِ شروع از صفر، می‌توانید کدینگِ حساب‌ها یا گروه‌هایِ تفصیلیِ یک شرکتِ دیگر را کپی کنید. "
-                "خودِ اشخاص (مشتری، تامین‌کننده، پرسنل) و اسنادِ حسابداری کپی نمی‌شوند.",
+                "به‌جای شروع از صفر، می‌توانید کدینگ حساب‌ها یا گروه‌های تفصیلی یک شرکت دیگر را کپی کنید. "
+                "خود اشخاص (مشتری، تامین‌کننده، پرسنل) و اسناد حسابداری کپی نمی‌شوند.",
             ),
-            (self.clone_source_combo, "شرکتی که کدینگ و تفصیلی‌هایش الگویِ این شرکتِ تازه می‌شود."),
+            (self.clone_source_combo, "شرکتی که کدینگ و تفصیلی‌هایش الگوی این شرکت تازه می‌شود."),
             (
                 self.clone_coa_checkbox,
-                "اگر فعال باشد، کدِ حساب‌هایِ شرکتِ مبدأ عیناً برایِ این شرکتِ تازه ساخته می‌شود.",
+                "اگر فعال باشد، کد حساب‌های شرکت مبدأ عیناً برای این شرکت تازه ساخته می‌شود.",
             ),
             (
                 self.clone_dimensions_checkbox,
-                "اگر فعال باشد، حساب‌هایِ تفصیلی (کالا، بانک، صندوق، مرکزِ هزینه، پروژه و گروه‌هایِ ساده) "
-                "از شرکتِ مبدأ کپی می‌شوند.",
+                "اگر فعال باشد، حساب‌های تفصیلی (کالا، بانک، صندوق، مرکز هزینه، پروژه و گروه‌های ساده) "
+                "از شرکت مبدأ کپی می‌شوند.",
             ),
         ])
 
@@ -150,7 +164,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("شرکتِ جدید")
+        self.form_title = QLabel("شرکت جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -187,16 +201,16 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.basic_grid = FieldGrid([
             FieldSpec("code", "کد", self.code_field, span=1),
-            FieldSpec("legal_name", "نامِ حقوقی", self.legal_name_field, span=2),
-            FieldSpec("display_name", "نامِ نمایشی", self.display_name_field, span=2),
-            FieldSpec("currency", "ارزِ پایه", self.currency_combo, span=1),
-            FieldSpec("language", "زبانِ پیش‌فرض", self.language_combo, span=1),
-            FieldSpec("fy_month", "ماهِ شروعِ سالِ مالی", self.fy_month_field, span=1),
-            FieldSpec("fy_day", "روزِ شروعِ سالِ مالی", self.fy_day_field, span=1),
-            FieldSpec("economic_code", "کدِ اقتصادی", self.economic_code_field, span=1),
-            FieldSpec("registration_no", "شماره‌ی ثبت", self.registration_no_field, span=1),
-            FieldSpec("national_id", "شناسه‌ی ملی", self.national_id_field, span=1),
-            FieldSpec("default_tax_percent", "درصدِ مالیاتِ پیش‌فرض", self.default_tax_percent_field, span=1),
+            FieldSpec("legal_name", "نام حقوقی", self.legal_name_field, span=2),
+            FieldSpec("display_name", "نام نمایشی", self.display_name_field, span=2),
+            FieldSpec("currency", "ارز پایه", self.currency_combo, span=1),
+            FieldSpec("language", "زبان پیش‌فرض", self.language_combo, span=1),
+            FieldSpec("fy_month", "ماه شروع سال مالی", self.fy_month_field, span=1),
+            FieldSpec("fy_day", "روز شروع سال مالی", self.fy_day_field, span=1),
+            FieldSpec("economic_code", "کد اقتصادی", self.economic_code_field, span=1),
+            FieldSpec("registration_no", "شمارهٔ ثبت", self.registration_no_field, span=1),
+            FieldSpec("national_id", "شناسهٔ ملی", self.national_id_field, span=1),
+            FieldSpec("default_tax_percent", "درصد مالیات پیش‌فرض", self.default_tax_percent_field, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
         layout.addWidget(self.basic_grid)
@@ -210,19 +224,19 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         clone_layout.setContentsMargins(0, 0, 0, 0)
         clone_layout.setSpacing(6)
 
-        self.clone_checkbox = QCheckBox("ایجاد بر اساسِ شرکتِ دیگر")
+        self.clone_checkbox = QCheckBox("ایجاد بر اساس شرکت دیگر")
         self.clone_checkbox.toggled.connect(self._on_clone_checkbox_toggled)
         clone_layout.addWidget(self.clone_checkbox)
 
         clone_grid = QGridLayout()
         clone_grid.setSpacing(8)
-        clone_grid.addWidget(QLabel("شرکتِ مبدأ"), 0, 0)
+        clone_grid.addWidget(QLabel("شرکت مبدأ"), 0, 0)
         self.clone_source_combo = QComboBox()
         clone_grid.addWidget(self.clone_source_combo, 0, 1)
-        self.clone_coa_checkbox = QCheckBox("کدینگِ حساب‌ها")
+        self.clone_coa_checkbox = QCheckBox("کدینگ حساب‌ها")
         self.clone_coa_checkbox.setChecked(True)
         clone_grid.addWidget(self.clone_coa_checkbox, 1, 1)
-        self.clone_dimensions_checkbox = QCheckBox("گروه‌هایِ تفصیلی")
+        self.clone_dimensions_checkbox = QCheckBox("گروه‌های تفصیلی")
         self.clone_dimensions_checkbox.setChecked(True)
         clone_grid.addWidget(self.clone_dimensions_checkbox, 2, 1)
         clone_layout.addLayout(clone_grid)
@@ -248,7 +262,10 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         cancel_button.clicked.connect(self._reset_form)
 
         layout.addStretch(1)
-        return wrap_scrollable_with_footer(panel, [save_button, cancel_button])
+        # R276: حذف (اگر سابقه دارد غیرفعال می‌شود)
+        delete = delete_button()
+        delete.clicked.connect(self._delete)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, delete])
 
     def refresh(self) -> None:
         self._currency_options = companies_service.list_currencies()
@@ -287,7 +304,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, company: companies_service.CompanyRow) -> None:
         self._editing_id = company.company_id
-        self.form_title.setText(f"ویرایشِ شرکت — {company.display_name}")
+        self.form_title.setText(f"ویرایش شرکت — {company.display_name}")
         self.status_label.setText("")
         self.code_field.setText(company.code)
         self.code_field.setEnabled(False)
@@ -317,9 +334,19 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _on_clone_checkbox_toggled(self, checked: bool) -> None:
         self._set_clone_options_visible(checked)
 
+    def _delete(self) -> None:
+        current = app_session.current_company
+        if current is not None and self._editing_id == current.company_id:
+            QMessageBox.warning(self, "شرکت", "شرکت جاری را نمی‌توان حذف کرد؛ ابتدا به شرکت دیگری بروید.")
+            return
+        if confirm_and_delete(self, "شرکت", self.display_name_field.text() or self.legal_name_field.text(), Company,
+                              self._editing_id, None):
+            self._reset_form()
+            self.refresh()
+
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("شرکتِ جدید")
+        self.form_title.setText("شرکت جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -346,7 +373,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         legal_name = self.legal_name_field.text().strip()
         display_name = self.display_name_field.text().strip()
         if not legal_name or not display_name:
-            self.status_label.setText("نامِ حقوقی و نامِ نمایشی را وارد کنید.")
+            self.status_label.setText("نام حقوقی و نام نمایشی را وارد کنید.")
             return
 
         base_currency_id = self.currency_combo.currentData()
@@ -355,7 +382,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         try:
             default_tax_percent = decimal.Decimal(tax_text) if tax_text else None
         except decimal.InvalidOperation:
-            self.status_label.setText("درصدِ مالیاتِ پیش‌فرض نامعتبر است.")
+            self.status_label.setText("درصد مالیات پیش‌فرض نامعتبر است.")
             return
 
         try:
@@ -411,10 +438,10 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 self.refresh()
                 if clone_error is not None:
                     theme.set_status_label(
-                        self.status_label, f"شرکت ایجاد شد؛ ولی کپیِ کدینگ/تفصیلی‌ها ناموفق بود: {clone_error}", ok=False
+                        self.status_label, f"شرکت ایجاد شد؛ ولی کپی کدینگ/تفصیلی‌ها ناموفق بود: {clone_error}", ok=False
                     )
                 elif clone_requested:
-                    theme.set_status_label(self.status_label, "شرکت ایجاد شد و کدینگ/گروه‌هایِ تفصیلی از شرکتِ مبدأ کپی شد.", ok=True)
+                    theme.set_status_label(self.status_label, "شرکت ایجاد شد و کدینگ/گروه‌های تفصیلی از شرکت مبدأ کپی شد.", ok=True)
                 return
         except ValueError as exc:
             self.status_label.setText(str(exc))

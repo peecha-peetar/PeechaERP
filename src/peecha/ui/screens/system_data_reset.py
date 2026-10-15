@@ -1,0 +1,172 @@
+"""طبق درخواست صریح: ابزار فنی/محدود (نه یک ویژگی عمومی) برای
+پاک‌سازی اطلاعات شرکت جاری، به‌تفکیک سه دستهٔ کاملاً جدا — تا
+بشود بدون نیاز به بازتعریف کدینگ/تنظیمات، بارها اسناد را پاک و
+دوباره تست کرد. هر عملیات برگشت‌ناپذیر است؛ پیش از هرکدام، تایپ کد
+شرکت الزامی است (نه فقط یک تایید سادهٔ بله/خیر)."""
+
+from __future__ import annotations
+
+from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget
+
+from peecha import numerals, session
+from peecha.services import data_reset as reset_service
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
+
+
+class _ResetSection(QWidget):
+    def __init__(self, title: str, description: str, button_label: str, run) -> None:
+        super().__init__()
+        self._run = run
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(4)
+
+        heading = QLabel(title)
+        heading.setObjectName("sectionTitle")
+        layout.addWidget(heading)
+
+        desc = QLabel(description)
+        desc.setObjectName("sectionHint")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        self.confirm_hint = QLabel()
+        self.confirm_hint.setObjectName("sectionHint")
+        layout.addWidget(self.confirm_hint)
+
+        self.confirm_field = QLineEdit()
+        self.confirm_field.setPlaceholderText("برای تایید این عملیات برگشت‌ناپذیر، کد شرکت را این‌جا تایپ کنید")
+        self.confirm_field.textChanged.connect(self._on_text_changed)
+        layout.addWidget(self.confirm_field)
+
+        self.action_button = QPushButton(button_label)
+        self.action_button.setObjectName("dangerButton")
+        self.action_button.setEnabled(False)
+        self.action_button.clicked.connect(self._on_click)
+        layout.addWidget(self.action_button)
+
+        self._refresh_hint()
+
+    def _expected_code(self) -> str:
+        return session.current_company.code if session.current_company else ""
+
+    def _refresh_hint(self) -> None:
+        code = self._expected_code()
+        self.confirm_hint.setText(f"کد شرکت جاری برای تایید: «{code}»" if code else "شرکت جاری نامشخص است.")
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._refresh_hint()
+
+    def _on_text_changed(self, text: str) -> None:
+        self._refresh_hint()
+        expected = self._expected_code()
+        # طبقِ گزارشِ کاربر: تایپِ صحیحِ کد ولی با حروفِ کوچک/بزرگِ متفاوت
+        # یا فاصله‌یِ اضافه، بدونِ هیچ بازخوردی رد می‌شد -- چون مقایسه
+        # قبلاً حساس‌به‌حروف و بدونِ trim بود.
+        self.action_button.setEnabled(bool(expected) and text.strip().casefold() == expected.strip().casefold())
+
+    def _on_click(self) -> None:
+        confirm = QMessageBox.question(
+            self,
+            "تایید نهایی",
+            "این عملیات برگشت‌ناپذیر است. آیا مطمئنید؟ (پیشنهاد: پیش از این کار، از «پشتیبان‌گیری و بازیابی» یک بک‌آپ بگیرید.)",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        self._run()
+        self.confirm_field.clear()
+
+
+class SystemDataResetScreen(FieldHelpMixin, QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 14, 20, 14)
+        layout.setSpacing(10)
+
+        title = QLabel("پاک‌سازی اطلاعات (ابزار فنی — فقط برای تست/راه‌اندازی اولیه)")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+
+        hint = QLabel(
+            "هرکدام از این سه عملیات فقط روی شرکت جاری اثر می‌گذارد و برگشت‌ناپذیر است — قبل از اجرا از "
+            "«پشتیبان‌گیری و بازیابی» یک نسخهٔ پشتیبان بگیرید. خود شرکت، کاربران و دسترسی‌ها، سال‌های مالی، "
+            "ارزهای شرکت و سابقهٔ تغییرات (حسابرسی) هرگز پاک نمی‌شوند."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.documents_section = _ResetSection(
+            "۱) اسناد و عملیات",
+            "همهٔ اسناد فروش و خرید (سفارش، پیش‌فاکتور، فاکتور، برگشت، امانی)، اسناد انبار و انبارگردانی، اسناد "
+            "حسابداری و خزانه‌داری (چک، تنخواه، اقساط، تسویه)، فروش حضوری، پخش، درخواست خرید، استعلام قیمت، "
+            "بودجه، تولید، دارایی‌های ثابت و استهلاک، حضور و غیاب و دوره‌های حقوق، ویزیت‌ها و سوابق ارتباط با "
+            "مشتری، کارتابل و اعلان‌ها پاک می‌شوند. اطلاعات پایه و تنظیمات دست‌نخورده می‌مانند.",
+            "پاک‌کردن همهٔ اسناد",
+            self._wipe_documents,
+        )
+        layout.addWidget(self.documents_section)
+
+        self.master_data_section = _ResetSection(
+            "۲) اطلاعات پایه",
+            "کدینگ حساب‌ها و تفصیلی‌ها، کالاها و گروه‌ها، انبارها و محل‌ها، مشتریان و تامین‌کنندگان، فهرست قیمت و "
+            "تخفیف، بانک‌ها، شعبه‌ها، صندوق‌های فروش، کارکنان و ساختار سازمانی، طبقه و محل دارایی، اطلاعات پایهٔ "
+            "تولید، نرخ ارزها و فایل‌های پیوست. فقط وقتی مجاز است که هیچ سندی نمانده باشد (ابتدا گزینهٔ ۱).",
+            "پاک‌کردن اطلاعات پایه",
+            self._wipe_master_data,
+        )
+        layout.addWidget(self.master_data_section)
+
+        self.settings_section = _ResetSection(
+            "۳) تنظیمات",
+            "نگاشت حساب‌ها، سطح‌بندی کدینگ، شماره‌گذاری اسناد، قابلیت‌های فعال، تنظیمات صندوق و پیامک و سانترال و "
+            "فروش اینترنتی، تنظیمات حقوق و بیمه و مالیات، گردش کار تایید و الگوهای گزارش. مستقل از دو مورد بالاست.",
+            "پاک‌کردن تنظیمات",
+            self._wipe_settings,
+        )
+        layout.addWidget(self.settings_section)
+        layout.addStretch(1)
+
+        self.status_text = QTextEdit()
+        self.status_text.setReadOnly(True)
+        self.status_text.setMaximumHeight(100)
+        self.status_text.setPlaceholderText("نتیجهٔ آخرین عملیات این‌جا نشان داده می‌شود.")
+        layout.addWidget(self.status_text)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, []))
+
+        self.set_field_help([
+            (self.status_text, "پیام یا خطای آخرین عملیات پاک‌سازی این‌جا نشان داده می‌شود — هیچ فیلدی برای ورود نیست."),
+        ])
+
+    def _company_id(self) -> int | None:
+        return session.current_company.company_id if session.current_company else None
+
+    def _run(self, func, success_message: str) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            deleted = func(company_id)
+        except ValueError as exc:
+            self.status_text.setPlainText(str(exc))
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        message = f"{success_message} ({numerals.to_persian_digits(str(deleted or 0))} رکورد)"
+        self.status_text.setPlainText(message)
+        QMessageBox.information(self, "انجام شد", message)
+
+    def _wipe_documents(self) -> None:
+        self._run(reset_service.wipe_documents, "همهٔ اسناد و عملیات این شرکت پاک شدند.")
+
+    def _wipe_master_data(self) -> None:
+        self._run(reset_service.wipe_master_data, "اطلاعات پایهٔ این شرکت پاک شدند.")
+
+    def _wipe_settings(self) -> None:
+        self._run(reset_service.wipe_settings, "تنظیمات این شرکت پاک شدند.")

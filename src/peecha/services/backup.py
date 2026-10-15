@@ -1,17 +1,17 @@
-"""پشتیبان‌گیری/بازیابیِ کاملِ دیتابیس — طبقِ گزارشِ صریحِ کاربر: بک‌آپِ
-گرفته‌شده قبل از ایجادِ ماژولِ حقوق‌ودستمزد، جدول‌ها/فیلدهایِ سفارشیِ
-اضافه‌شده بعداً را نداشت. راه‌حل: به‌جایِ فهرستِ ثابتِ جدول‌ها (که با هر
-ماژولِ تازه باید دستی به‌روز شود و دقیقاً همین باگ را دوباره می‌سازد)،
-ساختارِ *زنده*یِ دیتابیس در لحظه‌یِ بک‌آپ با SQLAlchemy reflect می‌شود —
-هر جدول یا فیلدی که این‌جا اضافه شود، خودکار در بک‌آپِ بعدی می‌آید، بدونِ
-هیچ تغییرِ کدی.
+"""پشتیبان‌گیری/بازیابی کامل دیتابیس — طبق گزارش صریح کاربر: بک‌آپ
+گرفته‌شده قبل از ایجاد ماژول حقوق‌ودستمزد، جدول‌ها/فیلدهای سفارشی
+اضافه‌شده بعداً را نداشت. راه‌حل: به‌جای فهرست ثابت جدول‌ها (که با هر
+ماژول تازه باید دستی به‌روز شود و دقیقاً همین باگ را دوباره می‌سازد)،
+ساختار *زنده*ی دیتابیس در لحظهٔ بک‌آپ با SQLAlchemy reflect می‌شود —
+هر جدول یا فیلدی که این‌جا اضافه شود، خودکار در بک‌آپ بعدی می‌آید، بدون
+هیچ تغییر کدی.
 
 بازیابی هم ابتدا db/schema/*.sql را تا آخرین نسخه اجرا می‌کند (همان
-مکانیزمِ apply_pending_schema_files) تا ساختارِ مقصد کاملاً به‌روز باشد،
-سپس ردیف‌هایِ فایلِ بک‌آپ را — فقط در ستون‌هایی که هنوز در جدولِ مقصد
-وجود دارند — درج می‌کند؛ ستون/جدولِ حذف‌شده نادیده گرفته می‌شود و
-خطایِ هر ردیف (مثلاً محدودیتِ NOT NULLِ تازه) فقط همان ردیف را متوقف
-می‌کند، نه کلِ بازیابی را."""
+مکانیزم apply_pending_schema_files) تا ساختار مقصد کاملاً به‌روز باشد،
+سپس ردیف‌های فایل بک‌آپ را — فقط در ستون‌هایی که هنوز در جدول مقصد
+وجود دارند — درج می‌کند؛ ستون/جدول حذف‌شده نادیده گرفته می‌شود و
+خطای هر ردیف (مثلاً محدودیت NOT NULL تازه) فقط همان ردیف را متوقف
+می‌کند، نه کل بازیابی را."""
 
 from __future__ import annotations
 
@@ -70,11 +70,11 @@ def _full_name(table) -> str:
 
 
 def _reflect(engine: Engine) -> MetaData:
-    """طبقِ طراحی: schemaهایِ برنامه (core/sec/acc/hr/payroll/treasury/wf/doc/
-    audit/public و هر schemaیِ تازه‌ای که بعداً اضافه شود) به‌صورتِ پویا از
-    خودِ دیتابیس پرسیده می‌شوند — reflect بدونِ schema=، فقط schemaیِ
-    پیش‌فرضِ اتصال (public) را می‌بیند و اکثرِ جدول‌هایِ برنامه را که در
-    schemaهایِ دیگرند نادیده می‌گیرد."""
+    """طبق طراحی: schemaهای برنامه (core/sec/acc/hr/payroll/treasury/wf/doc/
+    audit/public و هر schemaی تازه‌ای که بعداً اضافه شود) به‌صورت پویا از
+    خود دیتابیس پرسیده می‌شوند — reflect بدون schema=، فقط schemaی
+    پیش‌فرض اتصال (public) را می‌بیند و اکثر جدول‌های برنامه را که در
+    schemaهای دیگرند نادیده می‌گیرد."""
     metadata = MetaData()
     inspector = inspect(engine)
     for schema_name in inspector.get_schema_names():
@@ -139,7 +139,7 @@ def _open(path: str, mode: str):
 
 
 def export_backup(engine: Engine, path: str, selected_full_names: set[str] | None = None) -> dict:
-    """selected_full_names=None یعنی همه‌یِ جدول‌ها (به‌جز EXCLUDED_TABLES)."""
+    """selected_full_names=None یعنی همهٔ جدول‌ها (به‌جز EXCLUDED_TABLES)."""
     metadata = _reflect(engine)
     ordered = [t for t in metadata.sorted_tables if _full_name(t) not in EXCLUDED_TABLES]
     if selected_full_names is not None:
@@ -214,8 +214,8 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
             error_samples: list[str] = []
 
             def _try_insert_row(raw_row: dict) -> tuple[bool, bool, str | None]:
-                """یک ردیف را درج می‌کند. خروجی: (موفق؟, خطا_قابلِ‌رفعِ‌بعدی؟ (یعنی
-                IntegrityErrorِ ممکن‌است-به‌خاطرِ-ترتیب باشد, پیامِ خطا)."""
+                """یک ردیف را درج می‌کند. خروجی: (موفق؟, خطا_قابل‌رفع‌بعدی؟ (یعنی
+                IntegrityError ممکن‌است-به‌خاطر-ترتیب باشد, پیام خطا)."""
                 row = {k: _deserialize_value(v) for k, v in raw_row.items() if k in target_columns}
                 if not row:
                     return True, False, None

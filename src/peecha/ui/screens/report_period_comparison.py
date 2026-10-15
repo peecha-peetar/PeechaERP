@@ -1,5 +1,5 @@
-"""مقایسه‌یِ دوره‌ای (ماه‌به‌ماه/فصل‌به‌فصل/سال‌به‌سال) — گردشِ حساب‌هایِ
-درآمد/هزینه در چند دوره‌یِ متوالیِ جلالی، کنارِ هم."""
+"""مقایسهٔ دوره‌ای (ماه‌به‌ماه/فصل‌به‌فصل/سال‌به‌سال) — گردش حساب‌های
+درآمد/هزینه در چند دورهٔ متوالی جلالی، کنار هم."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ _GRANULARITY_OPTIONS = [("MONTHLY", "ماهانه"), ("QUARTERLY", "فصلی"), 
 
 class PeriodComparisonScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("مقایسه‌یِ دوره‌ای")
+        super().__init__("مقایسهٔ دوره‌ای")
 
-        hint = QLabel("«از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایانِ آخرین دوره است.")
+        hint = QLabel("«از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایان آخرین دوره است.")
         hint.setObjectName("sectionHint")
         self.layout().insertWidget(1, hint)
 
@@ -29,7 +29,7 @@ class PeriodComparisonScreen(ReportScreenBase):
         self.granularity_combo.setCurrentIndex(0)
         self.extra_filter_row.addWidget(self.granularity_combo)
 
-        self.extra_filter_row.addWidget(QLabel("تعدادِ دوره:"))
+        self.extra_filter_row.addWidget(QLabel("تعداد دوره:"))
         self.period_count_spin = QSpinBox()
         self.period_count_spin.setRange(2, 12)
         self.period_count_spin.setValue(6)
@@ -40,11 +40,11 @@ class PeriodComparisonScreen(ReportScreenBase):
         self.add_field_help([
             (
                 self.granularity_combo,
-                "هر دوره‌یِ مقایسه چقدر طول بکشد: یک ماه، یک فصل یا یک سال.",
+                "هر دورهٔ مقایسه چقدر طول بکشد: یک ماه، یک فصل یا یک سال.",
             ),
             (
                 self.period_count_spin,
-                "چند دوره‌یِ متوالی کنارِ هم مقایسه شود، مثلاً ۶ ماهِ اخیر. توجه: «از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایانِ آخرین دوره است.",
+                "چند دورهٔ متوالی کنار هم مقایسه شود، مثلاً ۶ ماه اخیر. توجه: «از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایان آخرین دوره است.",
             ),
         ])
 
@@ -53,7 +53,7 @@ class PeriodComparisonScreen(ReportScreenBase):
     def extra_filters_summary(self) -> list[tuple[str, str]]:
         return [
             ("دانه‌بندی", self.granularity_combo.currentText()),
-            ("تعدادِ دوره", str(self.period_count_spin.value())),
+            ("تعداد دوره", str(self.period_count_spin.value())),
         ]
 
     def code_range_account_level(self) -> int | None:
@@ -81,7 +81,7 @@ class PeriodComparisonScreen(ReportScreenBase):
             rows.append([r.full_code, r.name, *[self._fmt(a) for a in r.amounts]])
             self._all_row_bold.append(False)
 
-        rows.append(["", "سودِ (زیانِ) خالص", *[self._fmt(a) for a in result.net_income_by_period]])
+        rows.append(["", "سود (زیان) خالص", *[self._fmt(a) for a in result.net_income_by_period]])
         self._all_row_bold.append(True)
 
         return headers, rows, None
