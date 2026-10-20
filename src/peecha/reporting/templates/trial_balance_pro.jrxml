@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- R320: طرح حرفه‌ای (راست‌به‌چپ) — ساخته‌شده با tools/report_designs/build_pro_templates.py از trial_balance.jrxml؛
+     پارامترها و فیلدها همان قالب پایه است. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="trial_balance_pro" pageWidth="842" pageHeight="595" orientation="Landscape"
+              columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20"
+              whenNoDataType="AllSectionsNoDetail">
+    <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Title" fontName="Vazirmatn" fontSize="15" isBold="true"/>
+    <style name="TitleMeta" fontName="Vazirmatn" fontSize="8"/>
+    <style name="BoxTitle" fontName="Vazirmatn" fontSize="8" isBold="true" forecolor="#1F3A5F"/>
+    <style name="BoxStrong" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+    <style name="BoxText" fontName="Vazirmatn" fontSize="7.5"/>
+    <style name="MetaLabel" fontName="Vazirmatn" fontSize="7" forecolor="#5A6B82"/>
+    <style name="MetaValue" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+    <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
+    <style name="Cell" fontName="Vazirmatn" fontSize="8"/>
+    <style name="TotalLabel" fontName="Vazirmatn" fontSize="8.5" isBold="true" forecolor="#1F3A5F"/>
+    <style name="TotalValue" fontName="Vazirmatn" fontSize="8.5" isBold="true"/>
+    <style name="GrandLabel" fontName="Vazirmatn" fontSize="10.5" isBold="true"/>
+    <style name="GrandValue" fontName="Vazirmatn" fontSize="11" isBold="true"/>
+    <style name="Note" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Footer" fontName="Vazirmatn" fontSize="7" forecolor="#5A6B82"/>
+    <parameter name="companyName" class="java.lang.String">
+
+        <parameterDescription><![CDATA[نام شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازهٔ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="levelLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[سطح حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخ تولید گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="totalOpeningDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع بدهکار اول دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalOpeningCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع بستانکار اول دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalPeriodDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع بدهکار دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalPeriodCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع بستانکار دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalClosingDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع بدهکار پایان دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalClosingCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع بستانکار پایان دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="companyLogoPath" class="java.lang.String">
+        <defaultValueExpression><![CDATA[""]]></defaultValueExpression>
+    </parameter>
+    <parameter name="companyLogoPosition" class="java.lang.String">
+        <defaultValueExpression><![CDATA["NONE"]]></defaultValueExpression>
+    </parameter>
+    <field name="account_code" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="account_code"/>
+
+        <fieldDescription><![CDATA[کد حساب]]></fieldDescription>
+
+    </field>
+    <field name="account_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="account_name"/>
+        <fieldDescription><![CDATA[نام حساب]]></fieldDescription>
+    </field>
+    <field name="opening_debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="opening_debit_display"/>
+        <fieldDescription><![CDATA[بدهکار اول دوره]]></fieldDescription>
+    </field>
+    <field name="opening_credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="opening_credit_display"/>
+        <fieldDescription><![CDATA[بستانکار اول دوره]]></fieldDescription>
+    </field>
+    <field name="period_debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="period_debit_display"/>
+        <fieldDescription><![CDATA[بدهکار دوره]]></fieldDescription>
+    </field>
+    <field name="period_credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="period_credit_display"/>
+        <fieldDescription><![CDATA[بستانکار دوره]]></fieldDescription>
+    </field>
+    <field name="closing_debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="closing_debit_display"/>
+        <fieldDescription><![CDATA[بدهکار پایان دوره]]></fieldDescription>
+    </field>
+    <field name="closing_credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="closing_credit_display"/>
+        <fieldDescription><![CDATA[بستانکار پایان دوره]]></fieldDescription>
+    </field>
+    <pageHeader>
+        <band height="96">
+            <rectangle radius="4"><reportElement x="0" y="0" width="802" height="50" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank"><reportElement x="740" y="5" width="56" height="40"><printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "RIGHT".equals($P{companyLogoPosition})]]></printWhenExpression></reportElement><imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression></image>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank"><reportElement x="6" y="5" width="56" height="40"><printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "LEFT".equals($P{companyLogoPosition})]]></printWhenExpression></reportElement><imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression></image>
+            <textField><reportElement style="Title" x="70" y="4" width="662" height="24" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["تراز آزمایشی"]]></textFieldExpression></textField>
+            <textField><reportElement style="TitleMeta" x="70" y="28" width="662" height="18" forecolor="#D6E2F2"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{companyName}]]></textFieldExpression></textField>
+            <rectangle radius="4"><reportElement x="0" y="58" width="802" height="30" mode="Opaque" backcolor="#E8EEF6" forecolor="#E8EEF6"></reportElement><graphicElement><pen lineWidth="0" lineColor="#E8EEF6"/></graphicElement></rectangle>
+            <staticText><reportElement style="MetaLabel" x="401" y="59" width="401" height="13"><printWhenExpression><![CDATA[$P{dateRangeLabel} != null && !$P{dateRangeLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[بازهٔ گزارش]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="401" y="72" width="401" height="15"><printWhenExpression><![CDATA[$P{dateRangeLabel} != null && !$P{dateRangeLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{dateRangeLabel}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="0" y="59" width="401" height="13"><printWhenExpression><![CDATA[$P{levelLabel} != null && !$P{levelLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[سطح حساب]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="0" y="72" width="401" height="15"><printWhenExpression><![CDATA[$P{levelLabel} != null && !$P{levelLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{levelLabel}]]></textFieldExpression></textField>
+        </band>
+    </pageHeader>
+    <columnHeader>
+        <band height="22">
+            <rectangle radius="0"><reportElement x="0" y="0" width="802" height="22" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <staticText><reportElement style="Header" x="742" y="0" width="60" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[کد]]></text></staticText>
+            <staticText><reportElement style="Header" x="592" y="0" width="150" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[نام حساب]]></text></staticText>
+            <staticText><reportElement style="Header" x="494" y="0" width="98" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ماندهٔ ابتدای دوره (بدهکار)]]></text></staticText>
+            <staticText><reportElement style="Header" x="396" y="0" width="98" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ماندهٔ ابتدای دوره (بستانکار)]]></text></staticText>
+            <staticText><reportElement style="Header" x="298" y="0" width="98" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[گردش بدهکار]]></text></staticText>
+            <staticText><reportElement style="Header" x="200" y="0" width="98" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[گردش بستانکار]]></text></staticText>
+            <staticText><reportElement style="Header" x="102" y="0" width="98" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ماندهٔ پایان دوره (بدهکار)]]></text></staticText>
+            <staticText><reportElement style="Header" x="0" y="0" width="102" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ماندهٔ پایان دوره (بستانکار)]]></text></staticText>
+        </band>
+    </columnHeader>
+    <detail>
+        <band height="18">
+            <rectangle radius="0"><reportElement x="0" y="0" width="802" height="18" mode="Opaque" backcolor="#F6F8FB" forecolor="#F6F8FB"><printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 == 0]]></printWhenExpression></reportElement><graphicElement><pen lineWidth="0" lineColor="#F6F8FB"/></graphicElement></rectangle>
+            <line><reportElement x="0" y="17" width="802" height="1" forecolor="#C9D3E0"/></line>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="742" y="0" width="60" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{account_code}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="592" y="0" width="150" height="17"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{account_name}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="494" y="0" width="98" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{opening_debit_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="396" y="0" width="98" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{opening_credit_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="298" y="0" width="98" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{period_debit_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="200" y="0" width="98" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{period_credit_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="102" y="0" width="98" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{closing_debit_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="0" y="0" width="102" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{closing_credit_display}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+    <pageFooter>
+        <band height="20">
+            <line><reportElement x="0" y="2" width="802" height="1" forecolor="#1F3A5F"/></line>
+            <textField evaluationTime="Master"><reportElement style="Footer" x="642" y="5" width="160" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="1" leftIndent="1"/></textElement><textFieldExpression><![CDATA["صفحهٔ " + String.valueOf($V{MASTER_CURRENT_PAGE}).replace("0","۰").replace("1","۱").replace("2","۲").replace("3","۳").replace("4","۴").replace("5","۵").replace("6","۶").replace("7","۷").replace("8","۸").replace("9","۹") + " از " + String.valueOf($V{MASTER_TOTAL_PAGES}).replace("0","۰").replace("1","۱").replace("2","۲").replace("3","۳").replace("4","۴").replace("5","۵").replace("6","۶").replace("7","۷").replace("8","۸").replace("9","۹")]]></textFieldExpression></textField>
+            <textField><reportElement style="Footer" x="0" y="5" width="632" height="14"><printWhenExpression><![CDATA[$P{generatedAt} != null && !$P{generatedAt}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["تاریخ چاپ: " + $P{generatedAt}]]></textFieldExpression></textField>
+        </band>
+    </pageFooter>
+    <summary>
+        <band height="44">
+            <rectangle radius="0"><reportElement x="0" y="6" width="802" height="22" mode="Opaque" backcolor="#E8EEF6" forecolor="#C9D3E0"></reportElement><graphicElement><pen lineWidth="0.6" lineColor="#C9D3E0"/></graphicElement></rectangle>
+            <staticText><reportElement style="TotalLabel" x="592" y="6" width="210" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[جمع کل]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="TotalValue" x="494" y="6" width="98" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><textFieldExpression><![CDATA[$P{totalOpeningDebitDisplay}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="TotalValue" x="396" y="6" width="98" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><textFieldExpression><![CDATA[$P{totalOpeningCreditDisplay}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="TotalValue" x="298" y="6" width="98" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><textFieldExpression><![CDATA[$P{totalPeriodDebitDisplay}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="TotalValue" x="200" y="6" width="98" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><textFieldExpression><![CDATA[$P{totalPeriodCreditDisplay}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="TotalValue" x="102" y="6" width="98" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><textFieldExpression><![CDATA[$P{totalClosingDebitDisplay}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="TotalValue" x="0" y="6" width="102" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><textFieldExpression><![CDATA[$P{totalClosingCreditDisplay}]]></textFieldExpression></textField>
+        </band>
+    </summary>
+</jasperReport>

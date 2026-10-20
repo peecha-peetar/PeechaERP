@@ -1081,6 +1081,33 @@ class LayoutEditMixin:
             grid.reset_layout()
 
 
+class ElidedLabel(QLabel):
+    """R317: متن تک‌خطی بلند در جای تنگ با «…» کوتاه می‌شود (نه بریده‌شدن ناگهانی)؛ متن کامل در تول‌تیپ.
+    text() همان متن کامل را برمی‌گرداند."""
+
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full_text = ""
+        self.setText(text)
+
+    def setText(self, text) -> None:  # noqa: N802 — نام متد Qt
+        self._full_text = text or ""
+        self.setToolTip(self._full_text)
+        self._elide()
+
+    def text(self) -> str:  # noqa: D102
+        return self._full_text
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 — نام متد Qt
+        super().resizeEvent(event)
+        self._elide()
+
+    def _elide(self) -> None:
+        width = self.width()
+        shown = self.fontMetrics().elidedText(self._full_text, Qt.ElideRight, width) if width > 20 else self._full_text
+        QLabel.setText(self, shown)
+
+
 class HoverButton(QPushButton):
     """QPushButton با پس‌زمینهٔ متحرک (fade) بین رنگ عادی/هاور —
     به‌جای سوییچ آنی QSS. طبق درخواست صریح برای حس «مدرن ۲۰۲۶ با

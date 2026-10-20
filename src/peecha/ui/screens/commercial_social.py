@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import commercial_social as social_service
+from peecha.ui.screens import module_style as ms
 from peecha.ui import theme
 from peecha.db.models.commercial import ContentCalendarPost, SocialConnection
 from peecha.ui.widgets import (
@@ -113,7 +114,12 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         delete_connection_button = delete_button("حذف اتصال انتخاب‌شده")
         delete_connection_button.clicked.connect(self._delete_connection)
         form.addWidget(delete_connection_button)
-        outer.addLayout(form)
+        outer.addWidget(ms.grid_from_row(form, [
+            (self.social_platform_combo, "پیام‌رسان"),
+            (self.social_name_field, "نام نمایشی"),
+            (self.social_chat_id_field, "شناسهٔ چت یا کانال"),
+            (self.social_token_field, "توکن ربات"),
+        ]))
 
         self.social_status_label = QLabel("")
         self.social_status_label.setObjectName("statusError")

@@ -260,6 +260,8 @@ def app_icon() -> QIcon:
 # --- مدیریتِ حالتِ تم (روشن/تیره) --------------------------------------------
 _dark_mode = True
 _font_family: str | None = None
+# R317: استایل اضافهٔ حالت لمسی (ui.touch پر می‌کند)
+TOUCH_QSS = ""
 
 
 def set_font_family(name: str) -> None:
@@ -307,7 +309,7 @@ def set_theme_mode(app: QApplication, dark: bool) -> None:
         if _font_family
         else ""
     )
-    app.setStyleSheet(font_prefix + GLOBAL_QSS)
+    app.setStyleSheet(font_prefix + GLOBAL_QSS + TOUCH_QSS)
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     settings.setValue(_THEME_MODE_KEY, dark)
     for widget in app.allWidgets():
@@ -370,6 +372,11 @@ QLabel#pageTitle {{
 QLabel#sectionHint {{
     color: {TEXT_SECONDARY};
     font-size: 13px;
+}}
+QLabel#fieldCaption {{
+    color: {TEXT_SECONDARY};
+    font-size: 12px;
+    font-weight: 600;
 }}
 QLabel#rowsSummaryLabel {{
     font-size: 16px;

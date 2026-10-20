@@ -452,6 +452,43 @@ class JournalEntryLineDetail(Base):
     detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
+class DetailOperation(Base):
+    """R318: انتقال ماندهٔ تفصیلی با سند یا ادغام کامل گردش (برگشت‌پذیر)."""
+
+    __tablename__ = "detail_operations"
+    __table_args__ = {"schema": "acc"}
+
+    operation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    operation_type: Mapped[str] = mapped_column(String(20))  # TRANSFER | MERGE
+    source_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    target_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    status_code: Mapped[str] = mapped_column(String(20), default="DONE")  # DONE | REVERSED
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    reversal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    operation_date: Mapped[datetime.date] = mapped_column(Date)
+    description: Mapped[str | None]
+    source_was_active: Mapped[bool | None] = mapped_column(Boolean)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    reversed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    reversed_at: Mapped[datetime.datetime | None]
+
+
+class DetailMergeRow(Base):
+    """R318: هر ردیفی که در ادغام از مبدأ به مقصد رفت (row_key = [[ستون کلید، مقدار، مقایسهٔ متنی]])."""
+
+    __tablename__ = "detail_merge_rows"
+    __table_args__ = {"schema": "acc"}
+
+    merge_row_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_operations.operation_id", ondelete="CASCADE"))
+    table_name: Mapped[str] = mapped_column(String(130))
+    column_name: Mapped[str] = mapped_column(String(130))
+    row_key: Mapped[list] = mapped_column(JSONB)
+
+
 class StatementTemplate(Base):
     """یک الگوی گزارش سفارشی (طراح گزارش، فاز ۲) — مجموعه‌ای از ردیف‌های
     ترتیب‌دار که هرکدام از جمع چند حساب یا چند ردیف دیگر ساخته می‌شود."""

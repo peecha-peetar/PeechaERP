@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session as app_session
 from peecha.services import commercial_cms as cms_service
+from peecha.ui.screens import module_style as ms
 from peecha.ui import theme
 from peecha.db.models.commercial import CmsArticle, CmsConnection
 from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin, confirm_and_delete, delete_button, row_actions, wrap_scrollable
@@ -109,7 +110,13 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         delete_connection_button = delete_button("حذف اتصال انتخاب‌شده")
         delete_connection_button.clicked.connect(self._delete_connection)
         form.addWidget(delete_connection_button)
-        outer.addLayout(form)
+        outer.addWidget(ms.grid_from_row(form, [
+            (self.cms_platform_combo, "پلتفرم"),
+            (self.cms_name_field, "نام نمایشی"),
+            (self.cms_site_url_field, "آدرس سایت"),
+            (self.cms_username_field, "نام‌کاربری"),
+            (self.cms_app_password_field, "رمز برنامه"),
+        ]))
 
         self.cms_status_label = QLabel("")
         self.cms_status_label.setObjectName("statusError")

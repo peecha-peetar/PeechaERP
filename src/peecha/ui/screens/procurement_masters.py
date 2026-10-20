@@ -243,26 +243,20 @@ class _ReorderPoliciesTab(QWidget):
         self.table = _table(["کالا", "انبار", "حداقل", "نقطهٔ سفارش", "حداکثر", "مقدار سفارش", "زمان تحویل (روز)", "فعال"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
-        form = QHBoxLayout()
         self.item_combo = QComboBox()
         self.item_combo.setEditable(True)
         self.item_combo.setInsertPolicy(QComboBox.NoInsert)
         self.item_combo.setMinimumWidth(220)
         self.warehouse_combo = QComboBox()
         self.min_field, self.rop_field, self.max_field, self.qty_field = QLineEdit(), QLineEdit(), QLineEdit(), QLineEdit()
-        for field in (self.min_field, self.rop_field, self.max_field, self.qty_field):
-            field.setMaximumWidth(90)
         self.lead_spin = QSpinBox()
         self.lead_spin.setRange(0, 365)
         self.active_check = QCheckBox("فعال")
         self.active_check.setChecked(True)
-        for text, widget in (("کالا:", self.item_combo), ("انبار:", self.warehouse_combo), ("حداقل:", self.min_field),
-                             ("نقطهٔ سفارش:", self.rop_field), ("حداکثر:", self.max_field), ("مقدار سفارش:", self.qty_field),
-                             ("زمان تحویل:", self.lead_spin)):
-            form.addWidget(QLabel(text))
-            form.addWidget(widget)
-        form.addWidget(self.active_check)
-        layout.addLayout(form)
+        layout.addWidget(ms.field_grid([
+            ("کالا", self.item_combo), ("انبار", self.warehouse_combo), ("حداقل", self.min_field), ("نقطهٔ سفارش", self.rop_field),
+            ("حداکثر", self.max_field), ("مقدار سفارش", self.qty_field), ("زمان تحویل (روز)", self.lead_spin),
+            ("", self.active_check)], columns=4))
         buttons = QHBoxLayout()
         for text, slot in (("ذخیره", self.save), ("جدید", self.clear_form), ("حذف", self.delete)):
             button = ms.style_button(QPushButton(text))
@@ -370,9 +364,7 @@ class _BudgetsTab(QWidget):
         self.table = _table(["کد", "نام", "از", "تا", "مرکز هزینه", "پروژه", "گروه کالا", "مبلغ", "مصرف‌شده", "درصد مصرف", "فعال"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
-        form = QHBoxLayout()
         self.code_field, self.name_field, self.amount_field = QLineEdit(), QLineEdit(), QLineEdit()
-        self.code_field.setMaximumWidth(100)
         self.from_field, self.to_field = JalaliDateEdit(), JalaliDateEdit()
         self.cost_center_combo, self.project_combo, self.category_combo = QComboBox(), QComboBox(), QComboBox()
         self.branch_combo, self.department_combo = QComboBox(), QComboBox()
@@ -381,14 +373,12 @@ class _BudgetsTab(QWidget):
         self.warn_spin.setValue(90)
         self.active_check = QCheckBox("فعال")
         self.active_check.setChecked(True)
-        for text, widget in (("کد:", self.code_field), ("نام:", self.name_field), ("از:", self.from_field), ("تا:", self.to_field),
-                             ("مرکز هزینه:", self.cost_center_combo), ("پروژه:", self.project_combo),
-                             ("گروه کالا:", self.category_combo), ("شعبه:", self.branch_combo), ("دپارتمان:", self.department_combo),
-                             ("مبلغ:", self.amount_field), ("هشدار٪:", self.warn_spin)):
-            form.addWidget(QLabel(text))
-            form.addWidget(widget)
-        form.addWidget(self.active_check)
-        layout.addLayout(form)
+        # R317: فیلدها در کارت چندستونه با برچسب بالای هر فیلد، نه یک ردیف بلند
+        layout.addWidget(ms.field_grid([
+            ("کد", self.code_field), ("نام", self.name_field), ("از", self.from_field), ("تا", self.to_field),
+            ("مرکز هزینه", self.cost_center_combo), ("پروژه", self.project_combo), ("گروه کالا", self.category_combo),
+            ("شعبه", self.branch_combo), ("دپارتمان", self.department_combo), ("مبلغ", self.amount_field),
+            ("درصد هشدار", self.warn_spin), ("", self.active_check)], columns=6))
         buttons = QHBoxLayout()
         for text, slot in (("ذخیره", self.save), ("جدید", self.clear_form), ("حذف", self.delete)):
             button = ms.style_button(QPushButton(text))

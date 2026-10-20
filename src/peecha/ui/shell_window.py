@@ -60,7 +60,7 @@ from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha.services import translations as translations_service
-from peecha.ui import theme
+from peecha.ui import theme, touch
 from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help_enabled
 from peecha.version import APP_VERSION
 
@@ -1310,6 +1310,11 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     # --- سوییچِ زنده‌یِ تمِ روشن/تیره ---------------------------------------
+    def _on_touch_toggled(self, checked: bool) -> None:
+        touch.save_mode("on" if checked else "off")
+        touch.apply(QApplication.instance(), checked)
+        self._rebuild_chrome()
+
     def _on_theme_toggled(self, light_checked: bool) -> None:
         """طبق خواستهٔ صریح: سوییچ واقعی رفت‌وبرگشتی بین تم روشن/تیره،
         بدون نیاز به ری‌استارت برنامه. `theme.set_theme_mode` خودش
@@ -1451,6 +1456,25 @@ class MainWindow(QMainWindow):
         )
         self.theme_toggle.toggled.connect(self._on_theme_toggled)
         layout.addWidget(self.theme_toggle)
+
+        # R317: حالت لمسی — دکمه‌ها و ردیف‌های بزرگ‌تر، پیمایش با انگشت، لمس طولانی به‌جای راست‌کلیک
+        self.touch_toggle = QToolButton()
+        self.touch_toggle.setObjectName("fieldHelpToggle")
+        self.touch_toggle.setCheckable(True)
+        self.touch_toggle.setChecked(touch.is_enabled())
+        self.touch_toggle.setCursor(Qt.PointingHandCursor)
+        self.touch_toggle.setText("👆")
+        self.touch_toggle.setToolTip("حالت لمسی: دکمه‌ها و ردیف‌های بزرگ‌تر و پیمایش با انگشت")
+        self.touch_toggle.setStyleSheet(
+            "#fieldHelpToggle {"
+            "   border: none; border-radius: 14px; padding: 4px 10px;"
+            f"   font-size: 15px; color: {theme.TEXT_SECONDARY}; background: transparent;"
+            "}"
+            f"#fieldHelpToggle:checked {{ background: {theme.rgba(theme.PRIMARY, 0.16)}; }}"
+            f"#fieldHelpToggle:hover {{ background: {theme.rgba(theme.PRIMARY, 0.10)}; }}"
+        )
+        self.touch_toggle.toggled.connect(self._on_touch_toggled)
+        layout.addWidget(self.touch_toggle)
 
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")

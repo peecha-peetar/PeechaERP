@@ -50,6 +50,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import supplier_price_import as spi_service
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.db.models.commercial import DiscountRule, DiscountRuleTier, PriceList, PriceListItem, PriceListItemPriceHistory
 from peecha.ui.widgets import bind_qty_decimals, FieldHelpMixin, JalaliDateEdit, confirm_and_delete, delete_button, wrap_scrollable
@@ -148,39 +149,30 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         self.price_lists_table.cellClicked.connect(self._on_price_list_selected)
         left.addWidget(self.price_lists_table, stretch=1)
 
-        new_pl_box = QHBoxLayout()
         self.pl_code_field = QLineEdit()
-        self.pl_code_field.setPlaceholderText("کد")
-        self.pl_code_field.setMaximumWidth(100)
-        new_pl_box.addWidget(self.pl_code_field)
         self.pl_name_field = QLineEdit()
-        self.pl_name_field.setPlaceholderText("نام")
-        new_pl_box.addWidget(self.pl_name_field, stretch=1)
         self.pl_type_combo = QComboBox()
         self.pl_type_combo.addItem("فروش", "SALES")
         self.pl_type_combo.addItem("خرید", "PURCHASE")
-        self.pl_type_combo.setMaximumWidth(90)
-        new_pl_box.addWidget(self.pl_type_combo)
         add_pl_button = QPushButton("➕")
         add_pl_button.setObjectName("primaryIconButton")
         add_pl_button.setFixedWidth(44)
         add_pl_button.setToolTip("فهرست قیمت تازه")
         add_pl_button.clicked.connect(self._add_price_list)
-        new_pl_box.addWidget(add_pl_button)
         # R276: ویرایش و حذفِ فهرستِ انتخاب‌شده
         save_pl_button = QPushButton("💾")
         save_pl_button.setObjectName("iconButton")
         save_pl_button.setFixedWidth(44)
         save_pl_button.setToolTip("ذخیرهٔ تغییرات فهرست انتخاب‌شده (نام/فعال‌بودن)")
         save_pl_button.clicked.connect(self._update_price_list)
-        new_pl_box.addWidget(save_pl_button)
         self.pl_active_checkbox = QCheckBox("فعال")
         self.pl_active_checkbox.setChecked(True)
-        new_pl_box.addWidget(self.pl_active_checkbox)
         del_pl_button = delete_button("حذف فهرست قیمت انتخاب‌شده (اگر استفاده شده باشد غیرفعال می‌شود)")
         del_pl_button.clicked.connect(self._delete_price_list)
-        new_pl_box.addWidget(del_pl_button)
-        left.addLayout(new_pl_box)
+        # R317: فیلدهای فهرست قیمت با برچسب، نه فقط متن راهنمای داخل فیلد
+        left.addWidget(ms.field_grid([("کد", self.pl_code_field), ("نام", self.pl_name_field), ("نوع", self.pl_type_combo),
+                                      ("", self.pl_active_checkbox)], columns=4,
+                                     tail=[add_pl_button, save_pl_button, del_pl_button]))
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
@@ -482,53 +474,40 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         self.rules_table.cellClicked.connect(self._on_rule_selected)
         outer.addWidget(self.rules_table, stretch=1)
 
-        form = QHBoxLayout()
         self.rule_code_field = QLineEdit()
-        self.rule_code_field.setPlaceholderText("کد")
-        self.rule_code_field.setMaximumWidth(100)
-        form.addWidget(self.rule_code_field)
         self.rule_name_field = QLineEdit()
-        self.rule_name_field.setPlaceholderText("نام")
-        form.addWidget(self.rule_name_field, stretch=1)
         self.rule_type_combo = QComboBox()
         for code, label in _DISCOUNT_TYPE_LABELS.items():
             self.rule_type_combo.addItem(label, code)
-        self.rule_type_combo.setMaximumWidth(110)
         self.rule_type_combo.currentIndexChanged.connect(self._on_rule_type_changed)
-        form.addWidget(self.rule_type_combo)
         self.rule_value_field = QDoubleSpinBox()
         self.rule_value_field.setDecimals(2)
         self.rule_value_field.setRange(0, 999999999)
-        self.rule_value_field.setMaximumWidth(120)
-        form.addWidget(self.rule_value_field)
         self.rule_priority_field = QSpinBox()
         self.rule_priority_field.setRange(1, 9999)
         self.rule_priority_field.setValue(100)
-        self.rule_priority_field.setMaximumWidth(90)
         self.rule_priority_field.setToolTip("اولویت اجرا (عدد کوچک‌تر زودتر اجرا می‌شود)")
-        form.addWidget(self.rule_priority_field)
         self.rule_stackable_checkbox = QCheckBox("قابل‌ترکیب")
-        form.addWidget(self.rule_stackable_checkbox)
         add_rule_button = QPushButton("📐")
         add_rule_button.setObjectName("primaryIconButton")
         add_rule_button.setFixedWidth(44)
         add_rule_button.setToolTip("قاعدهٔ تازه")
         add_rule_button.clicked.connect(self._add_discount_rule)
-        form.addWidget(add_rule_button)
         # R276: ویرایش/حذفِ قاعدهٔ انتخاب‌شده
         self.rule_active_checkbox = QCheckBox("فعال")
         self.rule_active_checkbox.setChecked(True)
-        form.addWidget(self.rule_active_checkbox)
         save_rule_button = QPushButton("💾")
         save_rule_button.setObjectName("iconButton")
         save_rule_button.setFixedWidth(44)
         save_rule_button.setToolTip("ذخیرهٔ تغییرات قاعدهٔ انتخاب‌شده")
         save_rule_button.clicked.connect(self._update_discount_rule)
-        form.addWidget(save_rule_button)
         del_rule_button = delete_button("حذف قاعدهٔ انتخاب‌شده")
         del_rule_button.clicked.connect(self._delete_discount_rule)
-        form.addWidget(del_rule_button)
-        outer.addLayout(form)
+        # R317: فیلدهای قاعده با برچسب در کارت
+        outer.addWidget(ms.field_grid([("کد", self.rule_code_field), ("نام", self.rule_name_field), ("نوع", self.rule_type_combo),
+                                       ("مقدار/درصد", self.rule_value_field), ("اولویت", self.rule_priority_field),
+                                       ("", self.rule_stackable_checkbox), ("", self.rule_active_checkbox)], columns=7,
+                                      tail=[add_rule_button, save_rule_button, del_rule_button]))
         self._on_rule_type_changed()
 
         tiers_title = QLabel("پله‌های قاعدهٔ پلکانی انتخاب‌شده")

@@ -25,7 +25,7 @@ from peecha.services import inventory_locations as locations_service
 from peecha.services import purchase_dashboard as dashboard_service
 from peecha.services import purchase_reports as reports_service
 from peecha.ui.screens.reports_common import ReportScreenBase
-from peecha.ui.widgets import persist_column_widths
+from peecha.ui.widgets import ElidedLabel, persist_column_widths
 
 # R247: اجرایِ گزارش در رشتهٔ پس‌زمینه -- برنامهٔ اصلی (ui/main.py) روشن می‌کند؛ تست‌ها همگام می‌مانند
 BACKGROUND_REPORTS = False
@@ -277,7 +277,7 @@ class PurchaseReportScreen(ReportScreenBase):
         self.options_row.addStretch(1)
 
         # R275: توضیحِ گزارش کنارِ عنوان (نه یک ردیفِ جدا)؛ متنِ کامل در تول‌تیپ
-        self.hint_label = QLabel(self._def.hint)
+        self.hint_label = ElidedLabel(self._def.hint)
         self.hint_label.setObjectName("sectionHint")
         self.hint_label.setToolTip(self._def.hint)
         self.hint_label.setMinimumWidth(0)

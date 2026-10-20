@@ -51,7 +51,9 @@ class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         watermark_row = QHBoxLayout()
         self.watermark_preview = QLabel("بدون واترمارک")
-        self.watermark_preview.setFixedSize(64, 64)
+        self.watermark_preview.setFixedSize(96, 64)
+        self.watermark_preview.setAlignment(Qt.AlignCenter)
+        self.watermark_preview.setWordWrap(True)
         self.watermark_preview.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px;")
         watermark_row.addWidget(self.watermark_preview)
         watermark_button = QPushButton("🖼️ انتخاب عکس واترمارک")

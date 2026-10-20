@@ -128,6 +128,7 @@ class DistributionRunInvoiceRow:
     counterparty_detail_account_id: int
     total_amount: decimal.Decimal
     settlement_type_code: str | None = None
+    route_seq: int | None = None  # R320: ترتیب تحویل در مسیر
 
 
 @dataclass
@@ -221,20 +222,25 @@ def get_distribution_run(distribution_run_id: int, company_id: int) -> Distribut
         if run is None or run.company_id != company_id:
             raise ValueError("تیم پخش نامعتبر است.")
         vehicle_warehouse = session.get(Warehouse, run.vehicle_warehouse_id)
-        document_ids = list(
-            session.scalars(
-                select(DistributionRunDocument.document_id).where(DistributionRunDocument.distribution_run_id == distribution_run_id)
-            )
+        route_seqs = dict(
+            session.execute(
+                select(DistributionRunDocument.document_id, DistributionRunDocument.route_seq)
+                .where(DistributionRunDocument.distribution_run_id == distribution_run_id)
+            ).all()
         )
+        document_ids = list(route_seqs)
         invoices: list[DistributionRunInvoiceRow] = []
         if document_ids:
             docs = session.scalars(select(CommercialDocument).where(CommercialDocument.document_id.in_(document_ids))).all()
+            # R320: پس از مسیربندی به ترتیب تحویل؛ بدون آن همان ترتیب قبلی (شناسهٔ سند)
             invoices = [
                 DistributionRunInvoiceRow(
                     d.document_id, d.document_no, d.document_date, d.counterparty_detail_account_id, d.total_amount,
-                    d.settlement_type_code,
+                    d.settlement_type_code, route_seqs[d.document_id],
                 )
-                for d in sorted(docs, key=lambda d: d.document_id)
+                for d in sorted(
+                    docs, key=lambda d: (route_seqs[d.document_id] is None, route_seqs[d.document_id] or 0, d.document_id),
+                )
             ]
 
         item_totals: dict[int, decimal.Decimal] = {}

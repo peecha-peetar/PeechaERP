@@ -766,6 +766,8 @@ class _FeatureToggleTab(QWidget):
         descriptions = engine_service.feature_descriptions()
         order = [code for code, _label in _FEATURE_CATEGORIES]
         groups = dict(_FEATURE_CATEGORIES)
+        # R318–R320: کلیدهای حسابداری، پیام‌رسانی و گزارش در تنظیمات همان بخش است، نه این‌جا
+        features = [f for f in features if f.category not in ("ACCOUNTING", "MESSAGING", "REPORTING")]
         for category in order + sorted({f.category for f in features} - set(order)):
             members = [f for f in features if f.category == category]
             if not members:

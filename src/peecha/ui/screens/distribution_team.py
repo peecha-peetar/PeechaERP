@@ -28,6 +28,7 @@ from peecha import decimals, numerals, session as app_session
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import distribution_routing as routing_service
 from peecha.services import distribution_runs as distribution_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import report_export
@@ -35,7 +36,9 @@ from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "وضعیت"]
 _ELIGIBLE_COLUMNS = ["شماره", "تاریخ", "طرف‌حساب", "جمع کل", "نوع تسویه", "عملیات"]
-_ATTACHED_COLUMNS = ["شماره", "تاریخ", "طرف‌حساب", "جمع کل", "نوع تسویه", "عملیات"]
+# R320: دو ستون اول فقط وقتی «پیشنهاد مسیر پخش» روشن است دیده می‌شوند
+_ATTACHED_COLUMNS = ["ترتیب", "فاصله از توقف قبل", "شماره", "تاریخ", "طرف‌حساب", "جمع کل", "نوع تسویه", "عملیات"]
+_ROUTE_COLUMNS = 2
 _SUMMARY_COLUMNS = ["کالا", "واحد", "جمع مقدار"]
 _STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تحویل‌شده به راننده", "CANCELLED": "لغوشده"}
 
@@ -53,6 +56,8 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self._current_run: distribution_service.DistributionRunRow | None = None
         self._eligible: list[distribution_service.EligibleInvoiceRow] = []
         self._settlement_type_labels: dict[str, str] = {}
+        self._route_on = False
+        self._route_plan: routing_service.RoutePlan | None = None
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
@@ -170,11 +175,16 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.print_invoices_button.clicked.connect(self._print_invoice_list)
         attached_title_row.addWidget(self.print_invoices_button)
         layout.addLayout(attached_title_row)
+        layout.addWidget(self._build_route_bar())
         self.attached_table = QTableWidget(0, len(_ATTACHED_COLUMNS))
         self.attached_table.setHorizontalHeaderLabels(_ATTACHED_COLUMNS)
         self.attached_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.attached_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.attached_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.attached_table.verticalHeader().setVisible(False)
-        self.attached_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.attached_table.horizontalHeader().setSectionResizeMode(_ROUTE_COLUMNS + 2, QHeaderView.Stretch)
+        for col in range(_ROUTE_COLUMNS):
+            self.attached_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         layout.addWidget(self.attached_table, stretch=1)
 
         summary_title_row = QHBoxLayout()
@@ -225,6 +235,33 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         ])
         return wrap_scrollable(panel)
 
+    def _build_route_bar(self) -> QWidget:
+        """R320: پیشنهاد ترتیب تحویل از روی موقعیت مشتری و جابه‌جایی دستی آن."""
+        self.route_bar = QWidget()
+        row = QHBoxLayout(self.route_bar)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.route_buttons: dict[str, QPushButton] = {}
+        for key, glyph, tip, slot in (
+            ("suggest", "🧭", "پیشنهاد ترتیب تحویل بر اساس موقعیت مشتری", self.suggest_route),
+            ("start", "📍", "نقطهٔ شروع مسیر (مثلاً انبار) روی نقشه", self.pick_start_point),
+            ("up", "🔼", "زودتر تحویل شود", lambda: self.move_stop(-1)),
+            ("down", "🔽", "دیرتر تحویل شود", lambda: self.move_stop(1)),
+        ):
+            button = QPushButton(glyph)
+            button.setObjectName("primaryIconButton" if key == "suggest" else "iconButton")
+            button.setFixedWidth(48 if key == "suggest" else 44)
+            button.setToolTip(tip)
+            button.setAccessibleName(tip)
+            button.clicked.connect(lambda _c=False, f=slot: f())
+            self.route_buttons[key] = button
+            row.addWidget(button)
+        self.route_label = QLabel("")
+        self.route_label.setObjectName("sectionHint")
+        self.route_label.setWordWrap(True)
+        row.addWidget(self.route_label, stretch=1)
+        self.route_bar.setVisible(False)
+        return self.route_bar
+
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
 
@@ -271,6 +308,9 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self._settlement_type_labels = {
             t.code: t.name for t in pricing_service.list_distribution_settlement_types(company_id)
         }
+        self._route_on = routing_service.is_on(company_id)
+        for col in range(_ROUTE_COLUMNS):
+            self.attached_table.setColumnHidden(col, not self._route_on)
 
         self._runs = distribution_service.list_distribution_runs(company_id)
         self.runs_table.setRowCount(len(self._runs))
@@ -311,8 +351,10 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.create_button.setVisible(False)
 
         is_draft = run.status_code == "DRAFT"
+        self._route_plan = routing_service.current(company_id, run.distribution_run_id) if self._route_on else None
         self._refresh_eligible()
         self._fill_attached_table(editable=is_draft)
+        self._update_route_bar(is_draft)
         self._fill_summary_table(run)
         has_invoices = bool(run.invoices)
         self.print_invoices_button.setEnabled(has_invoices)
@@ -360,15 +402,21 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
 
     def _fill_attached_table(self, editable: bool) -> None:
         invoices = self._current_run.invoices if self._current_run else []
+        legs = {s.document_id: s.leg_km for s in self._route_plan.stops} if self._route_plan else {}
         self.attached_table.setRowCount(len(invoices))
         for row_index, inv in enumerate(invoices):
+            leg = legs.get(inv.document_id)
             values = [
+                numerals.to_persian_digits(str(row_index + 1)),
+                numerals.to_persian_digits(f"{leg:.1f}") + " کیلومتر" if leg is not None else "—",
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), decimals.format_amount(inv.total_amount),
                 self._settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
-                self.attached_table.setItem(row_index, col_index, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, inv.document_id)
+                self.attached_table.setItem(row_index, col_index, item)
             if editable:
                 button = QPushButton("➖ حذف")
                 button.setObjectName("dangerButton")
@@ -401,6 +449,8 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.summary_table.setRowCount(0)
         self.print_invoices_button.setEnabled(False)
         self.print_summary_button.setEnabled(False)
+        self._route_plan = None
+        self.route_bar.setVisible(False)
         self.runs_table.clearSelection()
 
     def _create_run(self) -> None:
@@ -458,6 +508,83 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             return
         self.refresh()
 
+    def _update_route_bar(self, is_draft: bool) -> None:
+        self.route_bar.setVisible(self._route_on)
+        if not self._route_on:
+            return
+        for key in ("suggest", "start", "up", "down"):
+            self.route_buttons[key].setEnabled(is_draft and bool(self._current_run.invoices))
+        self.route_buttons["start"].setEnabled(is_draft)
+        plan = self._route_plan
+        if plan is None or not plan.stops:
+            self.route_label.setText("")
+            return
+        parts = [f"{numerals.to_persian_digits(str(len(plan.stops)))} توقف"]
+        if plan.total_km:
+            parts.append(f"حدود {numerals.to_persian_digits(f'{plan.total_km:.1f}')} کیلومتر خط مستقیم")
+        if plan.start is None:
+            parts.append("نقطهٔ شروع تعیین نشده")
+        if plan.missing:
+            parts.append(f"{numerals.to_persian_digits(str(len(plan.missing)))} مشتری بی‌موقعیت در انتهای فهرست")
+        self.route_label.setText("، ".join(parts))
+
+    def suggest_route(self) -> bool:
+        if self._current_run is None:
+            return False
+        try:
+            plan = routing_service.apply_suggestion(self._company_id(), self._current_run.distribution_run_id)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return False
+        self._load_run(self._current_run.distribution_run_id)
+        if plan.missing:
+            self.status_label.setText(
+                "این مشتری‌ها موقعیت ثبت‌شده ندارند و آخر فهرست آمده‌اند: "
+                + "، ".join(_dimensions_label(s.counterparty_detail_account_id) for s in plan.missing)
+            )
+        return True
+
+    def pick_start_point(self, point: tuple[float, float] | None = None) -> bool:
+        if self._current_run is None:
+            return False
+        company_id = self._company_id()
+        if point is None:
+            from peecha.ui.map_picker import MapPickerDialog
+
+            current = routing_service.start_point(company_id, self._current_run.distribution_run_id)
+            dialog = MapPickerDialog(self, *(current or (None, None)))
+            if dialog.exec() != MapPickerDialog.Accepted or dialog.result_lat is None:
+                return False
+            point = (dialog.result_lat, dialog.result_lon)
+        try:
+            routing_service.set_start_point(company_id, self._current_run.distribution_run_id, *point)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return False
+        self._load_run(self._current_run.distribution_run_id)
+        return True
+
+    def move_stop(self, step: int) -> bool:
+        if self._current_run is None:
+            return False
+        row = self.attached_table.currentRow()
+        item = self.attached_table.item(row, 0) if row >= 0 else None
+        if item is None:
+            self.status_label.setText("ابتدا یک فاکتور را در فهرست همین تیم انتخاب کنید.")
+            return False
+        document_id = item.data(Qt.UserRole)
+        try:
+            routing_service.move(self._company_id(), self._current_run.distribution_run_id, document_id, step)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return False
+        self._load_run(self._current_run.distribution_run_id)
+        new_row = next((r for r in range(self.attached_table.rowCount())
+                        if self.attached_table.item(r, 0).data(Qt.UserRole) == document_id), -1)
+        if new_row >= 0:
+            self.attached_table.setCurrentCell(new_row, _ROUTE_COLUMNS)
+        return True
+
     def _open_warehouses(self) -> None:
         if self._main_window is not None:
             self._main_window.open_screen("inventory_warehouses")
@@ -478,6 +605,10 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             ]
             for inv in self._current_run.invoices
         ]
+        if self._route_on:
+            # R320: فهرست راننده به ترتیب تحویل
+            headers = ["ترتیب", *headers]
+            rows = [[numerals.to_persian_digits(str(i)), *r] for i, r in enumerate(rows, start=1)]
         title = f"لیست فاکتورهای الصاق‌شده -- {self._current_run.vehicle_warehouse_label}"
         report_export.print_report(self, title, headers, rows, **self._export_kwargs())
 

@@ -30,6 +30,7 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _WARRANTY_STATUS_LABELS = {"ACTIVE": "معتبر", "EXPIRED": "منقضی", "VOIDED": "باطل‌شده"}
@@ -126,7 +127,12 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
         add_warranty_button.setToolTip("صدور گارانتی")
         add_warranty_button.clicked.connect(self._add_warranty)
         form.addWidget(add_warranty_button)
-        outer.addLayout(form)
+        outer.addWidget(ms.grid_from_row(form, [
+            (self.warranty_invoice_combo, "فاکتور فروش"),
+            (self.warranty_line_combo, "کالای فاکتور"),
+            (self.warranty_duration_field, "مدت گارانتی"),
+            (self.warranty_terms_field, "شرایط"),
+        ]))
 
         self.warranty_status_label = QLabel("")
         self.warranty_status_label.setObjectName("statusError")

@@ -345,3 +345,36 @@ class AutomationLog(Base):
     customer_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     result: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+# --- R319: پیام‌رسان‌ها -----------------------------------------------------------------------------------
+class MessengerSetting(Base):
+    """توکن ربات رسمی (بله/تلگرام/ایتا/روبیکا) یا الگوی نشانی درگاه عمومی (واتس‌اپ)؛ رمزنگاری‌شده."""
+
+    __tablename__ = "messenger_settings"
+    __table_args__ = {"schema": "crm"}
+
+    setting_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    channel: Mapped[str] = mapped_column(String(12))
+    secret_encrypted: Mapped[bytes | None]
+    base_url: Mapped[str | None] = mapped_column(String(300))
+    http_method: Mapped[str] = mapped_column(String(6), default="GET")
+    is_active: Mapped[bool] = mapped_column(default=False)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class PartyMessengerId(Base):
+    """شناسهٔ گفت‌وگوی یک طرف حساب در یک پیام‌رسان."""
+
+    __tablename__ = "party_messenger_ids"
+    __table_args__ = {"schema": "crm"}
+
+    party_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(12), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    chat_id: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

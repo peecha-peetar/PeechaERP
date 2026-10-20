@@ -108,6 +108,10 @@ def main() -> None:
     # پیش‌فرضِ تیره اگر هنوز سوییچ نکرده) — هم QPalette هم QSS را با هم
     # اعمال می‌کند، پس دیگر نیازی به فراخوانیِ جداگانه‌یِ apply_palette نیست.
     theme.set_theme_mode(app, theme.load_saved_theme_mode())
+    # R317: حالت لمسی (خودکار با وجود صفحهٔ لمسی، یا طبق انتخاب کاربر)
+    from peecha.ui import touch
+
+    touch.install(app)
 
     from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
 

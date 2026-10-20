@@ -15,6 +15,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import warehouse_operations as ops
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import bind_qty_decimals
 
 
@@ -210,12 +211,8 @@ class _PlansTab(QWidget):
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        form = QHBoxLayout()
         self.code_field = QLineEdit()
-        self.code_field.setPlaceholderText("کد")
-        self.code_field.setMaximumWidth(90)
         self.name_field = QLineEdit()
-        self.name_field.setPlaceholderText("نام")
         self.warehouse_combo = QComboBox()
         self.scope_combo = QComboBox()
         self.scope_combo.setMinimumWidth(200)
@@ -225,23 +222,17 @@ class _PlansTab(QWidget):
         self.frequency_spin.setSuffix(" روز")
         self.active_check = QCheckBox("فعال")
         self.active_check.setChecked(True)
-        for label, widget in (("", self.code_field), ("", self.name_field), ("انبار:", self.warehouse_combo),
-                              ("دامنه:", self.scope_combo), ("تواتر:", self.frequency_spin)):
-            if label:
-                form.addWidget(QLabel(label))
-            form.addWidget(widget)
-        form.addWidget(self.active_check)
         save = QPushButton("ذخیره")
         save.setObjectName("primaryButton")
         save.clicked.connect(self.save)
-        form.addWidget(save)
         new = QPushButton("جدید")
         new.clicked.connect(self._clear)
-        form.addWidget(new)
         delete = QPushButton("حذف")
         delete.clicked.connect(self.delete_selected)
-        form.addWidget(delete)
-        layout.addLayout(form)
+        # R317: فیلدها با برچسب در کارت، به‌جای ردیف بلند با کد/نام بی‌برچسب
+        layout.addWidget(ms.field_grid([("کد", self.code_field), ("نام", self.name_field), ("انبار", self.warehouse_combo),
+                                        ("دامنه", self.scope_combo), ("تواتر", self.frequency_spin), ("", self.active_check)],
+                                       columns=6, tail=[save, new, delete]))
         self.table = _table(["کد", "نام", "انبار", "دامنه", "تواتر (روز)", "فعال", "اقلام سررسید"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
@@ -344,7 +335,6 @@ class _ReplenishTab(QWidget):
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        form = QHBoxLayout()
         self.warehouse_combo = QComboBox()
         self.warehouse_combo.currentIndexChanged.connect(lambda _i: self._fill_locations())
         self.location_combo = QComboBox()
@@ -356,16 +346,11 @@ class _ReplenishTab(QWidget):
             spin.setRange(0, 1e9)
             spin.setDecimals(3)
             bind_qty_decimals(spin, self.item_combo)
-        for label, widget in (("انبار:", self.warehouse_combo), ("محل:", self.location_combo), ("کالا:", self.item_combo),
-                              ("حداقل:", self.min_spin), ("حداکثر:", self.max_spin)):
-            form.addWidget(QLabel(label))
-            form.addWidget(widget)
         save = QPushButton("ذخیرهٔ قاعده")
         save.setObjectName("primaryButton")
         save.clicked.connect(self.save)
-        form.addWidget(save)
-        form.addStretch(1)
-        layout.addLayout(form)
+        layout.addWidget(ms.field_grid([("انبار", self.warehouse_combo), ("محل", self.location_combo), ("کالا", self.item_combo),
+                                        ("حداقل", self.min_spin), ("حداکثر", self.max_spin)], columns=5, tail=[save]))
         self.table = _table(["محل", "کالا", "حداقل", "حداکثر", "موجودی محل", "نیاز", "منابع", "فعال"])
         layout.addWidget(self.table, stretch=1)
         actions = QHBoxLayout()

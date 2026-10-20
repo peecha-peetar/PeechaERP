@@ -5,3 +5,4 @@
 """
 
 from peecha.services.workflow.adapters import budgeting, commerce, crm, finance, fixed_assets, hr, inventory, production  # noqa: F401
+from peecha.services.workflow.adapters import messaging  # noqa: F401 -- R319: اقدام «ارسال پیام»

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "FIXED_CART": "مبلغ ثابت (کل سبد)", "FIXED_PRODUCT": "مبلغ ثابت (هر کالا)"}
@@ -63,33 +64,28 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         row_buttons.addStretch(1)
         outer.addLayout(row_buttons)
 
-        form = QHBoxLayout()
         self.connection_combo = QComboBox()
-        form.addWidget(self.connection_combo)
         self.code_field = QLineEdit()
-        self.code_field.setPlaceholderText("کد کوپن (مثلاً SUMMER20)")
-        form.addWidget(self.code_field, stretch=1)
+        self.code_field.setPlaceholderText("مثلاً SUMMER20")
         self.discount_type_combo = QComboBox()
         for code, label in _DISCOUNT_TYPE_LABELS.items():
             self.discount_type_combo.addItem(label, code)
-        form.addWidget(self.discount_type_combo)
         self.amount_field = QLineEdit()
-        self.amount_field.setPlaceholderText("مقدار")
-        form.addWidget(self.amount_field)
         self.valid_until_field = JalaliDateEdit()
-        form.addWidget(self.valid_until_field)
         self.no_expiry_checkbox = QCheckBox("بدون تاریخ انقضا")
         self.no_expiry_checkbox.setChecked(True)
         self.no_expiry_checkbox.toggled.connect(self.valid_until_field.setDisabled)
         self.valid_until_field.setDisabled(True)
-        form.addWidget(self.no_expiry_checkbox)
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(44)
         add_button.setToolTip("افزودن کوپن")
         add_button.clicked.connect(self._add_coupon)
-        form.addWidget(add_button)
-        outer.addLayout(form)
+        # R317: فیلدهای کوپن با برچسب در کارت
+        outer.addWidget(ms.field_grid([("اتصال فروشگاه", self.connection_combo), ("کد کوپن", self.code_field),
+                                       ("نوع تخفیف", self.discount_type_combo), ("مقدار", self.amount_field),
+                                       ("معتبر تا", self.valid_until_field), ("", self.no_expiry_checkbox)],
+                                      columns=6, tail=[add_button]))
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")

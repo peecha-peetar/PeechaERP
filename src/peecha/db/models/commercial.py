@@ -1864,6 +1864,8 @@ class DistributionRun(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     confirmed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     confirmed_at: Mapped[datetime.datetime | None]
+    start_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))  # R320
+    start_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
 
 
 class DistributionRunDocument(Base):
@@ -1875,6 +1877,7 @@ class DistributionRunDocument(Base):
     )
     document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"), primary_key=True)
     added_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    route_seq: Mapped[int | None]  # R320: ترتیب تحویل در مسیر
 
 
 class PromotionRule(Base):

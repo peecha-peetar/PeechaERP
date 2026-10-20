@@ -16,7 +16,7 @@ def check(cond, msg):
     else:
         print("OK:", msg)
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 app = QApplication.instance() or QApplication([])
 QMessageBox.warning = staticmethod(lambda *a, **k: None)
 QMessageBox.information = staticmethod(lambda *a, **k: None)
@@ -228,7 +228,7 @@ for code in ("REPORTS_SALES_BY_ITEM", "REPORTS_CUSTOMER_PROFIT", "REPORTS_SALES_
     mw.open_screen(code); app.processEvents()
 check(not failed, f"همهٔ گزارش‌های فروش از منو باز و اجرا شدند (failed {failed})")
 scr = mw._screens["sales_report_reg_invoice"]; scr._reload()
-check(scr.supplier_combo.count() == 3 and "مشتری" in [l.text() for l in scr.findChildren(type(scr.hint_label))][0:99].__str__(),
+check(scr.supplier_combo.count() == 3 and "مشتری" in [l.text() for l in scr.findChildren(QLabel)][0:99].__str__(),
       "فیلتر «مشتری» در گزارش‌های فروش")
 scr._open_row(0, 0); app.processEvents()
 check(mw._screens["commercial_document_sales_invoice"]._document_id in (inv1, inv2), "دابل‌کلیک فاکتور فروش را باز کرد")

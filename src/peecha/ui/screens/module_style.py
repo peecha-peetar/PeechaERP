@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from peecha.ui.widgets import SummaryCard, SummaryCardBar
 
@@ -184,3 +184,54 @@ def styled(cls):
 
     cls.__init__ = __init__
     return cls
+
+
+def field_grid(pairs: list[tuple[str, QWidget]], columns: int = 4, tail: list[QWidget] | None = None) -> QWidget:
+    """R317: فیلدهای فرم در کارت چندستونه، برچسب بالای هر فیلد — به‌جای یک ردیف بلند و پراکنده.
+    pairs: [(برچسب، ویجت)]؛ برچسب خالی برای تیک‌ها. tail: دکمه‌های آخر ردیف پایانی (مثل افزودن/ذخیره)."""
+    box = QFrame()
+    box.setObjectName("card")
+    grid = QGridLayout(box)
+    grid.setContentsMargins(12, 8, 12, 8)
+    grid.setHorizontalSpacing(14)
+    grid.setVerticalSpacing(3)
+    index = 0
+    for label, widget in pairs:
+        row, col = divmod(index, columns)
+        if label:
+            caption = QLabel(label.rstrip(":： "))
+            caption.setObjectName("fieldCaption")
+            caption.setBuddy(widget)
+            grid.addWidget(caption, row * 2, col)
+        if isinstance(widget, QCheckBox):
+            widget.setStyleSheet("QCheckBox { background: transparent; }")
+        grid.addWidget(widget, row * 2 + 1, col)
+        index += 1
+    if tail:
+        row, col = divmod(index, columns)
+        holder = QWidget()
+        holder.setStyleSheet("background: transparent;")
+        line = QHBoxLayout(holder)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(6)
+        for w in tail:
+            line.addWidget(w)
+        line.addStretch(1)
+        grid.addWidget(holder, row * 2 + 1, col, 1, columns - col)
+    for col in range(columns):
+        grid.setColumnStretch(col, 1)
+    return box
+
+
+
+def grid_from_row(row: QHBoxLayout, labels: list[tuple[QWidget, str]], columns: int | None = None) -> QWidget:
+    """R317: ردیف افقی فیلدهای بی‌برچسب ← همان field_grid؛ دکمه‌ها به انتهای کارت می‌روند و ویجت‌ها همان قبلی‌اند."""
+    widgets = []
+    while row.count():
+        item = row.takeAt(0)
+        if item.widget() is not None:
+            widgets.append(item.widget())
+    caption = {id(w): text for w, text in labels}
+    fields = [(caption.get(id(w), ""), w) for w in widgets if not isinstance(w, QPushButton)]
+    buttons = [w for w in widgets if isinstance(w, QPushButton)]
+    return field_grid(fields, columns or max(1, min(len(fields), 6)), tail=buttons)

@@ -61,12 +61,14 @@ from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_deletion
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import detail_operations as detail_ops
 from peecha.services import hr as hr_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import payroll as payroll_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
+from peecha.services.fixed_assets import detail_form as asset_detail_form
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
 from peecha.ui.widgets import (
     bind_qty_decimals,
@@ -402,6 +404,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._selected_guarantee_id: int | None = None
         self._contracts: list = []
         self._selected_contract_id: int | None = None
+        # R318: پنل دارایی ثابت (مثل کالا) فقط وقتی لازم شود ساخته می‌شود
+        self.asset_detail_panel = None
+        self.dialog_runner = lambda dialog: dialog.exec()
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(12, 8, 12, 8)
@@ -601,6 +606,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.item_detail_panel = ItemDetailPanel()
         self.item_detail_panel.setVisible(False)
         layout.addWidget(self.item_detail_panel)
+        self._asset_panel_slot = QVBoxLayout()
+        self._asset_panel_slot.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self._asset_panel_slot)
 
         layout.addWidget(self._build_pay_components_section())
 
@@ -663,9 +671,15 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.approve_partner_button.setToolTip("تایید اعتباری")
         self.approve_partner_button.clicked.connect(self._approve_partner)
         self.approve_partner_button.setVisible(False)
+        self.detail_ops_button = QPushButton("🔀")
+        self.detail_ops_button.setObjectName("iconButton")
+        self.detail_ops_button.setFixedWidth(44)
+        self.detail_ops_button.setToolTip("انتقال مانده یا ادغام با تفصیلی دیگر")
+        self.detail_ops_button.clicked.connect(self._open_detail_operations)
+        self.detail_ops_button.setVisible(False)
         footer = build_action_footer([
             self.save_button, cancel_button, self.delete_button,
-            self.terminate_employee_button, self.approve_partner_button,
+            self.terminate_employee_button, self.approve_partner_button, self.detail_ops_button,
         ])
         wrapper_layout.addWidget(footer)
 
@@ -1759,6 +1773,71 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.delete_button.setEnabled(True)
             self.delete_button.setToolTip("حذف")
 
+    def _is_fixed_asset_group(self) -> bool:
+        """R318: گروه «دارایی ثابت» وقتی کلید «تعریف دارایی ثابت در فرم تفصیلی» روشن است — مثل کالا."""
+        if self._selected is None or self._selected[0] != "dim":
+            return False
+        if not any(t.dimension_type_id == self._selected[1] and t.code == dimensions_service.FIXED_ASSET_CODE
+                   for t in self._types):
+            return False
+        company_id = self._company_id()
+        return company_id is not None and asset_detail_form.is_on(company_id)
+
+    def _render_asset_panel(self, detail_account_id: int | None = None, reload: bool = True) -> None:
+        """reload=False فقط نمایش/پنهان (با تغییر والد/سطح) تا فیلدهای پرشده پاک نشوند."""
+        if not self._is_fixed_asset_group():
+            if self.asset_detail_panel is not None:
+                self.asset_detail_panel.setVisible(False)
+            return
+        company_id = self._company_id()
+        asset = asset_detail_form.asset_of_detail(company_id, detail_account_id) if detail_account_id else None
+        is_leaf = asset is not None or self._current_level_no() >= self._current_max_level_no
+        first = self.asset_detail_panel is None
+        if first:
+            from peecha.ui.screens.fixed_asset_detail_panel import AssetDetailPanel
+
+            self.asset_detail_panel = AssetDetailPanel()
+            self._asset_panel_slot.addWidget(self.asset_detail_panel)
+        self.asset_detail_panel.setVisible(is_leaf)
+        self.item_level_hint_label.setVisible(not is_leaf)
+        if not is_leaf:
+            self.item_level_hint_label.setText(
+                f"این یک سطح دسته‌بندی است، نه خود دارایی (سطح فعلی: {self._current_level_no()} از "
+                f"{self._current_max_level_no}). برای تعریف دارایی، یک زیرمجموعه در همین سطح بسازید تا به سطح آخر برسید."
+            )
+            return
+        if first or reload:
+            self.asset_detail_panel.refresh(company_id)
+            self.asset_detail_panel.load(asset)
+
+    def _update_detail_ops_button(self) -> None:
+        company_id = self._company_id()
+        on = company_id is not None and (detail_ops.is_on(company_id, detail_ops.FEATURE_TRANSFER)
+                                         or detail_ops.is_on(company_id, detail_ops.FEATURE_MERGE))
+        type_code = next((t.code for t in self._types if self._selected and self._selected[0] == "dim"
+                          and t.dimension_type_id == self._selected[1]), None)
+        self.detail_ops_button.setVisible(on and self._editing_account_id is not None
+                                          and type_code not in detail_ops.BLOCKED_TYPES)
+
+    def _open_detail_operations(self):
+        """R318: انتقال مانده با سند یا ادغام کامل با تفصیلی دیگر (هرکدام با کلید و دسترسی خودش)."""
+        company_id = self._company_id()
+        if company_id is None or self._editing_account_id is None:
+            return None
+        from peecha.ui.screens.detail_operations_dialog import DetailOperationsDialog
+
+        user_id = session.current_user.user_id if session.current_user else None
+        label = f"{self.account_code_field.text().strip()} — {self.account_name_field.text().strip()}"
+        dialog = DetailOperationsDialog(company_id, user_id, self._editing_account_id, label, self)
+        self.dialog_runner(dialog)
+        if dialog.changed:
+            selected, editing = self._selected, self._editing_account_id
+            self.refresh()
+            self._select(selected)
+            if editing in self._accounts_by_id or editing in self._person_rows_by_id:
+                self.edit_detail_account(editing)
+        return dialog
+
     def _dimension_type_id(self) -> int | None:
         """dimension_type_id فعلی — برای گروه‌های اشخاص، همیشه نوع‌بُعد
         سیستمی PERSON (سراسری برای هرسه‌شان)، برای بقیه همان انتخاب فهرست."""
@@ -1844,6 +1923,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._render_person_fields()
         self._render_extra_fields()
         self._render_item_panel()
+        self._render_asset_panel(self._editing_account_id, reload=False)
         if self._editing_account_id is None:
             self._suggest_code_for_current_parent()
 
@@ -2005,6 +2085,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self._render_person_fields()
         self._render_extra_fields()
         self._render_item_panel()
+        self._render_asset_panel(reload=False)
 
     def _update_level_info(self) -> None:
         if self._selected is None:
@@ -2248,6 +2329,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self._refresh_addresses_tab()
             self._refresh_guarantees_tab()
             self._refresh_contracts_tab()
+            self._update_detail_ops_button()
             return
 
         account = self._accounts_by_id.get(detail_account_id)
@@ -2270,8 +2352,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._is_inventory_item_group():
             item_row = catalog_service.get_item_row_by_detail_account_id(self._company_id(), detail_account_id)
         self._render_item_panel(item_row)
+        self._render_asset_panel(detail_account_id)
         self.delete_button.setVisible(True)
         self.terminate_employee_button.setVisible(False)
+        self._update_detail_ops_button()
         self._refresh_pay_components_section(None)
         self._refresh_files_tab()
         self._refresh_addresses_tab()
@@ -2397,10 +2481,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._render_person_fields()
         self._render_extra_fields()
         self._render_item_panel()
+        self._render_asset_panel()
         self._refresh_pay_components_section(None)
         self._suggest_code_for_current_parent()
         self.accounts_table.clearSelection()
         self.delete_button.setVisible(False)
+        self.detail_ops_button.setVisible(False)
         self.terminate_employee_button.setVisible(False)
         self.partner_status_label.setVisible(False)
         self.approve_partner_button.setVisible(False)
@@ -2449,6 +2535,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         name = self.account_name_field.text().strip() or None
         extra_fields = self._collect_extra_fields()
+        notice = None
 
         try:
             if self._is_person():
@@ -2483,6 +2570,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                         company_id, code, name or "", item_fields,
                         parent_detail_account_id=self.parent_combo.currentData(),
                     )
+            elif (self._is_fixed_asset_group() and self.asset_detail_panel is not None
+                  and not self.asset_detail_panel.isHidden()):
+                notice = self._save_asset(company_id, code, name or "", extra_fields)
             elif self._editing_account_id is not None:
                 dimensions_service.update_detail_account(
                     self._editing_account_id, company_id, code, self.account_active_checkbox.isChecked(),
@@ -2501,6 +2591,25 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._cancel_account_edit()
         self.refresh()
         self._select(selected)
+        if notice:
+            self.account_status_label.setText(notice)
+
+    def _save_asset(self, company_id: int, code: str, name: str, extra_fields: dict) -> str | None:
+        """R318: تفصیلی و شناسنامهٔ دارایی با هم؛ بهای تحصیل دارایی تازه از همان مسیر ویزارد. خروجی: هشدار یا None."""
+        user_id = session.current_user.user_id if session.current_user else None
+        fields = self.asset_detail_panel.fields(code, name)
+        editing = self._editing_account_id
+        if editing is not None and asset_detail_form.asset_of_detail(company_id, editing) is not None:
+            asset_detail_form.update(company_id, user_id, editing, code, name, self.account_active_checkbox.isChecked(),
+                                     fields, extra_fields)
+            return None
+        if editing is not None:
+            dimensions_service.update_detail_account(editing, company_id, code, self.account_active_checkbox.isChecked(),
+                                                     name=name, extra_fields=extra_fields)
+        asset_id = asset_detail_form.create(
+            company_id, user_id, code, name, fields, detail_account_id=editing, extra_fields=extra_fields,
+            parent_detail_account_id=None if editing is not None else self.parent_combo.currentData())
+        return self.asset_detail_panel.post_acquisition(company_id, user_id, asset_id) if user_id is not None else None
 
     def _delete_account(self) -> None:
         if self._editing_account_id is None or self._selected is None:

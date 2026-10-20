@@ -37,7 +37,6 @@ from PySide6.QtWidgets import (
 
 from peecha import decimals, numerals, session as app_session
 from peecha.reporting import jasper_bridge
-from peecha.reporting import registry as report_templates_registry
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
@@ -401,7 +400,7 @@ def _show_invoice_print(
         if jrxml_path is None:
             jrxml_path = report_templates_service.get_default_template_path(company_id, form_code)
         if jrxml_path is None:
-            jrxml_path = jasper_bridge.template_path(report_templates_registry.FORM_DEFINITIONS[form_code]["base_template"])
+            jrxml_path = report_templates_service.fallback_template_path(company_id, form_code)
         print_rows, params = _build_invoice_print_rows_and_params(company_id, doc, lines)
         if counterparty_label is not None:
             params["counterpartyLabel"] = counterparty_label

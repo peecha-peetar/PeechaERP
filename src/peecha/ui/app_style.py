@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
 from PySide6.QtWidgets import (
-    QAbstractButton, QAbstractItemView, QDoubleSpinBox, QGroupBox, QHeaderView, QLabel, QProxyStyle, QPushButton, QSpinBox,
-    QStyleFactory,
+    QAbstractButton, QAbstractItemView, QComboBox, QDoubleSpinBox, QGroupBox, QHeaderView, QLabel, QProxyStyle, QPushButton, QSpinBox,
+    QStyleFactory, QWidget,
 )
 
-from peecha.ui import icon_buttons, persian_numbers, ui_text_apply
+from peecha.ui import icon_buttons, layout_guard, persian_numbers, touch, ui_text_apply
 
 
 class AppStyle(QProxyStyle):
@@ -23,6 +23,10 @@ class AppStyle(QProxyStyle):
         # عنوان دلخواه/ترجمه بعد از آیکونی‌شدن، تا نگاشت آیکن با متن فارسی اصلی انجام شود
         if isinstance(arg, (QLabel, QAbstractButton, QGroupBox, QHeaderView)):
             ui_text_apply.apply(arg)
+        if isinstance(arg, (QAbstractItemView, QComboBox)):
+            layout_guard.guard(arg)
+        if touch.is_enabled() and isinstance(arg, QWidget):
+            touch.prepare(arg)
         return super().polish(arg)
 
 

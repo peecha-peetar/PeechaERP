@@ -192,7 +192,7 @@ def _show_stock_document_print(
         if jrxml_path is None:
             jrxml_path = report_templates_service.get_default_template_path(company_id, "STOCK_DOCUMENT")
         if jrxml_path is None:
-            jrxml_path = jasper_bridge.template_path("stock_document.jrxml")
+            jrxml_path = report_templates_service.fallback_template_path(company_id, "STOCK_DOCUMENT")
         print_rows, params = _build_stock_document_print_rows_and_params(company_id, doc, lines, counterparty_label)
         try:
             fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_stockdoc_")

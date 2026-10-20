@@ -135,13 +135,15 @@ def _apply_fields(asset: Asset, f: AssetFields, category: AssetCategory) -> None
     asset.barcode = f.barcode or asset.barcode or f.asset_code.strip()
 
 
-def insert_asset(session, company_id: int, user_id: int | None, f: AssetFields, status: str = "DRAFT") -> Asset:
-    """درج دارایی درون تراکنش فراخوان (برای عملیات اتمیک CIP/تقسیم)."""
+def insert_asset(session, company_id: int, user_id: int | None, f: AssetFields, status: str = "DRAFT",
+                 detail_account_id: int | None = None) -> Asset:
+    """درج دارایی درون تراکنش فراخوان (برای عملیات اتمیک CIP/تقسیم). R318: detail_account_id = تفصیلی ساخته‌شده در فرم تفصیلی."""
     category = _validate(session, company_id, f, None)
     c.primary_book(session, company_id)
     asset = Asset(company_id=company_id, status_code=status, created_by_user_id=user_id, purchase_price=ZERO,
                   residual_value=ZERO, gross_cost=ZERO, accumulated_depreciation=ZERO, accumulated_impairment=ZERO,
-                  revaluation_surplus=ZERO, units_consumed=ZERO, depreciated_months_offset=0)
+                  revaluation_surplus=ZERO, units_consumed=ZERO, depreciated_months_offset=0,
+                  detail_account_id=detail_account_id)
     _apply_fields(asset, f, category)
     session.add(asset)
     session.flush()

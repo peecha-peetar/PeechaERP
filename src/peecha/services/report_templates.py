@@ -21,6 +21,10 @@ from peecha.reporting.registry import FORM_DEFINITIONS
 
 _TEMPLATES_ROOT = SETTINGS_DIR / "report_templates"
 
+# R320: طرح حرفه‌ای (pro_template در رجیستری) پشت کلید؛ خاموش یعنی همان رفتار قبلی
+FEATURE_PRO = "REPORT_PRO_TEMPLATES"
+DESIGNS = {"BASIC": "طرح ساده", "PRO": "طرح حرفه‌ای"}
+
 
 @dataclass
 class ReportTemplateRow:
@@ -86,13 +90,37 @@ def get_default_template_path(company_id: int, form_code: str) -> Path | None:
         return _custom_dir(company_id) / row.file_name
 
 
-def create_template(company_id: int, form_code: str, name: str) -> ReportTemplateRow:
+def has_pro_design(form_code: str) -> bool:
+    return bool(FORM_DEFINITIONS.get(form_code, {}).get("pro_template"))
+
+
+def pro_by_default(company_id: int) -> bool:
+    from peecha.services import inventory_engine
+
+    return inventory_engine.is_feature_enabled(company_id, FEATURE_PRO)
+
+
+def fallback_template_path(company_id: int, form_code: str) -> Path:
+    """قالب داخلی برنامه وقتی شرکت برای این فرم گزارش پیش‌فرض ندارد."""
+    definition = FORM_DEFINITIONS[form_code]
+    if definition.get("pro_template") and pro_by_default(company_id):
+        return jasper_bridge.template_path(definition["pro_template"])
+    return jasper_bridge.template_path(definition["base_template"])
+
+
+def create_template(company_id: int, form_code: str, name: str, design: str | None = None) -> ReportTemplateRow:
     definition = FORM_DEFINITIONS.get(form_code)
     if definition is None:
         raise ValueError("فرم نامعتبر.")
     name = name.strip()
     if not name:
         raise ValueError("نام الزامی است.")
+    if design is None:
+        design = "PRO" if has_pro_design(form_code) and pro_by_default(company_id) else "BASIC"
+    if design not in DESIGNS:
+        raise ValueError("طرح نامعتبر.")
+    if design == "PRO" and not has_pro_design(form_code):
+        raise ValueError("این فرم طرح حرفه‌ای ندارد.")
 
     with new_session() as session:
         existing = session.scalar(
@@ -108,7 +136,7 @@ def create_template(company_id: int, form_code: str, name: str) -> ReportTemplat
         # همیشه از رویِ قالبِ پایه‌یِ همان فرم شروع می‌کنیم -- طبقِ
         # تصمیمِ معماریِ Jasper: هیچ‌وقت طراحِ گزارش با فایلِ خالی
         # شروع نمی‌کند، همیشه یک نسخه‌یِ کارکردنیِ اولیه در دست دارد.
-        base_path = jasper_bridge.template_path(definition["base_template"])
+        base_path = jasper_bridge.template_path(definition["pro_template" if design == "PRO" else "base_template"])
         file_name = f"{form_code.lower()}_{uuid.uuid4().hex[:10]}.jrxml"
         dest_path = _custom_dir(company_id) / file_name
         shutil.copyfile(base_path, dest_path)

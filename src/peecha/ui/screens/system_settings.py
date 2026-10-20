@@ -28,6 +28,7 @@ from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
 from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
+from peecha.ui.screens.detail_feature_settings import DetailFeatureSettingsScreen
 from peecha.ui.screens.field_labels import FieldLabelsScreen
 from peecha.ui.screens.financial_statement_mapping import FinancialStatementMappingScreen
 from peecha.ui.screens.fiscal_years import FiscalYearsScreen
@@ -93,6 +94,8 @@ _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
     ("داده‌های حسابداری", "ترجمه‌ها"): ("translations",),
     ("انبار و موجودی", "قیمت‌گذاری"): ("inventory_settings", "costing_settings"),
     ("ارتباط با مشتری", "الگوهای پیام"): ("crm_settings", "crm_automation"),
+    ("ارتباط با مشتری", "پیام‌رسان‌ها"): ("crm_settings", "crm_automation"),
+    ("ارتباط با مشتری", "پیام پس از فرایند"): ("crm_settings", "crm_automation"),
 }
 
 
@@ -321,6 +324,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
                 ("کدینگ حساب‌ها", AccountingCodingSettingsScreen),
                 ("تعداد رقم سطوح تفصیلی", DetailLevelDigitSettingsScreen),
                 ("تنظیمات صورت‌های مالی", FinancialStatementMappingScreen),
+                ("قابلیت‌های تفصیلی", DetailFeatureSettingsScreen),
             ]
         )
 
@@ -465,6 +469,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
 
     def _build_crm_tab(self):
         from peecha.ui.screens import crm
+        from peecha.ui.screens import messaging_settings as messaging
 
         return self._sub_tabs([
             ("قیف فروش و منابع سرنخ", crm.CrmSettingsScreen),
@@ -472,6 +477,8 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
             ("امتیازدهی سرنخ", crm.LeadScoringPanel),
             ("تعهد زمانی تیکت‌ها", crm.SlaPoliciesPanel),
             ("الگوهای پیام", crm.TemplatesPanel),
+            ("پیام‌رسان‌ها", messaging.MessengersPanel),
+            ("پیام پس از فرایند", messaging.ProcessMessagesPanel),
             ("تحلیل مشتری", crm.AnalyticsSettingsPanel),
         ])
 

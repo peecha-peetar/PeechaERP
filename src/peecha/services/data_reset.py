@@ -395,6 +395,8 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "OR item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
     "DELETE FROM payroll.journal_entry_links WHERE journal_entry_id IN "
     "(SELECT journal_entry_id FROM acc.journal_entries WHERE company_id = :company_id)",
+    # R318: سابقهٔ انتقال مانده/ادغام تفصیلی (به سند حسابداری اشاره می‌کند؛ ردیف‌های ادغام با CASCADE)
+    "DELETE FROM acc.detail_operations WHERE company_id = :company_id",
     # حسابداری
     "DELETE FROM acc.journal_entry_line_details WHERE line_id IN "
     "(SELECT jel.line_id FROM acc.journal_entry_lines jel "
@@ -489,6 +491,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     # اشخاص (تفصیلیِ مشتری/تامین‌کننده/پرسنل + گروه‌ها).
     "DELETE FROM comm.party_contacts WHERE party_detail_account_id IN "
     "(SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
+    "DELETE FROM crm.party_messenger_ids WHERE company_id = :company_id",  # R319: شناسهٔ گفت‌وگوی طرف حساب‌ها
     "DELETE FROM comm.party_addresses WHERE party_detail_account_id IN "
     "(SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
     "DELETE FROM comm.sales_representatives WHERE rep_detail_account_id IN "
@@ -638,6 +641,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM crm.sla_policies WHERE company_id = :company_id",
     "DELETE FROM crm.automation_rules WHERE company_id = :company_id",
     "DELETE FROM crm.message_templates WHERE company_id = :company_id",
+    "DELETE FROM crm.messenger_settings WHERE company_id = :company_id",  # R319: ربات‌ها و درگاه پیام‌رسان
     "DELETE FROM crm.settings WHERE company_id = :company_id",
     "DELETE FROM acc.statement_row_refs WHERE row_id IN "
     "(SELECT sr.row_id FROM acc.statement_rows sr JOIN acc.statement_templates st ON st.template_id = sr.template_id WHERE st.company_id = :company_id)",

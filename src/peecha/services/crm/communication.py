@@ -22,9 +22,13 @@ from peecha.services import sms_gateway as sms_gateway_service
 from peecha.services.crm import activities as act_service
 from peecha.services.crm import common as c
 
-CHANNELS = {"SMS": "پیامک", "EMAIL": "ایمیل", "WHATSAPP": "واتس‌اپ", "TELEGRAM": "تلگرام", "INTERNAL": "اعلان داخلی"}
+CHANNELS = {"SMS": "پیامک", "EMAIL": "ایمیل", "WHATSAPP": "واتس‌اپ", "TELEGRAM": "تلگرام", "BALE": "بله", "EITAA": "ایتا",
+            "RUBIKA": "روبیکا", "INTERNAL": "اعلان داخلی"}
+# R319: پیام‌رسان‌هایی که با ربات رسمی و «شناسهٔ گفت‌وگو» (نه شمارهٔ موبایل) کار می‌کنند
+BOT_CHANNELS = ("TELEGRAM", "BALE", "EITAA", "RUBIKA")
 STATUS = {"QUEUED": "در صف", "SENT": "ارسال‌شده", "FAILED": "ناموفق"}
-_ACTIVITY_TYPE = {"SMS": "MESSAGE", "WHATSAPP": "MESSAGE", "TELEGRAM": "MESSAGE", "EMAIL": "EMAIL", "INTERNAL": "NOTE"}
+_ACTIVITY_TYPE = {"SMS": "MESSAGE", "WHATSAPP": "MESSAGE", "TELEGRAM": "MESSAGE", "BALE": "MESSAGE", "EITAA": "MESSAGE",
+                  "RUBIKA": "MESSAGE", "EMAIL": "EMAIL", "INTERNAL": "NOTE"}
 TEMPLATE_FIELDS = {"name": "نام مشتری/سرنخ", "company": "نام شرکت شما", "balance": "ماندهٔ حساب", "overdue": "بدهی معوق",
                    "days": "روزهای بدون خرید", "amount": "مبلغ", "subject": "موضوع"}
 # R289: جای‌نگهدار فارسی هم‌ارز هر فیلد ({نام} همان {name})؛ متن‌های قدیمی انگلیسی هم کار می‌کنند.
@@ -68,7 +72,9 @@ class NotConfiguredProvider:
 
 
 _providers: dict[str, Provider] = {"SMS": SmsProvider(), "EMAIL": NotConfiguredProvider("EMAIL"),
-                                   "WHATSAPP": NotConfiguredProvider("WHATSAPP"), "TELEGRAM": NotConfiguredProvider("TELEGRAM")}
+                                   "WHATSAPP": NotConfiguredProvider("WHATSAPP"), "TELEGRAM": NotConfiguredProvider("TELEGRAM"),
+                                   "BALE": NotConfiguredProvider("BALE"), "EITAA": NotConfiguredProvider("EITAA"),
+                                   "RUBIKA": NotConfiguredProvider("RUBIKA")}
 
 
 def register_provider(channel: str, provider: Provider | None) -> None:
@@ -78,7 +84,17 @@ def register_provider(channel: str, provider: Provider | None) -> None:
     _providers[channel] = provider or (SmsProvider() if channel == "SMS" else NotConfiguredProvider(channel))
 
 
+_messengers_loaded = False
+
+
 def get_provider(channel: str) -> Provider:
+    global _messengers_loaded
+    if not _messengers_loaded:
+        # R319: ربات‌های رسمی و درگاه عمومی (تنبل، بدون وابستگی دوری در import)
+        _messengers_loaded = True
+        from peecha.services.crm import messengers
+
+        messengers.register_providers()
     return _providers[channel]
 
 
@@ -148,7 +164,17 @@ def _recipient(session, company_id: int, channel: str, customer_id: int | None, 
         da = session.get(DetailAccount, customer_id)
         if da is None or da.company_id != company_id:
             raise ValueError("مشتری نامعتبر است.")
+        if channel in BOT_CHANNELS:
+            from peecha.services.crm import messengers
+
+            return messengers.chat_id_of(session, customer_id, channel), da.name
         det = session.get(CustomerDetail, customer_id)
+        if det is None or not (det.mobile or det.phone):
+            # R319: طرف حساب خرید (تامین‌کننده) یا پرسنل هم موبایل خودش را دارد
+            from peecha.db.models.accounting import PersonnelDetail, SupplierDetail
+
+            det = next((d for d in (session.get(SupplierDetail, customer_id), session.get(PersonnelDetail, customer_id))
+                        if d is not None and (d.mobile or d.phone)), det)
         if channel == "EMAIL":
             from peecha.db.models.commercial import PartyContact
 
@@ -168,7 +194,7 @@ def _recipient(session, company_id: int, channel: str, customer_id: int | None, 
 def send_message(company_id: int, user_id: int | None, channel: str, body: str, *, customer_id: int | None = None,
                  lead_id: int | None = None, subject: str | None = None, template_id: int | None = None,
                  values: dict | None = None, campaign_id: int | None = None, rule_id: int | None = None,
-                 notify_user_id: int | None = None) -> int:
+                 notify_user_id: int | None = None, to: str | None = None) -> int:
     """ارسال پیام به مشتری/سرنخ (یا اعلان داخلی به کاربر). شکست ارسال خطا نمی‌دهد: پیام با وضعیت «ناموفق» ثبت
     می‌شود تا در دفتر پیام‌ها دیده و دوباره فرستاده شود. برمی‌گرداند: شناسهٔ پیام."""
     if channel not in CHANNELS:
@@ -187,6 +213,9 @@ def send_message(company_id: int, user_id: int | None, channel: str, body: str, 
                 raise ValueError("کاربر گیرندهٔ اعلان مشخص نشده است.")
             if customer_id:
                 name = session.get(DetailAccount, customer_id).name
+        elif to and to.strip():
+            # R319: گیرندهٔ ثابت (شماره یا شناسهٔ گفت‌وگو/گروه) بدون مشتری
+            recipient, name = to.strip(), session.get(DetailAccount, customer_id).name if customer_id else ""
         else:
             recipient, name = _recipient(session, company_id, channel, customer_id, lead_id)
         company = session.get(Company, company_id)

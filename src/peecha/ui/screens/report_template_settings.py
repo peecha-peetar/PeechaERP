@@ -12,6 +12,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.reporting import jasper_bridge
 from peecha.reporting.registry import FORM_DEFINITIONS
+from peecha.services import inventory_engine as engine_service
 from peecha.services import report_templates as templates_service
 
 _COLUMNS = ["فرم", "نام گزارش", "پیش‌فرض"]
@@ -41,9 +43,10 @@ def _company_id() -> int | None:
 
 
 class _NewReportDialog(QDialog):
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, parent: QWidget, pro_default: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("گزارش جدید")
+        self._pro_default = pro_default
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("فرم"))
         self.form_combo = QComboBox()
@@ -53,13 +56,29 @@ class _NewReportDialog(QDialog):
         layout.addWidget(QLabel("نام گزارش"))
         self.name_field = QLineEdit()
         layout.addWidget(self.name_field)
+        # R320: شروع از طرح ساده یا طرح حرفه‌ای همان فرم
+        layout.addWidget(QLabel("طرح"))
+        self.design_combo = QComboBox()
+        for code, label in templates_service.DESIGNS.items():
+            self.design_combo.addItem(label, code)
+        layout.addWidget(self.design_combo)
+        self.form_combo.currentIndexChanged.connect(self._sync_design)
+        self._sync_design()
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def _sync_design(self) -> None:
+        has_pro = templates_service.has_pro_design(self.form_combo.currentData())
+        self.design_combo.setEnabled(has_pro)
+        self.design_combo.setCurrentIndex(self.design_combo.findData("PRO" if has_pro and self._pro_default else "BASIC"))
+
     def selected_form_code(self) -> str:
         return self.form_combo.currentData()
+
+    def selected_design(self) -> str:
+        return self.design_combo.currentData()
 
     def name(self) -> str:
         return self.name_field.text().strip()
@@ -76,9 +95,19 @@ class _ReportTemplatesTab(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        add_button = QPushButton("➕ گزارش جدید")
+        self.pro_box = QCheckBox("چاپ با طرح حرفه‌ای")
+        self.pro_box.setToolTip(
+            "فاکتور و سند انبار بدون گزارش تعریف‌شده با طرح حرفه‌ای چاپ می‌شوند و گزارش تازه از طرح حرفه‌ای شروع می‌شود."
+        )
+        self.pro_box.toggled.connect(self._toggle_pro)
+        layout.addWidget(self.pro_box)
+
+        add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
-        add_button.clicked.connect(self._add)
+        add_button.setFixedWidth(48)
+        add_button.setToolTip("گزارش جدید")
+        add_button.setAccessibleName("گزارش جدید")
+        add_button.clicked.connect(lambda _c=False: self._add())
         layout.addWidget(add_button, alignment=Qt.AlignLeft)
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -129,6 +158,9 @@ class _ReportTemplatesTab(QWidget):
         company_id = _company_id()
         if company_id is None:
             return
+        self.pro_box.blockSignals(True)
+        self.pro_box.setChecked(templates_service.pro_by_default(company_id))
+        self.pro_box.blockSignals(False)
         self._rows = templates_service.list_all_templates(company_id)
         self.table.setRowCount(len(self._rows))
         for row_index, row in enumerate(self._rows):
@@ -145,19 +177,27 @@ class _ReportTemplatesTab(QWidget):
             return None
         return self._rows[selected[0].row()]
 
-    def _add(self) -> None:
+    def _toggle_pro(self, checked: bool) -> None:
+        company_id = _company_id()
+        if company_id is not None:
+            engine_service.set_feature_enabled(company_id, templates_service.FEATURE_PRO, checked)
+
+    def _add(self, values: dict | None = None) -> bool:
         company_id = _company_id()
         if company_id is None:
-            return
-        dialog = _NewReportDialog(self)
-        if dialog.exec() != QDialog.Accepted or not dialog.name():
-            return
+            return False
+        if values is None:
+            dialog = _NewReportDialog(self, pro_default=self.pro_box.isChecked())
+            if dialog.exec() != QDialog.Accepted or not dialog.name():
+                return False
+            values = {"form_code": dialog.selected_form_code(), "name": dialog.name(), "design": dialog.selected_design()}
         try:
-            templates_service.create_template(company_id, dialog.selected_form_code(), dialog.name())
+            templates_service.create_template(company_id, values["form_code"], values["name"], values.get("design"))
         except (ValueError, FileNotFoundError) as exc:
             QMessageBox.warning(self, "خطا", str(exc))
-            return
+            return False
         self.refresh()
+        return True
 
     def _rename(self) -> None:
         company_id = _company_id()

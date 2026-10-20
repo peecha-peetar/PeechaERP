@@ -152,7 +152,6 @@ class ReplacementCostScreen(QWidget):
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        form = QHBoxLayout()
         self.item_combo = QComboBox()
         self.item_combo.setEditable(True)
         self.item_combo.setInsertPolicy(QComboBox.NoInsert)
@@ -166,15 +165,13 @@ class ReplacementCostScreen(QWidget):
         self.date_field = JalaliDateEdit()
         self.note_field = QLineEdit()
         self.note_field.setPlaceholderText("علت/منبع")
-        for label, w in (("کالا", self.item_combo), ("واحد", self.uom_combo), ("انبار", self.warehouse_combo),
-                         ("بها", self.cost_field), ("از تاریخ", self.date_field), ("توضیح", self.note_field)):
-            form.addWidget(QLabel(label))
-            form.addWidget(w)
         self.save_button = QPushButton("ثبت بهای جایگزینی")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self.save)
-        form.addWidget(self.save_button)
-        layout.addLayout(form)
+        # R317: فیلدها در کارت سه‌ستونه با برچسب بالای هر فیلد
+        layout.addWidget(ms.field_grid([("کالا", self.item_combo), ("واحد", self.uom_combo), ("انبار", self.warehouse_combo),
+                                        ("بها", self.cost_field), ("از تاریخ", self.date_field), ("توضیح", self.note_field)],
+                                       columns=3, tail=[self.save_button]))
         self.status_label = QLabel("")
         layout.addWidget(self.status_label)
         self.table = QTableWidget(0, 6)
@@ -277,7 +274,6 @@ class RecalculationScreen(QWidget):
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        form = QHBoxLayout()
         self.item_combo = QComboBox()
         self.item_combo.setEditable(True)
         self.item_combo.setInsertPolicy(QComboBox.NoInsert)
@@ -287,18 +283,14 @@ class RecalculationScreen(QWidget):
         self.posting_date = JalaliDateEdit()
         self.reason_field = QLineEdit()
         self.reason_field.setPlaceholderText("علت بازمحاسبه")
-        for label, w in (("کالا", self.item_combo), ("انبار", self.warehouse_combo), ("از تاریخ", self.from_date),
-                         ("تاریخ ثبت", self.posting_date), ("علت", self.reason_field)):
-            form.addWidget(QLabel(label))
-            form.addWidget(w)
         self.preview_button = QPushButton("پیش‌نمایش")
         self.preview_button.clicked.connect(self.preview)
         self.apply_button = QPushButton("اجرای بازمحاسبه")
         self.apply_button.setObjectName("primaryButton")
         self.apply_button.clicked.connect(self.apply)
-        form.addWidget(self.preview_button)
-        form.addWidget(self.apply_button)
-        layout.addLayout(form)
+        layout.addWidget(ms.field_grid([("کالا", self.item_combo), ("انبار", self.warehouse_combo), ("از تاریخ", self.from_date),
+                                        ("تاریخ ثبت", self.posting_date), ("علت", self.reason_field)],
+                                       columns=5, tail=[self.preview_button, self.apply_button]))
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
