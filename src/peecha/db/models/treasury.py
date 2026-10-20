@@ -1,4 +1,4 @@
-"""مدل‌های ماژول خزانه‌داری (نگاشت حساب‌ها، دسته‌چک، چک‌های دریافتی/پرداختی).
+"""مدل‌های ماژول خزانه‌داری (تنظیم حساب‌ها، دسته‌چک، چک‌های دریافتی/پرداختی).
 
 معادل db/schema/024_treasury.sql
 """
@@ -29,9 +29,9 @@ class TreasuryAccountMapping(Base):
 
 
 class CounterpartyAccountMapping(Base):
-    """نگاشت نوع تفصیلی <-> معین حساب برای دریافت/پرداخت — هر ردیف یا
+    """تنظیم نوع تفصیلی <-> معین حساب برای دریافت/پرداخت — هر ردیف یا
     یک گروه تفصیلی اشخاص (person_group_id) یا یک نوع‌بُعد غیرشخصی
-    (dimension_type_id) را به یک معین نگاشت می‌کند."""
+    (dimension_type_id) را به یک معین تنظیم می‌کند."""
 
     __tablename__ = "counterparty_account_mappings"
     __table_args__ = {"schema": "treasury"}

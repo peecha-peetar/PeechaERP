@@ -6,7 +6,7 @@
 اصلاحی به حساب «اختلاف بهای موجودی» (یا بهای تمام‌شده) بسته می‌شود تا
 ارزش دفتری موجودی با موجودی واقعی (صفر) برابر شود.
 
-حساب مقابل از نگاشت INVENTORY_REVALUATION (تنظیمات انبار ‹ نگاشت حساب‌ها)؛
+حساب مقابل از تنظیم INVENTORY_REVALUATION (تنظیمات انبار ‹ تنظیم حساب‌ها)؛
 اگر تعریف نشده باشد INVENTORY_COST_VARIANCE و در نهایت COGS استفاده می‌شود.
 """
 
@@ -142,7 +142,7 @@ def post_residual_adjustment(
     counter_id, key = counter_account_id(company_id)
     if counter_id is None:
         raise ValueError(
-            "حساب «اختلاف بهای موجودی (تسعیر)» در تنظیمات انبار ‹ نگاشت حساب‌ها مشخص نشده است."
+            "حساب «اختلاف بهای موجودی (تسعیر)» در تنظیمات انبار ‹ تنظیم حساب‌ها مشخص نشده است."
         )
     fixed_detail = engine_service.get_account_mapping_detail(company_id, key)
     inventory_account_id = engine_service.get_account_mapping(company_id, "INVENTORY_ASSET")

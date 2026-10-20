@@ -2109,6 +2109,7 @@ class MainWindow(QMainWindow):
         # R314: افتتاحیه و انتقال اطلاعات
         from peecha.ui.screens import opening as opn_screens
 
+        self.register_screen("opn_sheet", lambda: opn_screens.OpeningSheetScreen(self))
         self.register_screen("opn_center", lambda: opn_screens.OpeningCenterScreen(self))
         self.register_screen("opn_data", lambda: opn_screens.OpeningDataScreen(self))
         self.register_screen("opn_reconcile", lambda: opn_screens.OpeningReconcileScreen(self))

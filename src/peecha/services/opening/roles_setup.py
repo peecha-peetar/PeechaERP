@@ -7,9 +7,10 @@ from peecha.services import roles as roles_service
 
 _V = ("VIEW",)
 _VE = ("VIEW", "EDIT")
-_SCREENS = ("opn_center", "opn_data", "opn_reconcile")
+_SCREENS = ("opn_sheet", "opn_center", "opn_data", "opn_reconcile")
 TEMPLATES: dict[str, tuple[str, dict[str, tuple[str, ...]]]] = {
-    "OPN_ENTRY": ("کارشناس ورود اطلاعات افتتاحیه", {**{s: _V for s in _SCREENS}, "opn_data": _VE, "opn_enter": _VE}),
+    "OPN_ENTRY": ("کارشناس ورود اطلاعات افتتاحیه", {**{s: _V for s in _SCREENS}, "opn_sheet": _VE, "opn_data": _VE,
+                                                    "opn_enter": _VE}),
     "OPN_APPROVER": ("بررسی‌کننده و تأییدکنندهٔ افتتاحیه", {**{s: _V for s in _SCREENS}, "opn_approve": _VE}),
     "OPN_MANAGER": ("مدیر پروژهٔ افتتاحیه", {
         **{s: _VE for s in _SCREENS}, "opn_setup": _VE, "opn_post": _VE, "opn_config": _VE, "opn_settings": _VE}),

@@ -1,4 +1,4 @@
-"""فروش اینترنتی و Omnichannel (مرحلهٔ ۸) — اتصالات، نگاشت کالا/مشتری،
+"""فروش اینترنتی و Omnichannel (مرحلهٔ ۸) — اتصالات، تطبیق کالا/مشتری،
 گزارش همگام‌سازی، و مسیریابی توزیع‌شدهٔ سفارش (DOM)."""
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ _SYNC_STATUS_LABELS = {"IMPORTED": "واردشده", "FAILED": "ناموفق", "
 _STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیق منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبار ثابت"}
 _PRICING_SCOPE_LABELS = {"BRAND": "برند", "CATEGORY": "دسته"}
 _PRICING_MARKUP_LABELS = {"PERCENT": "درصد", "AMOUNT": "مبلغ"}
-_RECONCILIATION_STATUS_LABELS = {"MATCHED": "نگاشته‌شده", "STORE_ONLY": "فقط در فروشگاه", "ERP_ONLY": "فقط در ERP"}
+_RECONCILIATION_STATUS_LABELS = {"MATCHED": "تطبیق داده‌شده", "STORE_ONLY": "فقط در فروشگاه", "ERP_ONLY": "فقط در ERP"}
 
 
 class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -59,7 +59,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(title)
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_connections_tab(), "اتصالات و نگاشت‌ها")
+        tabs.addTab(self._build_connections_tab(), "اتصالات و تطبیق‌ها")
         tabs.addTab(self._build_routing_tab(), "مسیریابی سفارش")
         tabs.addTab(self._build_pricing_tab(), "استودیوی قیمت")
         tabs.addTab(self._build_bulk_assign_tab(), "تخصیص گروهی دسته/برند")
@@ -81,9 +81,9 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.auto_sync_checkbox, "این اتصال بدون فشردن دکمه، به‌طور خودکار و دوره‌ای همگام‌سازی شود."),
             (self.auto_sync_interval_field, "هر چند دقیقه یک‌بار همگام‌سازی خودکار انجام شود."),
             (self.sku_field, "کد محصول (SKU) در سمت فروشگاه."),
-            (self.map_item_combo, "کالای داخلی ERP که این کد کالا باید به آن نگاشته شود."),
+            (self.map_item_combo, "کالای داخلی ERP که این کد کالا باید به آن تطبیق داده شود."),
             (self.external_customer_field, "شناسهٔ مشتری در سمت فروشگاه."),
-            (self.map_customer_combo, "مشتری داخلی ERP که این شناسهٔ خارجی باید به آن نگاشته شود."),
+            (self.map_customer_combo, "مشتری داخلی ERP که این شناسهٔ خارجی باید به آن تطبیق داده شود."),
             (self.routing_channel_combo, "این قاعده فقط برای سفارش‌های همین کانال اعمال شود — خالی یعنی همهٔ کانال‌ها."),
             (self.routing_strategy_combo, "روش انتخاب انبار تحویل‌دهنده برای سفارش‌های منطبق با این قاعده."),
             (self.routing_fallback_combo, "انباری که وقتی استراتژی بالا نتواند انبار بهتری پیدا کند، استفاده می‌شود."),
@@ -258,7 +258,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
-        right.addWidget(QLabel("نگاشت کالا (SKU خارجی ↔ کالای داخلی)"))
+        right.addWidget(QLabel("تطبیق کالا (SKU خارجی ↔ کالای داخلی)"))
         self.item_mappings_table = QTableWidget(0, 2)
         self.item_mappings_table.setHorizontalHeaderLabels(["کد کالا خارجی", "کالای داخلی"])
         self.item_mappings_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -275,12 +275,12 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_item_map_button = QPushButton("🗺️")
         add_item_map_button.setObjectName("iconButton")
         add_item_map_button.setFixedWidth(44)
-        add_item_map_button.setToolTip("نگاشت")
+        add_item_map_button.setToolTip("تطبیق")
         add_item_map_button.clicked.connect(self._add_item_mapping)
         item_map_form.addWidget(add_item_map_button)
         right.addLayout(item_map_form)
 
-        right.addWidget(QLabel("نگاشت مشتری (شناسهٔ خارجی ↔ مشتری داخلی)"))
+        right.addWidget(QLabel("تطبیق مشتری (شناسهٔ خارجی ↔ مشتری داخلی)"))
         self.customer_mappings_table = QTableWidget(0, 2)
         self.customer_mappings_table.setHorizontalHeaderLabels(["شناسهٔ خارجی", "مشتری داخلی"])
         self.customer_mappings_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -297,7 +297,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_customer_map_button = QPushButton("🗺️")
         add_customer_map_button.setObjectName("iconButton")
         add_customer_map_button.setFixedWidth(44)
-        add_customer_map_button.setToolTip("نگاشت")
+        add_customer_map_button.setToolTip("تطبیق")
         add_customer_map_button.clicked.connect(self._add_customer_mapping)
         customer_map_form.addWidget(add_customer_map_button)
         right.addLayout(customer_map_form)
@@ -973,10 +973,10 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_reconciliation_tab(self) -> QWidget:
         """طبق درخواست صریح کاربر: کل کاتالوگ فروشگاه در برابر کل
         کاتالوگ ERP — کالاهایی که فقط در فروشگاه‌اند (با پیشنهاد خودکار)،
-        کالاهایی که فقط در ERPاند، و کالاهای از قبل نگاشته‌شده."""
+        کالاهایی که فقط در ERPاند، و کالاهای از قبل تطبیق داده‌شده."""
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.addWidget(QLabel("کل کاتالوگ فروشگاه را با کالاهای ERP تطبیق می‌دهد — برای نگاشتن کالاهایی که فقط در یک طرف دیده می‌شوند."))
+        outer.addWidget(QLabel("کل کاتالوگ فروشگاه را با کالاهای ERP تطبیق می‌دهد — برای تطبیق دادن کالاهایی که فقط در یک طرف دیده می‌شوند."))
 
         form = QHBoxLayout()
         self.reconciliation_connection_combo = QComboBox()
@@ -1062,7 +1062,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.reconciliation_status_label.setText("هم کد کالا و هم کالای ERP باید مشخص باشند.")
             return
         ecommerce_service.map_item(connection_id, external_sku, item_id)
-        theme.set_status_label(self.reconciliation_status_label, f"«{external_sku}» نگاشته شد.", ok=True)
+        theme.set_status_label(self.reconciliation_status_label, f"«{external_sku}» تطبیق داده شد.", ok=True)
         self._load_reconciliation()
 
     # --- فیدِ ترب -----------------------------------------------------------
@@ -1106,7 +1106,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _generate_torob_feed(self) -> None:
         connection_id = self.torob_connection_combo.currentData()
         if connection_id is None:
-            self.torob_status_label.setText("ابتدا یک اتصال «ترب» ایجاد کنید (در تب «اتصالات و نگاشت‌ها»).")
+            self.torob_status_label.setText("ابتدا یک اتصال «ترب» ایجاد کنید (در تب «اتصالات و تطبیق‌ها»).")
             return
         try:
             feed_xml = ecommerce_service.generate_torob_feed_xml(connection_id)

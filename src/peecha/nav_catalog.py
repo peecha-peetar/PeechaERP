@@ -663,6 +663,7 @@ NAV_ITEMS = [
         "code": "OPN",
         "label": "افتتاحیه و انتقال اطلاعات",
         "children": [
+            {"code": "OPN_SHEET", "label": "سند افتتاحیه", "screen": "opn_sheet"},
             {"code": "OPN_CENTER", "label": "مرکز افتتاحیه", "screen": "opn_center"},
             {"code": "OPN_DATA", "label": "ورود و بارگذاری اطلاعات", "screen": "opn_data"},
             {"code": "OPN_RECONCILE", "label": "تطبیق با تراز افتتاحیه", "screen": "opn_reconcile"},
@@ -968,6 +969,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("BUD_RPT_BUD_DETAIL", "🔎"),
     ],
     "OPN": [
+        ("OPN_SHEET", "🧾"),
         ("OPN_CENTER", "🧭"),
         ("OPN_DATA", "📥"),
         ("OPN_RECONCILE", "⚖️"),
@@ -991,7 +993,7 @@ SETTINGS_SUB_FORMS = [
     ("roles", "نقش‌ها و دسترسی‌ها"),
     ("field_labels", "عنوان فیلدها"),
     ("translations", "ترجمه‌ها"),
-    ("workflow_designer", "طراحی گردش کار"),
+    ("workflow_designer", "مراحل کارتابل قبلی"),
     ("audit_log", "امنیت (رخدادنگار)"),
     ("payroll_settings", "تنظیمات حقوق و دستمزد"),
     # R272: دسترسیِ جداگانهٔ هر تبِ «تنظیماتِ سیستم» (تب‌هایِ دارایی/تولید/بها با فرمِ ماژولِ خودشان)
@@ -1075,7 +1077,7 @@ def flatten_nav_items_with_breadcrumb() -> list[tuple[str, str, str]]:
     منو (breadcrumb) را هم برمی‌گرداند — طبق نیاز جستجوی سراسری
     (کادر ازپیش‌موجود ولی تا امروز بی‌اتصال «جستجو در سیستم» در
     نوار بالایی): وقتی چند آیتم برگ در زیرمنوهای مختلف برچسب یکسان
-    دارند (مثلاً «نگاشت حساب‌ها» هم زیر انبار هم زیر بازرگانی است)،
+    دارند (مثلاً «تنظیم حساب‌ها» هم زیر انبار هم زیر بازرگانی است)،
     این مسیر برای نمایش متمایز و ناوبری درست لازم است."""
     result: list[tuple[str, str, str]] = []
 

@@ -2,7 +2,7 @@
 
 کالاهایی که موجودی تعدادیشان صفر است ولی حساب موجودی (به تفکیک تفصیلی
 کالا) هنوز مانده دارد فهرست می‌شوند؛ با انتخاب، یک سند اصلاحی به حساب
-«تسعیر/اصلاح ماندهٔ ریالی» (تنظیمات انبار ‹ نگاشت حساب‌ها) صادر می‌شود.
+«تسعیر/اصلاح ماندهٔ ریالی» (تنظیمات انبار ‹ تنظیم حساب‌ها) صادر می‌شود.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ class InventoryResidualScreen(QWidget):
             return
         counter_id, key = residual_service.counter_account_id(company_id)
         if counter_id is None:
-            self.account_label.setText("⚠ حساب مقابل تعریف نشده — تنظیمات انبار ‹ نگاشت حساب‌ها ‹ «تسعیر/اصلاح ماندهٔ ریالی موجودی صفر».")
+            self.account_label.setText("⚠ حساب مقابل تعریف نشده — تنظیمات انبار ‹ تنظیم حساب‌ها ‹ «تسعیر/اصلاح ماندهٔ ریالی موجودی صفر».")
         else:
             self.account_label.setText(f"حساب مقابل: {engine_service.MAPPING_LABELS.get(key, key)}")
         if not residual_service.inventory_account_tracks_items(company_id):

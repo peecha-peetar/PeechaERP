@@ -1,4 +1,4 @@
-"""تنظیمات دامنهٔ مدیریت بازرگانی: نگاشت حساب‌ها، Feature Toggle، شماره‌گذاری
+"""تنظیمات دامنهٔ مدیریت بازرگانی: تنظیم حساب‌ها، Feature Toggle، شماره‌گذاری
 اسناد (طبق مرحلهٔ ۱۱). کلیدهای CUSTOMER_RECEIVABLE/SUPPLIER_PAYABLE عمداً
 این‌جا نیستند — از inv.account_mappings مصرف می‌شوند (inventory_engine.
 get_account_mapping)، نه تکرار."""
@@ -69,7 +69,7 @@ def get_fixed_detail_for_mapping(company_id: int, mapping_key: str) -> tuple[int
 
 def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلید نگاشت نامعتبر است.")
+        raise ValueError("کلید تنظیم نامعتبر است.")
     with new_session() as session:
         row = session.get(CommercialAccountMapping, (company_id, mapping_key))
         if row is None:

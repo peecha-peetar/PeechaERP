@@ -1,7 +1,7 @@
 """قطعات دستور کار (R312): برنامه، رزرو، صدور، برگشت و درخواست خرید کمبود — فقط از موتور انبار.
 
 صدور = حوالهٔ ISSUE و برگشت = رسید RECEIPT با inventory_documents.create_and_post_in_session در همان تراکنش؛
-بدهکار/بستانکار نقش «هزینهٔ قطعات تعمیر و نگهداری» (نگاشت حساب انبار) با مرکز هزینه و پروژهٔ همان دارایی.
+بدهکار/بستانکار نقش «هزینهٔ قطعات تعمیر و نگهداری» (تنظیم حساب انبار) با مرکز هزینه و پروژهٔ همان دارایی.
 CMMS فقط شناسهٔ سند انبار را نگه می‌دارد؛ هیچ ردیف موجودی یا سند حسابداری را مستقیم نمی‌نویسد.
 """
 
@@ -170,8 +170,8 @@ def _header(wo: WorkOrder, asset: Asset, what: str, **kw) -> inv_docs.DocumentHe
 def _require_mapping(session, company_id: int) -> None:
     row = session.get(InventoryAccountMapping, (company_id, EXPENSE_ROLE))
     if row is None or row.account_id is None:
-        raise ValueError("حساب «هزینهٔ قطعات تعمیر و نگهداری» در نگاشت حساب‌های انبار تعیین نشده است "
-                         "(تنظیمات › انبار › نگاشت حساب‌ها).")
+        raise ValueError("حساب «هزینهٔ قطعات تعمیر و نگهداری» در تنظیم حساب‌های انبار تعیین نشده است "
+                         "(تنظیمات › انبار › تنظیم حساب‌ها).")
 
 
 def _replayed(session, work_order_id: int, key: str | None) -> WorkOrderPartMove | None:

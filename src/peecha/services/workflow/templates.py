@@ -409,3 +409,42 @@ def governing_process(company_id: int, form_code: str) -> str | None:
             if d.status_code in RUNNABLE_STATUSES and governs_approvals(_active_graph(company_id, d.definition_id)):
                 return d.name
     return None
+
+
+def legacy_chains(company_id: int) -> list[dict]:
+    """R316: همهٔ زنجیره‌های تایید کارتابل قبلی این شرکت، برای پنل «کارتابل قبلی» در تنظیمات گردش کار.
+
+    form، label، roles (نام نقش هر مرحله)، active، movable (نوع سند در گردش کار تازه دارد)، process (فرایند اجرایی جایگزین)."""
+    from peecha.db.models.security import Form, Role
+    from peecha.db.models.workflow import ApprovalWorkflow
+    from peecha.services import cartable
+    from peecha.services.roles import FORM_LABELS
+
+    with new_session() as session:
+        forms = list(session.scalars(select(Form.code).join(ApprovalWorkflow, ApprovalWorkflow.form_id == Form.form_id)
+                                     .where(ApprovalWorkflow.company_id == company_id).order_by(Form.code)))
+        role_names = {r.role_id: r.code for r in session.scalars(select(Role).where(Role.company_id == company_id))}
+    movable = {a.form_code for a in registry.adapters() if a.form_code}
+    out = []
+    for form in forms:
+        active, steps = cartable.get_workflow_steps(company_id, form)
+        if not steps:
+            continue
+        out.append({"form": form, "label": FORM_LABELS.get(form, form), "active": active,
+                    "roles": [role_names.get(s.approver_role_id, "—") for s in steps],
+                    "movable": form in movable, "process": governing_process(company_id, form)})
+    return out
+
+
+def set_legacy_active(company_id: int, form_code: str, active: bool) -> None:
+    """روشن/خاموش کردن زنجیرهٔ کارتابل قبلی بدون پاک کردن مراحلش؛ با فرایند اجرایی جایگزین روشن نمی‌شود."""
+    from peecha.services import cartable
+
+    _was, steps = cartable.get_workflow_steps(company_id, form_code)
+    if not steps:
+        raise WorkflowError("این فرم زنجیرهٔ تایید قبلی ندارد.")
+    if active:
+        process = governing_process(company_id, form_code)
+        if process:
+            raise WorkflowError(f"تایید این سند با فرایند «{process}» انجام می‌شود؛ کارتابل قبلی دوباره روشن نمی‌شود.")
+    cartable.save_workflow_steps(company_id, form_code, active, [s.approver_role_id for s in steps])

@@ -175,7 +175,7 @@ def render_report_at_path(
     قالب (jrxml) یکی باشند؛ مقادیر باید از قبل با numerals.format_money/
     format_jalali_date/to_persian_digits آماده‌شده باشند (JasperReports این‌جا
     فقط چیدمان می‌کند، نه محاسبه یا قالب‌دهی عدد/تاریخ).
-    params: نگاشت رشته‌ای برای پارامترهای گزارش (عنوان، نام شرکت، ...).
+    params: تنظیم رشته‌ای برای پارامترهای گزارش (عنوان، نام شرکت، ...).
     output_format: "pdf" یا "xlsx".
     """
     if not _RUNNER_JAR.exists():

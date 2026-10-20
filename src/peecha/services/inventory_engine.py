@@ -5,7 +5,7 @@ stock_balance همین‌جاست — هیچ کد دیگری مستقیماً ا
 نمی‌دهد. سه روش قیمت‌گذاری (FIFO/میانگین موزون/استاندارد) دقیقاً درون
 همین گام Post اجرا می‌شوند، نه یک مرحلهٔ جدا. هر Post موفق، سند
 حسابداری خودکار را از روی inv.account_mappings می‌سازد؛ اگر کلید لازم
-نگاشت نشده باشد، Post متوقف می‌شود و پیام روشن نمایش داده می‌شود، نه
+تنظیم نشده باشد، Post متوقف می‌شود و پیام روشن نمایش داده می‌شود، نه
 سکوت — دقیقاً همان اصلی که برای خزانه‌داری اجرا شده."""
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def get_account_mapping_detail(company_id: int, mapping_key: str) -> int | None:
 
 def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلید نگاشت نامعتبر است.")
+        raise ValueError("کلید تنظیم نامعتبر است.")
     with new_session() as session:
         row = session.get(InventoryAccountMapping, (company_id, mapping_key))
         if row is None:
@@ -1957,7 +1957,7 @@ def list_category_account_mappings(category_id: int) -> list[CategoryAccountMapp
 
 def set_category_account_mapping(category_id: int, mapping_key: str, account_id: int) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلید نگاشت نامعتبر است.")
+        raise ValueError("کلید تنظیم نامعتبر است.")
     with new_session() as session:
         row = session.get(CategoryAccountMapping, (category_id, mapping_key))
         if row is None:
@@ -1997,7 +1997,7 @@ def list_warehouse_account_mappings(warehouse_id: int) -> list[WarehouseAccountM
 
 def set_warehouse_account_mapping(warehouse_id: int, mapping_key: str, account_id: int) -> None:
     if mapping_key not in MAPPING_LABELS:
-        raise ValueError("کلید نگاشت نامعتبر است.")
+        raise ValueError("کلید تنظیم نامعتبر است.")
     with new_session() as session:
         row = session.get(WarehouseAccountMapping, (warehouse_id, mapping_key))
         if row is None:

@@ -81,16 +81,20 @@ def reverse_open_item(company_id: int, user_id: int, run_id: int, original_row_i
         if row.status_code != "POSTED":
             raise ValueError("این ردیف ثبت‌شده نیست یا قبلاً برگشت خورده است.")
         runs._module(session, run_id, row.module_code)
-        doc = session.scalar(select(CommercialDocument).where(CommercialDocument.document_id == row.target_id).with_for_update())
-        if doc is None or doc.status_code != "POSTED":
-            raise ValueError("سند باز در وضعیت قابل برگشت نیست.")
-        later = session.scalar(select(func.count()).select_from(InvoiceSettlement).where(
-            InvoiceSettlement.invoice_document_id == doc.document_id, InvoiceSettlement.description != PRE_CUTOVER_NOTE))
-        if later:
-            raise ValueError("پس از افتتاحیه روی این سند تسویه ثبت شده است؛ ابتدا آن تسویه‌ها را بردارید.")
-        # همان ردیف سند اصلی، معکوس؛ طرف مقابل حساب واسط
+        advance = bool(row.resolved.get("advance"))
+        doc = None
+        if not advance:
+            doc = session.scalar(select(CommercialDocument).where(CommercialDocument.document_id == row.target_id).with_for_update())
+            if doc is None or doc.status_code != "POSTED":
+                raise ValueError("سند باز در وضعیت قابل برگشت نیست.")
+            later = session.scalar(select(func.count()).select_from(InvoiceSettlement).where(
+                InvoiceSettlement.invoice_document_id == doc.document_id, InvoiceSettlement.description != PRE_CUTOVER_NOTE))
+            if later:
+                raise ValueError("پس از افتتاحیه روی این سند تسویه ثبت شده است؛ ابتدا آن تسویه‌ها را بردارید.")
+        # همان ردیف سند اصلی، معکوس؛ طرف مقابل حساب واسط. پیش‌دریافت/پیش‌پرداخت خلاف جهت سند باز است.
         lines = []
         receivable = row.module_code == "RECEIVABLES"
+        debit_side = receivable != advance
         src = session.scalars(select(JournalEntryLine).where(
             JournalEntryLine.journal_entry_id == row.journal_entry_id,
             JournalEntryLine.account_id == int(row.resolved["account_id"]))).all()
@@ -99,31 +103,34 @@ def reverse_open_item(company_id: int, user_id: int, run_id: int, original_row_i
         for ln in src:
             dets = {d.dimension_type_id: d.detail_account_id for d in session.scalars(
                 select(JournalEntryLineDetail).where(JournalEntryLineDetail.line_id == ln.line_id))}
-            if person in dets.values() and (ln.debit_amount_fc if receivable else ln.credit_amount_fc) == c.dec(row.resolved["open"]):
+            if person in dets.values() and (ln.debit_amount_fc if debit_side else ln.credit_amount_fc) == c.dec(row.resolved["open"]):
                 line = (ln, dets)
                 break
         if line is None:
-            raise ValueError("ردیف سند حسابداری همین سند باز پیدا نشد.")
+            raise ValueError("ردیف سند حسابداری همین مانده پیدا نشد.")
         ln, dets = line
         amount = c.dec(row.resolved["open"])
         foreign = ln.currency_id != run.currency_id
+        label = ("پیش‌دریافت" if receivable else "پیش‌پرداخت") if advance else "سند باز"
         lines.append(je_service.LineInput(
-            account_id=ln.account_id, description=f"برگشت سند باز افتتاحیه {row.resolved.get('legacy_no') or ''}", details=dets,
-            debit=c.ZERO if receivable else amount, credit=amount if receivable else c.ZERO,
+            account_id=ln.account_id, description=f"برگشت {label} افتتاحیه {row.resolved.get('legacy_no') or ''}".strip(), details=dets,
+            debit=c.ZERO if debit_side else amount, credit=amount if debit_side else c.ZERO,
             currency_id=ln.currency_id if foreign else None, exchange_rate=ln.exchange_rate if foreign else None))
         base = je_service._base_amount(amount, ln.exchange_rate if foreign else c.dec(1))
         lines.append(je_service.LineInput(account_id=c.clearing_account_id(company_id), description="برگشت افتتاحیه — طرف مقابل",
-                                          debit=base if receivable else c.ZERO, credit=c.ZERO if receivable else base))
+                                          debit=base if debit_side else c.ZERO, credit=c.ZERO if debit_side else base))
         je = je_service.create_journal_entry(company_id, user_id, run.go_live_date, f"افتتاحیهٔ اصلاحی {run.code}: {reason.strip()}"[:250],
                                              lines, alternative_number=f"OPN-{run.code}", entry_type_code="OPENING",
                                              session=session).journal_entry_id
-        doc.status_code = "CANCELLED"
+        if doc is not None:
+            doc.status_code = "CANCELLED"
         row.status_code = "REVERSED"
         session.add(Posting(run_id=run_id, module_code=row.module_code, step_key=f"REV:{row.row_id}", status_code="DONE",
-                            target_type="COMMERCIAL_DOCUMENT", target_id=doc.document_id, journal_entry_id=je, row_count=1,
-                            amount=-base if receivable else base, attempts=1, user_id=user_id, finished_at=c.now(),
+                            target_type="COMMERCIAL_DOCUMENT" if doc is not None else "JOURNAL_ENTRY",
+                            target_id=doc.document_id if doc is not None else je, journal_entry_id=je, row_count=1,
+                            amount=-base if debit_side else base, attempts=1, user_id=user_id, finished_at=c.now(),
                             message=reason.strip()))
-        details = {"row_id": row.row_id, "document_id": doc.document_id, "journal_entry_id": je}
+        details = {"row_id": row.row_id, "document_id": doc.document_id if doc is not None else None, "journal_entry_id": je}
         c.event(session, run_id, "REVERSE", user_id, row.module_code, reason.strip(), details)
         c.event(session, original.run_id, "REVERSE", user_id, row.module_code, f"در افتتاحیهٔ اصلاحی {run.code}: {reason.strip()}",
                 details)

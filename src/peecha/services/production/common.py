@@ -2,7 +2,7 @@
 
 قاعده: ثبت مالی فقط از موتور سند موجود (journal_entries.create_journal_entry) و حرکت موجودی فقط از موتور انبار
 (inventory_engine.post_stock_document)؛ هر دو در همان تراکنش عملیات تولید (session) تا یا همه بنشینند یا هیچ‌کدام.
-حساب‌ها نقش‌محورند و در همان «نگاشت حساب انبار» (inv.account_mappings) تعریف می‌شوند.
+حساب‌ها نقش‌محورند و در همان «تنظیم حساب انبار» (inv.account_mappings) تعریف می‌شوند.
 """
 
 from __future__ import annotations
@@ -131,7 +131,7 @@ def missing_roles(company_id: int, roles: tuple[str, ...]) -> list[str]:
 def require_roles(session, company_id: int, roles: tuple[str, ...]) -> None:
     missing = [ROLE_LABELS.get(r, r) for r in roles if role_account(session, company_id, r) is None]
     if missing:
-        raise ValueError("نگاشت حساب تولید ناقص است (تنظیمات انبار ← نگاشت حساب‌ها): " + "، ".join(missing))
+        raise ValueError("تنظیم حساب تولید ناقص است (تنظیمات انبار ← تنظیم حساب‌ها): " + "، ".join(missing))
 
 
 def post_journal(session, company_id: int, user_id: int, date: datetime.date, description: str,
@@ -143,7 +143,7 @@ def post_journal(session, company_id: int, user_id: int, date: datetime.date, de
     for role, debit, credit, details in lines:
         account_id = role_account(session, company_id, role)
         if account_id is None:
-            raise ValueError(f"حساب «{ROLE_LABELS.get(role, role)}» در نگاشت حساب‌های انبار تعیین نشده است.")
+            raise ValueError(f"حساب «{ROLE_LABELS.get(role, role)}» در تنظیم حساب‌های انبار تعیین نشده است.")
         mapping = session.get(InventoryAccountMapping, (company_id, role))
         ids = {d for d in details if d}
         if mapping is not None and mapping.detail_account_id:

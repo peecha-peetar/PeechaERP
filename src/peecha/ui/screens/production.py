@@ -1637,7 +1637,7 @@ class PrdCostingScreen(QWidget):
 # =========================================================================================================
 @ms.styled
 class PrdSettingsScreen(QWidget):
-    """تنظیمات تولید (هم‌الگو با تنظیمات ماژول‌های دیگر) + وضعیت نگاشت حساب‌ها."""
+    """تنظیمات تولید (هم‌الگو با تنظیمات ماژول‌های دیگر) + وضعیت تنظیم حساب‌ها."""
 
     scroll_in_mdi = True
 
@@ -1714,7 +1714,7 @@ class PrdSettingsScreen(QWidget):
             else:
                 w.setText(decimals.plain(value) if isinstance(value, decimal.Decimal) else P(value))
         missing = pc.missing_roles(cid, tuple(pc.ROLE_LABELS))
-        self.accounts_label.setText("نگاشت حساب‌های تولید (تنظیمات انبار ← نگاشت حساب‌ها): " +
+        self.accounts_label.setText("تنظیم حساب‌های تولید (تنظیمات انبار ← تنظیم حساب‌ها): " +
                                     ("کامل است ✓" if not missing else "ناقص: " + "، ".join(missing)))
 
     def save(self) -> bool:

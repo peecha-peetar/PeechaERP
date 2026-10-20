@@ -237,7 +237,7 @@ def missing_accounts(category: AssetCategory, needed: tuple[str, ...]) -> list[s
 def require_accounts(category: AssetCategory, needed: tuple[str, ...]) -> None:
     missing = missing_accounts(category, needed)
     if missing:
-        raise ValueError(f"نگاشت حساب طبقهٔ «{category.name}» ناقص است: {'، '.join(missing)}")
+        raise ValueError(f"تنظیم حساب طبقهٔ «{category.name}» ناقص است: {'، '.join(missing)}")
 
 
 def save_group(company_id: int, code: str, name: str, group_id: int | None = None) -> int:
@@ -321,7 +321,7 @@ def post_journal(session, company_id: int, user_id: int | None, date: datetime.d
     merged: dict[tuple, list] = {}
     for ln in lines:
         if ln.account_id is None:
-            raise ValueError("نگاشت حساب دارایی ناقص است (حساب یکی از ردیف‌های سند تعیین نشده).")
+            raise ValueError("تنظیم حساب دارایی ناقص است (حساب یکی از ردیف‌های سند تعیین نشده).")
         details = tuple(sorted(d for d in ln.detail_ids if d))
         key = (ln.account_id, details, ln.description)
         acc = merged.setdefault(key, [ZERO, ZERO])

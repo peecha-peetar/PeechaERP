@@ -641,7 +641,7 @@ def _payable_lines(company_id: int, supplier_id: int | None, date_to: datetime.d
     payable_id = engine_service.get_account_mapping(company_id, side.account_key)
     if payable_id is None:
         raise ValueError(
-            f"حساب «{engine_service.MAPPING_LABELS.get(side.account_key, side.account_key)}» در تنظیمات انبار ‹ نگاشت حساب‌ها مشخص نشده است."
+            f"حساب «{engine_service.MAPPING_LABELS.get(side.account_key, side.account_key)}» در تنظیمات انبار ‹ تنظیم حساب‌ها مشخص نشده است."
         )
     person_dim = dimensions_service.get_person_dimension_type_id(company_id)
     with new_session() as session:

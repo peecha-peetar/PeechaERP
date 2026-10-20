@@ -35,6 +35,8 @@ ms.ICONS.update({
     "ذخیرهٔ قواعد": ("💾", "primary"), "ذخیرهٔ ساعت کاری": ("💾", "primary"), "تعطیلی جدید": ("🆕", ""),
     "حذف تعطیلی": ("🗑️", "danger"), "ذخیرهٔ پیش‌فرض اعلان‌ها": ("💾", "primary"), "ذخیرهٔ کاربران کارکنان": ("💾", "primary"),
     "ذخیرهٔ مدیران واحدها": ("💾", "primary"), "مرکز تایید": ("🖊️", ""),
+    "انتقال به فرایند تازه": ("📥", "primary"), "روشن یا خاموش کردن کارتابل قبلی": ("⏯️", ""),
+    "ویرایش مراحل کارتابل قبلی": ("✏️", ""),
 })
 
 
@@ -701,6 +703,13 @@ class OrgLinksPanel(QWidget):
         layout.addWidget(hint)
         self.t_emp = table(["کد", "نام کارمند", "کاربر سامانه"])
         self.t_unit = table(["واحد سازمانی", "مدیر واحد"])
+        # R316: هر ردیف یک فهرست کشویی دارد؛ ارتفاع ردیف باید به اندازهٔ آن باشد
+        for t in (self.t_emp, self.t_unit):
+            t.verticalHeader().setDefaultSectionSize(46)
+            t.verticalHeader().setMinimumSectionSize(46)
+        self.t_emp.setColumnWidth(0, 110)
+        self.t_emp.setColumnWidth(1, 240)
+        self.t_unit.setColumnWidth(0, 260)
         tabs = QTabWidget()
         e_box, u_box = QWidget(), QWidget()
         el, ul = QVBoxLayout(e_box), QVBoxLayout(u_box)
@@ -766,9 +775,120 @@ class OrgLinksPanel(QWidget):
         return True
 
 
+@ms.styled
+class LegacyCartablePanel(QWidget):
+    """R316: «طراحی گردش کار» قدیمی از تنظیمات کاربران برداشته شد؛ زنجیره‌های قبلی اینجا دیده و منتقل می‌شوند."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        hint = QLabel("زنجیره‌های تایید کارتابل قبلی. هر کدام را به فرایند تازه منتقل کنید تا تایید سند از «طراحی فرایند» "
+                      "اداره شود. با منتشرشدن فرایند تازه، کارتابل قبلی همان سند خاموش می‌شود و سندهایی که الان در آن "
+                      "در جریان‌اند، همان‌جا تا پایان تایید می‌شوند.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.table = table(["سند", "مراحل تایید (به ترتیب)", "وضعیت", "فرایند تازه"])
+        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.setColumnWidth(0, 220)
+        self.table.setColumnWidth(1, 320)
+        self.table.setColumnWidth(2, 110)
+        layout.addWidget(self.table, stretch=1)
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("sectionHint")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+        self.move_btn = QPushButton("انتقال به فرایند تازه")
+        self.toggle_btn = QPushButton("روشن یا خاموش کردن کارتابل قبلی")
+        self.edit_btn = QPushButton("ویرایش مراحل کارتابل قبلی")
+        self.refresh_btn = QPushButton("تازه‌سازی")
+        self.move_btn.clicked.connect(lambda: self.move_selected())
+        self.toggle_btn.clicked.connect(lambda: self.toggle_selected())
+        self.edit_btn.clicked.connect(lambda: self.edit_steps())
+        self.refresh_btn.clicked.connect(lambda: self.refresh())
+        layout.addWidget(ms.footer([[self.move_btn, self.toggle_btn, self.edit_btn], [self.refresh_btn]]))
+        self.rows: list[dict] = []
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        from peecha.services.workflow import templates as wf_templates
+
+        registry.ensure_loaded()
+        self.rows = wf_templates.legacy_chains(company_id())
+        fill(self.table, [[r["label"], " ← ".join(r["roles"]), "روشن" if r["active"] else "خاموش",
+                           r["process"] or ("—" if r["movable"] else "در گردش کار تازه پشتیبانی نمی‌شود")]
+                          for r in self.rows], [r["form"] for r in self.rows])
+
+    def _selected(self) -> dict | None:
+        items = self.table.selectedItems()
+        if not items:
+            _warn(self, "کارتابل قبلی", "یک ردیف را انتخاب کنید.")
+            return None
+        return self.rows[items[0].row()]
+
+    def select_form(self, form_code: str) -> None:
+        for r, row in enumerate(self.rows):
+            if row["form"] == form_code:
+                self.table.setCurrentCell(r, 0)
+                return
+
+    def move_selected(self) -> int | None:
+        from peecha.services.workflow import templates as wf_templates
+
+        row = self._selected()
+        if row is None:
+            return None
+        if not row["movable"]:
+            _warn(self, "انتقال به فرایند تازه", "این سند هنوز در گردش کار تازه نوع سند ندارد؛ کارتابل قبلی آن مثل قبل کار می‌کند.")
+            return None
+        did, ok = _run(self, "انتقال به فرایند تازه", wf_templates.import_legacy, company_id(), user_id(), row["form"])
+        if ok:
+            self.refresh()
+            self.status_label.setText(f"پیش‌نویس فرایند «تایید {row['label']}» ساخته شد. آن را در «طراحی فرایند» بررسی و "
+                                      "منتشر کنید؛ با انتشار، کارتابل قبلی همین سند خاموش می‌شود.")
+        return did if ok else None
+
+    def toggle_selected(self) -> bool:
+        from peecha.services.workflow import templates as wf_templates
+
+        row = self._selected()
+        if row is None:
+            return False
+        _x, ok = _run(self, "کارتابل قبلی", wf_templates.set_legacy_active, company_id(), row["form"], not row["active"])
+        if ok:
+            form = row["form"]
+            self.refresh()
+            self.select_form(form)
+        return ok
+
+    def edit_steps(self) -> None:
+        from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
+
+        if not can("workflow_designer", "EDIT"):
+            _warn(self, "مراحل کارتابل قبلی", "دسترسی ویرایش مراحل کارتابل قبلی را ندارید.")
+            return
+        row = self._selected() if self.table.selectedItems() else None
+        dlg = QDialog(self)
+        dlg.setWindowTitle("مراحل کارتابل قبلی")
+        dlg.resize(760, 560)
+        box = QVBoxLayout(dlg)
+        designer = WorkflowDesignerScreen()
+        box.addWidget(designer)
+        designer.refresh()
+        if row is not None and hasattr(designer, "form_combo"):
+            index = designer.form_combo.findData(row["form"])
+            if index >= 0:
+                designer.form_combo.setCurrentIndex(index)
+        runner = getattr(self, "dialog_runner", None)
+        runner(dlg) if runner is not None else dlg.exec()
+        self.refresh()
+
+
 SETTINGS_PANELS = [("قواعد عمومی", WfRulesPanel), ("تقویم کاری و تعطیلات", CalendarPanel),
                    ("تعهد زمانی و ارجاع", SlaPoliciesPanel), ("پیش‌فرض اعلان‌ها", NotificationDefaultsPanel),
-                   ("کارکنان و مدیران", OrgLinksPanel)]
+                   ("کارکنان و مدیران", OrgLinksPanel), ("کارتابل قبلی", LegacyCartablePanel)]
 
 
 class WorkflowSettingsScreen(QWidget):

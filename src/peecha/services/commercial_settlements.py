@@ -366,7 +366,7 @@ def set_pos_settlement_method_default(
 def resolve_method_detail_options(company_id: int, direction: str, method_code: str) -> tuple[int | None, list]:
     """گزینه‌های تفصیلی معتبر برای یک روش دریافت/پرداخت — هم برای
     گزینش صندوق‌دار در فرم نحوهٔ تسویه، هم برای تنظیم پیش‌فرض. خروجی:
-    (account_id یا None اگر این روش نگاشت حسابی ندارد، فهرست ردیف‌های
+    (account_id یا None اگر این روش تنظیم حسابی ندارد، فهرست ردیف‌های
     تفصیلی مجاز — اگر معین هیچ بُعد الزامی‌ای نداشته باشد، فهرست آزاد
     همهٔ تفصیلی‌های برگ برمی‌گردد، هم‌الگو با treasury_voucher.py)."""
     from peecha.services import detail_dimensions as dimensions_service
@@ -406,7 +406,7 @@ def resolve_method_detail_options(company_id: int, direction: str, method_code: 
 def mobile_method_detail_options(company_id: int, method_code: str) -> tuple[bool, list]:
     """طبق درخواست صریح کاربر («ثبت تسویه دقیقاً همون فیلدهایی که
     دسکتاپ داره»): هم‌الگو با ستون «تفصیلی» در دیالوگ نحوهٔ تسویهٔ
-    دسکتاپ — فقط وقتی معین نگاشته‌شدهٔ این روش (دریافت) واقعاً یک
+    دسکتاپ — فقط وقتی معین تنظیم‌شدهٔ این روش (دریافت) واقعاً یک
     تفصیلی (صندوق/حساب بانکی/شخص) را الزامی کرده باشد، گزینه‌ها برگردانده
     می‌شوند؛ در غیر این صورت (False, []) و موبایل انتخاب‌گری نشان نمی‌دهد."""
     from peecha.services import detail_dimensions as dimensions_service
@@ -424,7 +424,7 @@ def mobile_method_detail_options(company_id: int, method_code: str) -> tuple[boo
 
 
 def method_requires_cost_center_or_project(company_id: int, direction: str, method_code: str) -> tuple[bool, bool]:
-    """آیا معین نگاشته‌شدهٔ این روش، مرکز هزینه/پروژه را الزامی کرده --
+    """آیا معین تنظیم‌شدهٔ این روش، مرکز هزینه/پروژه را الزامی کرده --
     طبق درخواست صریح («اگر تفصیلی‌ها مراکز هزینه و پروژه داشتند در
     همان تنظیمات... انجام شود»)، فقط در این حالت فیلدهای پیش‌فرض
     مربوطه در صفحهٔ تنظیمات فعال/معنی‌دار می‌شوند."""

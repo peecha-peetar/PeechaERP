@@ -1,4 +1,4 @@
-"""تنظیمات دامنهٔ مدیریت بازرگانی — نگاشت حساب‌ها، Feature Toggle،
+"""تنظیمات دامنهٔ مدیریت بازرگانی — تنظیم حساب‌ها، Feature Toggle،
 نمایه‌های صنعتی، شماره‌گذاری اسناد، کانال‌ها (مرحلهٔ ۱۱)."""
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        title = QLabel("نگاشت حساب‌های بازرگانی")
+        title = QLabel("تنظیم حساب‌های بازرگانی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         layout.addWidget(QLabel("حساب‌های دریافتنی مشتریان/پرداختنی تامین‌کنندگان از تنظیمات انبار می‌آیند و این‌جا تکرار نمی‌شوند."))
@@ -1004,7 +1004,8 @@ class _DistributionSettlementTypesTab(QWidget):
 class _MobileSettlementMethodsTab(QWidget):
     """طبق درخواست صریح کاربر («نوع تسویه در پخش گرم باید همانند
     انواع تسویه در دسکتاپ باشد — فقط جایی باشد که برخی را برای
-    موبایل خاموش کنیم»)."""
+    موبایل خاموش کنیم»). R316: همهٔ روش‌های تعریف‌شده دیده می‌شوند؛ آن‌هایی که در موبایل
+    شدنی نیستند (تهاتر، اقساط، روش غیرفعال خزانه‌داری) با دلیلشان، بدون کلید روشن/خاموش."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -1017,40 +1018,73 @@ class _MobileSettlementMethodsTab(QWidget):
         layout.addWidget(title)
 
         hint = QLabel(
-            "این‌ها همان روش‌های واقعی تسویهٔ فاکتور فروش همین شرکت‌اند (دسکتاپ) — فقط مشخص کن کدام‌ها "
-            "برای ثبت فاکتور پخش گرم در موبایل هم قابل‌انتخاب باشند."
+            "همهٔ روش‌های تسویهٔ فاکتور فروش همین شرکت (دسکتاپ) اینجا هستند؛ مشخص کنید کدام‌ها برای ثبت فاکتور پخش گرم "
+            "در موبایل هم قابل انتخاب باشند. «انواع تسویهٔ پخش» (مثل تسویهٔ یک‌هفته‌ای) فهرست جداگانه‌ای در زبانهٔ خودش دارد."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["روش تسویه", "تعریف", "در موبایل", "توضیح"])
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        layout.addWidget(self.table, stretch=1)
         self.checkboxes: dict[str, QCheckBox] = {}
-        self.checkbox_layout = QVBoxLayout()
-        layout.addLayout(self.checkbox_layout)
 
-        save_button = QPushButton("ذخیره")
+        footer = QHBoxLayout()
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        layout.addWidget(save_button)
-
+        footer.addWidget(save_button)
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
-        layout.addWidget(self.status_label)
-        layout.addStretch(1)
+        footer.addWidget(self.status_label, stretch=1)
+        layout.addLayout(footer)
 
     def refresh(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
-        self.status_label.setText("")
-        for checkbox in self.checkboxes.values():
-            checkbox.setParent(None)
-        self.checkboxes.clear()
+        from peecha.services import treasury as treasury_service
 
-        for method in settlements_service.list_mobile_settlement_methods(company_id):
-            checkbox = QCheckBox(method.label)
-            checkbox.setChecked(method.is_enabled)
-            self.checkbox_layout.addWidget(checkbox)
-            self.checkboxes[method.method_code] = checkbox
+        self.status_label.setText("")
+        self.checkboxes.clear()
+        methods = settlements_service.list_mobile_settlement_methods(company_id)
+        rows = [(m.method_code, m.label, "custom" if m.method_code.startswith("CUSTOM_") else "fixed", m.is_enabled, None)
+                for m in methods]
+        rows += [("NETTING", "تهاتر", "fixed", False, "به سند طرف مقابل وابسته است؛ فقط از سند دریافت در دسکتاپ ثبت می‌شود."),
+                 ("INSTALLMENT", "اقساط", "fixed", False, "برنامهٔ اقساط لازم دارد؛ فقط از سند دریافت در دسکتاپ ثبت می‌شود.")]
+        for custom in treasury_service.list_custom_methods(company_id, "RECEIPT"):
+            if not custom.is_active:
+                rows.append((f"CUSTOM_{custom.custom_method_id}", custom.label, "custom", False,
+                             "در «تنظیمات خزانه‌داری › انواع سند دریافت» غیرفعال است؛ برای موبایل ابتدا آنجا فعالش کنید."))
+        self.table.setRowCount(len(rows))
+        for r, (code, label, kind, enabled, reason) in enumerate(rows):
+            self.table.setItem(r, 0, QTableWidgetItem(label))
+            self.table.setItem(r, 1, QTableWidgetItem("روش ثابت برنامه" if kind == "fixed" else "تعریف‌شده در خزانه‌داری"))
+            checkbox = QCheckBox()
+            checkbox.setChecked(enabled)
+            checkbox.setEnabled(reason is None)
+            holder = QWidget()
+            hl = QHBoxLayout(holder)
+            hl.setContentsMargins(8, 0, 8, 0)
+            hl.addWidget(checkbox)
+            hl.addStretch(1)
+            self.table.setCellWidget(r, 2, holder)
+            note = QTableWidgetItem(reason or "قابل استفاده در موبایل")
+            note.setToolTip(note.text())
+            self.table.setItem(r, 3, note)
+            if reason is None:
+                self.checkboxes[code] = checkbox
 
     def _save(self) -> None:
         company_id = _company_id()

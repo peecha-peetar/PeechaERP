@@ -195,7 +195,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.acquisition_cost_field, "بهای تمام‌شدهٔ خرید این دارایی."),
             (self.salvage_value_field, "ارزش برآوردی این دارایی در پایان عمر مفیدش — از مبلغ مستهلک‌شونده کسر می‌شود."),
             # گروه‌بندی -- کالاهایِ مرتبط
-            (self.category_combo, "دسته‌بندی داخلی این کالا — برای فیلتر فهرست‌ها و نگاشت حساب‌های گروهی."),
+            (self.category_combo, "دسته‌بندی داخلی این کالا — برای فیلتر فهرست‌ها و تنظیم حساب‌های گروهی."),
             (self.related_item_combo, "کالای دیگری که با این کالا رابطه دارد (جایگزین یا مکمل)."),
             (self.relation_type_combo, "نوع رابطه با کالای انتخاب‌شده — جایگزین (می‌تواند به‌جایش فروخته شود) یا مکمل (معمولاً همراهش پیشنهاد می‌شود)."),
             (self.uom_conversion_combo, "واحد دیگری که این کالا می‌تواند با آن هم سنجیده شود (مثلاً کارتن/بسته) — واحد پایه در این فهرست نیست."),
@@ -1136,7 +1136,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ بازخوردِ صریحِ کاربر («تطبیقِ کد/SKU بینِ سایت و ERP بهتر
         # است در فرمِ تعریفِ کالا انجام شود»): به‌ازایِ هر اتصالِ فعالِ
         # فروشگاهی، یک ردیف با SKUِ سایت و دکمه‌یِ اتصال/جست‌وجو.
-        ecommerce_mapping_label = QLabel("نگاشت کالا در فروشگاه‌های اینترنتی")
+        ecommerce_mapping_label = QLabel("تطبیق کالا در فروشگاه‌های اینترنتی")
         layout.addWidget(ecommerce_mapping_label)
         self.ecommerce_mapping_container = QWidget()
         self.ecommerce_mapping_layout = QVBoxLayout(self.ecommerce_mapping_container)
@@ -1160,7 +1160,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._clear_ecommerce_mapping_rows()
         self.ecommerce_mapping_status_label.setText("")
         if self._item_id is None or self._company_id is None:
-            self.ecommerce_mapping_layout.addWidget(QLabel("ابتدا کالا را ذخیره کنید، سپس نگاشت فروشگاهی را انجام دهید."))
+            self.ecommerce_mapping_layout.addWidget(QLabel("ابتدا کالا را ذخیره کنید، سپس تطبیق فروشگاهی را انجام دهید."))
             return
         connections = [c for c in ecommerce_service.list_connections(self._company_id) if c.sync_status == "ACTIVE"]
         if not connections:
@@ -1198,7 +1198,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.ecommerce_mapping_status_label.setText(f"محصولی با کد کالا «{sku}» در فروشگاه پیدا نشد.")
             return
         ecommerce_service.map_item(connection_id, sku, self._item_id)
-        theme.set_status_label(self.ecommerce_mapping_status_label, f"به «{product_name}» نگاشته شد.", ok=True)
+        theme.set_status_label(self.ecommerce_mapping_status_label, f"به «{product_name}» تنظیم شد.", ok=True)
 
     # --- تبِ POS ---------------------------------------------------------------
     def _build_pos_tab(self) -> QWidget:

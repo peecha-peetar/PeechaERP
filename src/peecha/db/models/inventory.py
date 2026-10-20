@@ -592,7 +592,7 @@ class WarehouseUserAccess(Base):
 
 
 class WarehouseAccountMapping(Base):
-    """نگاشت حساب سطح‌انبار — عیناً هم‌شکل CategoryAccountMapping؛ override
+    """تنظیم حساب سطح‌انبار — عیناً هم‌شکل CategoryAccountMapping؛ override
     روی InventoryAccountMapping. طبق همان دامنه‌بندی: فقط CRUD این دور."""
 
     __tablename__ = "warehouse_account_mappings"

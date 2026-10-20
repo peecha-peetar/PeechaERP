@@ -338,7 +338,7 @@ def _resolve_receivable_counterparty_details(
     company_id: int, person_dimension_type_id: int, customer_id: int, cost_center_type_id: int, project_type_id: int,
 ) -> dict[int, int]:
     """طبق رفع باگ واقعی گزارش‌شده («در فرم تایید سرپرست، برای حساب
-    مشتری مرکز هزینه/پروژه می‌خواهد»): اگر حساب نگاشت‌شدهٔ دریافت
+    مشتری مرکز هزینه/پروژه می‌خواهد»): اگر حساب تنظیم‌شدهٔ دریافت
     مشتری این ابعاد را الزامی کرده باشد، پیش‌فرض تنظیم‌شده در
     PosSettings.default_receivable_cost_center/project به طرف حساب
     (بستانکار) سند RECEIPT هم اضافه می‌شود."""
@@ -418,7 +418,7 @@ def record_payment_and_settle_batch(
             None,
         )
         if mapping_account_id is None:
-            raise ValueError("نگاشت حساب دریافت برای گروه «مشتری» در تنظیمات خزانه‌داری مشخص نشده است.")
+            raise ValueError("تنظیم حساب دریافت برای گروه «مشتری» در تنظیمات خزانه‌داری مشخص نشده است.")
         treasury_method = "CASH" if method_code == "CASH" else "BANK"
         total_amount = sum(amounts[d.document_id] for d in docs)
         description = (
@@ -524,7 +524,7 @@ def record_combined_settlement(
         None,
     )
     if mapping_account_id is None:
-        raise ValueError("نگاشت حساب دریافت برای گروه «مشتری» در تنظیمات خزانه‌داری مشخص نشده است.")
+        raise ValueError("تنظیم حساب دریافت برای گروه «مشتری» در تنظیمات خزانه‌داری مشخص نشده است.")
 
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(
         company_id, dimensions_service.COST_CENTER_CODE
@@ -1035,7 +1035,7 @@ def post_invoice_settlement_plan(company_id: int, user_id: int, document_id: int
     )
     if mapping_account_id is None:
         raise ValueError(
-            f"نگاشت حساب {'دریافت' if is_sales else 'پرداخت'} برای گروه «{'مشتری' if is_sales else 'تامین‌کننده'}» "
+            f"تنظیم حساب {'دریافت' if is_sales else 'پرداخت'} برای گروه «{'مشتری' if is_sales else 'تامین‌کننده'}» "
             "در تنظیمات خزانه‌داری مشخص نشده است."
         )
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)

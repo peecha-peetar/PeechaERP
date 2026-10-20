@@ -153,7 +153,7 @@ class _MultiSelectComboBox(QComboBox):
 
 
 class _MappingForm(QWidget):
-    """ردیف افزودن نگاشت تازه: یک گروه تفصیلی + چند معین با هم — طبق
+    """ردیف افزودن تنظیم تازه: یک گروه تفصیلی + چند معین با هم — طبق
     گزارش صریح («بتوان چند معین را به آن تخصیص داد و برای هر گروه
     تفصیلی یک بار تعریف بشه»): قبلاً برای هر معین باید دوباره همان گروه
     از فهرست انتخاب و «افزودن» زده می‌شد؛ حالا گروه یک‌بار انتخاب می‌شود و
@@ -245,7 +245,7 @@ def _describe_account_requirements(account_ids: list[int]) -> str:
 
 
 class _MethodMappingRow(QWidget):
-    """ردیف نگاشت معین یک روش ردیف پایین سند دریافت (نقد/چک/تخفیف) —
+    """ردیف تنظیم معین یک روش ردیف پایین سند دریافت (نقد/چک/تخفیف) —
     طبق درخواست صریح: طرف بدهکار همین ردیف‌ها، در تنظیمات سند. جدا از
     معین، می‌شود یک تفصیلی مشخص هم از پیش تخصیص داد — اگر خالی بماند،
     کاربر خودش در فرم سند تفصیلی را انتخاب می‌کند."""
@@ -326,7 +326,7 @@ class _MethodMappingRow(QWidget):
 
 
 class _MultiAccountMappingRow(QWidget):
-    """طبق آیتم ۹: ردیف نگاشت چندمعینی یک روش دریافت — چک‌لیست
+    """طبق آیتم ۹: ردیف تنظیم چندمعینی یک روش دریافت — چک‌لیست
     چندانتخابی معین‌ها (هم‌الگو با فهرست چندانتخابی CHECK_DISBURSEMENT).
     تفصیلی اختصاصی اختیاری فقط وقتی معنی دارد که دقیقاً یک معین تیک
     خورده باشد — وگرنه موقع ثبت سند، تفصیلی‌های همهٔ معین‌های
@@ -454,7 +454,7 @@ class _CustomMethodForm(QWidget):
 
 
 class _CustomMethodRow(QWidget):
-    """ردیف مدیریت یک روش سفارشی موجود — فعال/غیرفعال و حذف. نگاشت
+    """ردیف مدیریت یک روش سفارشی موجود — فعال/غیرفعال و حذف. تنظیم
     حساب کل آن جدا، بلافاصله زیر همین ردیف، با یک _MultiAccountMappingRow
     معمولی (عیناً هم‌الگو با روش‌های ثابت) می‌آید."""
 
@@ -979,7 +979,7 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         table = self._tables[direction]
         mapping_id = table.item(row, 0).data(Qt.UserRole)
         confirm = QMessageBox.question(
-            self, "حذف ردیف", "این نگاشت حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف ردیف", "این تنظیم حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

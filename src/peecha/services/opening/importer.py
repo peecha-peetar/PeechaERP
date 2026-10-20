@@ -282,6 +282,61 @@ def save_row(company_id: int, user_id: int, run_id: int, module_code: str, value
                                amount=res.amount)
 
 
+def save_rows(company_id: int, user_id: int, run_id: int, module_code: str, items: list[tuple[int | None, dict]],
+              delete_ids=(), batch_id: int | None = None) -> SimpleNamespace:
+    """چند ردیف فرم در یک تراکنش (فرم سند افتتاحیه): items = [(شناسهٔ ردیف یا None، مقادیر)]. ردیف بی‌شناسه با همان
+    کلید، همان ردیف موجود را به‌روز می‌کند؛ ردیف ثبت‌شده دست نمی‌خورد. ردیف با خطا هم ذخیره می‌شود."""
+    c.require(company_id, user_id, c.FORM_ENTER)
+    h = handler(module_code)
+    with new_session() as session:
+        run, _m = _guard(session, company_id, user_id, run_id, module_code)
+        lk = Lookups(session, company_id, run)
+        by_key = {r.row_key: r for r in session.scalars(select(StagedRow).where(
+            StagedRow.run_id == run_id, StagedRow.module_code == module_code))}
+        by_id = {r.row_id: r for r in by_key.values()}
+        deleted = 0
+        for rid in delete_ids:
+            row = by_id.pop(rid, None)
+            if row is None:
+                continue
+            if row.status_code in ("POSTED", "REVERSED"):
+                raise ValueError("ردیف ثبت‌شده حذف نمی‌شود.")
+            by_key.pop(row.row_key, None)
+            session.delete(row)
+            deleted += 1
+        session.flush()
+        saved, seen = [], set()
+        for row_id, values in items:
+            res = _check(h, lk, values)
+            if res.key in seen:
+                raise ValueError(f"دو ردیف با یک مشخصات وارد شده است ({res.key}).")
+            seen.add(res.key)
+            clash = by_key.get(res.key)
+            row = clash if row_id is None else by_id.get(row_id)
+            if row_id is not None and row is None:
+                raise ValueError("ردیف نامعتبر است.")
+            if row is not None and row.status_code in ("POSTED", "REVERSED"):
+                raise ValueError(f"ردیف ثبت‌شده ویرایش نمی‌شود ({res.key}).")
+            if clash is not None and row is not None and clash.row_id != row.row_id:
+                raise ValueError(f"دو ردیف با یک مشخصات وارد شده است ({res.key}).")
+            if row is None:
+                row = StagedRow(run_id=run_id, module_code=module_code, row_key=res.key)
+                session.add(row)
+            elif row.row_key != res.key:
+                by_key.pop(row.row_key, None)
+                row.row_key = res.key
+            by_key[res.key] = row
+            _store(row, res, user_id, batch_id, None)
+            saved.append((row, res))
+        session.flush()
+        status = runs.refresh_module_status(session, run_id, module_code, user_id)
+        c.event(session, run_id, "FORM", user_id, module_code, f"{len(saved)} ردیف", {"saved": len(saved), "deleted": deleted})
+        session.commit()
+        out = [SimpleNamespace(row_id=row.row_id, key=res.key, status=row.status_code, errors=res.errors, warnings=res.warnings,
+                               amount=res.amount) for row, res in saved]
+        return SimpleNamespace(saved=out, deleted=deleted, invalid=sum(1 for x in out if x.errors), module_status=status)
+
+
 def delete_row(company_id: int, user_id: int, run_id: int, module_code: str, row_id: int) -> None:
     c.require(company_id, user_id, c.FORM_ENTER)
     with new_session() as session:

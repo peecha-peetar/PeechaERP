@@ -1,7 +1,7 @@
 """قالب ستون‌ها و اعتبارسنجی هر ماژول افتتاحیه (R314).
 
 هر ماژول: ستون‌ها (کلید، برچسب، الزامی، نوع، راهنما)، کلید طبیعی ردیف (برای جلوگیری از تکرار و بارگذاری دوباره) و
-اعتبارسنجی که کدها را به شناسهٔ PeechaERP نگاشت می‌کند و خطا را به تفکیک ستون برمی‌گرداند. ثبت نهایی در posting.py
+اعتبارسنجی که کدها را به شناسهٔ PeechaERP تنظیم می‌کند و خطا را به تفکیک ستون برمی‌گرداند. ثبت نهایی در posting.py
 و فقط با سرویس رسمی همان ماژول است.
 """
 
@@ -40,6 +40,7 @@ class Check:
         self.warnings.append((col, msg))
 
 
+_BALANCE_KIND = {"سند باز": "OPEN", "open": "OPEN", "پیش‌دریافت": "ADVANCE", "پیش‌پرداخت": "ADVANCE", "advance": "ADVANCE"}
 _YES = {"بله": True, "آری": True, "yes": True, "y": True, "1": True, "true": True, "خیر": False, "نه": False, "no": False,
         "n": False, "0": False, "false": False}
 
@@ -313,7 +314,15 @@ class GLHandler(Handler):
             clearing = c.clearing_account_id(lk.company_id)
             if acc.account_id == clearing:
                 chk.err("account_code", "حساب واسط افتتاحیه در تراز وارد نمی‌شود")
-            missing = lk.required_dims(acc.account_id) - set(details)
+            module = lk.control_accounts().get(acc.account_id)
+            # ماندهٔ حساب کنترل در سند دفتر کل به حساب واسط می‌رود و تفصیلی‌ها را سند زیرسیستم می‌دهد؛ فقط حساب اشخاص
+            # برای تطبیق به تفکیک طرف‌حساب، تفصیلی شخص را لازم دارد
+            required = lk.required_dims(acc.account_id)
+            if module in ("RECEIVABLES", "PAYABLES"):
+                required = required & {lk.dim_types().get("PERSON")}
+            elif module:
+                required = set()
+            missing = required - set(details)
             if missing:
                 chk.err("account_code", "تفصیلی الزامی این حساب خالی است: " + "، ".join(lk.dim_label(t) for t in sorted(missing)))
             allowed = lk.person_groups(acc.account_id)
@@ -322,7 +331,6 @@ class GLHandler(Handler):
                 chk.err("person_code", "این شخص در گروه‌های مجاز این حساب نیست")
             if acc.currency_id is not None and acc.currency_id != cur_id:
                 chk.err("currency_code", "این حساب فقط با ارز تعریف‌شدهٔ خودش ثبت می‌شود")
-            module = lk.control_accounts().get(acc.account_id)
             if module:
                 chk.warn("account_code", f"حساب کنترل «{c.MODULE_LABELS[module]}»: ماندهٔ آن از زیرسیستم ثبت و با همین رقم تطبیق "
                                          "داده می‌شود؛ در سند دفتر کل به حساب واسط می‌رود")
@@ -470,6 +478,9 @@ class OpenItemsHandler(Handler):
             Column("project_code", "کد پروژه"),
             Column("disputed", "مورد اختلاف", kind="choice", choices=_YES, help="بله/خیر"),
             Column("description", "شرح"),
+            Column("balance_kind", "نوع مانده", kind="choice", choices=_BALANCE_KIND,
+                   help="سند باز (پیش‌فرض)، یا " + ("پیش‌دریافت از مشتری" if self.receivable else "پیش‌پرداخت به تامین‌کننده")
+                   + " که ماندهٔ خلاف جهت است و سند باز نمی‌سازد"),
         ]
 
     def key(self, v: dict, lk: Lookups | None = None) -> str:
@@ -486,10 +497,13 @@ class OpenItemsHandler(Handler):
                 chk.warn("counterparty_code", "این شخص پروندهٔ " + ("مشتری" if self.receivable else "تامین‌کننده") +
                          " ندارد؛ سررسید پیش‌فرض و سقف اعتبار برایش محاسبه نمی‌شود")
         original, settled = v["original_amount"], v["settled_amount"] or c.ZERO
+        advance = v["balance_kind"] == "ADVANCE"
         if original is not None and original <= 0:
             chk.err("original_amount", "مبلغ اصلی باید مثبت باشد")
         if settled < 0:
             chk.err("settled_amount", "مبلغ تسویه منفی پذیرفته نمی‌شود")
+        if advance and settled:
+            chk.err("settled_amount", "پیش‌دریافت/پیش‌پرداخت تسویهٔ پیش از برش ندارد؛ فقط ماندهٔ آن را وارد کنید")
         open_amount = (original or c.ZERO) - settled
         if original is not None and open_amount <= 0:
             chk.err("settled_amount", "این سند کاملاً تسویه شده است؛ اسناد تسویه‌شده منتقل نمی‌شوند")
@@ -513,7 +527,7 @@ class OpenItemsHandler(Handler):
         ctrl = lk.inv_mapping(role)
         if ctrl is None:
             chk.err("counterparty_code", f"حساب «{'دریافتنی مشتریان' if self.receivable else 'پرداختنی تامین‌کنندگان'}» "
-                                         "در تنظیمات انبار نگاشت نشده است")
+                                         "در تنظیمات انبار تنظیم نشده است")
         elif party is not None:
             missing = lk.required_dims(ctrl) - {lk.dim_types().get("PERSON"), *dims}
             if missing:
@@ -528,8 +542,9 @@ class OpenItemsHandler(Handler):
                         "open_base": str(c.money(open_amount * rate)), "doc_date": v["doc_date"], "due_date": v["due_date"],
                         "branch_id": branch.branch_id if branch else None, "cost_center_id": dims.get(cc_type),
                         "project_id": dims.get(pj_type), "legacy_no": v["legacy_no"], "legacy_type": v["legacy_type"],
-                        "disputed": bool(v["disputed"]), "description": v["description"]}
-        chk.amount = c.money(open_amount * rate)
+                        "disputed": bool(v["disputed"]), "description": v["description"], "advance": advance}
+        # پیش‌دریافت/پیش‌پرداخت خلاف جهت حساب کنترل است
+        chk.amount = c.money(open_amount * rate) * (-1 if advance else 1)
         return chk
 
 
@@ -567,7 +582,7 @@ class ChequesHandler(Handler):
         direction = "RECEIPT" if kind == "RECEIVED" else "PAYMENT"
         account_id, options = settlements.resolve_method_detail_options(lk.company_id, direction, "CHECK")
         if account_id is None:
-            chk.err("kind", f"حساب «{'چک‌های دریافتنی' if kind == 'RECEIVED' else 'چک‌های پرداختنی'}» در تنظیمات خزانه نگاشت نشده است")
+            chk.err("kind", f"حساب «{'چک‌های دریافتنی' if kind == 'RECEIVED' else 'چک‌های پرداختنی'}» در تنظیمات خزانه تنظیم نشده است")
         holder = None
         restricted = bool(account_id and lk.required_dims(account_id))
         if v["holder_code"]:
@@ -747,7 +762,7 @@ class WipHandler(Handler):
         if v["wip_amount"] is not None and v["wip_amount"] < 0:
             chk.err("wip_amount", "هزینهٔ انباشته منفی پذیرفته نمی‌شود")
         if lk.inv_mapping("PRODUCTION_WIP") is None:
-            chk.err("wip_amount", "حساب «کالای در جریان ساخت» در تنظیمات انبار نگاشت نشده است")
+            chk.err("wip_amount", "حساب «کالای در جریان ساخت» در تنظیمات انبار تنظیم نشده است")
         whs = {}
         for col in ("material_warehouse_code", "fg_warehouse_code"):
             if v[col]:

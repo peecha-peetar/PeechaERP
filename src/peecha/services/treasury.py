@@ -1,4 +1,4 @@
-"""سرویس خزانه‌داری: نگاشت حساب‌ها، دسته‌چک، سند چندروشی دریافت/پرداخت
+"""سرویس خزانه‌داری: تنظیم حساب‌ها، دسته‌چک، سند چندروشی دریافت/پرداخت
 (نقد/بانک/چک/تخفیف در یک سند واحد)، و چرخهٔ عمر چک‌های دریافتی/پرداختی
 — همه روی همان موتور اسناد حسابداری (journal_entries.py) و ابعاد
 تفصیلی موجود (detail_dimensions.py)، بدون موتور موازی تازه."""
@@ -766,7 +766,7 @@ def _mapping_rows_query(session, company_id: int, mapping_key: str):
 
 
 def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
-    """نگاشت تک‌معینی قدیمی — همهٔ ردیف‌های این کلید را با فقط همین یک
+    """تنظیم تک‌معینی قدیمی — همهٔ ردیف‌های این کلید را با فقط همین یک
     معین جایگزین می‌کند (برای کلیدهایی مثل PAYMENT_*/CHECK_* که طبق
     خواستهٔ صریح کاربر همچنان فقط یک معین دارند)."""
     set_account_mappings(company_id, mapping_key, [(account_id, detail_account_id)])
@@ -795,7 +795,7 @@ def set_account_mappings(company_id: int, mapping_key: str, entries: list[tuple[
     # MAPPING_LABELِ ثابت نیستند — چون هر شرکت روش‌هایِ خودش را دارد؛
     # این‌ها با وجودِ همان custom_method_id در جدولِ سفارشی‌ها تایید می‌شوند.
     if mapping_key not in MAPPING_LABELS and not _is_valid_custom_method_mapping_key(company_id, mapping_key):
-        raise ValueError("کلید نگاشت نامعتبر است.")
+        raise ValueError("کلید تنظیم نامعتبر است.")
     with new_session() as session:
         for existing in _mapping_rows_query(session, company_id, mapping_key):
             session.delete(existing)
@@ -822,7 +822,7 @@ def _get_mapped_account_id(session, company_id: int, mapping_key: str) -> int:
 
 
 def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
-    """نگاشت یک روش را برمی‌گرداند (یا None اگر هنوز تنظیم نشده) — برای
+    """تنظیم یک روش را برمی‌گرداند (یا None اگر هنوز تنظیم نشده) — برای
     UI که می‌خواهد بُعد الزامی همان معین را از روی آن استنتاج کند
     (مثلاً کدام تفصیلی برای ردیف نقدی/تخفیف/کالابرگ نشان داده شود)،
     بدون ریسک raise شدن خطا در میانهٔ رفرش فرم. اگر چند معین تنظیم
@@ -885,7 +885,7 @@ class CustomMethodRow:
 
 
 def custom_method_mapping_key(direction: str, custom_method_id: int) -> str:
-    """کلید نگاشت حساب کل یک روش سفارشی — چون custom_method_id
+    """کلید تنظیم حساب کل یک روش سفارشی — چون custom_method_id
     منحصربه‌فرد کل جدول است (نه فقط هر شرکت)، این کلید هم بین همهٔ
     شرکت‌ها منحصربه‌فرد می‌ماند."""
     return f"{direction}_CUSTOM_{custom_method_id}"
@@ -895,7 +895,7 @@ def create_custom_method(company_id: int, direction: str, code: str, label: str)
     """طبق آیتم ۷ (درخواست صریح: «بتونیم روش پرداخت و دریافت خودمون
     درست کنیم غیر از موارد پیش‌فرض») — بر اساس توافق تاییدشده با کاربر،
     روش سفارشی «ساده» است (مثل نقد/تخفیف/بن): فقط مبلغ + تفصیلی اختیاری
-    که به یک حساب کل ثابت می‌رود؛ نگاشت همان حساب کل جداگانه، از همان
+    که به یک حساب کل ثابت می‌رود؛ تنظیم همان حساب کل جداگانه، از همان
     فرم تنظیمات روش‌های موجود (set_account_mapping/set_account_mappings
     با mapping_key حاصل از custom_method_mapping_key) تنظیم می‌شود."""
     if direction not in ("RECEIPT", "PAYMENT"):
@@ -960,7 +960,7 @@ def set_custom_method_active(company_id: int, custom_method_id: int, is_active: 
 def delete_custom_method(company_id: int, custom_method_id: int) -> None:
     """حذف کامل روش — چون سندهای قبلاً ثبت‌شده فقط به account_id (نه
     خود کد روش) وصل‌اند، حذف این ردیف به سندهای قدیمی آسیبی نمی‌زند؛
-    نگاشت حساب متناظر (اگر تنظیم شده بود) هم همراه حذف می‌شود."""
+    تنظیم حساب متناظر (اگر تنظیم شده بود) هم همراه حذف می‌شود."""
     with new_session() as session:
         row = session.get(CustomMethod, custom_method_id)
         if row is None or row.company_id != company_id:
@@ -1264,10 +1264,10 @@ def resolve_counterparty_for_detail_account(
     company_id: int, direction: str, detail_account_id: int
 ) -> tuple[int, dict[int, int]]:
     """هم‌الگو با ساخت _counterparty_index در UI فرم دریافت/پرداخت:
-    برای یک تفصیلی مشخص (مثلاً مشتری)، معین نگاشته‌شده (بر اساس
+    برای یک تفصیلی مشخص (مثلاً مشتری)، معین تنظیم‌شده (بر اساس
     گروه اشخاص یا نوع‌بُعد) را پیدا می‌کند — طبق همان اولویت: اگر هم
-    نگاشت گروه اشخاص و هم نگاشت سطح نوع‌بُعد برای همین تفصیلی وجود
-    داشته باشد، نگاشت نوع‌بُعد غالب است. برای استفادهٔ API موبایل
+    تنظیم گروه اشخاص و هم تنظیم سطح نوع‌بُعد برای همین تفصیلی وجود
+    داشته باشد، تنظیم نوع‌بُعد غالب است. برای استفادهٔ API موبایل
     (R134: /payments) که مستقیم شناسهٔ تفصیلی مشتری را دارد، نه یک UI
     برای انتخاب دستی."""
     with new_session() as session:
@@ -1288,7 +1288,7 @@ def resolve_counterparty_for_detail_account(
     if dimension_type_id in dim_mapping_by_type:
         account_id = dim_mapping_by_type[dimension_type_id]
     if account_id is None:
-        raise ValueError("برای این طرف‌حساب، نگاشت حساب در تنظیمات خزانه‌داری تعریف نشده است.")
+        raise ValueError("برای این طرف‌حساب، تنظیم حساب در تنظیمات خزانه‌داری تعریف نشده است.")
 
     counterparty_details = {resolved_dimension_type_id: detail_account_id}
     return account_id, counterparty_details
@@ -1393,7 +1393,7 @@ def sum_voucher_amount_for_company(
 class MethodLine:
     """یک ردیف فرم دریافت/پرداخت — روش + مبلغ + فیلدهای مخصوص همان روش.
     detail_account_id: برای نقد (کدام صندوق/تنخواه) یا بانک (کدام حساب
-    بانکی) — فقط اگر حساب نگاشت‌شده نیاز تفصیلی داشته باشد و بیش از یک
+    بانکی) — فقط اگر حساب تنظیم‌شده نیاز تفصیلی داشته باشد و بیش از یک
     گزینه موجود باشد؛ در غیر این صورت None."""
 
     method: str
@@ -1478,7 +1478,7 @@ def create_treasury_voucher(
     entry_type_code: str | None = None,
 ) -> je_service.JournalEntryResult:
     """طبق طرح تاییدشده: یک طرف‌حساب (بستانکار در دریافت، بدهکار در
-    پرداخت) و چند ردیف روش (نقد/بانک/چک/تخفیف) که هرکدام طبق نگاشت
+    پرداخت) و چند ردیف روش (نقد/بانک/چک/تخفیف) که هرکدام طبق تنظیم
     تنظیمات خزانه‌داری به حساب کل خودش می‌رود — همه در یک سند حسابداری
     واحد، روی همان create_journal_entry موجود.
 
@@ -2071,7 +2071,7 @@ def _group_received_checks_by_source(
 ) -> dict[tuple[int, int | None], list[ReceivedCheck]]:
     """چک‌های انتخاب‌شده را بر اساس محل فعلی نگه‌داری‌شان (حساب+تفصیلی)
     گروه‌بندی می‌کند — هر گروه یک خط جداگانه در سند bulk می‌شود. چک
-    بدون محل ثبت‌شده (دادهٔ قدیمی، پیش‌از این ویژگی) با حساب نگاشت
+    بدون محل ثبت‌شده (دادهٔ قدیمی، پیش‌از این ویژگی) با حساب تنظیم
     RECEIPT_CHECK و بدون تفصیلی جایگزین می‌شود."""
     fallback_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
     groups: dict[tuple[int, int | None], list[ReceivedCheck]] = {}
@@ -2091,7 +2091,7 @@ def _validate_detail_account(session, detail_account_id: int, company_id: int) -
 def transfer_received_checks_between_funds(
     check_ids: list[int], company_id: int, created_by_user_id: int, target_fund_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحلهٔ ۱ — انتقال چک نزد صندوق بین صندوق‌ها: بدهکار حساب نگاشت
+    """مرحلهٔ ۱ — انتقال چک نزد صندوق بین صندوق‌ها: بدهکار حساب تنظیم
     CHECK_RECEIVED_FUND_TRANSFER با تفصیلی صندوق مقصد / بستانکار همان
     حساب با تفصیلی صندوق(های) مبدأ هرکدام."""
     with new_session() as session:
@@ -2153,7 +2153,7 @@ def transfer_received_checks_between_funds(
 def collect_received_checks_cash(
     check_ids: list[int], company_id: int, created_by_user_id: int, cash_box_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحلهٔ ۲ — وصول نقدی چک نزد صندوق: بدهکار حساب نگاشت
+    """مرحلهٔ ۲ — وصول نقدی چک نزد صندوق: بدهکار حساب تنظیم
     CHECK_RECEIVED_CASH_COLLECT با تفصیلی صندوق نقدی مقصد / بستانکار
     محل فعلی هرچک."""
     with new_session() as session:
@@ -2209,7 +2209,7 @@ def collect_received_checks_cash(
 def deposit_received_checks_to_bank(
     check_ids: list[int], company_id: int, created_by_user_id: int, bank_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحلهٔ ۳ — واگذاری چک نزد صندوق به بانک: بدهکار حساب نگاشت
+    """مرحلهٔ ۳ — واگذاری چک نزد صندوق به بانک: بدهکار حساب تنظیم
     CHECK_RECEIVED_BANK_DEPOSIT با تفصیلی بانک مقصد / بستانکار محل
     فعلی هرچک."""
     with new_session() as session:
@@ -2272,7 +2272,7 @@ def deposit_received_checks_to_bank(
 def clear_deposited_received_checks(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحلهٔ ۴ — اعلام وصول چک نزد بانک: بدهکار حساب نگاشت
+    """مرحلهٔ ۴ — اعلام وصول چک نزد بانک: بدهکار حساب تنظیم
     CHECK_RECEIVED_BANK_CLEAR / بستانکار محل فعلی هرچک (همان بانکی که
     در مرحلهٔ ۳ انتخاب شده بود) — بدون نیاز انتخاب مقصد، چون بانک از
     روی خود چک معلوم است."""
@@ -2329,7 +2329,7 @@ def clear_deposited_received_checks(
 def return_deposited_received_checks_to_fund(
     check_ids: list[int], company_id: int, created_by_user_id: int, target_fund_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """مرحلهٔ ۵ — برگشت چک نزد بانک به صندوق: بدهکار حساب نگاشت
+    """مرحلهٔ ۵ — برگشت چک نزد بانک به صندوق: بدهکار حساب تنظیم
     CHECK_RECEIVED_BANK_RETURN با تفصیلی صندوق مقصد / بستانکار محل
     فعلی هرچک (بانک مبدأ)."""
     with new_session() as session:
@@ -2472,7 +2472,7 @@ def unendorse_received_checks_to_fund(
 def clear_issued_checks(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """وصول چک پرداختی از بانک: بدهکار حساب نگاشت CHECK_ISSUED_BANK_CLEAR
+    """وصول چک پرداختی از بانک: بدهکار حساب تنظیم CHECK_ISSUED_BANK_CLEAR
     / بستانکار همان حساب بانکی‌ای که موقع صدور هرچک مشخص شده بود."""
     with new_session() as session:
         if not check_ids:
@@ -2533,7 +2533,7 @@ def clear_issued_checks(
 def return_issued_checks_to_fund(
     check_ids: list[int], company_id: int, created_by_user_id: int
 ) -> je_service.JournalEntryResult:
-    """چک پرداختی وصول‌نشده جهت برگشت (ابطال): بدهکار حساب نگاشت
+    """چک پرداختی وصول‌نشده جهت برگشت (ابطال): بدهکار حساب تنظیم
     CHECK_ISSUED_RETURN_TO_FUND / بستانکار همان حساب/تفصیلی طرف‌حساب
     سند اصلی هرچک (بدهی ما به او دوباره برمی‌گردد)."""
     with new_session() as session:

@@ -1,6 +1,6 @@
 """فروش اینترنتی و Omnichannel (مرحلهٔ ۸): لایهٔ اتصال‌گر انتزاعی و
 مسیریابی توزیع‌شدهٔ سفارش. سفارش آنلاین دقیقاً همان SALES_ORDER است —
-این فایل فقط نگاشت/ورود/مسیریابی را اضافه می‌کند."""
+این فایل فقط تطبیق/ورود/مسیریابی را اضافه می‌کند."""
 
 from __future__ import annotations
 
@@ -145,9 +145,9 @@ def list_item_mappings(connection_id: int) -> list[MarketplaceItemMapping]:
 
 
 def list_item_mappings_for_item(item_id: int) -> list[MarketplaceItemMapping]:
-    """طبق بازخورد صریح کاربر («نگاشت کد کالا باید در فرم تعریف کالا
+    """طبق بازخورد صریح کاربر («تطبیق کد کالا باید در فرم تعریف کالا
     باشد»): برخلاف list_item_mappings (بر اساس یک اتصال)، این تابع
-    همهٔ نگاشت‌های یک کالای خاص را در همهٔ اتصال‌ها برمی‌گرداند --
+    همهٔ تطبیق‌های یک کالای خاص را در همهٔ اتصال‌ها برمی‌گرداند --
     برای نمایش در تب «فروشگاهی اینترنتی» فرم کالا."""
     with new_session() as session:
         return list(session.scalars(select(MarketplaceItemMapping).where(MarketplaceItemMapping.item_id == item_id)))
@@ -162,8 +162,8 @@ def unmap_item(connection_id: int, item_id: int) -> None:
 
 
 def search_external_product(connection_id: int, external_sku: str) -> str | None:
-    """طبق بازخورد صریح کاربر («نگاشت کد کالا در فرم تعریف کالا، با
-    دکمهٔ اتصال/جست‌وجو»): پیش از نگاشت، وجود واقعی آن کد کالا در
+    """طبق بازخورد صریح کاربر («تطبیق کد کالا در فرم تعریف کالا، با
+    دکمهٔ اتصال/جست‌وجو»): پیش از تطبیق، وجود واقعی آن کد کالا در
     فروشگاه را بررسی می‌کند و نام محصول را برمی‌گرداند — تا کاربر
     کورکورانه یک کد کالا اشتباه را ثبت نکند."""
     connection = _get_connection(connection_id)
@@ -235,15 +235,15 @@ def import_order(
 
     customer_id = resolve_customer(connection_id, external_customer_id)
     if customer_id is None:
-        _log_sync(connection_id, external_order_id, None, "FAILED", "مشتری خارجی به هیچ مشتری داخلی نگاشت نشده است.")
-        return ImportResult(sync_status="FAILED", document_id=None, error_message="مشتری خارجی نگاشت نشده است.")
+        _log_sync(connection_id, external_order_id, None, "FAILED", "مشتری خارجی به هیچ مشتری داخلی تطبیق نشده است.")
+        return ImportResult(sync_status="FAILED", document_id=None, error_message="مشتری خارجی تطبیق نشده است.")
 
     resolved_lines: list[tuple[int, decimal.Decimal, int]] = []
     for ext_line in lines:
         item_id = resolve_item(connection_id, ext_line.external_sku)
         if item_id is None:
-            _log_sync(connection_id, external_order_id, None, "FAILED", f"کد کالا «{ext_line.external_sku}» نگاشت نشده است.")
-            return ImportResult(sync_status="FAILED", document_id=None, error_message=f"کد کالا «{ext_line.external_sku}» نگاشت نشده است.")
+            _log_sync(connection_id, external_order_id, None, "FAILED", f"کد کالا «{ext_line.external_sku}» تطبیق نشده است.")
+            return ImportResult(sync_status="FAILED", document_id=None, error_message=f"کد کالا «{ext_line.external_sku}» تطبیق نشده است.")
         resolved_lines.append((item_id, ext_line.quantity, ext_line.uom_id))
 
     document_id = None
@@ -517,9 +517,9 @@ class ReconciliationEntry:
 
 def compute_catalog_reconciliation(connection_id: int) -> list[ReconciliationEntry]:
     """طبق درخواست صریح کاربر («تطبیق کالای ووکامرس/پرستاشاپ و ERP...
-    مثل برنامهٔ همگام‌ساز»): برخلاف نگاشت تک‌به‌تک موجود (فیلد کد کالا
+    مثل برنامهٔ همگام‌ساز»): برخلاف تطبیق تک‌به‌تک موجود (فیلد کد کالا
     در تب اتصالات)، این‌جا کل کاتالوگ فروشگاه در برابر کل کاتالوگ
-    ERP قرار می‌گیرد — سه وضعیت: نگاشته‌شده، فقط‌در‌فروشگاه (با
+    ERP قرار می‌گیرد — سه وضعیت: تطبیق داده‌شده، فقط‌در‌فروشگاه (با
     پیشنهاد خودکار اگر کد کالا/کدش با یک کالای ERP یکی باشد)، فقط‌در‌ERP."""
     from peecha.services import inventory_catalog as catalog_service
 
@@ -576,7 +576,7 @@ def _append_reconciliation_entry(entries: list, existing_mappings: dict, items_b
 
 
 def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
-    """طبق ویژگی «واریانت» — برای هر متغیر، نگاشت نام ویژگی به مقدارش
+    """طبق ویژگی «واریانت» — برای هر متغیر، تطبیق نام ویژگی به مقدارش
     (مثلاً {«سایز»: «M»، «رنگ»: «قرمز»}) که مستقیماً شکل attribute
     واریانت ووکامرس است."""
     if not item_ids:
@@ -1242,7 +1242,7 @@ def pull_new_orders(connection_id: int, created_by_user_id: int, currency_id: in
             lines.append(ExternalOrderLine(external_sku=line["sku"], quantity=decimal.Decimal(str(line["quantity"])), uom_id=uom_id))
         if unmapped_sku is not None:
             failed += 1
-            errors.append(f"سفارش #{order.external_order_id}: کد کالا «{unmapped_sku}» نگاشت نشده است.")
+            errors.append(f"سفارش #{order.external_order_id}: کد کالا «{unmapped_sku}» تطبیق نشده است.")
             continue
         result = import_order(
             connection_id, order.external_order_id, order.external_customer_id, connection.company_id,
@@ -1267,7 +1267,7 @@ class FullSyncResult:
 
 def sync_now(connection_id: int, created_by_user_id: int, currency_id: int) -> FullSyncResult:
     """دکمهٔ «همگام‌سازی الان» — کاتالوگ → مشتریان تازه → سفارش‌های تازه، به
-    همین ترتیب (سفارش به نگاشت مشتری نیاز دارد)."""
+    همین ترتیب (سفارش به تطبیق مشتری نیاز دارد)."""
     catalog = sync_catalog_to_store(connection_id)
     customers = pull_new_customers(connection_id)
     orders = pull_new_orders(connection_id, created_by_user_id, currency_id)
@@ -1366,7 +1366,7 @@ def create_routing_rule(company_id: int, strategy_code: str, fallback_warehouse_
 
 
 def resolve_fulfillment_warehouse(company_id: int, item_id: int, channel_code: str | None, warehouse_provinces: dict[int, str], customer_province: str | None = None) -> int:
-    """warehouse_provinces: نگاشت warehouse_id → نام استان (چون این
+    """warehouse_provinces: تطبیق warehouse_id → نام استان (چون این
     اطلاعات روی خود آدرس انبار است، نه این سرویس)."""
     with new_session() as session:
         rules = session.scalars(

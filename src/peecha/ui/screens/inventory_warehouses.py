@@ -171,7 +171,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.access_issue_checkbox, "این کاربر می‌تواند برای این انبار حواله/خروجی ثبت کند."),
             (self.access_adjust_checkbox, "این کاربر می‌تواند موجودی این انبار را اصلاح کند."),
         ] + [
-            (self._mapping_combos[key], f"حساب تفصیلی نگاشت‌شده برای «{engine_service.MAPPING_LABELS[key]}» — مخصوص این انبار (نه کل شرکت).")
+            (self._mapping_combos[key], f"حساب تفصیلی تنظیم‌شده برای «{engine_service.MAPPING_LABELS[key]}» — مخصوص این انبار (نه کل شرکت).")
             for key in _FINANCIAL_MAPPING_KEYS
         ])
         self.register_field_grids("inventory_warehouses", [
@@ -758,7 +758,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
         for combo in self._mapping_combos.values():
             combo.clear()
-            combo.addItem("(از نگاشت سراسری پیروی کند)", None)
+            combo.addItem("(از تنظیم سراسری پیروی کند)", None)
             for account_id, label in accounts:
                 combo.addItem(label, account_id)
 

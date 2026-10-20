@@ -29,6 +29,7 @@ from peecha.services.fixed_assets import documents as fdocs
 from peecha.services.fixed_assets import events as fe
 from peecha.services.fixed_assets import physical as fp
 from peecha.ui import theme
+from peecha.ui.persian_numbers import NumberEdit
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
@@ -46,7 +47,7 @@ def money(value) -> str:
 
 
 def dec(text: str) -> decimal.Decimal:
-    text = numerals.to_ascii_digits((text or "").replace(",", "").replace("٬", "").strip())
+    text = numerals.to_ascii_digits((text or "").replace(",", "").replace("٬", "").replace("٫", ".").strip())
     return decimal.Decimal(text) if text else ZERO
 
 
@@ -213,7 +214,7 @@ def num_field(value=None, dp: int | None = None) -> QLineEdit:
         text = decimals.plain(value, dp)
     else:
         text = P(value) if value is not None else ""
-    w = QLineEdit(text)
+    w = NumberEdit(text)
     w.setProperty("numeric", True)
     return w
 

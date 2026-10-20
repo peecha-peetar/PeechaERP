@@ -1,4 +1,4 @@
-"""تنظیمات ماژول انبار — واحد/برند/تولیدکننده، روش قیمت‌گذاری، نگاشت
+"""تنظیمات ماژول انبار — واحد/برند/تولیدکننده، روش قیمت‌گذاری، تنظیم
 حساب‌های حسابداری، و دلیل‌های ساختاریافتهٔ اصلاح/برگشت."""
 
 from __future__ import annotations
@@ -592,10 +592,10 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        _title_label = QLabel("نگاشت حساب‌های حسابداری")
+        _title_label = QLabel("تنظیم حساب‌های حسابداری")
         _title_label.setObjectName("pageTitle")
         layout.addWidget(_title_label)
-        layout.addWidget(QLabel("هر عملیات انبار به یک حساب (معین) نگاشت می‌شود؛ بدون نگاشت، ثبت سند خودکار متوقف می‌شود."))
+        layout.addWidget(QLabel("هر عملیات انبار به یک حساب (معین) تنظیم می‌شود؛ بدون تنظیم، ثبت سند خودکار متوقف می‌شود."))
 
         mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
@@ -924,8 +924,8 @@ class _ReasonCodesTab(QWidget):
 
 
 class _CategoriesTab(LayoutEditMixin, QWidget):
-    """دسته‌بندی کالا (بخش ۱) + نگاشت حساب حسابداری در سطح دسته (بخش ۱۴،
-    override روی نگاشت سراسری — فعلاً فقط تنظیم؛ اتصال به موتور ثبت در
+    """دسته‌بندی کالا (بخش ۱) + تنظیم حساب حسابداری در سطح دسته (بخش ۱۴،
+    override روی تنظیم سراسری — فعلاً فقط تنظیم؛ اتصال به موتور ثبت در
     دور بعدی)."""
 
     def __init__(self) -> None:
@@ -987,10 +987,10 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
     def _build_mapping_panel(self) -> QWidget:
         panel = QWidget()
         panel_layout = QVBoxLayout(panel)
-        title = QLabel("نگاشت حساب این دسته (override)")
+        title = QLabel("تنظیم حساب این دسته (override)")
         title.setObjectName("pageTitle")
         panel_layout.addWidget(title)
-        panel_layout.addWidget(QLabel("اگر دسته‌ای انتخاب نشده باشد یا برای کلیدی مقداری تعیین نشود، نگاشت سراسری شرکت استفاده می‌شود."))
+        panel_layout.addWidget(QLabel("اگر دسته‌ای انتخاب نشده باشد یا برای کلیدی مقداری تعیین نشود، تنظیم سراسری شرکت استفاده می‌شود."))
 
         mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
@@ -1009,7 +1009,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         save_button = QPushButton("🗺️")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
-        save_button.setToolTip("ذخیرهٔ نگاشت")
+        save_button.setToolTip("ذخیرهٔ تنظیم")
         save_button.clicked.connect(self._save_mapping)
         panel_layout.addWidget(save_button, alignment=Qt.AlignLeft)
         panel_layout.addStretch(1)
@@ -1046,7 +1046,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         for key, combo in self._mapping_combos.items():
             combo.blockSignals(True)
             combo.clear()
-            combo.addItem("(از نگاشت سراسری پیروی کند)", None)
+            combo.addItem("(از تنظیم سراسری پیروی کند)", None)
             for account_id, label in accounts:
                 combo.addItem(label, account_id)
             combo.setCurrentIndex(max(0, combo.findData(current_by_key.get(key))))

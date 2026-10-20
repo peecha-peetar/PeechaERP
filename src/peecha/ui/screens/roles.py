@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -40,8 +42,8 @@ class RolesScreen(FieldHelpMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        outer.addWidget(self._build_roles_panel(), stretch=1)
-        outer.addWidget(self._build_detail_panel(), stretch=3)
+        outer.addWidget(self._build_roles_panel(), stretch=2)
+        outer.addWidget(self._build_detail_panel(), stretch=5)
 
         self.set_field_help([
             (self.role_list, "فهرست نقش‌های این شرکت. برای دیدن و تغییر دسترسی‌های هر نقش، روی آن کلیک کنید."),
@@ -70,58 +72,67 @@ class RolesScreen(FieldHelpMixin, QWidget):
         ])
 
     def _build_roles_panel(self) -> QWidget:
+        # R316: فهرست نقش‌ها بیشترین فضا را می‌گیرد؛ ساخت و ویرایش نقش در دو بخش جمع‌وجور زیر آن
         panel = QWidget()
+        panel.setMinimumWidth(320)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         title = QLabel("نقش‌ها")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
+        self.role_search_field = QLineEdit()
+        self.role_search_field.setPlaceholderText("جستجوی نقش")
+        self.role_search_field.setClearButtonEnabled(True)
+        self.role_search_field.textChanged.connect(self._filter_roles)
+        layout.addWidget(self.role_search_field)
+
         self.role_list = QListWidget()
+        self.role_list.setMinimumHeight(300)
+        self.role_list.setWordWrap(True)
+        self.role_list.setStyleSheet("QListWidget::item { min-height: 34px; padding: 4px 8px; }")
         self.role_list.itemClicked.connect(self._on_role_selected)
-        layout.addWidget(self.role_list)
+        layout.addWidget(self.role_list, stretch=1)
 
-        layout.addWidget(QLabel("کد نقش جدید"))
+        new_box = QGroupBox("نقش تازه")
+        new_form = QFormLayout(new_box)
+        new_form.setContentsMargins(10, 8, 10, 8)
         self.new_role_code_field = QLineEdit()
-        layout.addWidget(self.new_role_code_field)
-
-        layout.addWidget(QLabel("والد (اختیاری)"))
         self.parent_role_combo = QComboBox()
-        layout.addWidget(self.parent_role_combo)
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(48)
+        create_button.setToolTip("افزودن نقش")
+        create_button.clicked.connect(self._create_role)
+        code_row = QHBoxLayout()
+        code_row.addWidget(self.new_role_code_field, stretch=1)
+        code_row.addWidget(create_button)
+        new_form.addRow("کد نقش جدید", code_row)
+        new_form.addRow("والد (اختیاری)", self.parent_role_combo)
+        layout.addWidget(new_box)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        create_button = QPushButton("➕")
-        create_button.setObjectName("primaryIconButton")
-        create_button.setFixedWidth(48)
-        create_button.setToolTip("افزودن نقش")
-        create_button.clicked.connect(self._create_role)
-        layout.addWidget(create_button)
-
         # طبقِ گزارشِ صریح («نقش را می‌شود ساخت ولی نمی‌شود ویرایش یا حذف
         # کرد»): بخشِ جداگانه برایِ ویرایش/حذفِ نقشِ انتخاب‌شده در فهرست.
-        divider = QLabel("ویرایش نقش انتخاب‌شده")
-        divider.setObjectName("sectionLabel")
-        layout.addWidget(divider)
-
-        layout.addWidget(QLabel("کد نقش"))
+        edit_box = QGroupBox("ویرایش نقش انتخاب‌شده")
+        edit_form = QFormLayout(edit_box)
+        edit_form.setContentsMargins(10, 8, 10, 8)
         self.edit_code_field = QLineEdit()
-        layout.addWidget(self.edit_code_field)
-
-        layout.addWidget(QLabel("والد (اختیاری)"))
         self.edit_parent_combo = QComboBox()
-        layout.addWidget(self.edit_parent_combo)
-
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+        edit_form.addRow("کد نقش", self.edit_code_field)
+        edit_form.addRow("والد (اختیاری)", self.edit_parent_combo)
 
         edit_buttons = QHBoxLayout()
+        edit_buttons.addWidget(self.is_active_checkbox)
+        edit_buttons.addStretch(1)
         save_edit_button = QPushButton("💾")
         save_edit_button.setObjectName("primaryIconButton")
         save_edit_button.setFixedWidth(48)
@@ -135,11 +146,15 @@ class RolesScreen(FieldHelpMixin, QWidget):
         delete_button.setToolTip("حذف این نقش")
         delete_button.clicked.connect(self._delete_role)
         edit_buttons.addWidget(delete_button)
-        edit_buttons.addStretch(1)
-        layout.addLayout(edit_buttons)
-
-        layout.addStretch(1)
+        edit_form.addRow(edit_buttons)
+        layout.addWidget(edit_box)
         return wrap_scrollable(panel)
+
+    def _filter_roles(self, text: str) -> None:
+        needle = (text or "").strip()
+        for row in range(self.role_list.count()):
+            item = self.role_list.item(row)
+            item.setHidden(bool(needle) and needle not in item.text())
 
     def _build_detail_panel(self) -> QWidget:
         panel = QWidget()
@@ -160,6 +175,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.permission_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.permission_table.verticalHeader().setVisible(False)
         self.permission_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.permission_table.verticalHeader().setDefaultSectionSize(36)
         tabs.addTab(self.permission_table, "دسترسی فرم‌ها")
 
         self.users_list = QListWidget()
@@ -179,7 +195,9 @@ class RolesScreen(FieldHelpMixin, QWidget):
         for role in self._roles:
             item = QListWidgetItem(role.code + ("" if role.is_active else " (غیرفعال)"))
             item.setData(Qt.UserRole, role.role_id)
+            item.setToolTip(item.text())
             self.role_list.addItem(item)
+        self._filter_roles(self.role_search_field.text())
 
         self.parent_role_combo.clear()
         self.parent_role_combo.addItem("— بدون والد —", None)

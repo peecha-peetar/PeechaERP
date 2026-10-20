@@ -4,15 +4,15 @@
 
 from __future__ import annotations
 
-import json
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -21,9 +21,10 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import audit as audit_service
+from peecha.ui import audit_format
 from peecha.ui.widgets import FieldHelpMixin
 
-_COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوع موجودیت"]
+_COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوع موجودیت", "جزئیات"]
 
 _ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف", "APPROVE": "تایید", "REVERSE": "برگشت",
                   "MERGE": "ادغام", "SUBMIT": "ارسال", "REJECT": "رد", "DELEGATE": "واگذاری", "ESCALATE": "ارجاع به مافوق",
@@ -58,6 +59,13 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.entity_type_combo.currentIndexChanged.connect(self._apply_filter)
         filter_row.addWidget(self.entity_type_combo)
         filter_row.addStretch(1)
+        self.details_button = QPushButton("🔍")
+        self.details_button.setObjectName("iconButton")
+        self.details_button.setFixedWidth(44)
+        self.details_button.setToolTip("نمایش جزئیات رویداد انتخاب‌شده")
+        self.details_button.setProperty("label", "نمایش جزئیات رویداد انتخاب‌شده")
+        self.details_button.clicked.connect(self._show_selected)
+        filter_row.addWidget(self.details_button)
         layout.addLayout(filter_row)
 
         self.status_label = QLabel("")
@@ -69,7 +77,9 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self.table.cellDoubleClicked.connect(self._show_changes)
         layout.addWidget(self.table, stretch=1)
 
@@ -90,7 +100,7 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.entity_type_combo.clear()
         self.entity_type_combo.addItem("همهٔ انواع", None)
         for et in entity_types:
-            self.entity_type_combo.addItem(_ENTITY_TYPE_LABELS.get(et, et), et)
+            self.entity_type_combo.addItem(_ENTITY_TYPE_LABELS.get(et) or audit_format.entity_label(et), et)
         self.entity_type_combo.blockSignals(False)
         self._apply_filter()
 
@@ -98,23 +108,64 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         company_id = self._company_id()
         entity_type = self.entity_type_combo.currentData()
         self._rows = audit_service.list_activity_log(company_id, entity_type)
-        self.status_label.setText("هنوز رویدادی ثبت نشده است." if not self._rows else f"{len(self._rows)} رویداد یافت شد.")
+        self.status_label.setText("هنوز رویدادی ثبت نشده است." if not self._rows
+                                  else numerals.to_persian_digits(f"{len(self._rows)} رویداد یافت شد."))
         self.table.setRowCount(len(self._rows))
         for row_index, r in enumerate(self._rows):
             values = [
                 numerals.format_jalali_datetime(r.created_at),
                 r.user_full_name or "سیستم",
                 _ACTION_LABELS.get(r.action, r.action),
-                str(r.entity_id),
-                _ENTITY_TYPE_LABELS.get(r.entity_type, r.entity_type),
+                numerals.to_persian_digits(str(r.entity_id)),
+                _ENTITY_TYPE_LABELS.get(r.entity_type) or audit_format.entity_label(r.entity_type),
+                audit_format.summary(r.changes),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, r.changes)
+                if col_index == 5:
+                    item.setToolTip(value)
                 self.table.setItem(row_index, col_index, item)
 
-    def _show_changes(self, row: int, _column: int) -> None:
-        from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+    def _show_selected(self) -> None:
+        items = self.table.selectedItems()
+        if items:
+            self._show_changes(items[0].row(), 0)
 
+    def details_dialog(self, row: int) -> QDialog:
+        """جزئیات خوانای یک رویداد: خلاصه + جدول «موضوع / پیش از تغییر / پس از تغییر»."""
         changes = self.table.item(row, 0).data(Qt.UserRole)
-        QMessageBox.information(self, "جزئیات تغییرات", json.dumps(changes, ensure_ascii=False, indent=2, default=str))
+        dlg = QDialog(self)
+        dlg.setWindowTitle("جزئیات رویداد")
+        dlg.resize(720, 460)
+        layout = QVBoxLayout(dlg)
+        head = QLabel(" — ".join(self.table.item(row, c).text() for c in (0, 1, 2, 4))
+                      + f" (شناسه {self.table.item(row, 3).text()})")
+        head.setObjectName("cardTitle")
+        head.setWordWrap(True)
+        layout.addWidget(head)
+        lines = audit_format.rows(changes)
+        table = QTableWidget(len(lines), 3)
+        table.setHorizontalHeaderLabels(["موضوع", "پیش از تغییر", "پس از تغییر / مقدار"])
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(34)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.setWordWrap(True)
+        for r, (subject, before, after) in enumerate(lines):
+            for c, text in enumerate((subject, before, after)):
+                item = QTableWidgetItem(text)
+                item.setToolTip(text)
+                table.setItem(r, c, item)
+        layout.addWidget(table, stretch=1)
+        if not lines:
+            empty = QLabel("برای این رویداد جزئیات دیگری ثبت نشده است.")
+            empty.setObjectName("sectionHint")
+            layout.addWidget(empty)
+        self.details_table = table
+        return dlg
+
+    def _show_changes(self, row: int, _column: int) -> None:
+        dlg = self.details_dialog(row)
+        runner = getattr(self, "dialog_runner", None)
+        runner(dlg) if runner is not None else dlg.exec()

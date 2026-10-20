@@ -32,7 +32,7 @@ check({"OPN_CENTER", "OPN_DATA", "OPN_RECONCILE", "OPN_RPT_OPN_RECONCILE", "OPN_
       and flat["OPN_SETTINGS"].get("hidden_from_sidebar") and shell_window._SETTINGS_TAB_BY_GROUP_CODE["OPN"] == 17,
       "opening module in the menu, settings behind the gear (tab 17)")
 ribbon = nav_catalog.DEFAULT_QUICK_ACCESS_BY_MODULE.get("OPN", [])
-check(len(ribbon) == 4 and all(code in flat for code, _ in ribbon), "opening ribbon shortcuts")
+check(len(ribbon) == 5 and all(code in flat for code, _ in ribbon), "opening ribbon shortcuts")  # R315: + سند افتتاحیه
 forms = {code for code, _m, _l in nav_catalog.build_form_catalog()}
 check({"opn_setup", "opn_enter", "opn_approve", "opn_post", "opn_correct", "opn_settings", "opn_difference", "opn_center", "opn_data",
        "opn_reconcile", "opn_config"} <= forms, "RBAC forms for every opening step and screen")
@@ -123,7 +123,7 @@ data.save_file_picker = lambda name: os.path.join(tmp, "tpl.xlsx" if name.endswi
 center._main_window = MainWindow({"OPN_DATA": data})
 center.t_mods.selectRow(0)
 center.open_data()
-check(data.run_box.currentData() == run and data.module_box.currentData() == "RECEIVABLES" and data.t.columnCount() == 2 + 15 + 3,
+check(data.run_box.currentData() == run and data.module_box.currentData() == "RECEIVABLES" and data.t.columnCount() == 2 + 16 + 3,
       "data screen opened from the hub on the selected module, one column per template field")
 check(os.path.exists(data.template(".xlsx")) and os.path.exists(data.template(".csv")), "templates downloaded (xlsx and csv)")
 bd = oc.fmt_date

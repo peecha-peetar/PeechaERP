@@ -167,7 +167,7 @@ def calculate_run(company_id: int, user_id: int | None, period_code: str, postin
             total += calc.amount
             count += 1
         if problems:
-            raise ValueError("نگاشت حساب استهلاک ناقص است:\n" + "\n".join(problems))
+            raise ValueError("تنظیم حساب استهلاک ناقص است:\n" + "\n".join(problems))
         run.total_amount, run.asset_count = total, count
         c.audit(session, company_id, user_id, run.run_id, "CALCULATE", {"period": code, "total": str(total), "assets": count},
                 entity_type="DepreciationRun")

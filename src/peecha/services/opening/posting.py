@@ -367,11 +367,26 @@ def _post_open_items(company_id: int, user_id: int, run: OpeningRun, module_code
         ids = [rid for rid, _ in part]
 
         def work(session, part=part):
-            docs, lines, clearing_total = {}, [], c.ZERO
+            docs, lines, clearing_total, advances = {}, [], c.ZERO, set()
             for rid, res in part:
                 cur, rate = int(res["currency_id"]), _d(res["rate"])
                 foreign = cur != run.currency_id
                 open_amount = _d(res["open"])
+                details = {person_type: int(res["counterparty_id"])}
+                if res.get("cost_center_id"):
+                    details[cc_type] = res["cost_center_id"]
+                if res.get("project_id"):
+                    details[pj_type] = res["project_id"]
+                base = je_service._base_amount(open_amount, rate if foreign else decimal.Decimal(1))
+                if res.get("advance"):
+                    # پیش‌دریافت/پیش‌پرداخت: فقط ماندهٔ خلاف جهت روی حساب طرف‌حساب، بدون سند باز
+                    advances.add(rid)
+                    lines.append(je_service.LineInput(
+                        account_id=int(res["account_id"]), description=f"{'پیش‌دریافت' if receivable else 'پیش‌پرداخت'} افتتاحیه",
+                        details=details, debit=c.ZERO if receivable else open_amount, credit=open_amount if receivable else c.ZERO,
+                        currency_id=cur if foreign else None, exchange_rate=rate if foreign else None))
+                    clearing_total -= base
+                    continue
                 doc_id = settlements.create_opening_open_item(
                     session, company_id, user_id, doc_type, run.go_live_date, int(res["counterparty_id"]), cur, rate,
                     _d(res["original"]), _d(res["settled"]), _date(res.get("due_date")), res.get("legacy_no") or "",
@@ -381,20 +396,18 @@ def _post_open_items(company_id: int, user_id: int, run: OpeningRun, module_code
                     cost_center_detail_account_id=res.get("cost_center_id"), project_detail_account_id=res.get("project_id"),
                     branch_id=res.get("branch_id"))
                 docs[rid] = doc_id
-                details = {person_type: int(res["counterparty_id"])}
-                if res.get("cost_center_id"):
-                    details[cc_type] = res["cost_center_id"]
-                if res.get("project_id"):
-                    details[pj_type] = res["project_id"]
                 memo = f"سند باز افتتاحیه {res.get('legacy_no') or ''}".strip()
                 lines.append(je_service.LineInput(
                     account_id=int(res["account_id"]), description=memo, details=details,
                     debit=open_amount if receivable else c.ZERO, credit=c.ZERO if receivable else open_amount,
                     currency_id=cur if foreign else None, exchange_rate=rate if foreign else None))
-                clearing_total += je_service._base_amount(open_amount, rate if foreign else decimal.Decimal(1))
-            lines.append(je_service.LineInput(
-                account_id=clearing, description=f"{c.MODULE_LABELS[module_code]} افتتاحیه — طرف مقابل",
-                debit=c.ZERO if receivable else clearing_total, credit=clearing_total if receivable else c.ZERO))
+                clearing_total += base
+            # طرف مقابل: خالص اسناد باز منهای پیش‌دریافت/پیش‌پرداخت
+            to_credit = clearing_total if receivable else -clearing_total
+            if to_credit:
+                lines.append(je_service.LineInput(
+                    account_id=clearing, description=f"{c.MODULE_LABELS[module_code]} افتتاحیه — طرف مقابل",
+                    debit=-to_credit if to_credit < 0 else c.ZERO, credit=to_credit if to_credit > 0 else c.ZERO))
             je = je_service.create_journal_entry(company_id, user_id, run.go_live_date,
                                                  f"{c.MODULE_LABELS[module_code]} افتتاحیه — {run.title}", lines,
                                                  alternative_number=f"OPN-{run.code}", entry_type_code="OPENING",
@@ -404,7 +417,8 @@ def _post_open_items(company_id: int, user_id: int, run: OpeningRun, module_code
             for doc in session.scalars(select(CommercialDocument).where(CommercialDocument.document_id.in_(docs.values()))):
                 doc.journal_entry_id = je
             return {"target_type": "JOURNAL_ENTRY", "target_id": je, "journal_entry_id": je, "amount": clearing_total,
-                    "rows": {rid: ("COMMERCIAL_DOCUMENT", doc_id, je) for rid, doc_id in docs.items()}}
+                    "rows": {**{rid: ("COMMERCIAL_DOCUMENT", doc_id, je) for rid, doc_id in docs.items()},
+                             **{rid: ("JOURNAL_ENTRY", je, je) for rid in advances}}}
         outcomes.append(_step(run.run_id, module_code, f"{module_code}:{ids[0]}", user_id, ids, work))
     return outcomes
 

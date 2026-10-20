@@ -58,7 +58,6 @@ from peecha.ui.screens.translations import TranslationsScreen
 from peecha.ui.screens.treasury_banks import TreasuryBanksScreen
 from peecha.ui.screens.treasury_counterparty_settings import TreasuryCounterpartySettingsScreen
 from peecha.ui.screens.users import UsersScreen
-from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
 from peecha.ui.widgets import FieldHelpMixin
 
 
@@ -91,7 +90,6 @@ _SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
     ("عمومی", "ارزها"): ("currencies",),
     ("عمومی", "سال‌های مالی"): ("fiscal_years",),
     ("کاربران و دسترسی‌ها", "نقش‌ها و دسترسی‌ها"): ("roles",),
-    ("کاربران و دسترسی‌ها", "طراحی گردش کار"): ("workflow_designer",),
     ("داده‌های حسابداری", "ترجمه‌ها"): ("translations",),
     ("انبار و موجودی", "قیمت‌گذاری"): ("inventory_settings", "costing_settings"),
     ("ارتباط با مشتری", "الگوهای پیام"): ("crm_settings", "crm_automation"),
@@ -377,7 +375,6 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
             [
                 ("کاربران", UsersScreen),
                 ("نقش‌ها و دسترسی‌ها", RolesScreen),
-                ("طراحی گردش کار", WorkflowDesignerScreen),
             ]
         )
 
@@ -407,7 +404,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
                 ("برند و تولیدکننده", _BrandManufacturerTab),
                 ("دسته‌بندی کالا", _CategoriesTab),
                 ("قیمت‌گذاری", _CostingSettingsTab),
-                ("نگاشت حساب‌ها", _AccountMappingsTab),
+                ("تنظیم حساب‌ها", _AccountMappingsTab),
                 ("دلیل‌های اصلاح/برگشت", _ReasonCodesTab),
                 ("قابلیت‌های فعال", _InventoryFeatureToggleTab),
             ]
@@ -430,7 +427,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
     def _build_commercial_tab(self) -> QWidget:
         return self._sub_tabs(
             [
-                ("نگاشت حساب‌ها", _CommercialAccountMappingsTab),
+                ("تنظیم حساب‌ها", _CommercialAccountMappingsTab),
                 ("قابلیت‌های فعال", _FeatureToggleTab),
                 ("نمایهٔ صنعتی", _IndustryProfileTab),
                 ("شماره‌گذاری اسناد", _NumberingSequencesTab),

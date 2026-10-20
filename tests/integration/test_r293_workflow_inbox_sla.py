@@ -298,7 +298,8 @@ check(settings_screen.tabs.tabText(13) == "گردش کار", "system settings ha
 wf_tab = settings_screen.tabs.widget(13)
 pages = {wf_tab.tabText(i): wf_tab.widget(i) for i in range(wf_tab.count())}
 page = lambda label: pages[label].widget() if isinstance(pages[label], QScrollArea) else pages[label]  # noqa: E731
-check(set(pages) == {"قواعد عمومی", "تقویم کاری و تعطیلات", "تعهد زمانی و ارجاع", "پیش‌فرض اعلان‌ها", "کارکنان و مدیران"},
+check(set(pages) == {"قواعد عمومی", "تقویم کاری و تعطیلات", "تعهد زمانی و ارجاع", "پیش‌فرض اعلان‌ها", "کارکنان و مدیران",
+                     "کارتابل قبلی"},
       f"workflow settings sub-tabs ({list(pages)})")
 settings_screen.select_tab(13, "قواعد عمومی")
 rules = page("قواعد عمومی")

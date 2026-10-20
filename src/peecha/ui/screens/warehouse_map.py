@@ -12,7 +12,7 @@ import decimal
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QGraphicsItem,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFrame, QGraphicsItem,
     QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView, QGridLayout,
     QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox, QSplitter, QStackedWidget,
     QStyleOptionGraphicsItem, QTableWidget, QTableWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
@@ -303,6 +303,29 @@ def _table(headers: list[str]) -> QTableWidget:
     return t
 
 
+_LEVEL_GLYPHS = {"AREA": "🟩", "AISLE": "↔️", "RACK": "🗄️", "SHELF": "📚", "BIN": "📦"}
+_BUTTON_NAMES = {"primary": "primaryIconButton", "danger": "dangerIconButton", "": "iconButton"}
+
+
+def _tool_button(glyph: str, tip: str, kind: str = "") -> QPushButton:
+    """دکمهٔ آیکونی نوار ابزار نقشه؛ برچسب در تول‌تیپ."""
+    b = QPushButton(glyph)
+    b.setObjectName(_BUTTON_NAMES[kind])
+    b.setToolTip(tip)
+    b.setAccessibleName(tip)
+    b.setProperty("label", tip)
+    b.setFixedWidth(48 if kind == "primary" else 44)
+    b.setCursor(Qt.PointingHandCursor)
+    return b
+
+
+def _separator() -> QFrame:
+    line = QFrame()
+    line.setFrameShape(QFrame.VLine)
+    line.setFrameShadow(QFrame.Sunken)
+    return line
+
+
 class WarehouseMapScreen(QWidget):
     """نقشه + فیلتر + جزئیات محل + درخت محل‌ها."""
 
@@ -319,48 +342,59 @@ class WarehouseMapScreen(QWidget):
         self.path_item: QGraphicsPathItem | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        top = QHBoxLayout()
+        outer.setSpacing(8)
+        # R316: سر صفحه و نوار ابزار در کارت، با دکمه‌های آیکونی و تول‌تیپ (مثل بقیهٔ فرم‌ها)
         title = QLabel("نقشه و محل‌های انبار")
         title.setObjectName("pageTitle")
-        top.addWidget(title)
-        top.addSpacing(12)
-        top.addWidget(QLabel("انبار:"))
         self.warehouse_combo = QComboBox()
         self.warehouse_combo.setMinimumWidth(180)
+        self.warehouse_combo.setToolTip("انبار")
         self.warehouse_combo.currentIndexChanged.connect(lambda _i: self.load_warehouse(self.warehouse_combo.currentData()))
-        top.addWidget(self.warehouse_combo)
-        top.addWidget(QLabel("حالت:"))
         self.mode_combo = QComboBox()
+        self.mode_combo.setToolTip("رنگ‌آمیزی نقشه بر اساس")
         for code, label in wl.HEATMAP_MODES.items():
             self.mode_combo.addItem(label, code)
         self.mode_combo.currentIndexChanged.connect(lambda _i: self.apply_mode())
-        top.addWidget(self.mode_combo)
-        top.addStretch(1)
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("جستجو: کد/نام/بارکد کالا یا کد/QR محل")
         self.search_field.setMinimumWidth(280)
+        self.search_field.setClearButtonEnabled(True)
         self.search_field.returnPressed.connect(lambda: self.search(self.search_field.text()))
-        top.addWidget(self.search_field)
-        search_button = QPushButton("یافتن")
-        search_button.setObjectName("primaryButton")
+        search_button = _tool_button("🔍", "یافتن", "primary")
         search_button.clicked.connect(lambda: self.search(self.search_field.text()))
+        header = QFrame()
+        header.setObjectName("card")
+        top = QHBoxLayout(header)
+        top.setContentsMargins(10, 6, 10, 6)
+        top.setSpacing(8)
+        top.addWidget(title)
+        top.addSpacing(12)
+        top.addWidget(QLabel("انبار"))
+        top.addWidget(self.warehouse_combo)
+        top.addWidget(QLabel("رنگ‌آمیزی"))
+        top.addWidget(self.mode_combo)
+        top.addStretch(1)
+        top.addWidget(self.search_field)
         top.addWidget(search_button)
-        outer.addLayout(top)
+        outer.addWidget(header)
 
-        tools = QHBoxLayout()
-        for text, slot in (("＋", lambda: self.zoom(1.25)), ("－", lambda: self.zoom(0.8)), ("کل نقشه", self.fit)):
-            b = QPushButton(text)
-            b.setObjectName("flatButton")
+        toolbar = QFrame()
+        toolbar.setObjectName("card")
+        tools = QHBoxLayout(toolbar)
+        tools.setContentsMargins(10, 4, 10, 4)
+        tools.setSpacing(6)
+        for glyph, tip, slot in (("➕", "بزرگ‌نمایی", lambda: self.zoom(1.25)), ("➖", "کوچک‌نمایی", lambda: self.zoom(0.8)),
+                                 ("🗺️", "نمایش کل نقشه", self.fit)):
+            b = _tool_button(glyph, tip)
             b.clicked.connect(slot)
             tools.addWidget(b)
+        tools.addWidget(_separator())
         self.edit_check = QCheckBox("حالت ویرایش نقشه")
         self.edit_check.toggled.connect(self.set_edit_mode)
-        tools.addSpacing(12)
         tools.addWidget(self.edit_check)
         self.add_buttons = {}
         for level in wl.LEVELS:
-            b = QPushButton(f"＋ {wl.LEVEL_LABELS[level].split(' ')[0]}")
-            b.setObjectName("flatButton")
+            b = _tool_button(_LEVEL_GLYPHS.get(level, "➕"), f"افزودن {wl.LEVEL_LABELS[level]}")
             b.clicked.connect(lambda _c=False, lv=level: self.add_location(lv))
             tools.addWidget(b)
             self.add_buttons[level] = b
@@ -368,13 +402,13 @@ class WarehouseMapScreen(QWidget):
         self.view3d_check = QCheckBox("نمای سه‌بعدی")
         self.view3d_check.toggled.connect(self.set_3d)
         tools.addWidget(self.view3d_check)
-        for text, slot in (("مسیر برداشت", self.show_picking_path), ("چاپ برچسب", self.print_labels),
-                           ("ابعاد انبار", self.edit_warehouse_dimensions)):
-            b = QPushButton(text)
-            b.setObjectName("flatButton")
+        tools.addWidget(_separator())
+        for glyph, tip, slot in (("🧭", "مسیر برداشت", self.show_picking_path), ("🏷️", "چاپ برچسب", self.print_labels),
+                                 ("📏", "ابعاد انبار", self.edit_warehouse_dimensions)):
+            b = _tool_button(glyph, tip)
             b.clicked.connect(slot)
             tools.addWidget(b)
-        outer.addLayout(tools)
+        outer.addWidget(toolbar)
 
         splitter = QSplitter(Qt.Horizontal)
         self.scene = QGraphicsScene(self)
@@ -395,18 +429,18 @@ class WarehouseMapScreen(QWidget):
         dl.addWidget(self.detail_title)
         dl.addWidget(self.detail_info)
         ops = QGridLayout()
+        ops.setSpacing(6)
         self.op_buttons = {}
-        for code, text in (("EDIT", "ویرایش"), ("STATUS", "وضعیت"), ("TRANSFER", "انتقال"), ("PUTAWAY", "پیشنهاد جانمایی"),
-                           ("REPLENISH", "حداقل/حداکثر تامین"), ("COUNT", "شمارش محل"), ("TASKS", "وظایف انبار"),
-                           ("DEFAULT", "مکان پیش‌فرض"), ("DELETE", "حذف")):
-            b = QPushButton(text)
-            b.setObjectName("flatButton")
-            # R255: دو ستون و ارتفاعِ کافی تا متنِ دکمه‌ها در پنلِ باریک بریده/پنهان نشود
+        for code, glyph, text, kind in (("EDIT", "✏️", "ویرایش", ""), ("STATUS", "🚦", "وضعیت", ""), ("TRANSFER", "🚚", "انتقال", ""),
+                                        ("PUTAWAY", "💡", "پیشنهاد جانمایی", ""), ("REPLENISH", "📉", "حداقل/حداکثر تامین", ""),
+                                        ("COUNT", "🔢", "شمارش محل", ""), ("TASKS", "📋", "وظایف انبار", ""),
+                                        ("DEFAULT", "📍", "مکان پیش‌فرض", ""), ("DELETE", "🗑️", "حذف", "danger")):
+            b = _tool_button(glyph, text, kind)
             b.setMinimumHeight(34)
-            b.setToolTip(text)
             b.clicked.connect(lambda _c=False, op=code: self.run_operation(op))
-            ops.addWidget(b, len(self.op_buttons) // 2, len(self.op_buttons) % 2)
+            ops.addWidget(b, len(self.op_buttons) // 5, len(self.op_buttons) % 5)
             self.op_buttons[code] = b
+        ops.setColumnStretch(5, 1)
         dl.addLayout(ops)
         rot = QHBoxLayout()
         rot.addWidget(QLabel("چرخش:"))
@@ -471,7 +505,10 @@ class WarehouseMapScreen(QWidget):
         splitter.setSizes([900, 400])
         outer.addWidget(splitter, stretch=1)
 
-        filters = QHBoxLayout()
+        filter_bar = QFrame()
+        filter_bar.setObjectName("card")
+        filters = QHBoxLayout(filter_bar)
+        filters.setContentsMargins(10, 4, 10, 4)
         filters.addWidget(QLabel("منطقه:"))
         self.zone_filter = QComboBox()
         self.zone_filter.currentIndexChanged.connect(lambda _i: self.apply_filters())
@@ -498,7 +535,7 @@ class WarehouseMapScreen(QWidget):
         self.legend = QLabel("")
         self.legend.setObjectName("sectionHint")
         filters.addWidget(self.legend)
-        outer.addLayout(filters)
+        outer.addWidget(filter_bar)
 
     # ------------------------------------------------------------------
     def _company_id(self):

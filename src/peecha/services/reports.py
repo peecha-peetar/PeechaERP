@@ -1434,7 +1434,7 @@ def _liquidity_totals(
     company_id: int, date_to: datetime.date, status_filter: str
 ) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal]:
     """دارایی‌های جاری، سهم موجودی از آن‌ها، و بدهی‌های جاری — از روی
-    liquidity_class_code که در «نگاشت صورت‌های مالی»/کدینگ حسابداری
+    liquidity_class_code که در «تنظیم صورت‌های مالی»/کدینگ حسابداری
     تنظیم می‌شود (CURRENT/CURRENT_INVENTORY برای دارایی، CURRENT برای
     بدهی؛ NULL یعنی در نسبت جاری/آنی دیده نمی‌شود)."""
     balances = compute_account_balances(company_id, None, date_to, status_filter=status_filter)
@@ -1464,7 +1464,7 @@ def compute_financial_ratios(
     """نسبت‌های سودآوری/اهرمی/نقدینگی — روی compute_balance_sheet/
     compute_income_statement موجود سوار می‌شود. نسبت‌های نقدینگی (جاری/
     آنی) فقط برای حساب‌هایی محاسبه می‌شوند که liquidity_class_code‌شان
-    در کدینگ حسابداری/نگاشت صورت‌های مالی تنظیم شده باشد — اگر هیچ
+    در کدینگ حسابداری/تنظیم صورت‌های مالی تنظیم شده باشد — اگر هیچ
     حسابی طبقه‌بندی نشده باشد، این دو نسبت None برمی‌گردند (نه صفر
     گمراه‌کننده)."""
     bs = compute_balance_sheet(company_id, date_to, status_filter=status_filter)

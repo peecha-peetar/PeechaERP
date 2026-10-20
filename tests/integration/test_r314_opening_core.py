@@ -215,7 +215,7 @@ f_chq = write_csv(os.path.join(tmp, "chq.csv"), ["نوع چک", "شمارهٔ چ
 ])
 oim.import_file(company_id, entry, run, "CHEQUES", f_chq)
 chq = {r.source_row_no: r for r in rows_of(run, "CHEQUES")}
-check("نگاشت نشده" in str(chq[2].errors), "cheque refused while the treasury cheque account is not mapped")
+check("تنظیم نشده" in str(chq[2].errors), "cheque refused while the treasury cheque account is not mapped")
 check("مجاز نیست" in str(chq[3].errors), "invalid choice value reported with allowed values")
 
 from peecha.services.fixed_assets import common as fac  # noqa: E402

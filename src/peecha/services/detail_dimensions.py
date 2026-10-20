@@ -542,7 +542,7 @@ def delete_custom_group_completely(dimension_type_id: int, company_id: int) -> N
         )
         if usage_on_counterparty_mapping:
             raise ValueError(
-                "این گروه تفصیلی در تنظیمات سند دریافت/پرداخت استفاده شده؛ ابتدا آن نگاشت را از آن‌جا حذف کنید."
+                "این گروه تفصیلی در تنظیمات سند دریافت/پرداخت استفاده شده؛ ابتدا آن تنظیم را از آن‌جا حذف کنید."
             )
 
         # حذفِ حساب‌هایِ تفصیلی از عمیق‌ترین سطح به سمتِ ریشه — چون
@@ -1574,7 +1574,7 @@ SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
 
 def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
     """این ۷ نوع‌بُعد را برای این شرکت تضمین می‌کند (اگر نبود می‌سازد) و
-    نگاشت کد→شناسه را برمی‌گرداند — باید با همان session/تراکنش ساخت
+    تنظیم کد→شناسه را برمی‌گرداند — باید با همان session/تراکنش ساخت
     شرکت صدا زده شود (مثل ensure_person_dimension/ensure_person_groups)؛
     برای شرکت‌های موجود، 011_coding_settings.sql همین کار را یک‌بار
     برای همه انجام داده."""
@@ -1662,7 +1662,7 @@ class PersonGroupRow:
 
 def ensure_person_groups(session, company_id: int) -> dict[str, int]:
     """سه گروه تفصیلی سیستمی (مشتری/تامین‌کننده/پرسنل) را برای این شرکت
-    تضمین می‌کند و نگاشت کد→شناسه را برمی‌گرداند. باید با همان session/
+    تضمین می‌کند و تنظیم کد→شناسه را برمی‌گرداند. باید با همان session/
     تراکنش ساخت شرکت صدا زده شود (مثل ensure_person_dimension)."""
     existing = {
         g.code: g.person_group_id
