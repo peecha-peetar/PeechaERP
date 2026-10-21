@@ -34,7 +34,7 @@ LEVEL_PREFIX = {"AREA": "Z", "AISLE": "A", "RACK": "R", "SHELF": "L", "BIN": "B"
 _ALLOWED_PARENTS = {"AREA": (None,), "AISLE": ("AREA",), "RACK": ("AISLE", "AREA"), "SHELF": ("RACK",), "BIN": ("SHELF", "RACK")}
 LOCATION_TYPES = {
     "RECEIVING": "دریافت", "QC": "کنترل کیفیت", "QUARANTINE": "قرنطینه", "BULK": "انبارش حجیم", "RESERVE": "ذخیره",
-    "PICK_FACE": "محل‌های برداشت", "PICKING": "برداشت", "STAGING": "آماده‌سازی", "SHIPPING": "ارسال", "RETURNS": "مرجوعی",
+    "PICK_FACE": "محل‌های جمع‌آوری", "PICKING": "جمع‌آوری", "STAGING": "آماده‌سازی", "SHIPPING": "ارسال", "RETURNS": "مرجوعی",
     "DAMAGED": "آسیب‌دیده", "HIGH_VALUE": "کالای گران‌بها", "COLD": "سردخانه", "FREEZER": "فریزر", "TRANSIT": "ترانزیت",
 }
 STATUSES = {"ACTIVE": "فعال", "INACTIVE": "غیرفعال", "BLOCKED": "مسدود", "FULL": "پر", "RESERVED": "رزرو",
@@ -743,7 +743,7 @@ def verify_scans(company_id: int, scans: dict | None, expected: list[tuple[str, 
 
 
 # =====================================================================
-# پیشنهادِ جانمایی، مسیرِ برداشت، Heatmap و تاریخچه
+# پیشنهادِ چیدن در قفسه، مسیرِ جمع‌آوری، Heatmap و تاریخچه
 # =====================================================================
 def _leaf_nodes(nodes: list) -> list:
     parents = {n.parent_id for n in nodes}
@@ -751,8 +751,8 @@ def _leaf_nodes(nodes: list) -> list:
 
 
 def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quantity: decimal.Decimal, limit: int = 5) -> list:
-    """بهترین محل‌ها برای جانمایی: فقط محل فعال/مجاز با ظرفیت کافی؛ امتیاز با تجمیع همان کالا، تطبیق نوع محل
-    با کلاس ABC (A → محل‌های برداشت، C → حجیم/ذخیره)، و ظرفیت باقی‌مانده."""
+    """بهترین محل‌ها برای چیدن در قفسه: فقط محل فعال/مجاز با ظرفیت کافی؛ امتیاز با تجمیع همان کالا، تطبیق نوع محل
+    با کلاس ABC (A → محل‌های جمع‌آوری، C → حجیم/ذخیره)، و ظرفیت باقی‌مانده."""
     from peecha.services import purchase_reports as base
     from peecha.services import warehouse_reports as wr
 
@@ -793,7 +793,7 @@ def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quanti
         types = {a.location_type_code for a in ancestors(by_id, n.location_id) if a.location_type_code}
         if cls == "A" and types & {"PICK_FACE", "PICKING"}:
             score += 25
-            reasons.append("نزدیک محل‌های برداشت — مناسب کالای A")
+            reasons.append("نزدیک محل‌های جمع‌آوری — مناسب کالای A")
         if cls in ("B", "C") and types & {"BULK", "RESERVE"}:
             score += 15
             reasons.append(f"منطقهٔ ذخیره/حجیم — مناسب کالای {cls}")
@@ -836,7 +836,7 @@ def picking_path(company_id: int, warehouse_id: int, location_ids: list[int]) ->
                            start=start_zone, end=end_zone)
 
 
-HEATMAP_MODES = {"NORMAL": "عادی", "OCCUPANCY": "اشغال", "PICK_FREQ": "تواتر برداشت", "VALUE": "ارزش موجودی", "ABC": "ABC",
+HEATMAP_MODES = {"NORMAL": "عادی", "OCCUPANCY": "اشغال", "PICK_FREQ": "دفعات جمع‌آوری", "VALUE": "ارزش موجودی", "ABC": "ABC",
                  "EXPIRY": "ریسک انقضا", "CONGESTION": "ازدحام", "TEMPERATURE": "دما"}
 
 
@@ -946,7 +946,7 @@ def history(company_id: int, location_id: int, limit: int = 200) -> list[SimpleN
 # =====================================================================
 def transfer(company_id: int, user_id: int, item_id: int, from_location_id: int, to_location_id: int,
              quantity: decimal.Decimal, allow_over_capacity: bool = False, scans: dict | None = None) -> int:
-    """اعتبارسنجی محل مقصد (فعال، مجاز برای جانمایی، ظرفیت) و ثبت سند انتقال عادی؛ خروجی = شناسهٔ سند.
+    """اعتبارسنجی محل مقصد (فعال، مجاز برای چیدن در قفسه، ظرفیت) و ثبت سند انتقال عادی؛ خروجی = شناسهٔ سند.
     R304: scans (موبایل) = {"from"، "to"، "item"}."""
     from peecha.services import inventory_documents as inv_documents_service
 
@@ -1145,7 +1145,7 @@ def _quarantine_exit_allowed(session, doc, ln) -> bool:
 
 def check_document_locations(company_id: int, stock_document_id: int, session=None, errors_only: bool = False) -> SimpleNamespace:
     """پیش از تایید/ثبت سند انبار: خطا = ورود به محل غیرفعال/مسدود/در تعمیر/پر یا خروج از محل مسدود/در تعمیر؛
-    هشدار = محل بدون اجازهٔ جانمایی/آسیب‌دیده، ناسازگاری کالا و عبور از ظرفیت.
+    هشدار = محل بدون اجازهٔ چیدن کالا/آسیب‌دیده، ناسازگاری کالا و عبور از ظرفیت.
     R303: با کلید «کنترل وضعیت محل»، خروج از محل قرنطینه هم خطاست (جز مقصدهای مجاز)؛ session برای ثبت اتمیک."""
     from peecha.services import stock_controls
 
@@ -1191,7 +1191,7 @@ def check_document_locations(company_id: int, stock_document_id: int, session=No
         if errors_only:
             continue
         if not node.allow_putaway or node.is_damaged:
-            warnings.append(f"{label} برای جانمایی مجاز نیست یا آسیب‌دیده است.")
+            warnings.append(f"{label} برای چیدن کالا مجاز نیست یا آسیب‌دیده است.")
         for issue in compatibility_issues(company_id, ln.item_id, bin_id, trees[wid]):
             warnings.append(f"{label}: {issue}.")
         w, v = dims.get(ln.item_id, (None, None))
@@ -1300,7 +1300,7 @@ _OUT_TYPES = ("ISSUE", "RETURN_OUT", "CONSIGN_RETURN", "TRANSFER")
 
 def assign_outbound_bins(company_id: int, stock_document_id: int) -> list[tuple[int, str]]:
     """ردیف خروجی بی‌محل در انبار دارای نقشه: اگر محل پیش‌فرض موجودی کافی ندارد، یک محل که کل مقدار را دارد
-    انتخاب می‌شود (اول محل بچ/سریال تعیین‌شده، سپس زودانقضاترین بچ، سپس محل‌های برداشت و بیشترین موجودی).
+    انتخاب می‌شود (اول محل بچ/سریال تعیین‌شده، سپس زودانقضاترین بچ، سپس محل‌های جمع‌آوری و بیشترین موجودی).
     ردیف تقسیم نمی‌شود؛ اگر هیچ محلی کل مقدار را نداشته باشد رفتار قبلی (محل پیش‌فرض) می‌ماند.
     خروجی: [(شمارهٔ ردیف، کد محل انتخاب‌شده)]."""
     from peecha.services import inventory_locations as locations_service

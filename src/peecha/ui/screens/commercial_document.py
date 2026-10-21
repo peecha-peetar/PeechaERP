@@ -737,6 +737,16 @@ class _ItemPriceHistoryDialog(QDialog):
         _show_invoice_print(self, self._company_id, history_row.document_id)
 
 
+def _pickable_items(items, document_type_code: str | None, keep_item_id: int | None = None) -> list:
+    """R321: در فرم‌های خرید فقط کالای «قابل‌خرید» (و کالای اصلی‌ای که متغیر قابل‌خرید دارد) پیشنهاد می‌شود.
+    کالای ردیفی که در حال ویرایش است همیشه می‌ماند."""
+    code = document_type_code or ""
+    if not (code.startswith("PURCHASE") or code == "CONSIGNMENT_IN"):
+        return list(items)
+    parents = {it.variant_parent_item_id for it in items if it.variant_parent_item_id and it.is_purchasable}
+    return [it for it in items if it.is_purchasable or it.item_id in parents or it.item_id == keep_item_id]
+
+
 class _LineDialog(LayoutEditMixin, QDialog):
     def __init__(
         self, parent: QWidget, items: list[catalog_service.ItemRow], company_id: int, main_window,
@@ -770,9 +780,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # ظاهر نمی‌شوند. اگر کالایِ انتخاب‌شده در این مجموعه دارایِ
         # متغیر باشد، کمبویِ دومِ «متغیرِ کالا» ظاهر می‌شود و انتخابِ یکی
         # از متغیرها الزامی است (_on_accept این را چک می‌کند).
-        self._variant_parent_ids = {it.variant_parent_item_id for it in items if it.variant_parent_item_id}
+        pickable = _pickable_items(items, document_type_code, (initial or {}).get("item_id"))
+        self._pickable_ids = {it.item_id for it in pickable}
+        self._variant_parent_ids = {it.variant_parent_item_id for it in pickable if it.variant_parent_item_id}
 
-        item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items if it.variant_parent_item_id is None]
+        item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in pickable if it.variant_parent_item_id is None]
         item_row_widget = QWidget()
         item_row_layout = QHBoxLayout(item_row_widget)
         item_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1163,7 +1175,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
         شود»): فیلتر موجودی فقط برای اسنادی اعمال می‌شود که موجودی را
         کم می‌کنند (_STOCK_OUTBOUND_TYPES) — برای خرید/برگشت از خرید و
         امانی ورودی، همیشه همهٔ متغیرها نشان داده می‌شوند."""
-        variants = variants_service.list_item_variants(self._company_id, parent_id)
+        variants = [v for v in variants_service.list_item_variants(self._company_id, parent_id)
+                    if v.variant_item_id in self._pickable_ids]
         stock_by_item: dict[int, decimal.Decimal] = {}
         warehouse_id = self._effective_warehouse_id()
         for v in variants:
@@ -1290,7 +1303,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self.variant_combo.setVisible(True)
             self.variant_table.setVisible(False)
             self.variant_table.setRowCount(0)
-            variants = variants_service.list_item_variants(self._company_id, parent_id)
+            variants = [v for v in variants_service.list_item_variants(self._company_id, parent_id)
+                        if v.variant_item_id in self._pickable_ids]
             variant_options = [(v.variant_item_id, f"{v.code} — {v.attribute_labels or v.name or ''}") for v in variants]
             _fill_options(self.variant_combo, variant_options)
             self.fields_grid.set_field_visible("variant", True)
@@ -3504,7 +3518,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         return self._status_code == "DRAFT"
 
     def _render_readonly_line_row(self, row_index: int, ln, item, dp: int) -> None:
-        for col in (2, 3, 4, 5):
+        self._drop_entry_widgets(row_index)
+        for col in (2, 3, 4, 5, _BIN_COL):
             self.lines_table.removeCellWidget(row_index, col)
         values = [
             numerals.to_persian_digits(str(row_index + 1)),
@@ -3619,7 +3634,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         layout.addWidget(type_combo)
         return container
 
+    def _drop_entry_widgets(self, row_index: int) -> None:
+        """R321: ردیفی که تا قبل از افزودن، ردیف ورود بود، کمبوی کالا و فیلد شرحش را روی خود نگه می‌داشت
+        و ردیف ثبت‌شده زیر آن کم‌رنگ و درهم دیده می‌شد."""
+        for col in (1, 6, 7, 8):
+            self.lines_table.removeCellWidget(row_index, col)
+
     def _render_editable_line_row(self, row_index: int, ln, item, dp: int) -> None:
+        self._drop_entry_widgets(row_index)
         idx_cell = QTableWidgetItem(numerals.to_persian_digits(str(row_index + 1)))
         idx_cell.setTextAlignment(Qt.AlignCenter)
         idx_cell.setData(Qt.UserRole, ln.line_id)
@@ -3729,7 +3751,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setItem(row_index, 0, idx_cell)
 
         item_options = [
-            (it.item_id, f"{it.code} — {it.name or ''}") for it in self._items if it.variant_parent_item_id is None
+            (it.item_id, f"{it.code} — {it.name or ''}") for it in _pickable_items(self._items, self.document_type_code)
+            if it.variant_parent_item_id is None
         ]
         item_combo = _make_searchable_combo(item_options)
         item_combo.setCurrentIndex(-1)

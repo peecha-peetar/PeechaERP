@@ -86,6 +86,79 @@ def persist_column_widths(table, key: str, skip_columns: tuple[int, ...] = ()) -
     header.sectionResized.connect(save)
 
 
+class _EnterNavigator(QObject):
+    """R321: Enter در هر فیلد فوکوس را به فیلد بعدی فعال و نمایان می‌برد؛ در آخرین فیلد on_last اجرا می‌شود."""
+
+    def __init__(self, widgets: list[QWidget], on_last=None) -> None:
+        super().__init__(widgets[0] if widgets else None)
+        self._widgets = widgets
+        self._on_last = on_last
+
+    def _usable(self, widget: QWidget) -> bool:
+        return widget.isEnabled() and not widget.isHidden() and widget.focusPolicy() != Qt.NoFocus
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 — نام متد Qt
+        if event.type() != QEvent.KeyPress or event.key() not in (Qt.Key_Return, Qt.Key_Enter):
+            return False
+        if event.modifiers() & (Qt.ControlModifier | Qt.ShiftModifier | Qt.AltModifier):
+            return False
+        owner = next((w for w in self._widgets if w is obj or (isinstance(w, QComboBox) and w.lineEdit() is obj)), None)
+        if owner is None:
+            return False
+        if isinstance(owner, QComboBox):
+            completer = owner.completer()
+            if owner.view().isVisible() or (completer is not None and completer.popup().isVisible()):
+                return False  # اول انتخاب از فهرست باز
+        index = self._widgets.index(owner)
+        for nxt in self._widgets[index + 1:]:
+            if self._usable(nxt):
+                nxt.setFocus(Qt.TabFocusReason)
+                if isinstance(nxt, QLineEdit):
+                    nxt.selectAll()
+                return True
+        if self._on_last is not None:
+            self._on_last()
+            return True
+        return False
+
+
+def enter_navigation(widgets: list[QWidget], on_last=None) -> _EnterNavigator:
+    """زنجیرهٔ Enter برای فرم‌ها: فیلدها به ترتیب فهرست؛ on_last مثلاً «افزودن ردیف»."""
+    navigator = _EnterNavigator(widgets, on_last)
+    for widget in widgets:
+        widget.installEventFilter(navigator)
+        if isinstance(widget, QComboBox) and widget.lineEdit() is not None:
+            widget.lineEdit().installEventFilter(navigator)
+    return navigator
+
+
+def mark_invalid(widget: QWidget, message: str | None) -> None:
+    """R322: کادر قرمز و پیام روی خود فیلد، همان لحظهٔ ورود (نه پس از زدن ذخیره)."""
+    invalid = bool(message)
+    if bool(widget.property("invalid")) != invalid:
+        widget.setProperty("invalid", invalid)
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+    widget.setToolTip(message or "")
+
+
+def live_check(widget: QWidget, check, status_label: QLabel | None = None) -> None:
+    """check() پیام خطا یا None برمی‌گرداند؛ با ترک فیلد یا تغییر انتخاب اجرا می‌شود."""
+
+    def run(*_args) -> None:
+        message = check()
+        mark_invalid(widget, message)
+        if status_label is not None and (message or status_label.property("live_message")):
+            status_label.setText(message or "")
+            status_label.setProperty("live_message", bool(message))
+
+    signal = (widget.currentIndexChanged if isinstance(widget, QComboBox)
+              else widget.editingFinished if hasattr(widget, "editingFinished") else None)
+    if signal is not None:
+        signal.connect(run)
+    widget._live_check = run
+
+
 def show_saved_dialog(parent: QWidget | None, text: str, title: str = "ذخیره") -> QMessageBox:
     """R226 (درخواست صریح): پیام ذخیره در یک پنجرهٔ تعاملی با دکمهٔ «تایید»،
     نه فقط متن وضعیت. غیرمسدودکننده (open) تا جریان فرم/تست قفل نشود."""

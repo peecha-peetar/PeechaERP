@@ -139,6 +139,7 @@ class AssetDetailPanel(QWidget):
             box = self.w[key]
             box.blockSignals(True)
             box.clear()
+            box._legacy_labels = getattr(items, "legacy", None)
             if none_label is not None:
                 box.addItem(none_label, None)
             for label, data in items:

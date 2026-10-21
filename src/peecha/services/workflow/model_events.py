@@ -210,16 +210,63 @@ def gate_message(conn, company_id: int, entity_type: str, entity_id: int | None,
     if not all_gated(entity_type):
         return None
     versions = gate_definitions(conn, company_id, entity_type)
-    if not versions or approved_by_workflow(conn, company_id, entity_type, entity_id):
+    if versions and not approved_by_workflow(conn, company_id, entity_type, entity_id):
+        running = entity_id and conn.execute(text(
+            "SELECT 1 FROM wf.instances WHERE company_id = :c AND entity_type = :et AND entity_id = :id "
+            "AND status_code IN ('RUNNING', 'WAITING') LIMIT 1"), {"c": company_id, "et": entity_type, "id": entity_id}).first()
+        if running:
+            return "این سند در جریان تایید است؛ پس از تایید نهایی در «مرکز تایید» خودکار انجام می‌شود."
+        if _conditions_match(conn, company_id, entity_type, versions, context, entity_id):
+            return "این سند پیش از این مرحله باید تایید شود؛ ابتدا آن را «برای تایید بفرستید»."
+    return _busy_text(conn, company_id, entity_type, entity_id)
+
+
+# --- R323: تا پایان گردش کار، سند دستی جلو نمی‌رود (حتی بدون «قفل تایید» در تعریف) -----------------------------
+def _lock_while_running(conn, company_id: int) -> bool:
+    from peecha.services.workflow.common import DEFAULT_SETTINGS
+
+    options = conn.execute(text("SELECT options FROM wf.settings WHERE company_id = :c"), {"c": company_id}).scalar()
+    return bool({**DEFAULT_SETTINGS, **(options or {})}.get("lock_while_running"))
+
+
+def running_steps(conn, company_id: int, entity_type: str | None, entity_id: int | None) -> list[str] | None:
+    """عنوان مراحل باز گردش کار در جریان که تایید یا کار انسانی دارد؛ None یعنی چنین گردش کاری در جریان نیست."""
+    if not entity_type or not entity_id:
         return None
-    running = entity_id and conn.execute(text(
-        "SELECT 1 FROM wf.instances WHERE company_id = :c AND entity_type = :et AND entity_id = :id "
-        "AND status_code IN ('RUNNING', 'WAITING') LIMIT 1"), {"c": company_id, "et": entity_type, "id": entity_id}).first()
-    if running:
-        return "این سند در جریان تایید است؛ پس از تایید نهایی در «مرکز تایید» خودکار انجام می‌شود."
-    if not _conditions_match(conn, company_id, entity_type, versions, context, entity_id):
+    rows = conn.execute(text(
+        "SELECT i.instance_id, v.graph FROM wf.instances i JOIN wf.definition_versions v ON v.version_id = i.version_id "
+        "WHERE i.company_id = :c AND i.entity_type = :et AND i.entity_id = :id AND i.status_code IN ('RUNNING', 'WAITING')"),
+        {"c": company_id, "et": entity_type, "id": entity_id}).all()
+    labels = {}
+    for instance_id, graph in rows:
+        nodes = (graph or {}).get("nodes") or []
+        if any(n.get("type") in ("APPROVAL", "TASK") for n in nodes):
+            labels[instance_id] = {n.get("id"): n.get("label") for n in nodes}
+    if not labels:
         return None
-    return "این سند پیش از این مرحله باید تایید شود؛ ابتدا آن را «برای تایید بفرستید»."
+    return [labels[i].get(node_id) or title for i, node_id, title in conn.execute(text(
+        "SELECT instance_id, node_id, title FROM wf.tasks WHERE instance_id = ANY(:ids) AND status_code = 'OPEN' "
+        "ORDER BY task_id"), {"ids": list(labels)})]
+
+
+def _busy_text(conn, company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:
+    if not _lock_while_running(conn, company_id):
+        return None
+    steps = running_steps(conn, company_id, entity_type, entity_id)
+    if steps is None:
+        return None
+    where = f" (مرحلهٔ جاری: «{'»، «'.join(steps[:3])}»)" if steps else ""
+    return f"این سند در جریان تایید است{where}؛ تا همهٔ مراحل گردش کار در «کارتابل من» انجام نشود، این کار ممکن نیست."
+
+
+def busy(company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:
+    """پیش از بردن سند به مرحلهٔ بعد (مثلاً تبدیل درخواست به سفارش یا رد دستی): None یعنی آزاد."""
+    if not entity_type or not entity_id or _acting() is not None or getattr(_STATE, "ungated", False):
+        return None
+    from peecha.db.base import new_session
+
+    with new_session() as session:
+        return _busy_text(session.connection(), company_id, entity_type, int(entity_id))
 
 
 def check(company_id: int, entity_type: str | None, entity_id: int | None, target_status: str | None = None,

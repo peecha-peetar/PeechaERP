@@ -7,14 +7,16 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from peecha import numerals
-from peecha.services.workflow import definitions, model_events, registry, runtime
+from peecha.services.workflow import definitions, model_events, registry, runtime, tasks
+from peecha.services.workflow.common import WorkflowError
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.fixed_assets import FormDialog, combo, company_id, fill, table, user_id
 
-ms.ICONS.update({"ارسال برای تایید": ("📨", "primary"), "تاریخچهٔ گردش کار": ("🕘", "")})
+ms.ICONS.update({"ارسال برای تایید": ("📨", "primary"), "تاریخچهٔ گردش کار": ("🕘", ""),
+                 "انجام مرحلهٔ جاری": ("📋", "primary"), "یادداشت روی مرحله": ("💬", "")})
 
 _GLYPH = {"done": "✔", "current": "●", "pending": "○", "failed": "✖"}
 _COLOR = {"done": "#10B981", "current": "#3B82F6", "pending": "#94A3B8", "failed": "#EF4444"}
@@ -59,9 +61,18 @@ class WorkflowBar(QWidget):
         self.send_button.clicked.connect(self.send)
         self.history_button = QPushButton("تاریخچهٔ گردش کار")
         self.history_button.clicked.connect(self.history)
-        for b in (self.send_button, self.history_button):
+        # R323: مرحلهٔ جاری با فرم کامل خودش و یادداشت، از داخل همین سند
+        self.step_button = QPushButton("انجام مرحلهٔ جاری")
+        self.step_button.clicked.connect(lambda _c=False: self.open_step())
+        self.note_button = QPushButton("یادداشت روی مرحله")
+        self.note_button.clicked.connect(lambda _c=False: self.add_note())
+        self.main_window = None
+        self.open_task_ids: list[int] = []
+        self.my_task_ids: list[int] = []
+        for b in (self.send_button, self.step_button, self.note_button, self.history_button):
             ms.style_button(b)
-        outer.addWidget(ms.header_card(self.title, self.path, self.send_button, self.history_button))
+        outer.addWidget(ms.header_card(self.title, self.path, self.send_button, self.step_button, self.note_button,
+                                       self.history_button))
         self.setVisible(False)
 
     # --- وضعیت ---------------------------------------------------------------------------------------------
@@ -97,6 +108,17 @@ class WorkflowBar(QWidget):
             self.path.setToolTip("")
         self.send_button.setEnabled(bool(manual) and not running)
         self.history_button.setEnabled(self.instance_id is not None)
+        try:
+            self.open_task_ids = [t.task_id for t in tasks.list_tasks(cid, status="OPEN", instance_id=self.instance_id)] \
+                if running else []
+            mine = {t.task_id for t in tasks.list_my_tasks(cid, user_id())} if self.open_task_ids and user_id() else set()
+        except Exception:  # noqa: BLE001
+            self.open_task_ids, mine = [], set()
+        self.my_task_ids = [t for t in self.open_task_ids if t in mine]
+        self.step_button.setEnabled(bool(self.open_task_ids))
+        self.step_button.setToolTip("انجام مرحلهٔ جاری -- " + ("این مرحله منتظر شماست" if self.my_task_ids else
+                                                                "دیدن فرم مرحله؛ تصمیم با مسئول همان مرحله است"))
+        self.note_button.setEnabled(bool(self.open_task_ids))
         self.setVisible(bool(rows) or bool(manual))
 
     # --- کارها -----------------------------------------------------------------------------------------------
@@ -122,6 +144,40 @@ class WorkflowBar(QWidget):
         self.refresh()
         if self.on_started:
             self.on_started()
+        return True
+
+    def open_step(self) -> bool:
+        """فرم کامل مرحلهٔ جاری؛ اگر مرحله منتظر همین کاربر باشد تصمیم هم از همین‌جا ثبت می‌شود."""
+        task_id = (self.my_task_ids or self.open_task_ids or [None])[0]
+        if task_id is None:
+            return False
+        from peecha.ui.screens.workflow_task_form import TaskFormDialog
+
+        dlg = TaskFormDialog(task_id, self, self.main_window)
+        ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
+        self.refresh()
+        if dlg.decided and self.on_started:
+            self.on_started()
+        return bool(ok and dlg.decided)
+
+    def add_note(self, text: str | None = None) -> bool:
+        task_id = (self.my_task_ids or self.open_task_ids or [None])[0]
+        if task_id is None:
+            return False
+        if text is None:
+            box = QTextEdit()
+            box.setMaximumHeight(90)
+            dlg = FormDialog("یادداشت روی مرحله", [("text", "یادداشت", box)],
+                             "یادداشت برای افراد همین مرحله و درخواست‌کننده فرستاده می‌شود و در تاریخچه می‌ماند.", self)
+            ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
+            if not ok:
+                return False
+            text = dlg.values().get("text") or ""
+        try:
+            tasks.add_comment(company_id(), task_id, user_id(), text)
+        except WorkflowError as exc:
+            QMessageBox.warning(self, "یادداشت روی مرحله", str(exc))
+            return False
         return True
 
     def history(self) -> None:

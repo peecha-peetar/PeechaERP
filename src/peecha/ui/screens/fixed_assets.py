@@ -59,9 +59,27 @@ def user_id() -> int | None:
     return app_session.current_user.user_id if app_session.current_user else None
 
 
+class LeafOptions(list):
+    """R322: فقط آخرین سطح (مرکز هزینه/پروژه) برای انتخاب؛ legacy برچسب همهٔ سطوح برای نمایش مقدار ذخیره‌شدهٔ قدیمی."""
+
+    def __init__(self, items, legacy: dict) -> None:
+        super().__init__(items)
+        self.legacy = legacy
+
+
+def leaf_options(cid: int, dimension_code: str) -> LeafOptions:
+    from peecha.services import detail_dimensions as dims
+
+    type_id = dims.get_specialized_dimension_type_id(cid, dimension_code)
+    label = lambda d: f"{d.code} — {d.name or ''}"  # noqa: E731
+    return LeafOptions([(label(d), d.detail_account_id) for d in dims.list_leaf_detail_accounts(cid, type_id)],
+                       {d.detail_account_id: label(d) for d in dims.list_detail_accounts(cid, type_id)})
+
+
 def combo(items, none_label: str | None = None) -> QComboBox:
     """فهرست جستجوپذیر (تایپ بخشی از نام)."""
     box = QComboBox()
+    box._legacy_labels = getattr(items, "legacy", None)
     box.setEditable(True)
     box.setInsertPolicy(QComboBox.NoInsert)
     if none_label is not None:
@@ -77,6 +95,10 @@ def combo(items, none_label: str | None = None) -> QComboBox:
 
 def set_combo(box: QComboBox, data) -> None:
     idx = box.findData(data)
+    legacy = getattr(box, "_legacy_labels", None)
+    if idx < 0 and data is not None and legacy and data in legacy:
+        box.addItem(P(legacy[data]), data)  # مقدار قدیمی سطح بالاتر، تا با ذخیرهٔ دوباره پاک نشود
+        idx = box.findData(data)
     box.setCurrentIndex(idx if idx >= 0 else 0)
 
 
@@ -122,10 +144,8 @@ class Lookups:
         from peecha.services import hr as hr_service
         from peecha.services import procurement_masters as masters
 
-        cc_type = dims.get_specialized_dimension_type_id(cid, dims.COST_CENTER_CODE)
-        pr_type = dims.get_specialized_dimension_type_id(cid, dims.PROJECT_CODE)
-        self.cost_centers = [(f"{d.code} — {d.name or ''}", d.detail_account_id) for d in dims.list_detail_accounts(cid, cc_type)]
-        self.projects = [(f"{d.code} — {d.name or ''}", d.detail_account_id) for d in dims.list_detail_accounts(cid, pr_type)]
+        self.cost_centers = leaf_options(cid, dims.COST_CENTER_CODE)
+        self.projects = leaf_options(cid, dims.PROJECT_CODE)
         self.suppliers = [(f"{s['code']} — {s['name']}", s["detail_account_id"]) for s in dims.list_suppliers(cid)]
         self.customers = [(f"{s['code']} — {s['name']}", s["detail_account_id"]) for s in dims.list_customers(cid)]
         self.accounts = [(f"{a.full_code} — {a.name}", a.account_id) for a in coa_service.list_postable_accounts(cid)]
@@ -643,7 +663,7 @@ class AssetsScreen(QWidget):
         drow = QHBoxLayout()
         self.doc_type = combo([(v, k) for k, v in fdocs.DOCUMENT_TYPES.items()])
         add_doc = QPushButton("افزودن مدرک")
-        add_doc.clicked.connect(self.add_document)
+        add_doc.clicked.connect(lambda _c=False: self.add_document())  # R324: تیک دکمه به‌جای مسیر فایل نرود
         drow.addWidget(self.doc_type)
         drow.addWidget(add_doc)
         drow.addStretch(1)
@@ -738,7 +758,7 @@ class AssetsScreen(QWidget):
         cid = company_id()
         self.asset = a = fa.get_asset(cid, asset_id)
         lk = self.lk or Lookups(cid)
-        name = dict((d, lb) for lb, d in lk.cost_centers)
+        name = dict(getattr(lk.cost_centers, "legacy", None) or {d: lb for lb, d in lk.cost_centers})
         emp = dict((d, lb) for lb, d in lk.employees)
         show_cost = can("fa_cost_view", "VIEW")
         from peecha.db.base import new_session
@@ -1202,6 +1222,7 @@ class SetupScreen(QWidget):
             for label, data in lk.accounts:
                 box.addItem(P(label), data)
         self.cat_cc.clear()
+        self.cat_cc._legacy_labels = getattr(lk.cost_centers, "legacy", None)
         self.cat_cc.addItem("— ندارد —", None)
         for label, data in lk.cost_centers:
             self.cat_cc.addItem(P(label), data)

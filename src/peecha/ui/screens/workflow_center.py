@@ -404,6 +404,8 @@ class WfRulesPanel(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         self.self_approval = QCheckBox("درخواست‌کننده بتواند درخواست خودش را تایید کند (توصیه نمی‌شود)")
         self.notify_end = QCheckBox("پس از پایان هر فرایند به درخواست‌کننده خبر داده شود")
+        self.lock_running = QCheckBox("تا همهٔ مراحل گردش کار یک سند انجام نشده، تصویب، رد یا رفتن آن به مرحلهٔ بعد "
+                                      "دستی ممکن نباشد (توصیه می‌شود)")
         self.max_steps = num_field()
         self.max_depth = num_field()
         grid = QGridLayout()
@@ -415,7 +417,7 @@ class WfRulesPanel(QWidget):
         self.step_up_amount.setPlaceholderText("خالی یعنی بدون سقف")
         grid.addWidget(QLabel("تایید در موبایل با رمز دوباره، برای مبلغ از"), 2, 0)
         grid.addWidget(self.step_up_amount, 2, 1)
-        for w in (self.self_approval, self.notify_end):
+        for w in (self.self_approval, self.notify_end, self.lock_running):
             layout.addWidget(w)
         layout.addLayout(grid)
         hint = QLabel("این سقف‌ها جلوی اجرای بی‌پایان یک فرایند اشتباه را می‌گیرند؛ در حالت عادی نیازی به تغییر نیست.")
@@ -433,6 +435,7 @@ class WfRulesPanel(QWidget):
         s = wf_settings(company_id())
         self.self_approval.setChecked(bool(s.get("allow_self_approval")))
         self.notify_end.setChecked(bool(s.get("notify_starter_on_end", True)))
+        self.lock_running.setChecked(bool(s.get("lock_while_running", True)))
         self.max_steps.setText(P(s.get("max_steps") or 200))
         self.max_depth.setText(P(s.get("max_event_depth") or 5))
         self.step_up_amount.setText(P(s.get("mobile_step_up_amount")) if s.get("mobile_step_up_amount") else "")
@@ -451,7 +454,7 @@ class WfRulesPanel(QWidget):
             return False
         save_settings(company_id(), user_id(), allow_self_approval=self.self_approval.isChecked(),
                       notify_starter_on_end=self.notify_end.isChecked(), max_steps=steps, max_event_depth=depth,
-                      mobile_step_up_amount=step_up_amount)
+                      mobile_step_up_amount=step_up_amount, lock_while_running=self.lock_running.isChecked())
         return True
 
 

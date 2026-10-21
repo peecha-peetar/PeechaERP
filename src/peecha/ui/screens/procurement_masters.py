@@ -13,6 +13,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.db.models.commercial import Branch, CancellationReason, PurchaseType
 from peecha.services import procurement_masters as masters_service
+from peecha.ui.persian_numbers import NumberEdit
 from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import confirm_and_delete, delete_button
 
@@ -248,7 +249,7 @@ class _ReorderPoliciesTab(QWidget):
         self.item_combo.setInsertPolicy(QComboBox.NoInsert)
         self.item_combo.setMinimumWidth(220)
         self.warehouse_combo = QComboBox()
-        self.min_field, self.rop_field, self.max_field, self.qty_field = QLineEdit(), QLineEdit(), QLineEdit(), QLineEdit()
+        self.min_field, self.rop_field, self.max_field, self.qty_field = NumberEdit(), NumberEdit(), NumberEdit(), NumberEdit()
         self.lead_spin = QSpinBox()
         self.lead_spin.setRange(0, 365)
         self.active_check = QCheckBox("فعال")
@@ -364,7 +365,7 @@ class _BudgetsTab(QWidget):
         self.table = _table(["کد", "نام", "از", "تا", "مرکز هزینه", "پروژه", "گروه کالا", "مبلغ", "مصرف‌شده", "درصد مصرف", "فعال"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
-        self.code_field, self.name_field, self.amount_field = QLineEdit(), QLineEdit(), QLineEdit()
+        self.code_field, self.name_field, self.amount_field = QLineEdit(), QLineEdit(), NumberEdit()
         self.from_field, self.to_field = JalaliDateEdit(), JalaliDateEdit()
         self.cost_center_combo, self.project_combo, self.category_combo = QComboBox(), QComboBox(), QComboBox()
         self.branch_combo, self.department_combo = QComboBox(), QComboBox()
@@ -399,10 +400,11 @@ class _BudgetsTab(QWidget):
         details = dimensions_service.list_all_detail_accounts(company_id)
         self._names = {d.detail_account_id: f"{d.full_code} — {d.name or ''}" for d in details}
         self._categories = {c.category_id: f"{c.code} — {c.name}" for c in catalog_service.list_categories(company_id)}
+        leaves = {d.detail_account_id for d in dimensions_service.list_all_leaf_detail_accounts(company_id)}  # R322
         for combo, options in ((self.cost_center_combo, [(d.detail_account_id, self._names[d.detail_account_id]) for d in details
-                                                         if d.dimension_type_id == cc_type]),
+                                                         if d.dimension_type_id == cc_type and d.detail_account_id in leaves]),
                                (self.project_combo, [(d.detail_account_id, self._names[d.detail_account_id]) for d in details
-                                                     if d.dimension_type_id == pj_type]),
+                                                     if d.dimension_type_id == pj_type and d.detail_account_id in leaves]),
                                (self.category_combo, list(self._categories.items())),
                                (self.branch_combo, [(b.branch_id, b.name) for b in masters_service.list_branches(company_id)]),
                                (self.department_combo, [(d.org_unit_id, d.name) for d in masters_service.list_departments(company_id)])):
@@ -451,6 +453,8 @@ class _BudgetsTab(QWidget):
         for combo, value in ((self.cost_center_combo, b.cost_center_detail_account_id), (self.project_combo, b.project_detail_account_id),
                              (self.category_combo, b.category_id), (self.branch_combo, b.branch_id),
                              (self.department_combo, b.org_unit_id)):
+            if combo in (self.cost_center_combo, self.project_combo) and combo.findData(value) < 0 and value in self._names:
+                combo.addItem(numerals.to_persian_digits(self._names[value]), value)  # R322: مقدار قدیمی سطح بالاتر
             combo.setCurrentIndex(max(0, combo.findData(value)))
         self.warn_spin.setValue(int(b.warn_percent))
         self.active_check.setChecked(b.is_active)

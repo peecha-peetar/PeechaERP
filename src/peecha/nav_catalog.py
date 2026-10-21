@@ -227,12 +227,12 @@ WAREHOUSE_REPORT_MENU = [
         ("REPLENISHMENT", "پیشنهاد تامین مجدد"), ("PRODUCTIVITY", "بهره‌وری انبار"), ("CAPACITY", "ظرفیت انبار"),
         ("BIN_STOCK", "موجودی به تفکیک محل نگهداری"),
     ]),
-    ("WMS", "جانمایی و برداشت", [
-        ("PUTAWAY", "جانمایی"), ("UNLOCATED_STOCK", "دریافت‌شده ولی جانمایی‌نشده"), ("PICKING", "برداشت"),
+    ("WMS", "چیدن در قفسه و جمع‌آوری کالا", [
+        ("PUTAWAY", "چیدن در قفسه"), ("UNLOCATED_STOCK", "رسیده ولی در قفسه چیده‌نشده"), ("PICKING", "جمع‌آوری کالا"),
         ("WMS_PERFORMANCE", "عملکرد اپراتورهای انبار"),
         # R252: گزارش‌هایِ محل‌محور
-        ("BIN_BATCH_STOCK", "بچ به تفکیک محل"), ("WAVES", "موج‌های برداشت"), ("LOCATION_COUNTS", "شمارش‌های محل"),
-        ("REPLENISH_TASKS", "تامین مجدد محل‌های برداشت"),
+        ("BIN_BATCH_STOCK", "بچ به تفکیک محل"), ("WAVES", "جمع‌آوری‌های گروهی"), ("LOCATION_COUNTS", "شمارش‌های محل"),
+        ("REPLENISH_TASKS", "تامین مجدد محل‌های جمع‌آوری"),
     ]),
     ("MASTER", "اطلاعات پایه", [
         ("MD_WAREHOUSES", "فهرست انبارها"), ("MD_UNITS", "واحدها و تبدیل واحد کالاها"),
@@ -454,7 +454,7 @@ NAV_ITEMS = [
             # اختلاف به واحدِ پایه با سندِ اصلاحِ موجودی ثبت می‌شود.
             {"code": "INV_STOCK_COUNT", "label": "انبارگردانی", "screen": "stock_count"},
             # R247: وظایفِ جانمایی/برداشت و برنامهٔ شمارشِ دوره‌ای
-            {"code": "INV_WMS_TASKS", "label": "جانمایی، برداشت و برنامهٔ شمارش", "screen": "warehouse_operations"},
+            {"code": "INV_WMS_TASKS", "label": "چیدن در قفسه، جمع‌آوری کالا و برنامهٔ شمارش", "screen": "warehouse_operations"},
             # R248: نقشهٔ تعاملی و مدیریتِ محل‌هایِ انبار (Zone/Aisle/Rack/Level/Bin)
             {"code": "INV_WAREHOUSE_MAP", "label": "نقشه و محل‌های انبار", "screen": "warehouse_map"},
             {"code": "INV_LOT_TRACE", "label": "ردیابی بچ/سریال/امانی", "screen": "lot_trace"},

@@ -58,6 +58,7 @@ from peecha.ui.widgets import (
     SummaryCard,
     SummaryCardBar,
 )
+from peecha.ui.persian_numbers import NumberEdit
 
 _METHOD_LABELS = {
     "CASH": "نقدی",
@@ -1927,7 +1928,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         header_layout.addWidget(self.rate_label, 6, 2)
         rate_row = QHBoxLayout()
         rate_row.setContentsMargins(0, 0, 0, 0)
-        self.rate_field = QLineEdit()
+        self.rate_field = NumberEdit()
         self.rate_field.editingFinished.connect(self._on_rate_changed)
         rate_row.addWidget(self.rate_field)
         self.rate_fetch_button = QPushButton("🌐")

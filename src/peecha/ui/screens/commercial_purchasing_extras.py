@@ -35,6 +35,7 @@ from peecha.db.models.commercial import VendorRebateAgreement, VendorRebateTier
 from peecha.ui.widgets import (
     FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable,
 )
+from peecha.ui.persian_numbers import NumberEdit
 
 _REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصد ثابت", "VOLUME_TIER": "پلکانی حجمی"}
 _ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحال تجمیع", "SETTLED": "تسویه‌شده"}
@@ -141,7 +142,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         self.tier_min_field = QLineEdit()
         self.tier_min_field.setPlaceholderText("حداقل مبلغ خرید")
         tier_form.addWidget(self.tier_min_field)
-        self.tier_percent_field = QLineEdit()
+        self.tier_percent_field = NumberEdit()
         self.tier_percent_field.setPlaceholderText("درصد تخفیف حجمی")
         tier_form.addWidget(self.tier_percent_field)
         add_tier_button = QPushButton("➕")

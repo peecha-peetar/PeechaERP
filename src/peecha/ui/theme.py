@@ -335,7 +335,27 @@ def _apply_tokens(tokens: dict[str, str]) -> None:
     g["GLOBAL_QSS"] = _build_global_qss()
 
 
+def _arrow_icon(color: str) -> str:
+    """R322: فلش کمبوباکس با رنگ تم (پیش‌فرض Qt در هر دو تم سفید و نامعلوم بود) — مسیر فایل SVG برای QSS."""
+    from peecha.config import SETTINGS_DIR
+
+    folder = SETTINGS_DIR / "ui"
+    path = folder / f"combo_arrow_{color.lstrip('#').lower()}.svg"
+    if not path.exists():
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8">'
+                f'<path d="M1 1.5 L6 6.5 L11 1.5" fill="none" stroke="{color}" stroke-width="2" '
+                'stroke-linecap="round" stroke-linejoin="round"/></svg>', encoding="utf-8")
+        except OSError:
+            return ""
+    return path.as_posix()
+
+
 def _build_global_qss() -> str:
+    arrow = _arrow_icon(TEXT_SECONDARY)
+    arrow_off = _arrow_icon(TEXT_DISABLED)
     return f"""
 * {{
     outline: none;
@@ -427,6 +447,9 @@ QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBo
     border: 1.5px solid {ACCENT};
     background-color: {SURFACE};
 }}
+QLineEdit[invalid="true"], QComboBox[invalid="true"], QSpinBox[invalid="true"], QDoubleSpinBox[invalid="true"] {{
+    border: 1.5px solid {DANGER};
+}}
 QLineEdit:disabled, QComboBox:disabled {{
     color: {TEXT_DISABLED};
     background-color: {HOVER};
@@ -438,6 +461,14 @@ QSpinBox:disabled, QDoubleSpinBox:disabled {{
 QComboBox::drop-down {{
     border: none;
     width: 28px;
+}}
+QComboBox::down-arrow {{
+    image: url("{arrow}");
+    width: 12px;
+    height: 8px;
+}}
+QComboBox::down-arrow:disabled {{
+    image: url("{arrow_off}");
 }}
 QComboBox QAbstractItemView {{
     background-color: {GRID_HEADER_BG};

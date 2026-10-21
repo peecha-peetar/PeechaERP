@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QEvent, QLocale, QObject, Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import QEvent, QLocale, QObject, QRegularExpression, Qt
+from PySide6.QtGui import QKeyEvent, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QLineEdit,
@@ -24,6 +24,7 @@ _GROUP_MIN = 100000
 _SEPARATORS = ",٬"
 _TO_PERSIAN = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 _BODY = re.compile(r"^([-−+]?)([\d,٬]*)(?:([.٫])(\d*))?$")
+_NUMBER_INPUT = r"^[-−]?[0-9۰-۹٠-٩,٬]*([.٫][0-9۰-۹٠-٩]*)?$"
 _LATIN = re.compile(r"[A-Za-z]")
 _ASCII_DIGIT = re.compile(r"[0-9]")
 _NUMERIC_CELL = re.compile(r"^\s*([-−+]?)(\d[\d,٬]*)(?:[.٫](\d+))?\s*([%٪]?)\s*$")
@@ -80,6 +81,8 @@ class NumberEdit(QLineEdit):
 
     def __init__(self, text: str = "", parent=None) -> None:
         super().__init__(parent)
+        # R322: همان لحظهٔ تایپ، حرف و نویسهٔ غیرعددی پذیرفته نمی‌شود (نه هنگام ذخیره)
+        self.setValidator(QRegularExpressionValidator(QRegularExpression(_NUMBER_INPUT), self))
         self.setText(text)
         self.textEdited.connect(self._regroup)
 

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, JalaliDateEdit, LayoutEditMixin, wrap_scrollable_with_footer
+from peecha.ui.persian_numbers import NumberEdit
 
 _COLUMNS = ["فعال", "رقم اعشار", "نماد", "کد ارز"]
 _RATE_COLUMNS = ["تاریخ", "نرخ به ارز پایه"]
@@ -214,7 +215,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.rate_date_field = JalaliDateEdit()
         new_rate_row.addWidget(self.rate_date_field)
         new_rate_row.addWidget(QLabel("نرخ:"))
-        self.rate_value_field = QLineEdit()
+        self.rate_value_field = NumberEdit()
         new_rate_row.addWidget(self.rate_value_field, stretch=1)
         content_layout.addLayout(new_rate_row)
 

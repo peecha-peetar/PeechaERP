@@ -137,6 +137,20 @@ def _paths_have_approval_before(graph: dict, target: str) -> bool:
     return dfs(START, frozenset({START}))
 
 
+def _field_issues(node: dict, name: str, nid: str) -> list[Issue]:
+    fields = node.get("fields") or []
+    keys = [f.get("key") for f in fields]
+    issues = []
+    if any(not k or not (f.get("label") or "").strip() for k, f in zip(keys, fields)):
+        issues.append(Issue("error", f"هر خانهٔ فرم «{name}» باید کلید و عنوان داشته باشد.", nid))
+    if len(keys) != len(set(keys)):
+        issues.append(Issue("error", f"کلید تکراری در فرم «{name}».", nid))
+    for f in fields:
+        if f.get("kind") == "choice" and not f.get("choices"):
+            issues.append(Issue("error", f"برای خانهٔ «{f.get('label') or f.get('key')}» در فرم «{name}» گزینه‌ای تعریف نشده است.", nid))
+    return issues
+
+
 def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> list[Issue]:
     issues: list[Issue] = []
     adapter = registry.get_adapter(entity_type)
@@ -211,6 +225,7 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
                 issues.append(Issue("error", f"درصد لازم برای «{name}» باید بین ۱ تا ۱۰۰ باشد.", nid))
             if (node.get("mode") or "ANY") not in ("SINGLE", "ANY", "ALL", "PERCENT", "SEQUENTIAL"):
                 issues.append(Issue("error", f"شیوهٔ تایید «{name}» نامعتبر است.", nid))
+            issues.extend(_field_issues(node, name, nid))
             for a in node.get("approvers") or []:
                 if a.get("kind") == "ROLE":
                     role_ids.add(a.get("role_id"))
@@ -223,11 +238,7 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
                 issues.append(Issue("error", f"برای کار «{name}» مسئولی تعیین نشده است.", nid))
             if "done" not in whens and None not in whens:
                 issues.append(Issue("error", f"کار «{name}» مسیر «انجام شد» ندارد.", nid))
-            keys = [f.get("key") for f in node.get("fields") or []]
-            if any(not k or not (f.get("label") or "").strip() for k, f in zip(keys, node.get("fields") or [])):
-                issues.append(Issue("error", f"هر خانهٔ فرم کار «{name}» باید کلید و عنوان داشته باشد.", nid))
-            if len(keys) != len(set(keys)):
-                issues.append(Issue("error", f"کلید تکراری در فرم کار «{name}».", nid))
+            issues.extend(_field_issues(node, name, nid))
             for a in node.get("assignees") or []:
                 if a.get("kind") == "ROLE":
                     role_ids.add(a.get("role_id"))

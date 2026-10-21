@@ -56,6 +56,7 @@ _WITHDRAWAL_POLICY_LABELS: dict[str, str] = {
 }
 _ACCESS_LEVEL_LABELS: dict[str, str] = {"PUBLIC": "عمومی", "RESTRICTED": "محدود (فقط کاربران مجاز)"}
 from peecha.services.costing.strategies import METHOD_LABELS as _COSTING_METHOD_LABELS  # noqa: E402
+from peecha.ui.persian_numbers import NumberEdit
 _FINANCIAL_MAPPING_KEYS = ("INVENTORY_ASSET", "INVENTORY_ADJUSTMENT_GAIN", "INVENTORY_ADJUSTMENT_LOSS")
 
 
@@ -447,7 +448,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ درخواستِ صریح («سیاستِ مالیات: شرکت -> انبار -> کالا»): اگر
         # تنظیماتِ کلیِ شرکت خالی باشد، پیش از سراغِ‌رفتن به مالیاتِ خودِ
         # کالا، این مقدار بررسی می‌شود.
-        self.default_tax_percent_field = QLineEdit()
+        self.default_tax_percent_field = NumberEdit()
 
         self.stock_control_grid = FieldGrid([
             FieldSpec("costing_method", "روش قیمت‌گذاری (فقط اطلاعاتی)", self.costing_method_combo, span=1),

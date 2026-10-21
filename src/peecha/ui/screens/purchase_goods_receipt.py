@@ -268,7 +268,7 @@ class _GoodsReceiptDialog(QDialog):
         combo.setToolTip("مکان قرارگیری کالا در انبار — برای انبار دارای مکان‌بندی الزامی است.")
         wh_combo.currentIndexChanged.connect(lambda _i, c=combo, w=wh_combo: self._fill_bin_combo(c, w.currentData(), None))
         map_button = QPushButton("نقشه")
-        map_button.setToolTip("انتخاب مکان روی نقشهٔ انبار (با پیشنهاد جانمایی)")
+        map_button.setToolTip("انتخاب مکان روی نقشهٔ انبار (با پیشنهاد قفسه)")
         map_button.setEnabled(editable)
         map_button.clicked.connect(lambda _c=False, line=ln, it=item, c=combo, w=wh_combo: self._pick_on_map(line, it, c, w))
         row.addWidget(combo, stretch=1)

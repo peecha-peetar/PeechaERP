@@ -28,8 +28,8 @@ from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.fixed_assets import (
-    FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, qty_field, qty_precision_problem,
-    set_combo, table, user_id,
+    FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, leaf_options, money, num_field, qty_field,
+    qty_precision_problem, set_combo, table, user_id,
 )
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
 from peecha.ui.widgets import FormDrawer, confirm_and_delete
@@ -59,8 +59,7 @@ class PrdLookups:
                      if i.item_kind_code in ("FINISHED_GOOD", "SEMI_FINISHED", "GOOD")]
         self.uoms = {i.item_id: i.base_uom_id for i in items}
         self.warehouses = [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations.list_warehouses(cid, active_only=True)]
-        cc_type = dims.get_specialized_dimension_type_id(cid, dims.COST_CENTER_CODE)
-        self.cost_centers = [(f"{d.code} — {d.name or ''}", d.detail_account_id) for d in dims.list_detail_accounts(cid, cc_type)]
+        self.cost_centers = leaf_options(cid, dims.COST_CENTER_CODE)  # R322: فقط آخرین سطح
         self.branches = [(b.name, b.branch_id) for b in masters.list_branches(cid)]
         self.employees = [(f"{e.employee_code} — {e.full_name}", e.employee_id) for e in hr_service.list_employees(cid)]
         self.work_centers = [(f"{w.code} — {w.name}", w.work_center_id) for w in pm.list_work_centers(cid, active_only=True)]
@@ -447,6 +446,8 @@ class OrdersScreen(QWidget):
         for key, label, form in self.ACTIONS:
             b = QPushButton(label)
             b.setProperty("form", form)
+            if key in _ACTION_HINTS:
+                b.setToolTip(_ACTION_HINTS[key])
             b.clicked.connect(lambda _c=False, k=key: self.action(k))
             self.actions[key] = b
         self.tabs = QTabWidget()
@@ -692,7 +693,9 @@ class OrdersScreen(QWidget):
             "machine": [("order_operation_id", "عملیات", combo(ops, "—")), ("hours", "ساعت", num_field()),
                         ("rate", "نرخ (خالی = خودکار)", num_field())],
             "hold": [("reason", "دلیل توقف", QLineEdit())],
-            "complete": [("quantity", "رسید نهایی (اختیاری)", qty_field(self.view.order.remaining_qty, item_id=product)),
+            # R324: پیش‌فرض صفر وقتی تولید قبلاً ثبت شده (وگرنه کاربر همان تولید را دوباره و با بهای صفر وارد می‌کرد)
+            "complete": [("quantity", "تولیدی که هنوز ثبت نشده (معمولاً صفر)",
+                          qty_field(ZERO if self.view.order.produced_qty > 0 else self.view.order.remaining_qty, item_id=product)),
                          ("joint_method", "روش تخصیص تولید مشترک", combo([(v, k) for k, v in pc.JOINT_METHODS.items()]))],
             "reopen": [("reason", "دلیل بازگشایی", QLineEdit())], "cancel": [("reason", "دلیل لغو", QLineEdit())],
             "reverse": [("txn_id", "رسید", combo([(f"{numerals.format_jalali_date(t.date)} -- {t.item_label} -- {decimals.format_qty(t.quantity, item_id=t.item_id)}", t.txn_id)
@@ -701,12 +704,16 @@ class OrdersScreen(QWidget):
                         ("reason", "دلیل", QLineEdit())],
         }
         if values is None and key in forms:
-            values = _ask(self, dict((k, lb) for k, lb, _f in self.ACTIONS)[key], forms[key])
+            values = _ask(self, dict((k, lb) for k, lb, _f in self.ACTIONS)[key], forms[key], self._form_hint(key))
             if values is None:
                 return False
         values = values or {}
         if key in ("close", "cancel", "complete") and not getattr(self, "_skip_confirm", False):
             if not self.confirm("این عملیات قابل بازگشت مستقیم نیست. ادامه می‌دهید؟"):
+                return False
+        if key in ("receipt", "complete") and (values.get("quantity") or ZERO) > 0 and not getattr(self, "_skip_confirm", False):
+            warning = po.zero_cost_warning(cid, oid)
+            if warning and not self.confirm(warning):
                 return False
         fn = {
             "release": lambda: po.release_order(cid, uid, oid),
@@ -744,6 +751,28 @@ class OrdersScreen(QWidget):
             self.reload_list()
             self.load_order(oid)
         return ok
+
+
+    def _form_hint(self, key: str) -> str:
+        o = self.view.order
+        done = (f"برنامه: {decimals.format_qty(o.planned_qty, item_id=o.item_id)} — تا الان ثبت‌شده: "
+                f"{decimals.format_qty(o.produced_qty, item_id=o.item_id)}")
+        if key == "receipt":
+            return P(done + "\nمحصول ساخته‌شده را با بهای مواد و هزینه‌های ثبت‌شده به انبار محصول می‌برد؛ "
+                            "می‌توانید چند بار و بخش‌بخش ثبت کنید.")
+        if key == "complete":
+            return P(done + "\n«اتمام تولید» یعنی کار ساخت این دستور تمام شد: رزرو مواد باقی آزاد و عملیات بسته می‌شود. "
+                            "اگر همهٔ تولید را با «ثبت تولید» وارد کرده‌اید، مقدار را صفر بگذارید؛ فقط تولیدی را وارد کنید که "
+                            "هنوز ثبت نشده است.")
+        return ""
+
+
+_ACTION_HINTS = {
+    "issue": "مواد اولیه را از انبار مواد به این دستور می‌برد (مصرف)؛ بهای آن به کالای در جریان ساخت اضافه می‌شود.",
+    "receipt": "محصول ساخته‌شده را با بهای ثبت‌شده به انبار محصول می‌برد؛ چند بار هم ممکن است.",
+    "complete": "پایان کار ساخت: رزروها آزاد و عملیات بسته می‌شود؛ تولید تازه فقط اگر هنوز ثبت نشده باشد.",
+    "close": "پس از اتمام: محاسبهٔ نهایی بها و انحراف‌ها و قفل دستور.",
+}
 
 
 # =========================================================================================================
@@ -1336,7 +1365,7 @@ class PlanningScreen(QWidget):
         run.setObjectName("primaryButton")
         run.clicked.connect(self.run_mrp)
         convert = QPushButton("تبدیل پیشنهادهای انتخاب‌شده")
-        convert.clicked.connect(self.convert_mrp)
+        convert.clicked.connect(lambda _c=False: self.convert_mrp())  # R324: تیک دکمه به‌جای ردیف‌های انتخابی نرود
         mrow.addWidget(run)
         mrow.addWidget(convert)
         mrow.addStretch(1)
@@ -1707,6 +1736,7 @@ class PrdSettingsScreen(QWidget):
             elif isinstance(w, QComboBox):
                 if key.endswith("warehouse_id") or key.endswith("account_id"):
                     w.clear()
+                    w._legacy_labels = getattr(lk.cost_centers, "legacy", None) if key.endswith("account_id") else None
                     w.addItem("—", None)
                     for label, data in (lk.cost_centers if key.endswith("account_id") else lk.warehouses):
                         w.addItem(P(label), data)

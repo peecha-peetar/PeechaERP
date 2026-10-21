@@ -38,8 +38,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const TASK_FILTERS: { key: WmsTaskType | null; label: string }[] = [
   { key: null, label: "همه" },
-  { key: "PUTAWAY", label: "جانمایی" },
-  { key: "PICK", label: "برداشت" },
+  { key: "PUTAWAY", label: "چیدن در قفسه" },
+  { key: "PICK", label: "جمع‌آوری" },
   { key: "REPLENISH", label: "تامین" },
 ];
 
@@ -52,7 +52,7 @@ export async function resolveLocation(api: ApiClient, text: string): Promise<Loc
   return result.kind === "LOCATION" && result.locations.length > 0 ? result.locations[0] : null;
 }
 
-/** اپِ انباردار (R249): جستجو/اسکنِ محل و کالا، وظایفِ جانمایی/برداشت/تأمین و انتقالِ بینِ محل‌ها.
+/** اپِ انباردار (R249): جستجو/اسکنِ محل و کالا، وظایفِ چیدن در قفسه/جمع‌آوری/تأمین و انتقالِ بینِ محل‌ها.
  * نوشتن‌ها از صفِ آفلاین می‌روند و نتیجهٔ فوری (ثبت/در صف/رد) نشان داده می‌شود. */
 export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }: Props) {
   const { colors, spacing, typography } = useTheme();
@@ -99,7 +99,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const [mapZoom, setMapZoom] = useState(1);
   const [mapSelected, setMapSelected] = useState<LocationDetail | null>(null);
   const [kpis, setKpis] = useState<WmsKpis | null>(null);
-  // R252: شمارشِ سریال، منابعِ جانمایی
+  // R252: شمارشِ سریال، منابعِ چیدن در قفسه
   const [serialKey, setSerialKey] = useState<string | null>(null);
   const [countSerials, setCountSerials] = useState<Record<string, string[]>>({});
   const [putawaySources, setPutawaySources] = useState<PutawaySource[] | null>(null);
@@ -193,9 +193,9 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       const { wave_id } = await apiClient.createWave(warehouseId);
       setActiveWave(wave_id);
       await loadTasks();
-      toast.show("موج برداشت ساخته شد.", "success");
+      toast.show("جمع‌آوری گروهی ساخته شد.", "success");
     } catch (e) {
-      toast.show(errorText(e, "ساخت موج ناموفق بود."), "danger");
+      toast.show(errorText(e, "ساخت جمع‌آوری گروهی ناموفق بود."), "danger");
     }
   };
 
@@ -252,26 +252,26 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       }
       ok = await submit(
         { type: "WMS_PUTAWAY", payload: { taskId: activeTask.task_id, toLocationId: putawayTarget.id, scans: { location: putawayTarget.scanned ?? null } } },
-        "جانمایی ثبت شد.",
+        "چیدن در قفسه ثبت شد.",
       );
     } else if (activeTask.task_type === "PICK") {
       if (scanRequired && (!taskScans.location || !taskScans.item)) {
-        toast.show("برای تایید، محل برداشت و کالا را اسکن کنید.", "warning");
+        toast.show("برای تایید، محل جمع‌آوری و کالا را اسکن کنید.", "warning");
         return;
       }
       const picked = Number(qty || "0");
       const wanted = Number(toAsciiDigits(activeTask.quantity));
       if (pickControl && picked > wanted) {
-        toast.show("مقدار برداشته از مقدار وظیفه بیشتر است.", "warning");
+        toast.show("مقدار جمع‌آوری‌شده از مقدار وظیفه بیشتر است.", "warning");
         return;
       }
       if (pickControl && picked < wanted && !shortReason.trim()) {
-        toast.show("برداشت کمتر از مقدار وظیفه است؛ علت کسری را بنویسید.", "warning");
+        toast.show("جمع‌آوری کمتر از مقدار وظیفه است؛ علت کسری را بنویسید.", "warning");
         return;
       }
       ok = await submit(
         { type: "WMS_PICK", payload: { taskId: activeTask.task_id, quantity: qty, scans: taskScans, shortReason: shortReason.trim() || null } },
-        "برداشت ثبت شد.",
+        "جمع‌آوری ثبت شد.",
       );
     } else {
       if (scanRequired && (!taskScans.from || !taskScans.to)) {
@@ -383,7 +383,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const createPutaway = async (documentId: number) => {
     try {
       const { task_ids } = await apiClient.generatePutawayTasks(documentId);
-      toast.show(`${task_ids.length} وظیفهٔ جانمایی ساخته شد.`, "success");
+      toast.show(`${task_ids.length} کار چیدن در قفسه ساخته شد.`, "success");
       setPutawaySources(null);
       await loadTasks();
     } catch (e) {
@@ -430,7 +430,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       ))}
       {kpis?.short_reasons && kpis.short_reasons.length > 0 ? (
         <Card>
-          {text(typography.bodyBold, "علت‌های کسری برداشت")}
+          {text(typography.bodyBold, "علت‌های کسری جمع‌آوری")}
           {kpis.short_reasons.map((r) => (
             <Text key={r.reason} style={[typography.caption, { color: colors.textSecondary }]}>{`${r.reason}: ${r.count}`}</Text>
           ))}
@@ -461,7 +461,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
         {loc.name ?? ""}
         {loc.occupancy_percent !== null ? ` · اشغال ${formatAmount(loc.occupancy_percent)}٪` : ""}
-        {loc.putaway_allowed ? "" : " · جانمایی مجاز نیست"}
+        {loc.putaway_allowed ? "" : " · چیدن کالا مجاز نیست"}
       </Text>
       {loc.contents.length === 0 ? (
         <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.sm }]}>خالی</Text>
@@ -524,7 +524,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const renderTaskScans = (task: WmsTask) => (
     <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
       {task.task_type === "PICK"
-        ? [scanRow("اسکن محل برداشت", "TASK_LOCATION", "location"), scanRow("اسکن کالا", "TASK_ITEM", "item")]
+        ? [scanRow("اسکن محل جمع‌آوری", "TASK_LOCATION", "location"), scanRow("اسکن کالا", "TASK_ITEM", "item")]
         : [scanRow("اسکن محل مبدا", "TASK_FROM", "from"), scanRow("اسکن محل مقصد", "TASK_TO", "to")]}
     </View>
   );
@@ -559,7 +559,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         <>
           <Input label="مقدار انجام‌شده" value={taskQty} onChangeText={setTaskQty} numeric keyboardType="decimal-pad" style={{ marginTop: spacing.md }} />
           {pickControl && task.task_type === "PICK" && Number(toAsciiDigits(taskQty) || "0") < Number(toAsciiDigits(task.quantity)) ? (
-            <Input label="علت کسری برداشت" value={shortReason} onChangeText={setShortReason} style={{ marginTop: spacing.sm }} />
+            <Input label="علت کسری جمع‌آوری" value={shortReason} onChangeText={setShortReason} style={{ marginTop: spacing.sm }} />
           ) : null}
           {scanRequired ? renderTaskScans(task) : null}
         </>
@@ -578,7 +578,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
 
   const renderWaves = () => (
     <View style={{ gap: spacing.xs }}>
-      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>موج‌های برداشت (ترتیب مسیر)</Text>
+      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>جمع‌آوری‌های گروهی (ترتیب مسیر)</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
         <Button label="همهٔ وظایف" size="md" fullWidth={false} variant={activeWave === null ? "primary" : "secondary"} onPress={() => setActiveWave(null)} />
         {waves.map((w) => (
@@ -592,7 +592,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
           />
         ))}
         {warehouses.map((wh) => (
-          <Button key={`new-${wh.warehouse_id}`} label={`موج تازه: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
+          <Button key={`new-${wh.warehouse_id}`} label={`جمع‌آوری گروهی تازه: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
         ))}
       </View>
     </View>
@@ -722,7 +722,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       </View>
       {activeTask ? renderTaskPanel(activeTask) : null}
       {renderWaves()}
-      <Button label="ساخت وظیفهٔ جانمایی از رسید تازه" size="md" variant="secondary" onPress={loadPutawaySources} />
+      <Button label="ساخت کار چیدن در قفسه از رسید تازه" size="md" variant="secondary" onPress={loadPutawaySources} />
       {putawaySources !== null && putawaySources.length === 0 ? <EmptyState title="رسید بی‌وظیفه‌ای نیست" /> : null}
       {(putawaySources ?? []).map((src) => (
         <Card key={src.document_id} onPress={() => createPutaway(src.document_id)}>

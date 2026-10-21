@@ -804,7 +804,7 @@ USAGE_LABELS = {
     "inv.cycle_count_lines": "انبارگردانی", "inv.items": "متغیرهای این کالا", "inv.location_replenishment_rules": "قواعد تأمین محل انبار",
     "inv.lot_movements": "گردش بچ", "inv.serial_numbers": "سریال‌ها", "inv.stock_reservations": "رزرو موجودی",
     "inv.vehicle_loading_lines": "بارگیری خودرو", "inv.vehicle_settlement_lines": "تسویهٔ خودرو",
-    "inv.warehouse_tasks": "وظایف انبار (جانمایی و برداشت)", "prd.bom_outputs": "محصول جانبی فرمول تولید",
+    "inv.warehouse_tasks": "کارهای انبار (چیدن در قفسه و جمع‌آوری کالا)", "prd.bom_outputs": "محصول جانبی فرمول تولید",
     "prd.mrp_lines": "برنامه‌ریزی مواد", "prd.order_materials": "مواد دستور تولید", "prd.order_outputs": "محصول دستور تولید",
     "prd.order_transactions": "گردش تولید", "prd.production_orders": "دستور تولید", "prd.production_plan_lines": "برنامهٔ تولید",
 }

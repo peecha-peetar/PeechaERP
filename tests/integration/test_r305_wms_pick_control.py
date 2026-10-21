@@ -70,7 +70,7 @@ check(task_of(t_over).done_quantity_base == 7, "switch off: over-pick accepted (
 switch(sc.PICK_CONTROL)
 check(client.get("/locations/settings", headers=H).json()["pick_control"] is True, "mobile sees the pick control switch")
 t1 = ops.generate_tasks(company_id, "PICK", ("STOCK", issue_draft(item_a, 5, b1)), uid)[0]
-check(raises(lambda: ops.complete_pick(t1, company_id, uid, D(6)), "بیش‌برداشت"), "over-pick refused")
+check(raises(lambda: ops.complete_pick(t1, company_id, uid, D(6)), "بیش از مقدار"), "over-pick refused")
 check(raises(lambda: ops.complete_pick(t1, company_id, uid, D(3)), "علت کسری"), "short pick without a reason refused")
 r = client.post(f"/locations/tasks/{t1}/pick", headers=H, json={"quantity": "3", "short_reason": "کارتن آسیب‌دیده"})
 check(r.status_code == 200 and task_of(t1).notes == "کسری برداشت: کارتن آسیب‌دیده", "short pick with a reason is saved on the task")

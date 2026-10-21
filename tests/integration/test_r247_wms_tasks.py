@@ -272,7 +272,7 @@ pk = run("PICKING", options={"view": "PARTIAL"}).rows
 check(len(pk) == 1 and pk[0][5] == 4 and pk[0][6] == 80, f"برداشت ناقص با دقت ۸۰٪ (got {pk})")
 check(raises(lambda: ops.complete_pick(pick[0], company_id, user.user_id, D(5))), "وظیفهٔ انجام‌شده دوباره تکمیل نمی‌شود")
 perf = {r[0]: r for r in run("WMS_PERFORMANCE").rows}
-check(perf["برداشت"][2] == 1 and perf["برداشت"][5] == 0 and perf["جانمایی"][2] == 1, "عملکرد اپراتور")
+check(perf["جمع‌آوری کالا"][2] == 1 and perf["جمع‌آوری کالا"][5] == 0 and perf["چیدن در قفسه"][2] == 1, "عملکرد اپراتور (R324: نام ساده)")
 kpis, _charts = wd.dashboard(company_id, F.date_from, today)
 check(len(kpis) == 26 and {k.code for k in kpis} >= {"PUTAWAY", "PICKS", "COUNT_DUE"}, "شاخص‌های تازهٔ داشبورد")
 

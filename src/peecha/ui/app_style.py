@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator
 from PySide6.QtWidgets import (
-    QAbstractButton, QAbstractItemView, QComboBox, QDoubleSpinBox, QGroupBox, QHeaderView, QLabel, QProxyStyle, QPushButton, QSpinBox,
-    QStyleFactory, QWidget,
+    QAbstractButton, QAbstractItemView, QComboBox, QDialogButtonBox, QDoubleSpinBox, QGroupBox, QHeaderView, QLabel, QProxyStyle,
+    QPushButton, QSpinBox, QStyle, QStyleFactory, QWidget,
 )
 
 from peecha.ui import icon_buttons, layout_guard, persian_numbers, touch, ui_text_apply
@@ -25,9 +25,17 @@ class AppStyle(QProxyStyle):
             ui_text_apply.apply(arg)
         if isinstance(arg, (QAbstractItemView, QComboBox)):
             layout_guard.guard(arg)
+        if isinstance(arg, QDialogButtonBox) and arg.orientation() == Qt.Horizontal:
+            # R322: دکمه‌های تایید/انصراف پایینِ سمت راست پنجره، تایید راست‌ترین
+            arg.setLayoutDirection(Qt.LeftToRight)
         if touch.is_enabled() and isinstance(arg, QWidget):
             touch.prepare(arg)
         return super().polish(arg)
+
+    def styleHint(self, hint, option=None, widget=None, return_data=None):  # noqa: N802 — نام متد Qt
+        if hint == QStyle.SH_DialogButtonLayout:
+            return int(QDialogButtonBox.MacLayout.value)  # [انصراف][تایید] — کنار راست، تایید راست‌ترین
+        return super().styleHint(hint, option, widget, return_data)
 
 
 _KEEP: list = []

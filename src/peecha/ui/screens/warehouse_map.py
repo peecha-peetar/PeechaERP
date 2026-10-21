@@ -243,7 +243,7 @@ class LocationDialog(QDialog):
         for code, label in wl.DIRECTIONS.items():
             self.direction.addItem(label, code)
         self.direction.setCurrentIndex(max(0, self.direction.findData(f.direction)))
-        self.pickable, self.putaway = QCheckBox("برداشت مجاز"), QCheckBox("جانمایی مجاز")
+        self.pickable, self.putaway = QCheckBox("جمع‌آوری مجاز"), QCheckBox("چیدن کالا مجاز")
         self.replenish, self.damaged = QCheckBox("جایگزینی مجاز"), QCheckBox("آسیب‌دیده")
         self.pickable.setChecked(f.is_pickable)
         self.putaway.setChecked(f.allow_putaway)
@@ -403,10 +403,10 @@ class WarehouseMapScreen(QWidget):
         self.view3d_check.toggled.connect(self.set_3d)
         tools.addWidget(self.view3d_check)
         tools.addWidget(_separator())
-        for glyph, tip, slot in (("🧭", "مسیر برداشت", self.show_picking_path), ("🏷️", "چاپ برچسب", self.print_labels),
+        for glyph, tip, slot in (("🧭", "مسیر جمع‌آوری کالا", self.show_picking_path), ("🏷️", "چاپ برچسب", self.print_labels),
                                  ("📏", "ابعاد انبار", self.edit_warehouse_dimensions)):
             b = _tool_button(glyph, tip)
-            b.clicked.connect(slot)
+            b.clicked.connect(lambda _c=False, f=slot: f())  # R324: بدون فرستادن تیک دکمه به‌جای فهرست محل‌ها
             tools.addWidget(b)
         outer.addWidget(toolbar)
 
@@ -432,7 +432,7 @@ class WarehouseMapScreen(QWidget):
         ops.setSpacing(6)
         self.op_buttons = {}
         for code, glyph, text, kind in (("EDIT", "✏️", "ویرایش", ""), ("STATUS", "🚦", "وضعیت", ""), ("TRANSFER", "🚚", "انتقال", ""),
-                                        ("PUTAWAY", "💡", "پیشنهاد جانمایی", ""), ("REPLENISH", "📉", "حداقل/حداکثر تامین", ""),
+                                        ("PUTAWAY", "💡", "پیشنهاد قفسه", ""), ("REPLENISH", "📉", "حداقل/حداکثر تامین", ""),
                                         ("COUNT", "🔢", "شمارش محل", ""), ("TASKS", "📋", "وظایف انبار", ""),
                                         ("DEFAULT", "📍", "مکان پیش‌فرض", ""), ("DELETE", "🗑️", "حذف", "danger")):
             b = _tool_button(glyph, text, kind)
@@ -841,7 +841,7 @@ class WarehouseMapScreen(QWidget):
                         f"تعداد کالا: {_p(len(o.items))} | مقدار: {_p(decimals.format_qty(o.quantity))}")
             if o.percent is not None and o.percent > 100:
                 info.append(f"<span style='color:{theme.DANGER}'>⚠ اشغال بیش از ظرفیت است.</span>")
-        flags = [t for t, ok in (("برداشت", node.is_pickable), ("جانمایی", node.allow_putaway),
+        flags = [t for t, ok in (("جمع‌آوری", node.is_pickable), ("چیدن در قفسه", node.allow_putaway),
                                  ("جایگزینی", node.allow_replenishment)) if ok]
         info.append("مجاز: " + ("، ".join(flags) or "—") + (" | آسیب‌دیده" if node.is_damaged else ""))
         from peecha.services import inventory_locations as locations_service
@@ -1078,7 +1078,7 @@ class WarehouseMapScreen(QWidget):
             self.select_location(node.location_id, focus=False)
 
     def _replenishment_dialog(self, node) -> None:
-        """R249: حداقل/حداکثر یک کالا در این محل برداشت."""
+        """R249: حداقل/حداکثر یک کالا در این محل جمع‌آوری."""
         from peecha.services import inventory_catalog as catalog_service
         from peecha.services import warehouse_operations as ops
 
@@ -1126,10 +1126,10 @@ class WarehouseMapScreen(QWidget):
 
         items = catalog_service.list_items(self._company_id(), transactable_only=True)
         labels = [_p(f"{i.code} — {i.name or ''}") for i in items]
-        choice, ok = QInputDialog.getItem(self, "پیشنهاد جانمایی", "کالا:", labels, 0, True)
+        choice, ok = QInputDialog.getItem(self, "پیشنهاد قفسه", "کالا:", labels, 0, True)
         if not ok or choice not in labels:
             return
-        qty, ok = QInputDialog.getDouble(self, "پیشنهاد جانمایی", "مقدار:", 1, 0.001, 1e9, 3)
+        qty, ok = QInputDialog.getDouble(self, "پیشنهاد قفسه", "مقدار:", 1, 0.001, 1e9, 3)
         if not ok:
             return
         suggestions = wl.putaway_suggestions(self._company_id(), self.warehouse_id, items[labels.index(choice)].item_id,
@@ -1139,10 +1139,10 @@ class WarehouseMapScreen(QWidget):
         self.highlight([s.location_id for s in suggestions[:1]])
         text = "\n\n".join(f"{i + 1}) {_p(s.location_code)} -- امتیاز {_p(s.score)}\n   " + "، ".join(s.reasons)
                            for i, s in enumerate(suggestions))
-        QMessageBox.information(self, "پیشنهاد جانمایی", f"کلاس ABC کالا: {suggestions[0].abc_class}\n\n{text}")
+        QMessageBox.information(self, "پیشنهاد قفسه", f"کلاس ABC کالا: {suggestions[0].abc_class}\n\n{text}")
 
     def show_picking_path(self, location_ids: list[int] | None = None):
-        """مسیر برداشت: وظایف برداشت باز همین انبار (یا محل‌های داده‌شده) به ترتیب نزدیک‌ترین همسایه."""
+        """مسیر جمع‌آوری کالا: کارهای جمع‌آوری کالا باز همین انبار (یا محل‌های داده‌شده) به ترتیب نزدیک‌ترین همسایه."""
         from peecha.services import warehouse_operations as ops
 
         if location_ids is None:
@@ -1152,7 +1152,7 @@ class WarehouseMapScreen(QWidget):
             self.scene.removeItem(self.path_item)
             self.path_item = None
         if not location_ids:
-            theme.set_status_label(self.status_label, "برداشت بازی برای مسیریابی نیست.", ok=False)
+            theme.set_status_label(self.status_label, "در این انبار کار جمع‌آوری انجام‌نشده‌ای نیست که مسیرش روی نقشه نشان داده شود.", ok=False)
             return None
         route = wl.picking_path(self._company_id(), self.warehouse_id, location_ids)
         points = [self.items[i].sceneBoundingRect().center() for i in ([route.start] if route.start in self.items else []) + route.order
@@ -1254,7 +1254,7 @@ class LocationPickerDialog(QDialog):
         if current_id is not None and current_id in self.map.by_id:
             self.map.select_location(current_id, focus=True)
         elif suggested:
-            self.choice_label.setText(_p("پیشنهاد جانمایی: " + "، ".join(self.map.by_id[i].full_code for i in suggested[:3]
+            self.choice_label.setText(_p("پیشنهاد قفسه: " + "، ".join(self.map.by_id[i].full_code for i in suggested[:3]
                                                                          if i in self.map.by_id)))
 
     def _picked(self, location_id: int | None) -> None:

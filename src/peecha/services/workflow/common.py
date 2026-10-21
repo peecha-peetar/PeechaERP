@@ -36,7 +36,7 @@ DEFAULT_WORK_HOURS = {"5": ["08:00", "16:00"], "6": ["08:00", "16:00"], "0": ["0
                       "2": ["08:00", "16:00"], "3": ["08:00", "12:00"]}
 DEFAULT_SETTINGS = {"allow_self_approval": False, "max_steps": 200, "max_event_depth": 5, "api_allowlist": [],
                     "notify_starter_on_end": True, "work_hours": DEFAULT_WORK_HOURS, "notification_defaults": {},
-                    "mobile_step_up_amount": None}
+                    "mobile_step_up_amount": None, "lock_while_running": True}
 _AUDIT_ACTIONS = {"CREATE", "UPDATE", "DELETE", "APPROVE", "REVERSE", "MERGE", "SUBMIT", "REJECT", "DELEGATE", "ESCALATE",
                   "EXECUTE", "PUBLISH", "CANCEL", "RETRY", "RESOLVE", "COMMENT", "START", "COMPLETE"}
 

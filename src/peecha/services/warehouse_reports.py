@@ -1355,7 +1355,7 @@ def productivity(company_id: int, f) -> ReportResult:
         # سندِ خودکار (صادرشده از فاکتور) در کسری از ثانیه ثبت می‌شود؛ نرخِ ساعتی برایِ آن معنا ندارد
         r.add(list(key) + [n, lines, _hours(statistics.fmean(hours)) if hours else None,
                            _hours(lines / total_hours) if total_hours >= 0.25 else None])
-    r.note = ("زمان دریافت/حواله = فاصلهٔ ایجاد تا ثبت نهایی سند. زمان جانمایی/برداشت/بسته‌بندی/ارسال در سیستم ثبت نمی‌شود.")
+    r.note = ("زمان دریافت/حواله = فاصلهٔ ایجاد تا ثبت نهایی سند. زمان چیدن در قفسه/جمع‌آوری/بسته‌بندی/ارسال در سیستم ثبت نمی‌شود.")
     return r
 
 
@@ -1491,7 +1491,7 @@ def waves_report(company_id: int, f) -> ReportResult:
 
     m, codes = _meta(company_id), _location_codes(company_id)
     status = {"OPEN": "باز", "DONE": "انجام‌شده", "CANCELLED": "لغوشده"}
-    r = ReportResult([("موج", TEXT), ("انبار", TEXT), ("وضعیت", TEXT), ("مسیر (متر)", QTY), ("وظایف", INT), ("انجام‌شده", INT),
+    r = ReportResult([("گروه", TEXT), ("انبار", TEXT), ("وضعیت", TEXT), ("مسیر (متر)", QTY), ("وظایف", INT), ("انجام‌شده", INT),
                       ("محل‌های مسیر", TEXT), ("ایجاد", DATE), ("زمان انجام (دقیقه)", QTY), ("سازنده", TEXT)], no_total={3, 8})
     for w in ops.list_waves(company_id):
         if not _wh_ok(m, f, w.warehouse_id) or not (f.date_from <= w.created_at.date() <= f.date_to):
@@ -1630,7 +1630,7 @@ def md_min_max(company_id: int, f) -> ReportResult:
 
 
 # ---------------------------------------------------------------------
-# R247: WMS سبک (جانمایی/برداشت) و برنامهٔ شمارش
+# R247: WMS سبک (چیدن در قفسه/جمع‌آوری) و برنامهٔ شمارش
 # ---------------------------------------------------------------------
 def _tasks(company_id: int, f, m, task_type: str) -> list:
     from peecha.services import warehouse_operations as ops
@@ -1672,7 +1672,7 @@ def putaway_report(company_id: int, f) -> ReportResult:
 
     m, bins, view = _meta(company_id), _bins(company_id), _opt(f, "view", "ALL")
     r = ReportResult([("وظیفه", INT), ("انبار", TEXT), ("منبع", TEXT), ("کالا", TEXT), ("مقدار", QTY), ("از محل", TEXT), ("به محل", TEXT),
-                      ("وضعیت", TEXT), ("ایجاد", DATE), ("زمان انتظار تا شروع (دقیقه)", QTY), ("زمان جانمایی (دقیقه)", QTY),
+                      ("وضعیت", TEXT), ("ایجاد", DATE), ("زمان انتظار تا شروع (دقیقه)", QTY), ("زمان چیدن در قفسه (دقیقه)", QTY),
                       ("اپراتور", TEXT)], no_total={0, 9, 10})
     for t in _tasks(company_id, f, m, "PUTAWAY"):
         if view != "ALL" and t.status_code != view:
@@ -1686,17 +1686,17 @@ def putaway_report(company_id: int, f) -> ReportResult:
     return r
 
 
-_PICK_VIEW = ("view", "نمایش", (("ALL", "همه"), ("OPEN", "آمادهٔ برداشت"), ("IN_PROGRESS", "در حال برداشت"), ("DONE", "برداشته‌شده"),
-                                 ("PARTIAL", "برداشت ناقص")))
+_PICK_VIEW = ("view", "نمایش", (("ALL", "همه"), ("OPEN", "آمادهٔ جمع‌آوری"), ("IN_PROGRESS", "در حال جمع‌آوری"), ("DONE", "جمع‌آوری‌شده"),
+                                 ("PARTIAL", "جمع‌آوری ناقص")))
 
 
 def picking_report(company_id: int, f) -> ReportResult:
     from peecha.services.warehouse_operations import TASK_STATUSES
 
     m, bins, view = _meta(company_id), _bins(company_id), _opt(f, "view", "ALL")
-    r = ReportResult([("وظیفه", INT), ("انبار", TEXT), ("منبع", TEXT), ("کالا", TEXT), ("مقدار درخواستی", QTY), ("برداشته‌شده", QTY),
-                      ("دقت برداشت", PERCENT), ("از محل", TEXT), ("وضعیت", TEXT), ("ایجاد", DATE), ("زمان برداشت (دقیقه)", QTY),
-                      ("برداشت‌کننده", TEXT)], no_total={0, 6, 10})
+    r = ReportResult([("وظیفه", INT), ("انبار", TEXT), ("منبع", TEXT), ("کالا", TEXT), ("مقدار درخواستی", QTY), ("جمع‌آوری‌شده", QTY),
+                      ("دقت جمع‌آوری", PERCENT), ("از محل", TEXT), ("وضعیت", TEXT), ("ایجاد", DATE), ("زمان جمع‌آوری (دقیقه)", QTY),
+                      ("جمع‌آوری‌کننده", TEXT)], no_total={0, 6, 10})
     for t in _tasks(company_id, f, m, "PICK"):
         partial = t.status_code == "DONE" and (t.done_quantity_base or _ZERO) != t.quantity_base
         if view == "PARTIAL" and not partial or (view not in ("ALL", "PARTIAL") and t.status_code != view):
@@ -1704,7 +1704,7 @@ def picking_report(company_id: int, f) -> ReportResult:
         accuracy = (100 - abs(t.done_quantity_base - t.quantity_base) * 100 / t.quantity_base).quantize(decimal.Decimal("0.1"))             if t.status_code == "DONE" and t.quantity_base else None
         r.add([t.task_id, _wh_label(m, t.warehouse_id), _task_source(t)[0], m.ctx.item_label(t.item_id), t.quantity_base,
                t.done_quantity_base, accuracy, bins.get(t.from_bin_location_id, ""),
-               "برداشت ناقص" if partial else TASK_STATUSES[t.status_code], t.created_at.date(), _minutes(t.started_at, t.completed_at),
+               "جمع‌آوری ناقص" if partial else TASK_STATUSES[t.status_code], t.created_at.date(), _minutes(t.started_at, t.completed_at),
                m.users.get(t.completed_by_user_id or t.assigned_user_id, "")],
               (t.source_commercial_document_id, "SALES_ORDER") if t.source_commercial_document_id
               else (_ref(t.source_stock_document_id, "ISSUE") if t.source_stock_document_id else None))
@@ -1712,7 +1712,7 @@ def picking_report(company_id: int, f) -> ReportResult:
 
 
 def wms_performance(company_id: int, f) -> ReportResult:
-    """عملکرد اپراتور: وظایف انجام‌شده، میانگین زمان، ردیف در ساعت و دقت برداشت."""
+    """عملکرد اپراتور: وظایف انجام‌شده، میانگین زمان، ردیف در ساعت و دقت جمع‌آوری."""
     from peecha.services.warehouse_operations import TASK_TYPES
 
     m = _meta(company_id)
@@ -1730,7 +1730,7 @@ def wms_performance(company_id: int, f) -> ReportResult:
                 a[2] += 1
                 a[3] += 1 if t.done_quantity_base == t.quantity_base else 0
     r = ReportResult([("نوع", TEXT), ("اپراتور", TEXT), ("وظایف انجام‌شده", INT), ("میانگین زمان (دقیقه)", QTY),
-                      ("ردیف در ساعت", QTY), ("دقت برداشت", PERCENT)], no_total={3, 4, 5})
+                      ("ردیف در ساعت", QTY), ("دقت جمع‌آوری", PERCENT)], no_total={3, 4, 5})
     for key in sorted(agg):
         n, minutes, picks, exact = agg[key]
         total = sum(minutes, _ZERO)
@@ -1742,7 +1742,7 @@ def wms_performance(company_id: int, f) -> ReportResult:
 
 
 def unlocated_stock(company_id: int, f) -> ReportResult:
-    """دریافت‌شده ولی جانمایی‌نشده: موجودی محل پیش‌فرض در انبارهایی که محل دیگری هم دارند + وظایف جانمایی باز."""
+    """رسیده ولی در قفسه چیده‌نشده: موجودی محل پیش‌فرض در انبارهایی که محل دیگری هم دارند + کارهای چیدن در قفسه باز."""
     from peecha.services import warehouse_operations as ops
 
     m = _meta(company_id)
@@ -1764,12 +1764,12 @@ def unlocated_stock(company_id: int, f) -> ReportResult:
     for t in ops.list_tasks(company_id, "PUTAWAY"):
         if t.status_code in ("OPEN", "IN_PROGRESS"):
             open_tasks[(t.item_id, t.warehouse_id)] += t.quantity_base
-    r = ReportResult([("کالا", TEXT), ("انبار", TEXT), ("موجودی در محل دریافت (پیش‌فرض)", QTY), ("وظیفهٔ جانمایی باز", QTY)])
+    r = ReportResult([("کالا", TEXT), ("انبار", TEXT), ("موجودی در محل دریافت (پیش‌فرض)", QTY), ("کار چیدن در قفسه باز", QTY)])
     keys = {(i, w): q for i, w, b, q in rows if b in default_bins and q and per_wh[w] > 1}
     for key in sorted(set(keys) | set(open_tasks), key=lambda k: (m.ctx.item_label(k[0]), _wh_label(m, k[1]))):
         if _item_ok(m, f, key[0]) and _wh_ok(m, f, key[1]):
             r.add([m.ctx.item_label(key[0]), _wh_label(m, key[1]), keys.get(key, _ZERO), open_tasks.get(key, _ZERO)])
-    r.note = "انبار تک‌محلی (فقط محل پیش‌فرض) جانمایی لازم ندارد و در این فهرست نیست."
+    r.note = "انبار تک‌محلی (فقط محل پیش‌فرض) چیدن در قفسه لازم ندارد و در این فهرست نیست."
     return r
 
 
@@ -1879,22 +1879,22 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
               "تعداد سند و ردیف، میانگین زمان و ردیف در ساعت به تفکیک نوع سند و کاربر.", group=_OP),
     ReportDef("CAPACITY", "ظرفیت انبار", capacity, ("warehouse", "branch"), "ظرفیت وزنی/حجمی، اشغال، آزاد و درصد استفاده.", "none", _OP),
     ReportDef("BIN_STOCK", "موجودی به تفکیک محل نگهداری", bin_stock, _IF, "موجودی هر خانهٔ قفسه در هر انبار.", "none", _OP),
-    ReportDef("PUTAWAY", "جانمایی", putaway_report, _IF,
-              "وظایف جانمایی با محل مبدا/مقصد، زمان انتظار، زمان جانمایی و اپراتور.", group=_OP, options=(_TASK_VIEW,)),
-    ReportDef("UNLOCATED_STOCK", "دریافت‌شده ولی جانمایی‌نشده", unlocated_stock, _IF,
-              "موجودی ماندهٔ محل دریافت و وظایف جانمایی باز.", "none", _OP),
-    ReportDef("PICKING", "برداشت", picking_report, _IF,
-              "آمادهٔ برداشت، برداشته‌شده، در انتظار، ناقص؛ دقت و زمان برداشت.", group=_OP, options=(_PICK_VIEW,)),
+    ReportDef("PUTAWAY", "چیدن در قفسه", putaway_report, _IF,
+              "کارهای چیدن در قفسه با محل مبدا/مقصد، زمان انتظار، زمان چیدن در قفسه و اپراتور.", group=_OP, options=(_TASK_VIEW,)),
+    ReportDef("UNLOCATED_STOCK", "رسیده ولی در قفسه چیده‌نشده", unlocated_stock, _IF,
+              "موجودی ماندهٔ محل دریافت و کارهای چیدن در قفسه باز.", "none", _OP),
+    ReportDef("PICKING", "جمع‌آوری", picking_report, _IF,
+              "آمادهٔ جمع‌آوری، جمع‌آوری‌شده، در انتظار، ناقص؛ دقت و زمان جمع‌آوری.", group=_OP, options=(_PICK_VIEW,)),
     ReportDef("WMS_PERFORMANCE", "عملکرد اپراتورهای انبار", wms_performance, ("warehouse", "branch"),
-              "وظایف انجام‌شده، میانگین زمان، ردیف در ساعت و دقت برداشت هر اپراتور.", group=_OP),
+              "وظایف انجام‌شده، میانگین زمان، ردیف در ساعت و دقت جمع‌آوری هر اپراتور.", group=_OP),
     ReportDef("BIN_BATCH_STOCK", "بچ به تفکیک محل", bin_batch_stock, _IF,
-              "بچ/لات و انقضای موجود در هر خانهٔ قفسه — برای برداشت FEFO از محل درست.", "as_of", _OP),
-    ReportDef("WAVES", "موج‌های برداشت", waves_report, ("warehouse", "branch"),
-              "موج‌ها با طول مسیر، محل‌های مسیر به ترتیب، پیشرفت و زمان انجام.", group=_OP),
+              "بچ/لات و انقضای موجود در هر خانهٔ قفسه — برای جمع‌آوری زودانقضاها (FEFO) از محل درست.", "as_of", _OP),
+    ReportDef("WAVES", "جمع‌آوری‌های گروهی", waves_report, ("warehouse", "branch"),
+              "جمع‌آوری‌های گروهی با طول مسیر، محل‌های مسیر به ترتیب، پیشرفت و زمان انجام.", group=_OP),
     ReportDef("LOCATION_COUNTS", "شمارش‌های محل", location_counts_report, _IF,
               "ردیف‌های شمارش محل‌محور با دفتری، شمارش و اختلاف.", group=_OP,
               options=(("view", "نمایش", (("ALL", "همه"), ("DIFF", "فقط دارای اختلاف"))),)),
-    ReportDef("REPLENISH_TASKS", "تامین مجدد محل‌های برداشت", replenishment_tasks, _IF,
+    ReportDef("REPLENISH_TASKS", "تامین مجدد محل‌های جمع‌آوری", replenishment_tasks, _IF,
               "وظایف تامین مجدد و نیازهای بی‌وظیفه با قاعدهٔ حداقل/حداکثر.", group=_OP),
     ReportDef("MD_WAREHOUSES", "فهرست انبارها", md_warehouses, ("warehouse", "branch"),
               "نوع، شعبه، مسئول، محل‌ها، تعداد و ارزش کالاهای هر انبار.", "none", _MD),

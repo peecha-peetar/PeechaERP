@@ -29,6 +29,8 @@ class ApprovalLevel:
     allow_changes: bool = False
     instructions: str = ""
     fallback: list[dict] | None = None  # اگر کسی پیدا نشد (مثلاً مدیر مستقیم تعریف نشده)
+    kind: str = "APPROVAL"  # R323: «TASK» یعنی مرحلهٔ انجام کار (مثلاً استعلام قیمت) با فرم خودش
+    fields: list[dict] = field(default_factory=list)  # خانه‌های فرمی که انجام‌دهندهٔ مرحله پر می‌کند
 
 
 @dataclass
@@ -66,9 +68,10 @@ def build_graph(spec: WizardSpec) -> dict:
     reject_needed = False
     reject_target = "rja1" if spec.reject_actions else ("rej_note" if spec.notify_on_reject else "end_no")
     for i, level in enumerate(spec.levels, start=1):
+        is_task = level.kind == "TASK"
         if not level.approvers:
-            raise WorkflowError(f"برای مرحلهٔ «{level.label or i}» تاییدکننده تعیین نشده است.")
-        ap = f"ap{i}"
+            raise WorkflowError(f"برای مرحلهٔ «{level.label or i}» {'مسئول' if is_task else 'تاییدکننده'} تعیین نشده است.")
+        ap = f"tk{i}" if is_task else f"ap{i}"
         if level.only_if:
             cond = f"c{i}"
             nodes.append({"id": cond, "type": "CONDITION", "label": f"نیاز به «{level.label}»؟", "rule": copy.deepcopy(level.only_if)})
@@ -78,8 +81,20 @@ def build_graph(spec: WizardSpec) -> dict:
         else:
             attach(ap)
             skip = []
+        if is_task:
+            node = {"id": ap, "type": "TASK", "label": level.label or f"کار مرحلهٔ {i}", "assignees": copy.deepcopy(level.approvers),
+                    "mode": "ALL" if level.mode == "ALL" else "ANY"}
+            for key, value in (("sla_policy_id", level.sla_policy_id), ("instructions", level.instructions),
+                               ("fields", copy.deepcopy(level.fields)), ("fallback", copy.deepcopy(level.fallback))):
+                if value:
+                    node[key] = int(value) if key == "sla_policy_id" else value
+            nodes.append(node)
+            tail[:] = [(ap, "done")] + skip
+            continue
         node = {"id": ap, "type": "APPROVAL", "label": level.label or f"تایید مرحلهٔ {i}", "approvers": copy.deepcopy(level.approvers),
                 "mode": level.mode or "ANY"}
+        if level.fields:
+            node["fields"] = copy.deepcopy(level.fields)
         if level.mode == "PERCENT":
             node["percent"] = int(level.percent or 50)
         if level.sla_policy_id:

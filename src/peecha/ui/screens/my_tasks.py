@@ -23,7 +23,7 @@ from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.fixed_assets import P, combo, company_id, fill, table, user_id
 from peecha.ui.screens.workflow_center import (
-    _ask, _field_widget, _run, _warn, company_user_choices, open_work_item, path_html,
+    _ask, _run, _warn, company_user_choices, open_work_item, path_html,
 )
 
 # طبقِ همان الگویِ registerِ سرویس — هر ماژولی که کارتابل برایش فعال
@@ -109,7 +109,7 @@ ms.ICONS.update({
     "تایید درخواست": ("✅", "primary"), "رد درخواست": ("❌", "danger"), "برگشت برای اصلاح": ("↩️", ""),
     "واگذاری به همکار": ("👥", ""), "یادداشت": ("💬", ""), "بازکردن سند": ("📂", ""), "تایید گروهی": ("☑️", ""),
     "تازه‌سازی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
-    "انجام کار": ("✔️", "primary"), "بازکردن پروندهٔ مشتری": ("👤", ""),
+    "انجام کار": ("✔️", "primary"), "بازکردن پروندهٔ مشتری": ("👤", ""), "فرم کامل مرحله": ("📋", ""),
 })
 
 # نوع کار ← (آیکن، رنگ تم)
@@ -269,8 +269,8 @@ class WorkCard(QFrame):
         if it.tone == "mine":
             return [("یادآوری به گیرنده", lambda: s.remind()), ("پس‌گرفتن درخواست", lambda: s.withdraw())]
         if it.kind == "APPROVAL" and it.can_quick_decide:
-            return [("تایید درخواست", lambda: s.decide("APPROVE")), ("رد درخواست", lambda: s.reject_selected()),
-                    ("بازکردن سند", lambda: s.open_selected())]
+            return [("تایید درخواست", lambda: s.approve_selected()), ("رد درخواست", lambda: s.reject_selected())] + (
+                [("فرم کامل مرحله", lambda: s.open_form())] if it.source == "WF" else []) + [("بازکردن سند", lambda: s.open_selected())]
         if it.source == "WF" and it.kind == "TASK":
             return [("انجام کار", lambda: s.approve_selected()), ("بازکردن سند", lambda: s.open_selected())]
         if it.source == "CRM":
@@ -289,7 +289,10 @@ class WorkCard(QFrame):
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
         self.screen.select_key(self.item.key)
-        self.screen.open_selected()
+        if self.item.source == "WF":  # R323: مرحلهٔ گردش کار با فرم کامل خودش انجام می‌شود
+            self.screen.open_form()
+        else:
+            self.screen.open_selected()
         super().mouseDoubleClickEvent(event)
 
 
@@ -410,11 +413,13 @@ class MyTasksScreen(QWidget):
 
         self.buttons = {k: QPushButton(t) for k, t in (
             ("approve", "تایید درخواست"), ("reject", "رد درخواست"), ("changes", "برگشت برای اصلاح"),
+            ("form", "فرم کامل مرحله"),
             ("delegate", "واگذاری به همکار"), ("note", "یادداشت"), ("open", "بازکردن سند"), ("bulk", "تایید گروهی"),
             ("remind", "یادآوری به گیرنده"), ("withdraw", "پس‌گرفتن درخواست"), ("refresh", "تازه‌سازی"))}
         self.buttons["approve"].clicked.connect(lambda: self.approve_selected())
         self.buttons["reject"].clicked.connect(lambda: self.reject_selected())
         self.buttons["changes"].clicked.connect(lambda: self.decide("CHANGES"))
+        self.buttons["form"].clicked.connect(lambda: self.open_form())
         self.buttons["delegate"].clicked.connect(lambda: self.delegate())
         self.buttons["note"].clicked.connect(lambda: self.add_note())
         self.buttons["open"].clicked.connect(lambda: self.open_selected())
@@ -423,7 +428,7 @@ class MyTasksScreen(QWidget):
         self.buttons["withdraw"].clicked.connect(lambda: self.withdraw())
         self.buttons["refresh"].clicked.connect(lambda: self.reload())
         B = self.buttons
-        outer.addWidget(ms.footer([[B["approve"], B["reject"], B["changes"]], [B["delegate"], B["note"], B["open"]],
+        outer.addWidget(ms.footer([[B["approve"], B["reject"], B["changes"], B["form"]], [B["delegate"], B["note"], B["open"]],
                                    [B["bulk"]], [B["remind"], B["withdraw"]], [B["refresh"]]]))
         self._update_buttons(None)
 
@@ -584,6 +589,7 @@ class MyTasksScreen(QWidget):
         self.buttons["reject"].setEnabled(decidable)
         self.buttons["changes"].setEnabled(decidable and "CHANGES" in allowed)
         self.buttons["delegate"].setEnabled(bool(item) and item.source == "WF")
+        self.buttons["form"].setEnabled(bool(item) and item.source == "WF")
         self.buttons["note"].setEnabled(bool(item) and item.source == "WF")
         self.buttons["open"].setEnabled(bool(item))
         self.buttons["bulk"].setEnabled(any(w.can_quick_decide and w.kind == "APPROVAL" for w in self.shown))
@@ -621,6 +627,8 @@ class MyTasksScreen(QWidget):
             return self.complete_task(item)
         if not item.can_quick_decide:
             return self.open_selected()
+        if item.source == "WF" and (self.current or {}).get("form_fields"):
+            return self.open_form()  # R323: تایید با فرم مرحله (خانه‌های لازم پیش از تایید پر می‌شوند)
         return self.decide("APPROVE", comment)
 
     def reject_selected(self, comment: str | None = None) -> bool:
@@ -653,14 +661,27 @@ class MyTasksScreen(QWidget):
             self.reload()
         return ok
 
+    def open_form(self) -> bool:
+        """R323: فرم کامل مرحله (اطلاعات سند، سابقه، خانه‌های فرم، یادداشت و تصمیم)."""
+        item = self._require()
+        if item is None or item.source != "WF":
+            return False
+        from peecha.ui.screens.workflow_task_form import run_task_form
+
+        dlg = run_task_form(self, item.ref_id, self._main_window)
+        if dlg is not None and dlg.decided:
+            self.last_message = dlg.result_message
+            self.current = None
+            self.reload()
+            return True
+        if dlg is not None:
+            self.reload()
+        return False
+
     def complete_task(self, item: inbox.WorkItem, values: dict | None = None) -> bool:
         detail = tasks.task_detail(company_id(), item.ref_id, user_id())
         if values is None:
-            fields = [(f["key"], f.get("label") or f["key"], _field_widget(f)) for f in detail.form_fields]
-            fields.append(("__comment", "توضیح", QTextEdit()))
-            values = _ask(self, f"انجام کار: {detail.row.title}", fields, detail.row.instructions)
-            if values is None:
-                return False
+            return self.open_form()
         comment = values.pop("__comment", "") or ""
         _r, ok = _run(self, "انجام کار", tasks.decide, company_id(), item.ref_id, user_id(), "DONE", comment,
                       data=values, row_version=detail.row.row_version)

@@ -35,6 +35,7 @@ from peecha.ui.widgets import (
     ZeroPaddedSpinBox,
     wrap_scrollable_with_footer,
 )
+from peecha.ui.persian_numbers import NumberEdit
 
 _LOAN_COLUMNS = ["وضعیت", "منبع تامین", "تعداد اقساط", "نرخ کارمزد", "مبلغ اصل", "نوع"]
 _INSTALLMENT_COLUMNS = ["وضعیت", "مبلغ", "دورهٔ سررسید", "شمارهٔ قسط"]
@@ -103,7 +104,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.principal_field)
 
         layout.addWidget(QLabel("نرخ کارمزد (۰ تا ۱)"))
-        self.fee_rate_field = QLineEdit()
+        self.fee_rate_field = NumberEdit()
         self.fee_rate_field.setText("0")
         layout.addWidget(self.fee_rate_field)
 

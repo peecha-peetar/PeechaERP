@@ -39,6 +39,7 @@ from peecha.services import order_tracking as order_tracking_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, add_quick_add_button
+from peecha.ui.persian_numbers import NumberEdit
 
 
 class _PaymentCurrencyDialog(QDialog):
@@ -116,7 +117,7 @@ class _PaymentCurrencyDialog(QDialog):
         rate_row = QHBoxLayout(self.rate_row_widget)
         rate_row.setContentsMargins(0, 0, 0, 0)
         rate_row.addWidget(QLabel("نرخ روز:"))
-        self.rate_field = QLineEdit()
+        self.rate_field = NumberEdit()
         rate_row.addWidget(self.rate_field, stretch=1)
         layout.addWidget(self.rate_row_widget)
 

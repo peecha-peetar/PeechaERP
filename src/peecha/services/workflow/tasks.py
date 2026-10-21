@@ -32,7 +32,8 @@ DECISIONS = {"APPROVE": "تایید", "REJECT": "رد", "CHANGES": "برگشت �
              "DELEGATE": "واگذاری", "REASSIGN": "ارجاع دوباره", "CANCEL": "لغو", "ESCALATE": "ارجاع به سطح بالاتر"}
 SEAT_STATUS = {"QUEUED": "در نوبت", "ACTIVE": "منتظر تصمیم", "DECIDED": "تصمیم گرفت", "SKIPPED": "نیازی نشد",
                "DELEGATED": "واگذار کرد", "CANCELLED": "لغو شد"}
-FIELD_KINDS = {"text": "متن", "number": "عدد", "date": "تاریخ", "bool": "بله/خیر", "choice": "انتخاب از فهرست"}
+FIELD_KINDS = {"text": "متن", "longtext": "متن بلند", "number": "عدد", "money": "مبلغ", "date": "تاریخ", "bool": "بله/خیر",
+               "choice": "انتخاب از فهرست"}
 SLA_STATUS = {"NONE": "", "ON_TRACK": "در مهلت", "AT_RISK": "نزدیک موعد", "BREACHED": "گذشته از مهلت",
               "MET": "به‌موقع انجام شد"}
 _OUTCOME = {"APPROVED": "approved", "REJECTED": "rejected", "CHANGES": "changes", "DONE": "done", "EXPIRED": "timeout"}
@@ -260,7 +261,7 @@ def _validate_form(fields: list[dict], data: dict) -> dict:
                 raise WorkflowError(f"«{label}» را وارد کنید.")
             continue
         kind = f.get("kind") or "text"
-        if kind == "number":
+        if kind in ("number", "money"):
             value = conditions._number(value)
             if value is None:
                 raise WorkflowError(f"«{label}» باید عدد باشد.")
@@ -274,6 +275,25 @@ def _validate_form(fields: list[dict], data: dict) -> dict:
             raise WorkflowError(f"مقدار «{label}» از گزینه‌های مجاز نیست.")
         out[key] = value
     return out
+
+
+def form_summary(fields: list[dict] | None, data: dict | None) -> str:
+    """خلاصهٔ خوانای فرم پرشدهٔ یک مرحله (تاریخ شمسی، عدد سه‌رقمی)."""
+    if not data:
+        return ""
+    specs = {f.get("key"): f for f in fields or []}
+    parts = []
+    for key, value in data.items():
+        f = specs.get(key) or {}
+        if f.get("kind") == "date" and isinstance(value, str):
+            try:
+                value = datetime.date.fromisoformat(value[:10])
+            except ValueError:
+                pass
+        elif f.get("kind") in ("number", "money") and isinstance(value, str):
+            value = conditions._number(value) if conditions._number(value) is not None else value
+        parts.append(f"{f.get('label') or key}: {display(value)}")
+    return "؛ ".join(parts)
 
 
 def _aggregate(session, task: WfTask, decision: str) -> tuple[str | None, list[int]]:
@@ -327,7 +347,8 @@ def decide(company_id: int, task_id: int, user_id: int, decision: str, comment: 
         _check_sod(task, user_id)
         if decision in ("REJECT", "CHANGES") and (task.options or {}).get("require_comment_on_reject", True) and not comment:
             raise WorkflowError("لطفاً علت رد یا موارد اصلاحی را بنویسید.")
-        values = _validate_form(task.form_fields or [], data or {}) if decision == "DONE" else {}
+        # R323: فرم مرحلهٔ تایید هم پیش از تایید کامل می‌شود؛ رد/برگشت فقط علت می‌خواهد
+        values = _validate_form(task.form_fields or [], data or {}) if decision in ("DONE", "APPROVE") else {}
         session.add(WfTaskDecision(task_id=task_id, user_id=user_id, on_behalf_of_user_id=seat.original_user_id,
                                    decision=decision, comment=comment or None, data=plain(values), client_ref=client_ref,
                                    channel=(channel or "DESKTOP")[:10]))
@@ -748,7 +769,8 @@ def task_detail(company_id: int, task_id: int, user_id: int | None = None) -> Ta
             note = d.comment or ""
             if d.decision == "DELEGATE" and (d.data or {}).get("to_user_id"):
                 note = f"به {user_names(session, [d.data['to_user_id']]).get(d.data['to_user_id'], '')}" + (f" — {note}" if note else "")
-            history.append((d.created_at, actor, DECISIONS.get(d.decision, d.decision), note))
+            filled = form_summary(task.form_fields, d.data if d.decision in ("DONE", "APPROVE") else None)
+            history.append((d.created_at, actor, DECISIONS.get(d.decision, d.decision), "\n".join(x for x in (note, filled) if x)))
         mine = []
         if user_id and task.status_code == "OPEN" and any(s.user_id == user_id and s.status_code == "ACTIVE" for s in seats):
             mine = [(code, DECISIONS[code]) for code in allowed_decisions(task)]
@@ -768,8 +790,9 @@ def _timeline(session, inst: WfInstance) -> list:
     for d in decisions:
         actor = names.get(d.user_id, "سیستم") + (f" (به جای {names.get(d.on_behalf_of_user_id, '')})"
                                                  if d.on_behalf_of_user_id else "")
+        filled = form_summary(tasks[d.task_id].form_fields, d.data if d.decision in ("DONE", "APPROVE") else None)
         rows.append(runtime.TimelineRow(d.created_at, "DECISION", f"{DECISIONS.get(d.decision, d.decision)}: {tasks[d.task_id].title}",
-                                        d.comment or "", actor, d.decision))
+                                        "\n".join(x for x in (d.comment or "", filled) if x), actor, d.decision))
     return rows
 
 

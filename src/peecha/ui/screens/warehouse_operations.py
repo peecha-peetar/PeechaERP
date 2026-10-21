@@ -1,4 +1,4 @@
-"""جانمایی، برداشت و برنامهٔ شمارش دوره‌ای — R247 (WMS سبک)."""
+"""چیدن در قفسه، جمع‌آوری و برنامهٔ شمارش دوره‌ای — R247 (WMS سبک)."""
 
 from __future__ import annotations
 
@@ -39,8 +39,10 @@ class _TasksTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        hint = QLabel("وظیفهٔ جانمایی برای رسید ثبت‌شده و وظیفهٔ برداشت برای حواله/سفارش منتظر انبار ساخته می‌شود. "
-                      "تکمیل جانمایی با سند انتقال عادی سیستم کالا را به محل مقصد می‌برد؛ برداشت فقط مقدار و زمان را ثبت می‌کند.")
+        hint = QLabel("«چیدن در قفسه» (جانمایی): کالایی که با رسید وارد انبار شده، از محل دریافت به قفسهٔ مناسب برده می‌شود؛ "
+                      "تکمیل آن با سند انتقال عادی سیستم انجام می‌شود. «جمع‌آوری کالا» (برداشت): کالای حواله یا سفارش، پیش از "
+                      "ارسال از قفسه جمع و آماده می‌شود؛ فقط مقدار و زمان ثبت می‌شود و خروج واقعی همان حواله است. «تامین مجدد»: "
+                      "پرکردن محل جمع‌آوری از انبار ذخیره وقتی به حداقل رسید.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -75,7 +77,7 @@ class _TasksTab(QWidget):
         actions = QHBoxLayout()
         for text, slot in (("شروع", self.start_selected), ("تکمیل…", self.complete_selected), ("لغو", self.cancel_selected)):
             button = QPushButton(text)
-            button.clicked.connect(slot)
+            button.clicked.connect(lambda _c=False, f=slot: f())  # R324: تیک دکمه نباید مقدار صفر ثبت کند
             actions.addWidget(button)
         actions.addStretch(1)
         self.status_label = QLabel("")
@@ -165,7 +167,7 @@ class _TasksTab(QWidget):
         return bool(task) and self._run(lambda: ops.cancel_task(task.task_id, self._company_id(), self._user_id()), "وظیفه لغو شد.")
 
     def complete_selected(self, value=None) -> bool:
-        """value: برای جانمایی شناسهٔ محل مقصد، برای برداشت مقدار برداشته (اگر None باشد از کاربر پرسیده می‌شود)."""
+        """value: برای چیدن در قفسه شناسهٔ محل مقصد، برای جمع‌آوری مقدار جمع‌آوری‌شده (اگر None باشد از کاربر پرسیده می‌شود)."""
         task = self._selected()
         if task is None:
             return False
@@ -174,11 +176,11 @@ class _TasksTab(QWidget):
             if value is None:
                 bins = locations_service.list_bin_locations(task.warehouse_id, active_only=True)
                 labels = [f"{b.code} — {b.name or ''}" for b in bins]
-                choice, ok = QInputDialog.getItem(self, "جانمایی", "محل مقصد:", labels, 0, False)
+                choice, ok = QInputDialog.getItem(self, "چیدن در قفسه", "محل مقصد:", labels, 0, False)
                 if not ok:
                     return False
                 value = bins[labels.index(choice)].bin_location_id
-            return self._run(lambda: ops.complete_putaway(task.task_id, company_id, user_id, value), "جانمایی انجام شد.")
+            return self._run(lambda: ops.complete_putaway(task.task_id, company_id, user_id, value), "کالا در قفسه چیده شد.")
         if task.task_type_code == "REPLENISH":
             if value is None:
                 qty, ok = QInputDialog.getDouble(self, "تامین مجدد", "مقدار جابه‌جاشده:", float(task.quantity_base), 0.001,
@@ -188,7 +190,7 @@ class _TasksTab(QWidget):
                 value = decimal.Decimal(str(qty))
             return self._run(lambda: ops.complete_replenishment(task.task_id, company_id, user_id, value), "تامین مجدد انجام شد.")
         if value is None:
-            qty, ok = QInputDialog.getDouble(self, "برداشت", "مقدار برداشته (واحد اصلی):", float(task.quantity_base), 0, 1e12, 3)
+            qty, ok = QInputDialog.getDouble(self, "جمع‌آوری", "مقدار جمع‌آوری‌شده (واحد اصلی):", float(task.quantity_base), 0, 1e12, 3)
             if not ok:
                 return False
             value = decimal.Decimal(str(qty))
@@ -196,10 +198,10 @@ class _TasksTab(QWidget):
         from peecha.services import stock_controls
 
         if value < task.quantity_base and stock_controls.is_on(company_id, stock_controls.PICK_CONTROL):
-            reason, ok = QInputDialog.getText(self, "کسری برداشت", "علت برداشت کمتر از مقدار وظیفه:")
+            reason, ok = QInputDialog.getText(self, "کسری جمع‌آوری", "علت جمع‌آوری کمتر از مقدار وظیفه:")
             if not ok:
                 return False
-        return self._run(lambda: ops.complete_pick(task.task_id, company_id, user_id, value, short_reason=reason), "برداشت ثبت شد.")
+        return self._run(lambda: ops.complete_pick(task.task_id, company_id, user_id, value, short_reason=reason), "جمع‌آوری ثبت شد.")
 
 
 class _PlansTab(QWidget):
@@ -325,12 +327,12 @@ class _PlansTab(QWidget):
 
 
 class _ReplenishTab(QWidget):
-    """R249: حداقل/حداکثر کالا در محل برداشت و نیازهای تامین مجدد."""
+    """R249: حداقل/حداکثر کالا در محل جمع‌آوری و نیازهای تامین مجدد."""
 
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        hint = QLabel("برای هر محل برداشت، حداقل و حداکثر کالا را تعریف کنید. وقتی موجودی محل به حداقل برسد، "
+        hint = QLabel("برای هر محل جمع‌آوری، حداقل و حداکثر کالا را تعریف کنید. وقتی موجودی محل به حداقل برسد، "
                       "وظیفهٔ تامین مجدد از محل‌های ذخیره/حجیم همان انبار ساخته و مقدارش رزرو می‌شود.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -445,12 +447,12 @@ class _ReplenishTab(QWidget):
 
 
 class _WavesTab(QWidget):
-    """R250: موج برداشت — گروه‌بندی وظایف برداشت با ترتیب مسیر بهینه."""
+    """R250: جمع‌آوری گروهی — گروه‌بندی کارهای جمع‌آوری کالا با ترتیب مسیر بهینه."""
 
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        hint = QLabel("وظایف برداشت باز یک انبار در یک موج جمع و به ترتیب کوتاه‌ترین مسیر (از منطقهٔ برداشت تا ارسال) مرتب می‌شوند.")
+        hint = QLabel("کارهای جمع‌آوری انجام‌نشدهٔ یک انبار در یک گروه جمع و به ترتیب کوتاه‌ترین مسیر (از منطقهٔ جمع‌آوری تا ارسال) مرتب می‌شوند تا انباردار با یک دور زدن همه را جمع کند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -458,19 +460,19 @@ class _WavesTab(QWidget):
         top.addWidget(QLabel("انبار:"))
         self.warehouse_combo = QComboBox()
         top.addWidget(self.warehouse_combo)
-        create = QPushButton("ساخت موج از وظایف باز")
+        create = QPushButton("ساخت جمع‌آوری گروهی از کارهای انجام‌نشده")
         create.setObjectName("primaryButton")
         create.clicked.connect(self.create)
         top.addWidget(create)
         top.addStretch(1)
         layout.addLayout(top)
-        self.waves_table = _table(["موج", "انبار", "وضعیت", "مسیر (متر)", "وظایف", "انجام‌شده", "ایجاد"])
+        self.waves_table = _table(["گروه", "انبار", "وضعیت", "مسیر (متر)", "وظایف", "انجام‌شده", "ایجاد"])
         self.waves_table.itemSelectionChanged.connect(self._load_tasks)
         layout.addWidget(self.waves_table, stretch=1)
         self.tasks_table = _table(["ترتیب", "وظیفه", "کالا", "مقدار", "از محل", "وضعیت"])
         layout.addWidget(self.tasks_table, stretch=1)
         actions = QHBoxLayout()
-        for text, slot in (("لغو موج", self.release_selected), ("نمایش مسیر روی نقشه", self.show_on_map)):
+        for text, slot in (("لغو جمع‌آوری گروهی", self.release_selected), ("نمایش مسیر روی نقشه", self.show_on_map)):
             b = QPushButton(text)
             b.clicked.connect(slot)
             actions.addWidget(b)
@@ -530,9 +532,9 @@ class _WavesTab(QWidget):
         try:
             wave_id = ops.create_wave(self._company_id(), self.warehouse_combo.currentData(), app_session.current_user.user_id)
         except ValueError as exc:
-            QMessageBox.warning(self, "موج برداشت", str(exc))
+            QMessageBox.warning(self, "جمع‌آوری گروهی", str(exc))
             return None
-        theme.set_status_label(self.status_label, "موج ساخته شد.", ok=True)
+        theme.set_status_label(self.status_label, "جمع‌آوری گروهی ساخته شد.", ok=True)
         self.refresh()
         self.waves_table.selectRow(0)
         return wave_id
@@ -544,7 +546,7 @@ class _WavesTab(QWidget):
         try:
             ops.release_wave(self._company_id(), wave.wave_id)
         except ValueError as exc:
-            QMessageBox.warning(self, "موج برداشت", str(exc))
+            QMessageBox.warning(self, "جمع‌آوری گروهی", str(exc))
             return
         self.refresh()
 
@@ -601,7 +603,7 @@ class _LocationCountTab(QWidget):
         actions = QHBoxLayout()
         for text, slot in (("ثبت شمارش…", self.record_selected), ("نهایی‌سازی و اصلاح اختلاف", self.finalize), ("لغو شمارش", self.cancel)):
             b = QPushButton(text)
-            b.clicked.connect(slot)
+            b.clicked.connect(lambda _c=False, f=slot: f())  # R324: تیک دکمه نباید شمارش صفر ثبت کند
             actions.addWidget(b)
         actions.addStretch(1)
         self.status_label = QLabel("")
@@ -754,10 +756,10 @@ class _KpiTab(QWidget):
         layout.addLayout(self.cards)
         self.card_labels: dict[str, QLabel] = {}
         self.type_table = _table(["نوع", "انجام‌شده", "باز", "میانگین زمان (دقیقه)"])
-        self.operator_table = _table(["اپراتور", "وظایف", "ساعت", "وظیفه در ساعت", "برداشت", "دقت برداشت"])
+        self.operator_table = _table(["اپراتور", "وظایف", "ساعت", "وظیفه در ساعت", "جمع‌آوری", "دقت جمع‌آوری"])
         layout.addWidget(self.type_table, stretch=1)
         layout.addWidget(self.operator_table, stretch=1)
-        self.reason_table = _table(["علت کسری برداشت", "تعداد"])  # R308: کلید «شاخص‌های تکمیلی»
+        self.reason_table = _table(["علت کسری جمع‌آوری", "تعداد"])  # R308: کلید «شاخص‌های تکمیلی»
         layout.addWidget(self.reason_table, stretch=1)
         self.result = None
 
@@ -1167,7 +1169,7 @@ class _FlowTab(QWidget):
         self.slot_box = QWidget()
         slot = QVBoxLayout(self.slot_box)
         slot.setContentsMargins(0, 0, 0, 0)
-        slot.addWidget(_hint("پیشنهاد چیدمان: کالای پرگردشی که در محل برداشت نیست و کالای کم‌گردشی که محل برداشت را گرفته است. "
+        slot.addWidget(_hint("پیشنهاد چیدمان: کالای پرگردشی که در محل جمع‌آوری نیست و کالای کم‌گردشی که محل جمع‌آوری را گرفته است. "
                              "برای هر پیشنهاد یک سند انتقال پیش‌نویس ساخته می‌شود که در «اسناد انبار» بررسی و ثبت می‌کنید."))
         self.slot_table = _table(["کالا", "کلاس", "دفعات خروج", "از محل", "به محل", "مقدار", "علت"])
         slot.addWidget(self.slot_table, stretch=1)
@@ -1180,7 +1182,7 @@ class _FlowTab(QWidget):
         dock = QVBoxLayout(self.dock_box)
         dock.setContentsMargins(0, 0, 0, 0)
         dock.addWidget(_hint("ارسال مستقیم: رسیدهای این هفته که کالایشان را سفارش فروش تاییدشده‌ای منتظر است. با «ارسال مستقیم» همان "
-                             "موجودی محل رسید برای سفارش رزرو و وظیفهٔ برداشت از همان محل ساخته می‌شود."))
+                             "موجودی محل رسید برای سفارش رزرو و کار جمع‌آوری کالا از همان محل ساخته می‌شود."))
         self.dock_table = _table(["رسید", "انبار", "کالا", "آزاد در محل رسید", "نیاز سفارش‌ها", "سفارش‌ها"])
         dock.addWidget(self.dock_table, stretch=1)
         row = QHBoxLayout()
@@ -1262,7 +1264,7 @@ class _FlowTab(QWidget):
             QMessageBox.warning(self, "ارسال مستقیم", str(exc))
             return None
         theme.set_status_label(self.status_label, numerals.to_persian_digits(
-            f"موجودی برای سفارش‌ها رزرو شد و {len(tasks)} وظیفهٔ برداشت ساخته شد."), ok=True)
+            f"موجودی برای سفارش‌ها رزرو شد و {len(tasks)} کار جمع‌آوری کالا ساخته شد."), ok=True)
         self._load()
         return tasks
 
@@ -1272,7 +1274,7 @@ class WarehouseOperationsScreen(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
-        title = QLabel("جانمایی، برداشت و برنامهٔ شمارش")
+        title = QLabel("چیدن در قفسه، جمع‌آوری و برنامهٔ شمارش")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         self.tabs = QTabWidget()
@@ -1286,10 +1288,10 @@ class WarehouseOperationsScreen(QWidget):
         self.expiry_tab = _ExpiryTab()
         self.transit_tab = _TransitTab()
         self.flow_tab = _FlowTab()
-        self.tabs.addTab(self.tasks_tab, "وظایف جانمایی، برداشت و تامین")
+        self.tabs.addTab(self.tasks_tab, "کارهای چیدن در قفسه، جمع‌آوری و تامین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارش دوره‌ای")
         self.tabs.addTab(self.replenish_tab, "قاعده‌های تامین مجدد")
-        self.tabs.addTab(self.waves_tab, "موج‌های برداشت")
+        self.tabs.addTab(self.waves_tab, "جمع‌آوری‌های گروهی")
         self.tabs.addTab(self.count_tab, "شمارش محل")
         self.tabs.addTab(self.kpi_tab, "داشبورد عملیات")
         self.tabs.addTab(self.quality_tab, "کنترل کیفیت")

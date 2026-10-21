@@ -833,6 +833,31 @@ def report_production(company_id: int, user_id: int, order_id: int, data: Receip
         return txn.txn_id
 
 
+def zero_cost_warning(company_id: int, order_id: int) -> str | None:
+    """R324: رسید محصول بهایش را از «کالای در جریان ساخت» برمی‌دارد. اگر مواد هنوز مصرف نشده یا هزینه‌ها قبلاً با
+    رسید قبلی برداشته شده، بهای این رسید صفر یا ناقص می‌شود. فقط هشدار پیش از ثبت است — منطق بها تغییری نمی‌کند."""
+    with new_session() as session:
+        order = session.get(ProductionOrder, order_id)
+        if order is None or order.company_id != company_id:
+            return None
+        st = c.settings(session, company_id)
+        if st.auto_consumption or _profile_backflush(session, order.item_id):
+            return None  # مواد هنگام ثبت تولید خودکار مصرف می‌شود
+        materials = [m for m in session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == order_id)) if not m.is_optional]
+        consumed = any(decimal.Decimal(m.consumed_qty or 0) > 0 for m in materials)
+        wip = wip_balance(session, order_id)
+        produced = decimal.Decimal(order.produced_qty) > 0
+    if materials and not consumed:
+        why = "هنوز هیچ مادهٔ اولیه‌ای برای این دستور مصرف نشده است (ابتدا «ثبت مصرف» یا «مصرف کامل استاندارد» را بزنید)"
+    elif wip <= 0 and produced:
+        why = "همهٔ هزینه‌های ثبت‌شده (مواد، دستمزد، ماشین) قبلاً با «ثبت تولید» به محصول منتقل شده است"
+    elif wip <= 0 and not st.auto_cost_calculation:
+        why = "هنوز هیچ هزینه‌ای (مواد، دستمزد یا ماشین) برای این دستور ثبت نشده است"
+    else:
+        return None
+    return f"{why}؛ اگر ادامه دهید بهای تمام‌شدهٔ این رسید «صفر» یا ناقص ثبت می‌شود. ادامه می‌دهید؟"
+
+
 def _weights(session, order: ProductionOrder, joint: list[tuple[OrderOutput, decimal.Decimal]], method: str,
              manual: dict[int, decimal.Decimal] | None, sales_values: dict[int, decimal.Decimal] | None = None
              ) -> list[decimal.Decimal]:

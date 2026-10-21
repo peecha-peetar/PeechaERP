@@ -86,7 +86,7 @@ check(ok_btn.text() == "✅" and ok_btn.toolTip() not in ("", "OK"), f"dialog OK
 mb = QMessageBox(QMessageBox.Question, "t", "x", QMessageBox.Yes | QMessageBox.No)
 mb.show(); app.processEvents()
 yes = mb.button(QMessageBox.Yes)
-check(yes.text() not in ("✅",) and yes.text() != "&Yes", f"message box keeps translated text ({yes.text()})")
+check(yes.text() == "✅" and yes.toolTip().startswith("بله"), f"R322: message box buttons iconized with Persian tooltip ({yes.toolTip()})")
 mb.close()
 
 # --- ۱ و ۱۶: گردش کار ------------------------------------------------------------------------------------

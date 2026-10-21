@@ -28,14 +28,14 @@ _KEYWORDS: list[tuple[str, str, str]] = [
     ("بک‌آپ", "📦", ""), ("بازیابی", "📥", ""),
     ("بارگذاری", "📤", ""), ("الصاق", "📎", ""), ("انتخاب لوگو", "🖼️", ""), ("انتخاب عکس", "🖼️", ""),
     ("تایید", "✅", "primary"), ("نهایی", "🏁", "primary"), ("تکمیل", "🏁", ""), ("شروع", "▶️", ""),
-    ("پیشنهاد", "💡", ""), ("مسیر برداشت", "🧭", ""), ("ردیابی", "🧭", ""), ("وظایف", "📋", ""),
+    ("پیشنهاد", "💡", ""), ("مسیر جمع‌آوری کالا", "🧭", ""), ("ردیابی", "🧭", ""), ("وظایف", "📋", ""),
     ("شمارش", "🔢", ""), ("وضعیت", "🚦", ""), ("انتقال", "🚚", ""), ("تحویل", "🚚", ""), ("خودرو", "🚚", ""),
     ("برچسب", "🏷️", ""), ("ابعاد", "📏", ""), ("حداقل/حداکثر", "📉", ""), ("مکان پیش‌فرض", "📍", ""),
     ("یافتن", "🔍", "primary"), ("جستجو", "🔍", ""), ("بررسی", "🔍", ""), ("نمایش", "👁️", ""),
     ("استعلام", "📨", ""), ("دعوت", "✉️", ""), ("انصراف", "🙅", ""), ("بهترین پیشنهاد", "🏆", ""),
     ("پیشنهاد", "💬", ""), ("قیمت", "💲", ""), ("اصلی", "⭐", ""), ("پرداخت", "💳", ""), ("وصول", "💰", ""),
     ("تسویه", "🔗", "primary"), ("اختصاص", "🔗", ""), ("نقش‌های آماده", "🛡️", ""), ("کمپین", "📣", "primary"),
-    ("موج", "🌊", "primary"), ("سفارش خرید", "🛒", "primary"), ("صدور", "📤", "primary"), ("ایجاد", "➕", "primary"),
+    ("موج", "🌊", "primary"), ("جمع‌آوری گروهی", "🌊", "primary"), ("سفارش خرید", "🛒", "primary"), ("صدور", "📤", "primary"), ("ایجاد", "➕", "primary"),
     ("ساخت", "➕", "primary"), ("افزودن", "➕", ""), ("جدید", "➕", "primary"), ("تازه", "➕", ""), ("ثبت", "📌", "primary"),
     ("گزارش", "📊", ""), ("شرایط نگهداری", "💾", ""),
 ]
@@ -47,6 +47,15 @@ _BOX_ROLES = {
     QDialogButtonBox.ResetRole: ("↺", ""), QDialogButtonBox.HelpRole: ("❔", ""),
 }
 _NAV_CLASSES = ("_SidebarButton", "_QuickAccessTile", "HoverButton", "_StepButton")
+# R322: دکمه‌های استاندارد پنجره‌ها (حتی «OK» دوحرفی و دکمه‌های پیام) آیکونی با برچسب فارسی
+_STANDARD_LABELS = {
+    QDialogButtonBox.Ok: "تایید", QDialogButtonBox.Cancel: "انصراف", QDialogButtonBox.Yes: "بله", QDialogButtonBox.No: "خیر",
+    QDialogButtonBox.Save: "ذخیره", QDialogButtonBox.Close: "بستن", QDialogButtonBox.Apply: "اعمال",
+    QDialogButtonBox.Discard: "ذخیره نشود", QDialogButtonBox.Abort: "توقف", QDialogButtonBox.Retry: "تلاش دوباره",
+    QDialogButtonBox.Ignore: "نادیده گرفتن", QDialogButtonBox.Reset: "بازنشانی", QDialogButtonBox.Help: "راهنما",
+    QDialogButtonBox.YesToAll: "بله برای همه", QDialogButtonBox.NoToAll: "خیر برای همه",
+    QDialogButtonBox.RestoreDefaults: "بازگشت به پیش‌فرض",
+}
 
 
 def _kind_of(label: str) -> str:
@@ -77,6 +86,19 @@ def icon_for(label: str, box_role=None) -> tuple[str, str, str] | None:
     return None
 
 
+def _box_button(button: QPushButton) -> tuple[str, str, str] | None:
+    """دکمهٔ داخل QDialogButtonBox یا پیام: (آیکن، نوع، برچسب فارسی) بر اساس نقش دکمه."""
+    box = button.parentWidget()
+    if not isinstance(box, QDialogButtonBox):
+        return None
+    role = box.buttonRole(button)
+    if role not in _BOX_ROLES:
+        return None
+    glyph, kind = _BOX_ROLES[role]
+    label = _STANDARD_LABELS.get(box.standardButton(button)) or (button.text() or "").replace("&", "").strip()
+    return (glyph, kind, label) if label else None
+
+
 def _skip(button: QPushButton) -> bool:
     if button.property("keep_text") or button.property("label") or type(button).__name__ in _NAV_CLASSES:
         return True
@@ -102,11 +124,12 @@ def _repolish(button: QPushButton) -> None:
 
 
 def iconize(button: QPushButton) -> bool:
-    if _skip(button):
+    boxed = None if button.property("keep_text") or button.property("label") else _box_button(button)
+    if boxed is None and _skip(button):
         return False
     box = button.parentWidget()
     role = box.buttonRole(button) if isinstance(box, QDialogButtonBox) else None
-    found = icon_for(button.text(), role)
+    found = boxed or icon_for(button.text(), role)
     if found is None:
         return False
     glyph, kind, label = found

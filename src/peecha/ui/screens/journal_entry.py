@@ -83,6 +83,7 @@ from peecha.ui.widgets import (
     SummaryCardBar,
     persist_column_widths,
 )
+from peecha.ui.persian_numbers import NumberEdit
 
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
@@ -833,7 +834,7 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         fields.addWidget(self.header_rate_label, 0, 3)
         rate_row = QHBoxLayout()
         rate_row.setSpacing(4)
-        self.header_rate_field = QLineEdit()
+        self.header_rate_field = NumberEdit()
         self.header_rate_field.setFixedWidth(120)
         self.header_rate_field.editingFinished.connect(self._on_header_rate_changed)
         rate_row.addWidget(self.header_rate_field)

@@ -36,7 +36,7 @@ KIND_LABELS = {
     "CONVERT_TO_INVOICE": "تبدیل به فاکتور",
     "POST_ORDER": "ثبت نهایی سفارش (پیش از رسید)",
     "INVENTORY_RESIDUAL": "اصلاح ماندهٔ ریالی موجودی صفر",
-    "PUTAWAY_PENDING": "جانمایی رسیدهای انبار",
+    "PUTAWAY_PENDING": "چیدن کالای رسیده در قفسه",
     "QC_PENDING": "کنترل کیفیت رسیدها",
     "EXPIRY_NEAR": "کالای نزدیک به انقضا",
     "EXPIRED_STOCK": "کالای منقضی در انبار",
@@ -192,7 +192,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
 
 
 def _putaway_pending(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
-    """R304 (کلید «رسیدهای جانمایی‌نشده در کارتابل انباردار»): یک کار برای هر انبار، برای انباردار همان انبار و مدیر."""
+    """R304 (کلید «رسیدهای در قفسه چیده‌نشده در کارتابل انباردار»): یک کار برای هر انبار، برای انباردار همان انبار و مدیر."""
     from peecha.db.models.inventory import Warehouse
     from peecha.services import stock_controls
     from peecha.services import warehouse_operations as ops
@@ -214,7 +214,7 @@ def _putaway_pending(company_id: int, user_id: int, is_manager: bool) -> list[Op
         lines = sum(s.open_lines for s in sources)
         out.append(OperationalTask(
             "PUTAWAY_PENDING", KIND_LABELS["PUTAWAY_PENDING"], 0, "",
-            f"{len(sources)} رسید با {lines} ردیف جانمایی‌نشده در «{w.name}»", w.name,
+            f"{len(sources)} رسید با {lines} ردیف در قفسه چیده‌نشده در «{w.name}»", w.name,
             max(s.doc.document_date for s in sources), "",
         ))
     return out

@@ -1,9 +1,9 @@
-"""عملیات انبار — R247: برنامهٔ شمارش دوره‌ای و وظایف جانمایی/برداشت (WMS سبک).
+"""عملیات انبار — R247: برنامهٔ شمارش دوره‌ای و کارهای چیدن در قفسه/جمع‌آوری (WMS سبک).
 
 - برنامهٔ شمارش فقط «سررسید» را حساب می‌کند؛ خود شمارش همان انبارگردانی موجود (stock_count) است.
-- وظیفهٔ جانمایی زمان و اپراتور را ثبت می‌کند و جابه‌جایی محل را با سند انتقال معمولی سیستم
+- کار چیدن در قفسه زمان و اپراتور را ثبت می‌کند و جابه‌جایی محل را با سند انتقال معمولی سیستم
   (inventory_documents: انبار مبدا = مقصد، محل متفاوت) انجام می‌دهد؛ منطق انبار تغییری نمی‌کند.
-- وظیفهٔ برداشت فقط زمان، اپراتور و مقدار برداشته را ثبت می‌کند؛ خروج واقعی همچنان با حواله است.
+- کار جمع‌آوری کالا فقط زمان، اپراتور و مقدار جمع‌آوری‌شده را ثبت می‌کند؛ خروج واقعی همچنان با حواله است.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from peecha.db.models.inventory import (
 from peecha.services import quality_control, stock_controls
 
 _ZERO = decimal.Decimal(0)
-TASK_TYPES = {"PUTAWAY": "جانمایی", "PICK": "برداشت", "REPLENISH": "تامین مجدد"}
+TASK_TYPES = {"PUTAWAY": "چیدن در قفسه", "PICK": "جمع‌آوری کالا", "REPLENISH": "تامین مجدد"}
 _RESERVATION_SOURCE = {"PICK": "WMS_PICK_TASK", "REPLENISH": "WMS_REPLENISH_TASK"}
 TASK_STATUSES = {"OPEN": "باز", "IN_PROGRESS": "در حال انجام", "DONE": "انجام‌شده", "CANCELLED": "لغوشده"}
 _INBOUND = ("RECEIPT", "RETURN_IN", "CONSIGNMENT_IN")
@@ -144,7 +144,7 @@ def due_counts(company_id: int, as_of: datetime.date | None = None, warehouse_id
 
 
 # =====================================================================
-# وظایفِ جانمایی و برداشت
+# وظایفِ چیدن در قفسه و جمع‌آوری
 # =====================================================================
 def _default_bin(session, warehouse_id: int) -> int | None:
     from peecha.services.inventory_locations import get_default_bin_location
@@ -154,7 +154,7 @@ def _default_bin(session, warehouse_id: int) -> int | None:
 
 
 def putaway_sources(company_id: int, days: int = 60) -> list[SimpleNamespace]:
-    """رسیدهای ثبت‌شدهٔ اخیر که هنوز برای همهٔ ردیف‌هایشان وظیفهٔ جانمایی ندارند."""
+    """رسیدهای ثبت‌شدهٔ اخیر که هنوز برای همهٔ ردیف‌هایشان کار چیدن در قفسه ندارند."""
     since = datetime.date.today() - datetime.timedelta(days=days)
     with new_session() as session:
         docs = list(session.scalars(select(StockDocument).where(
@@ -163,7 +163,7 @@ def putaway_sources(company_id: int, days: int = 60) -> list[SimpleNamespace]:
         tasked = set(session.scalars(select(WarehouseTask.source_stock_line_id).where(
             WarehouseTask.company_id == company_id, WarehouseTask.task_type_code == "PUTAWAY",
             WarehouseTask.status_code != "CANCELLED", WarehouseTask.source_stock_line_id.is_not(None))))
-        tasked |= quality_control.waiting_line_ids(session)  # R306: منتظر کنترل کیفیت هنوز جانمایی نمی‌شود
+        tasked |= quality_control.waiting_line_ids(session)  # R306: منتظر کنترل کیفیت هنوز چیدن در قفسه نمی‌شود
         lines = {}
         for ln in session.scalars(select(StockDocumentLine).where(
                 StockDocumentLine.stock_document_id.in_([d.stock_document_id for d in docs] or [-1]))):
@@ -215,9 +215,9 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
             if doc is None or doc.company_id != company_id:
                 raise ValueError("سند انبار نامعتبر است.")
             if task_type == "PUTAWAY" and (doc.document_type_code not in _INBOUND or doc.status_code != "POSTED"):
-                raise ValueError("جانمایی فقط برای رسید ثبت‌شده ساخته می‌شود.")
+                raise ValueError("چیدن در قفسه فقط برای رسید ثبت‌شده ساخته می‌شود.")
             if task_type == "PICK" and (doc.document_type_code not in _OUTBOUND or doc.status_code not in ("DRAFT", "CONFIRMED")):
-                raise ValueError("برداشت فقط برای حواله/انتقال ثبت‌نشده ساخته می‌شود.")
+                raise ValueError("جمع‌آوری فقط برای حواله/انتقال ثبت‌نشده ساخته می‌شود.")
             warehouse_id = doc.destination_warehouse_id if task_type == "PUTAWAY" else doc.source_warehouse_id
             lines = list(session.scalars(select(StockDocumentLine).where(StockDocumentLine.stock_document_id == doc_id)
                                          .order_by(StockDocumentLine.line_no)))
@@ -230,7 +230,7 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
                 if task_type == "PUTAWAY":
                     from_bin = session.scalar(select(StockLedger.bin_location_id).where(
                         StockLedger.stock_document_line_id == ln.line_id, StockLedger.movement_direction == "IN"))
-                    if cross_dock:  # R309: آنچه برای سفارش منتظر رزرو شده از محل رسید مستقیم برداشت می‌شود
+                    if cross_dock:  # R309: آنچه برای سفارش منتظر رزرو شده از محل رسید مستقیم جمع‌آوری می‌شود
                         quantity = min(quantity, _free_in_bin(session, ln.item_id, warehouse_id, from_bin))
                         if quantity <= 0:
                             continue
@@ -246,7 +246,7 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
                 created.append(task.task_id)
         elif kind == "COMMERCIAL":
             if task_type != "PICK":
-                raise ValueError("از سند بازرگانی فقط وظیفهٔ برداشت ساخته می‌شود.")
+                raise ValueError("از سند بازرگانی فقط کار جمع‌آوری کالا ساخته می‌شود.")
             doc, lines = documents_service.get_document(doc_id, company_id)
             for ln in lines:
                 if ln.line_id in existing_comm or ln.item_id is None:
@@ -330,7 +330,7 @@ def cancel_task(task_id: int, company_id: int, user_id: int | None = None) -> No
 
 
 def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_location_id: int, scans: dict | None = None) -> int | None:
-    """جانمایی: اگر محل مقصد با محل فعلی فرق دارد، با سند انتقال عادی سیستم جابه‌جا می‌شود.
+    """چیدن در قفسه: اگر محل مقصد با محل فعلی فرق دارد، با سند انتقال عادی سیستم جابه‌جا می‌شود.
     R304: scans (موبایل) = {"location": متن اسکن محل مقصد}."""
     from peecha.services import inventory_documents as inv_documents_service
     from peecha.services import warehouse_locations as wl
@@ -339,11 +339,11 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
     with new_session() as session:
         task = _task(session, task_id, company_id)
         if task.task_type_code != "PUTAWAY" or task.status_code not in ("OPEN", "IN_PROGRESS"):
-            raise ValueError("این وظیفهٔ جانمایی باز نیست.")
+            raise ValueError("این کار چیدن در قفسه باز نیست.")
         bin_ok = session.scalar(select(BinLocation.warehouse_id).where(BinLocation.bin_location_id == to_bin_location_id))
         if bin_ok != task.warehouse_id:
             raise ValueError("محل مقصد باید در همان انبار باشد.")
-        target = session.get(BinLocation, to_bin_location_id)  # R248: فقط محلِ فعال و مجاز برایِ جانمایی
+        target = session.get(BinLocation, to_bin_location_id)  # R248: فقط محلِ فعال و مجاز برایِ چیدن در قفسه
         if not target.is_active or target.status_code != "ACTIVE" or target.is_damaged or not target.allow_putaway:
             raise ValueError("محل مقصد فعال نیست یا ورود کالا به آن مجاز نیست.")
         warehouse_id, item_id, qty, from_bin = task.warehouse_id, task.item_id, task.quantity_base, task.from_bin_location_id
@@ -364,10 +364,10 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
         doc_id = inv_documents_service.create_stock_document(
             company_id, user_id, "TRANSFER", datetime.date.today(),
             inv_documents_service.DocumentHeaderFields(source_warehouse_id=warehouse_id, destination_warehouse_id=warehouse_id,
-                                                       description=f"جانمایی وظیفهٔ {task_id}"))
+                                                       description=f"چیدن در قفسه وظیفهٔ {task_id}"))
         inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(
             item_id=item_id, uom_id=base_uom or uom_id, quantity=qty, quantity_base=qty, conversion_factor=decimal.Decimal(1),
-            bin_location_id=from_bin, destination_bin_location_id=to_bin_location_id, description=f"جانمایی وظیفهٔ {task_id}"))
+            bin_location_id=from_bin, destination_bin_location_id=to_bin_location_id, description=f"چیدن در قفسه وظیفهٔ {task_id}"))
         inv_documents_service.confirm_stock_document(doc_id, company_id)
         inv_documents_service.post_stock_document(doc_id, company_id, user_id)
     with new_session() as session:
@@ -384,25 +384,25 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
 
 def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: decimal.Decimal,
                   scans: dict | None = None, short_reason: str | None = None) -> None:
-    """R304: scans (موبایل) = {"location": اسکن محل برداشت، "item": اسکن کالا}.
-    R305: با کلید «کنترل برداشت»، بیش‌برداشت ممنوع و کم‌برداشت با علت (short_reason)."""
+    """R304: scans (موبایل) = {"location": اسکن محل جمع‌آوری، "item": اسکن کالا}.
+    R305: با کلید «کنترل جمع‌آوری»، جمع‌آوری بیش از مقدار ممنوع و کم‌جمع‌آوری با علت (short_reason)."""
     from peecha.services import stock_controls
     from peecha.services import warehouse_locations as wl
 
     picked_quantity = decimal.Decimal(picked_quantity)
     if picked_quantity < 0:
-        raise ValueError("مقدار برداشته نمی‌تواند منفی باشد.")
+        raise ValueError("مقدار جمع‌آوری‌شده نمی‌تواند منفی باشد.")
     with new_session() as session:
         task = _task(session, task_id, company_id)
         if task.task_type_code != "PICK" or task.status_code not in ("OPEN", "IN_PROGRESS"):
-            raise ValueError("این وظیفهٔ برداشت باز نیست.")
+            raise ValueError("این کار جمع‌آوری کالا باز نیست.")
         wl.verify_scans(company_id, scans, [("location", "location", task.from_bin_location_id), ("item", "item", task.item_id)])
         short_reason = (short_reason or "").strip() or None
         if stock_controls.is_on(company_id, stock_controls.PICK_CONTROL, session):
             if picked_quantity > task.quantity_base:
-                raise ValueError("مقدار برداشته از مقدار وظیفه بیشتر است؛ بیش‌برداشت مجاز نیست.")
+                raise ValueError("مقدار جمع‌آوری‌شده از مقدار وظیفه بیشتر است؛ جمع‌آوری بیش از مقدار مجاز نیست.")
             if picked_quantity < task.quantity_base and not short_reason:
-                raise ValueError("برداشت کمتر از مقدار وظیفه است؛ علت کسری را وارد کنید.")
+                raise ValueError("جمع‌آوری کمتر از مقدار وظیفه است؛ علت کسری را وارد کنید.")
         if short_reason:
             task.notes = f"کسری برداشت: {short_reason}"[:500]
         now = datetime.datetime.now()
@@ -420,11 +420,11 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
 
 
 # =====================================================================
-# R249: رزروِ وظیفه، انتخابِ محلِ برداشت و تأمینِ مجددِ جبههٔ برداشت
+# R249: رزروِ وظیفه، انتخابِ محلِ جمع‌آوری و تأمینِ مجددِ جبههٔ جمع‌آوری
 # =====================================================================
 def _reserve(session, task: WarehouseTask) -> None:
     """رزرو قطعی مقدار وظیفه در همان inv.stock_reservations (R303: تابع مشترک stock_reservations).
-    برداشت از ردیف سفارشی که خودش رزرو دارد، رزرو دوم نمی‌سازد."""
+    جمع‌آوری از ردیف سفارشی که خودش رزرو دارد، رزرو دوم نمی‌سازد."""
     from peecha.services import stock_reservations
 
     if task.task_type_code not in _RESERVATION_SOURCE or not task.quantity_base or task.quantity_base <= 0:
@@ -479,7 +479,7 @@ def reserved_by_bin(company_id: int, warehouse_id: int | None = None) -> dict[tu
 
 def _pick_bin(session, company_id: int, warehouse_id: int, item_id: int, need: decimal.Decimal,
               commercial_line_id: int | None = None) -> int | None:
-    """R305: با کلید «کنترل برداشت»، محل رزرو سفارش و سپس محل دارای موجودی آزاد و زودانقضاتر؛ وگرنه روش قبلی."""
+    """R305: با کلید «کنترل جمع‌آوری»، محل رزرو سفارش و سپس محل دارای موجودی آزاد و زودانقضاتر؛ وگرنه روش قبلی."""
     from peecha.services import stock_controls, stock_reservations
 
     if not stock_controls.is_on(company_id, stock_controls.PICK_CONTROL, session):
@@ -494,7 +494,7 @@ def _pick_bin(session, company_id: int, warehouse_id: int, item_id: int, need: d
 
 
 def _smart_pick_bin(session, company_id: int, warehouse_id: int, item_id: int, need: decimal.Decimal) -> int | None:
-    """محل برداشت با موجودی آزاد (فیزیکی − رزرو): اول محل‌های برداشت، بعد زودانقضاترین بچ غیرمنقضی،
+    """محل جمع‌آوری با موجودی آزاد (فیزیکی − رزرو): اول محل‌های جمع‌آوری، بعد زودانقضاترین بچ غیرمنقضی،
     بعد محلی که کل مقدار را دارد، بعد بیشترین موجودی آزاد."""
     from peecha.services import warehouse_locations as wl
 
@@ -521,7 +521,7 @@ def _smart_pick_bin(session, company_id: int, warehouse_id: int, item_id: int, n
 
 
 def generate_picks_for_reserved_orders(company_id: int, user_id: int, warehouse_id: int | None = None) -> list[int]:
-    """R305: وظیفهٔ برداشت برای سفارش‌های فروش ثبت‌شده‌ای که رزرو فعال دارند و هنوز وظیفه ندارند."""
+    """R305: کار جمع‌آوری کالا برای سفارش‌های فروش ثبت‌شده‌ای که رزرو فعال دارند و هنوز وظیفه ندارند."""
     from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
     from peecha.services import stock_reservations
 
@@ -542,7 +542,7 @@ def generate_picks_for_reserved_orders(company_id: int, user_id: int, warehouse_
 
 
 def _best_pick_bin(session, warehouse_id: int, item_id: int) -> int | None:
-    """محل برداشت: محل قابل‌برداشت دارای موجودی با اولویت محل‌های برداشت (نوع خود محل یا والدها)، سپس بیشترین موجودی."""
+    """محل جمع‌آوری: محل قابل‌جمع‌آوری دارای موجودی با اولویت محل‌های جمع‌آوری (نوع خود محل یا والدها)، سپس بیشترین موجودی."""
     from peecha.db.models.inventory import Warehouse
     from peecha.services import warehouse_locations as wl
 
@@ -632,7 +632,7 @@ def delete_rule(company_id: int, rule_id: int) -> None:
 def replenishment_needs(company_id: int, warehouse_id: int | None = None) -> list[SimpleNamespace]:
     """قاعده‌هایی که موجودی + وظایف باز تامین به حداقل یا کمتر رسیده؛ مقدار = تا حداکثر، با منابع پیشنهادی
     (محل‌های دیگر همان انبار با موجودی آزاد، اولویت ذخیره/حجیم).
-    R307 (کلید «تامین مجدد با در نظر گرفتن رزرو»): نیاز با موجودی آزاد محل (پس از رزرو سفارش/برداشت باز) سنجیده می‌شود،
+    R307 (کلید «تامین مجدد با در نظر گرفتن رزرو»): نیاز با موجودی آزاد محل (پس از رزرو سفارش/جمع‌آوری باز) سنجیده می‌شود،
     مقدار از جای خالی محل بیشتر نمی‌شود و منبع فقط موجودی آزاد واقعی (پس از همهٔ رزروها) است."""
     from peecha.services import stock_controls
     from peecha.services import warehouse_locations as wl
@@ -667,7 +667,7 @@ def replenishment_needs(company_id: int, warehouse_id: int | None = None) -> lis
         if on_hand - held + pending > rule.min_quantity or not wl.is_operable(target):
             continue
         need = rule.max_quantity - on_hand - pending
-        if smart and need <= 0:  # محل پر است؛ رزروها را برداشت باز خالی می‌کند
+        if smart and need <= 0:  # محل پر است؛ رزروها را جمع‌آوری باز خالی می‌کند
             continue
         sources = []
         for b, i, q, r_, _v in stock[wid]:
@@ -756,10 +756,10 @@ def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity
 
 
 # =====================================================================
-# R250: تأمینِ خودکار و برداشتِ موجی
+# R250: تأمینِ خودکار و جمع‌آوریِ موجی
 # =====================================================================
 def auto_replenish(company_id: int, user_id: int, warehouse_id: int) -> list[int]:
-    """پس از هر برداشت: اگر قاعدهٔ فعالی در این انبار به حداقل رسیده، وظیفهٔ تامین ساخته می‌شود."""
+    """پس از هر جمع‌آوری: اگر قاعدهٔ فعالی در این انبار به حداقل رسیده، وظیفهٔ تامین ساخته می‌شود."""
     if not any(r.is_active for r in list_rules(company_id, warehouse_id)):
         return []
     return generate_replenishment_tasks(company_id, user_id, warehouse_id)
@@ -776,8 +776,8 @@ def _close_wave_if_done(session, wave_id: int | None) -> None:
 
 
 def create_wave(company_id: int, warehouse_id: int, user_id: int, task_ids: list[int] | None = None) -> int:
-    """موج از وظایف برداشت باز بی‌موج انبار (یا وظایف داده‌شده)، به ترتیب مسیر نزدیک‌ترین همسایه.
-    R305: با کلید «کنترل برداشت»، پیش از آن وظایف سفارش‌های رزروشدهٔ همین انبار ساخته می‌شود."""
+    """موج از کارهای جمع‌آوری کالا باز بی‌موج انبار (یا وظایف داده‌شده)، به ترتیب مسیر نزدیک‌ترین همسایه.
+    R305: با کلید «کنترل جمع‌آوری»، پیش از آن وظایف سفارش‌های رزروشدهٔ همین انبار ساخته می‌شود."""
     from peecha.services import stock_controls
     from peecha.services import warehouse_locations as wl
 
@@ -792,9 +792,9 @@ def create_wave(company_id: int, warehouse_id: int, user_id: int, task_ids: list
             q = q.where(WarehouseTask.task_id.in_(task_ids))
         tasks = list(session.scalars(q))
         if task_ids is not None and len(tasks) != len(set(task_ids)):
-            raise ValueError("بعضی از وظایف برداشت باز بی‌موج همین انبار نیستند.")
+            raise ValueError("بعضی از کارهای انتخاب‌شده، کار جمع‌آوری انجام‌نشده و بدون گروه در همین انبار نیستند.")
         if not tasks:
-            raise ValueError("وظیفهٔ برداشت بازی برای موج نیست.")
+            raise ValueError("کار جمع‌آوری انجام‌نشده‌ای برای ساخت گروه نیست.")
         bins = [t.from_bin_location_id for t in tasks if t.from_bin_location_id]
         path = wl.picking_path(company_id, warehouse_id, bins)
         rank = {lid: i for i, lid in enumerate(path.order)}
@@ -824,7 +824,7 @@ def wave_tasks(company_id: int, wave_id: int) -> list[WarehouseTask]:
     with new_session() as session:
         wave = session.get(PickWave, wave_id)
         if wave is None or wave.company_id != company_id:
-            raise ValueError("موج نامعتبر است.")
+            raise ValueError("جمع‌آوری گروهی نامعتبر است.")
         return list(session.scalars(select(WarehouseTask).where(WarehouseTask.wave_id == wave_id)
                                     .order_by(WarehouseTask.wave_sequence)))
 
@@ -836,7 +836,7 @@ def release_wave(company_id: int, wave_id: int) -> None:
         if wave is None or wave.company_id != company_id:
             raise ValueError("موج نامعتبر است.")
         if wave.status_code != "OPEN":
-            raise ValueError("فقط موج باز لغو می‌شود.")
+            raise ValueError("فقط جمع‌آوری گروهی انجام‌نشده لغو می‌شود.")
         for t in session.scalars(select(WarehouseTask).where(WarehouseTask.wave_id == wave_id,
                                                             WarehouseTask.status_code.in_(("OPEN", "IN_PROGRESS")))):
             t.wave_id, t.wave_sequence = None, None

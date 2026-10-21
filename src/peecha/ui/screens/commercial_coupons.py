@@ -29,6 +29,7 @@ from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin
+from peecha.ui.persian_numbers import NumberEdit
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "FIXED_CART": "مبلغ ثابت (کل سبد)", "FIXED_PRODUCT": "مبلغ ثابت (هر کالا)"}
 _SYNC_STATUS_LABELS = {"PENDING": "همگام‌نشده", "SYNCED": "همگام‌شده", "FAILED": "ناموفق"}
@@ -70,7 +71,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.discount_type_combo = QComboBox()
         for code, label in _DISCOUNT_TYPE_LABELS.items():
             self.discount_type_combo.addItem(label, code)
-        self.amount_field = QLineEdit()
+        self.amount_field = NumberEdit()
         self.valid_until_field = JalaliDateEdit()
         self.no_expiry_checkbox = QCheckBox("بدون تاریخ انقضا")
         self.no_expiry_checkbox.setChecked(True)

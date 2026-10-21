@@ -141,13 +141,13 @@ kinds = lambda user: [t for t in operational_tasks.list_operational_tasks(compan
 check(kinds(keeper) == [] and kinds(uid) == [], "switch off: nothing in the cartable")
 engine_service.set_feature_enabled(company_id, sc.PUTAWAY_IN_CARTABLE, True)
 mine = kinds(keeper)
-check(len(mine) == 1 and "انبار اصلی" in mine[0].title and mine[0].kind_label == "جانمایی رسیدهای انبار",
+check(len(mine) == 1 and "انبار اصلی" in mine[0].title and mine[0].kind_label == "چیدن کالای رسیده در قفسه",
       f"warehouse keeper sees the unlocated receipts ({[t.title for t in mine]})")
 check(len(kinds(uid)) == 1, "manager sees it too")
 other = users_service.create_user("keeper2", "انباردار دیگر", "secret123", None, lang_id, False, [company_id], company_id)
 check(kinds(other.user_id) == [], "a user who is not this warehouse's keeper does not see it")
 work = [w for w in inbox.my_work(company_id, keeper) if w.source == "DOC" and w.extra.get("kind") == "PUTAWAY_PENDING"]
-check(len(work) == 1 and work[0].action == "برای رسیدها وظیفهٔ جانمایی بسازید", "unified cartable shows the task with a clear action")
+check(len(work) == 1 and work[0].action == "کالای رسیده را در قفسه بچینید (کار چیدن در قفسه بسازید)", "unified cartable shows the task with a clear action")
 for src in ops.putaway_sources(company_id):
     ops.generate_tasks(company_id, "PUTAWAY", src.key, uid)
 check(kinds(keeper) == [], "once putaway tasks exist it leaves the cartable")

@@ -53,7 +53,8 @@ screen = InventoryWarehousesScreen()
 screen.refresh()
 idx = next(i for i in range(screen.table.rowCount()) if screen._rows[i].warehouse_id == wh_id)
 screen._on_row_clicked(idx, 0)
-check(screen.default_tax_percent_field.text() == "7.50", f"فیلد درصد مالیات در فرم با مقدار ذخیره‌شده پر شده (got {screen.default_tax_percent_field.text()!r})")
+from peecha import numerals  # R322: فیلد عددی رقم فارسی نشان می‌دهد
+check(numerals.to_ascii_digits(screen.default_tax_percent_field.text()) == "7.50", f"فیلد درصد مالیات در فرم با مقدار ذخیره‌شده پر شده (got {screen.default_tax_percent_field.text()!r})")
 
 screen.default_tax_percent_field.setText("")
 screen._save()

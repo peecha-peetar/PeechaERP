@@ -32,6 +32,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens import module_style as ms
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.persian_numbers import NumberEdit
 
 _WARRANTY_STATUS_LABELS = {"ACTIVE": "معتبر", "EXPIRED": "منقضی", "VOIDED": "باطل‌شده"}
 _TICKET_STATUS_LABELS = {"OPEN": "باز", "IN_PROGRESS": "درحال انجام", "RESOLVED": "حل‌شده", "CLOSED": "بسته"}
@@ -281,7 +282,7 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
         part_form = QHBoxLayout()
         self.ticket_part_item_combo = QComboBox()
         part_form.addWidget(self.ticket_part_item_combo, stretch=1)
-        self.ticket_part_qty_field = QLineEdit()
+        self.ticket_part_qty_field = NumberEdit()
         self.ticket_part_qty_field.setPlaceholderText("مقدار")
         self.ticket_part_qty_field.setMaximumWidth(80)
         part_form.addWidget(self.ticket_part_qty_field)
@@ -414,7 +415,7 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
         self.rma_reason_combo = QComboBox()
         for code, label in _RMA_REASON_LABELS.items():
             self.rma_reason_combo.addItem(label, code)
-        self.rma_quantity_field = QLineEdit()
+        self.rma_quantity_field = NumberEdit()
         self.rma_quantity_field.setPlaceholderText("مقدار درخواستی")
         self.rma_form_grid = FieldGrid([
             FieldSpec("customer", "مشتری", self.rma_customer_combo, span=2),

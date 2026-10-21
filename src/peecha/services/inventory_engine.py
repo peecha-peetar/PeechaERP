@@ -804,7 +804,7 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
             free = max(bal.quantity_on_hand - reserved, _ZERO)
             if reserved > 0 and quantity_base > free:
                 controls.violate(
-                    f"بخشی از موجودی کالای «{item_label}» در انبار «{warehouse.name}» برای سفارش، برداشت، تولید یا کنترل کیفیت "
+                    f"بخشی از موجودی کالای «{item_label}» در انبار «{warehouse.name}» برای سفارش، جمع‌آوری کالا، تولید یا کنترل کیفیت "
                     f"رزرو شده است (موجود: {_q(bal.quantity_on_hand)}، رزرو: {_q(reserved)}، آزاد: {_q(free)}، "
                     f"درخواستی: {_q(quantity_base)})."
                 )

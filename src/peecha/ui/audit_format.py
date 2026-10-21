@@ -52,7 +52,7 @@ VALUE_LABELS = {
     "QC_RETURN_TO_SUPPLIER": "برگشت به تامین‌کننده پس از بازرسی", "CROSS_DOCK": "ارسال مستقیم", "STOCK_RESERVE": "رزرو موجودی",
     "STOCK_RELEASE": "آزادسازی رزرو", "REVERSE_CANCEL": "برگشت و لغو", "RETURN_TO_SUPPLIER": "برگشت به تامین‌کننده",
     "USE_AS_IS": "استفاده با همین وضع", "REWORK": "دوباره‌کاری", "SCRAP": "ضایعات", "IN_PROCESS": "حین تولید",
-    "INCOMING": "ورودی", "FINAL": "نهایی", "PUTAWAY": "جانمایی", "PICK": "برداشت", "REPLENISH": "تامین مجدد",
+    "INCOMING": "ورودی", "FINAL": "نهایی", "PUTAWAY": "چیدن در قفسه", "PICK": "جمع‌آوری", "REPLENISH": "تامین مجدد",
     "MOVE": "جابه‌جایی", "COUNT": "شمارش", "RECEIVABLES": "دریافتنی‌ها", "PAYABLES": "پرداختنی‌ها", "GL": "تراز حساب‌ها",
     "INVENTORY": "موجودی", "TRUE": "بله", "FALSE": "خیر",
 }

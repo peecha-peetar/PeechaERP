@@ -185,7 +185,7 @@ def _issued_for_order_line(session, order_line_id: int) -> decimal.Decimal:
 
 
 def _line_links(session, lines) -> dict[int, tuple]:
-    """ردیف سند انبار → (ردیف سند بازرگانی، [ردیف بازرگانی و ردیف سفارش مبدا]، [وظایف برداشت])."""
+    """ردیف سند انبار → (ردیف سند بازرگانی، [ردیف بازرگانی و ردیف سفارش مبدا]، [کارهای جمع‌آوری کالا])."""
     from peecha.db.models.commercial import CommercialDocumentLine
 
     comm_by_stock = {cl.stock_document_line_id: cl for cl in session.scalars(select(CommercialDocumentLine).where(
@@ -215,7 +215,7 @@ def linked_reservations(session, stock_document_id: int) -> list[StockReservatio
 
 
 def consume_for_stock_document(session, stock_document_id: int, include_picks: bool = False) -> decimal.Decimal:
-    """رزروهایی که همین سند برایشان صادر شده (سفارش فروش مبدا و، با کلید رعایت رزرو، وظیفهٔ برداشت همین ردیف)
+    """رزروهایی که همین سند برایشان صادر شده (سفارش فروش مبدا و، با کلید رعایت رزرو، کار جمع‌آوری کالا همین ردیف)
     مصرف می‌شوند تا کنترل رزرو موتور، رزرو خود سند را مانع نبیند. خروجی = جمع مقدار مصرف‌شده."""
     from peecha.db.models.commercial import CommercialDocumentLine
 

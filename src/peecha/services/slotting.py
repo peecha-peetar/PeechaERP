@@ -1,7 +1,7 @@
 """R309 — پیشنهاد چیدمان (Slotting؛ کلید WMS_SLOTTING_SUGGESTIONS).
 
 کلاس ABC هر کالا از دفعات خروج همان انبار (همان abc_classes گزارش‌های انبار، مبنای «دفعات») خوانده می‌شود:
-کالای پرگردش (A) که در هیچ محل برداشتی نیست → پیشنهاد محل برداشت؛ کالای کم‌گردش (C) که محل برداشت را گرفته
+کالای پرگردش (A) که در هیچ محل جمع‌آوری نیست → پیشنهاد محل جمع‌آوری؛ کالای کم‌گردش (C) که محل جمع‌آوری را گرفته
 → پیشنهاد محل ذخیره/حجیم. فقط پیشنهاد است؛ جابه‌جایی با سند انتقال پیش‌نویسی که کاربر ثبت می‌کند.
 """
 
@@ -30,7 +30,7 @@ def suggestions(company_id: int, warehouse_id: int, days: int = 90) -> list[Simp
     types = {n.location_id: {a.location_type_code for a in wl.ancestors(by_id, n.location_id) if a.location_type_code}
              for n in nodes}
     if not any(t & _PICK_TYPES for t in types.values()):
-        return []   # انبار محل برداشت تعریف‌شده ندارد
+        return []   # انبار محل جمع‌آوری تعریف‌شده ندارد
     today = datetime.date.today()
     f = base.PurchaseFilters(today - datetime.timedelta(days=days), today, warehouse_id=warehouse_id, side="INVENTORY",
                              options={"basis": "FREQ"})
@@ -48,12 +48,12 @@ def suggestions(company_id: int, warehouse_id: int, days: int = 90) -> list[Simp
             source, qty = max(places, key=lambda p: p[1])
             target = next((s for s in wl.putaway_suggestions(company_id, warehouse_id, item_id, qty, limit=20)
                            if types.get(s.location_id, set()) & _PICK_TYPES), None)
-            reason = "کالای پرگردش در هیچ محل برداشتی نیست"
+            reason = "کالای پرگردش در هیچ محل جمع‌آوری نیست"
         elif cls == "C" and in_pick:
             source, qty = max(in_pick, key=lambda p: p[1])
             target = next((s for s in wl.putaway_suggestions(company_id, warehouse_id, item_id, qty, limit=20)
                            if types.get(s.location_id, set()) & _STORE_TYPES), None)
-            reason = "کالای کم‌گردش محل برداشت را گرفته است"
+            reason = "کالای کم‌گردش محل جمع‌آوری را گرفته است"
         else:
             continue
         if target is None or target.location_id == source:

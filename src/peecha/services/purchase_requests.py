@@ -201,9 +201,19 @@ def approve_request(request_id: int, company_id: int, approved_by_user_id: int) 
         session.commit()
 
 
+def _workflow_busy(request_id: int, company_id: int) -> None:
+    """R323: تا پایان گردش کار تعریف‌شده، درخواست دستی رد یا به سفارش تبدیل نمی‌شود."""
+    from peecha.services.workflow import model_events
+
+    message = model_events.busy(company_id, "PURCHASE_REQUEST", request_id)
+    if message:
+        raise ValueError(message)
+
+
 def reject_request(request_id: int, company_id: int, reason: str) -> None:
     if not (reason or "").strip():
         raise ValueError("علت رد را بنویسید.")
+    _workflow_busy(request_id, company_id)
     with new_session() as session:
         row = _get(session, request_id, company_id)
         if row.status_code != "SUBMITTED":
@@ -270,9 +280,11 @@ def linked_orders(request_id: int) -> list[CommercialDocument]:
 def convert_to_orders(
     request_id: int, company_id: int, user_id: int, supplier_id: int | None = None,
     quantities: dict[int, decimal.Decimal] | None = None, order_date: datetime.date | None = None,
+    line_suppliers: dict[int, int] | None = None,
 ) -> list[int]:
     """درخواست تصویب‌شده → سفارش خرید (یک سفارش برای هر تامین‌کننده).
-    supplier_id: تامین‌کنندهٔ همهٔ ردیف‌ها (وگرنه تامین‌کنندهٔ پیشنهادی هر ردیف).
+    supplier_id: تامین‌کنندهٔ همهٔ ردیف‌ها در یک سفارش (وگرنه تامین‌کنندهٔ هر ردیف).
+    line_suppliers: R321 {line_id: تامین‌کننده} به‌جای تامین‌کنندهٔ پیشنهادی ردیف.
     quantities: {line_id: مقدار به واحد ردیف} برای سفارش بخشی؛ پیش‌فرض = کل مانده."""
     from peecha import session as app_session
 
@@ -280,6 +292,9 @@ def convert_to_orders(
         row = _get(session, request_id, company_id)
         if row.status_code != "APPROVED":
             raise ValueError("فقط درخواست تصویب‌شده به سفارش تبدیل می‌شود.")
+    _workflow_busy(request_id, company_id)
+    with new_session() as session:
+        row = _get(session, request_id, company_id)
         lines = list(session.scalars(select(PurchaseRequestLine).where(PurchaseRequestLine.request_id == request_id)
                                      .order_by(PurchaseRequestLine.line_no)))
         ordered = _ordered_by_line(session, [ln.line_id for ln in lines])
@@ -296,7 +311,7 @@ def convert_to_orders(
             remaining_base = wanted_base
         if remaining_base <= 0:
             continue
-        supplier = supplier_id or ln.suggested_supplier_detail_account_id
+        supplier = supplier_id or (line_suppliers or {}).get(ln.line_id) or ln.suggested_supplier_detail_account_id
         if supplier is None:
             raise ValueError("برای ردیف‌های بدون تامین‌کنندهٔ پیشنهادی، تامین‌کننده را انتخاب کنید.")
         groups[supplier].append((ln, remaining_base))

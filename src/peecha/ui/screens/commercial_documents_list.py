@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import datetime
+import decimal
+from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -28,6 +30,7 @@ from peecha.services import roles as roles_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import purchase_requests as pr_service
 from peecha.ui.screens.commercial_document import (
     DOC_TYPE_TITLES,
     STATUS_LABELS,
@@ -72,6 +75,27 @@ _TYPE_TO_NAV_CODE = {
 }
 
 
+# R321: درخواست خرید هم در «اسناد خرید» دیده می‌شود (جدول جدای خودش را دارد و در فرم خودش باز می‌شود)
+_PR_TYPE = "PURCHASE_REQUEST"
+_PR_TITLE = "درخواست خرید"
+
+
+@dataclass
+class _RequestRow:
+    request_id: int
+    document_no: int
+    document_date: datetime.date
+    status_code: str
+    total_amount: decimal.Decimal
+    fulfilment: str
+    description: str | None
+    document_id: None = None
+    document_type_code: str = _PR_TYPE
+    counterparty_detail_account_id: None = None
+    reference_no: None = None
+    pos_session_id: None = None
+
+
 class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
     def __init__(
         self, main_window, type_filter_codes: tuple[str, ...] | None = None,
@@ -100,11 +124,14 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         layout.addWidget(title)
 
         visible_types = type_filter_codes or tuple(DOC_TYPE_TITLES.keys())
+        self._with_requests = bool(type_filter_codes) and "PURCHASE_ORDER" in type_filter_codes and channel_type_code is None
 
         filters = QHBoxLayout()
         filters.addWidget(QLabel("نوع"))
         self.type_filter = QComboBox()
         self.type_filter.addItem("(همه)", None)
+        if self._with_requests:
+            self.type_filter.addItem(_PR_TITLE, _PR_TYPE)
         for code in visible_types:
             self.type_filter.addItem(DOC_TYPE_TITLES[code], code)
         self.type_filter.currentIndexChanged.connect(self.refresh)
@@ -115,6 +142,9 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         self.status_filter.addItem("(همه)", None)
         for code, label in STATUS_LABELS.items():
             self.status_filter.addItem(label, code)
+        if self._with_requests:
+            for code in ("SUBMITTED", "REJECTED"):
+                self.status_filter.addItem(pr_service.STATUS_LABELS[code], code)
         self.status_filter.currentIndexChanged.connect(self.refresh)
         filters.addWidget(self.status_filter)
 
@@ -145,6 +175,12 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         layout.addLayout(filters)
 
         new_buttons = QHBoxLayout()
+        if self._with_requests:
+            button = QPushButton(f"➕ {_PR_TITLE}")
+            button.setObjectName("primaryButton")
+            button.setToolTip("درخواست خرید تازه")
+            button.clicked.connect(lambda _checked=False: self._open_request(None))
+            new_buttons.addWidget(button)
         if channel_type_code not in _SYNC_ONLY_CHANNEL_TYPES:
             for code in visible_types:
                 button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
@@ -191,7 +227,9 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             self._parties_by_id[s["detail_account_id"]] = f"{s['code']} — {s['name'] or ''}"
 
         type_code = self.type_filter.currentData()
-        if type_code is None and self._type_filter_codes is not None:
+        if type_code == _PR_TYPE:
+            self._rows = []
+        elif type_code is None and self._type_filter_codes is not None:
             self._rows = []
             for code in self._type_filter_codes:
                 self._rows.extend(
@@ -213,9 +251,13 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         elif source == "GENERAL":
             self._rows = [d for d in self._rows if d.pos_session_id is None]
 
+        requests = self._request_rows(company_id) if self._with_requests and type_code in (None, _PR_TYPE) else []
+        if requests and source != "POS":
+            self._rows.extend(requests)
+            self._rows.sort(key=lambda d: (d.document_date, d.document_id or 0, d.document_no), reverse=True)
         pre_sales_statuses = {
             d.document_id: documents_service.describe_pre_sales_fulfillment_status(d.document_id, company_id)
-            for d in self._rows
+            for d in self._rows if d.document_id is not None
         }
         warehouse_status = self.warehouse_status_filter.currentData() if self._channel_type_code == "PRE_SALES" else None
         if warehouse_status is not None:
@@ -223,6 +265,9 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
 
         self.table.setRowCount(len(self._rows))
         for row_index, d in enumerate(self._rows):
+            if isinstance(d, _RequestRow):
+                self._render_request_row(row_index, d)
+                continue
             fulfillment = self._fulfillment_summary(d, company_id)
             pre_sales_status = pre_sales_statuses.get(d.document_id)
             type_label = DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code)
@@ -251,6 +296,50 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         # سه‌دکمه‌ای/دودکمه‌ای بودنِ سند فرق می‌کند) دوباره اندازه‌گیری کرد.
         self.table.resizeColumnToContents(len(_COLUMNS) - 1)
         self.table.resizeRowsToContents()
+
+    def _request_rows(self, company_id: int) -> list[_RequestRow]:
+        status = self.status_filter.currentData()
+        if status is not None and status not in pr_service.STATUS_LABELS:
+            return []
+        out = []
+        for req in pr_service.list_requests(company_id, statuses=(status,) if status else None):
+            _row, lines = pr_service.get_request(req.request_id, company_id)
+            total = sum(((ln.estimated_unit_price or decimal.Decimal(0)) * ln.quantity for ln in lines), decimal.Decimal(0))
+            fulfil = pr_service.FULFILMENT_LABELS[pr_service.fulfilment(
+                lines, pr_service.ordered_quantities([ln.line_id for ln in lines]))] if req.status_code == "APPROVED" else "—"
+            out.append(_RequestRow(req.request_id, req.request_no, req.request_date, req.status_code, total, fulfil, req.description))
+        return out
+
+    def _render_request_row(self, row_index: int, d: _RequestRow) -> None:
+        values = [
+            str(row_index + 1), _PR_TITLE, numerals.to_persian_digits(str(d.document_no)), numerals.format_jalali_date(d.document_date),
+            "—", numerals.format_company_amount(d.total_amount) if d.total_amount else "—",
+            pr_service.STATUS_LABELS.get(d.status_code, d.status_code), "—", d.fulfilment,
+        ]
+        for col_index, value in enumerate(values):
+            item = QTableWidgetItem(value)
+            item.setData(Qt.UserRole, None)
+            item.setData(Qt.UserRole + 1, d.request_id)
+            self.table.setItem(row_index, col_index, item)
+        actions = QWidget()
+        line = QHBoxLayout(actions)
+        line.setContentsMargins(4, 4, 4, 4)
+        button = QPushButton("✎")
+        button.setObjectName("iconButton")
+        button.setFixedSize(44, 32)
+        button.setToolTip("اصلاح" if d.status_code in ("DRAFT", "REJECTED") else "مشاهده")
+        button.clicked.connect(lambda _checked=False, rid=d.request_id: self._open_request(rid))
+        line.addWidget(button)
+        line.addStretch(1)
+        self.table.setCellWidget(row_index, len(_COLUMNS) - 1, actions)
+
+    def _open_request(self, request_id: int | None) -> None:
+        if self._main_window is None:
+            return
+        if request_id is None:
+            self._main_window.open_screen("PURCH_REQUESTS", then=lambda screen: screen.new_request())
+        else:
+            self._main_window.open_screen("PURCH_REQUESTS", then=lambda screen: screen.edit_document(request_id))
 
     def _fulfillment_summary(self, d, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal] | None:
         # طبقِ درخواستِ صریح («مدیریتِ سفارشات داشته باشیم»): فقط برایِ
@@ -559,5 +648,9 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         self.refresh()
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
+        request_id = self.table.item(row, 0).data(Qt.UserRole + 1)
+        if request_id is not None:
+            self._open_request(request_id)
+            return
         document_id = self.table.item(row, 0).data(Qt.UserRole)
         self._open_existing(document_id)

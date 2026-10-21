@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
@@ -37,7 +38,7 @@ ms.ICONS.update({
     "افزودن گیرنده": ("➕", ""), "حذف گیرنده": ("➖", "danger"), "افزودن خانه": ("➕", ""), "حذف خانه": ("➖", "danger"),
     "تنظیم شروع فرایند": ("🚀", ""), "ساخت از قالب": ("📚", "primary"), "انتقال از کارتابل قبلی": ("📥", ""),
     "نصب قالب": ("✅", "primary"), "ساخت با توصیف متنی": ("✍️", ""), "پیش‌نمایش پیشنهاد": ("👁️", ""),
-    "ساخت پیش‌نویس": ("✅", "primary"),
+    "ساخت پیش‌نویس": ("✅", "primary"), "افزودن مرحلهٔ انجام کار": ("📋", ""),
 })
 
 NODE_ICONS = {"START": "🚀", "CONDITION": "🔀", "APPROVAL": "🖊️", "TASK": "📋", "ACTION": "⚙️", "NOTIFY": "🔔", "WAIT": "⏳",
@@ -46,7 +47,70 @@ NODE_COLORS = {"START": "#6366F1", "CONDITION": "#F59E0B", "APPROVAL": "#3B82F6"
                "NOTIFY": "#0EA5E9", "WAIT": "#64748B", "PARALLEL": "#A855F7", "JOIN": "#A855F7", "END": "#10B981"}
 MODES = [("ANY", "اولین تصمیم کافی است"), ("SINGLE", "یک نفر"), ("ALL", "همه باید تایید کنند"),
          ("PERCENT", "درصدی از گیرندگان"), ("SEQUENTIAL", "به ترتیب، یکی پس از دیگری")]
-FIELD_KINDS = [("text", "متن"), ("number", "عدد"), ("date", "تاریخ"), ("bool", "بله/خیر"), ("choice", "انتخاب از فهرست")]
+FIELD_KINDS = [("text", "متن"), ("longtext", "متن بلند"), ("number", "عدد"), ("money", "مبلغ"), ("date", "تاریخ"),
+               ("bool", "بله/خیر"), ("choice", "انتخاب از فهرست")]
+STEP_KINDS = [("APPROVAL", "تایید یا رد"), ("TASK", "انجام کار (با فرم)")]
+
+
+class FieldsEditor(QWidget):
+    """R323: خانه‌های فرم یک مرحله — عنوان، نوع، الزامی و گزینه‌ها؛ کلید داخلی خودکار ساخته می‌شود."""
+
+    def __init__(self, fields: list[dict] | None = None, parent=None) -> None:
+        super().__init__(parent)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["عنوان خانه", "نوع", "الزامی", "گزینه‌ها (با «،» جدا کنید)"])
+        self.table.setMaximumHeight(160)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        row = QHBoxLayout()
+        row.addWidget(_icon_button("➕", "افزودن خانه", lambda: self.add()))
+        row.addWidget(_icon_button("➖", "حذف خانه", lambda: self.table.removeRow(self.table.currentRow())
+                                   if self.table.currentRow() >= 0 else None))
+        row.addStretch(1)
+        lay.addWidget(self.table)
+        lay.addLayout(row)
+        for f in fields or []:
+            self.add(f)
+
+    def add(self, f: dict | None = None) -> int:
+        f = f or {}
+        r = self.table.rowCount()
+        self.table.insertRow(r)
+        title = QTableWidgetItem(f.get("label", ""))
+        title.setData(Qt.UserRole, f.get("key") or "")
+        self.table.setItem(r, 0, title)
+        kind = combo([(label, code) for code, label in FIELD_KINDS])
+        set_combo(kind, f.get("kind", "text"))
+        self.table.setCellWidget(r, 1, kind)
+        req = QTableWidgetItem()
+        req.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+        req.setCheckState(Qt.Checked if f.get("required") else Qt.Unchecked)
+        self.table.setItem(r, 2, req)
+        self.table.setItem(r, 3, QTableWidgetItem("، ".join(str(c) for c in f.get("choices") or [])))
+        return r
+
+    def fields(self) -> list[dict]:
+        out, used = [], set()
+        for r in range(self.table.rowCount()):
+            item = self.table.item(r, 0)
+            label = (item.text() if item else "").strip()
+            if not label:
+                continue
+            key = (item.data(Qt.UserRole) or "").strip()
+            if not key or key in used:
+                n = r + 1
+                while f"f{n}" in used:
+                    n += 1
+                key = f"f{n}"
+            used.add(key)
+            kind = self.table.cellWidget(r, 1).currentData()
+            f = {"key": key, "label": label, "kind": kind, "required": self.table.item(r, 2).checkState() == Qt.Checked}
+            if kind == "choice":
+                raw = numerals.to_persian_digits(self.table.item(r, 3).text() if self.table.item(r, 3) else "")
+                f["choices"] = [c.strip() for c in raw.replace(",", "،").split("،") if c.strip()]
+            out.append(f)
+        return out
 
 
 def _icon_button(glyph: str, tooltip: str, slot, primary: bool = False) -> QPushButton:
@@ -422,12 +486,17 @@ STEPS = ["اطلاعات پایه", "زمان شروع", "شرط شروع", "م�
 
 
 class LevelDialog(QDialog):
-    def __init__(self, entity_type: str | None, level: builder.ApprovalLevel | None = None, parent=None) -> None:
+    def __init__(self, entity_type: str | None, level: builder.ApprovalLevel | None = None, parent=None,
+                 kind: str | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("مرحلهٔ تایید")
+        self.setWindowTitle("مرحلهٔ گردش کار")
         self.setLayoutDirection(Qt.RightToLeft)
         layout = QVBoxLayout(self)
         form = QFormLayout()
+        self.form = form
+        self.kind = combo([(label, code) for code, label in STEP_KINDS])
+        set_combo(self.kind, (level.kind if level else None) or kind or "APPROVAL")
+        self.fields = FieldsEditor(level.fields if level else [])
         self.label = QLineEdit(level.label if level else "")
         self.approvers = SpecListEditor(entity_type)
         self.approvers.set_specs(level.approvers if level else [])
@@ -441,24 +510,48 @@ class LevelDialog(QDialog):
         self.instructions = QLineEdit(level.instructions if level else "")
         self.only_if = RuleBuilder(entity_type)
         self.only_if.set_rule(level.only_if if level else None)
-        for label, w in (("عنوان مرحله", self.label), ("تاییدکنندگان", self.approvers), ("شیوهٔ تایید", self.mode),
-                         ("درصد لازم", self.percent), ("مهلت و ارجاع", self.sla), ("راهنما برای تاییدکننده", self.instructions),
+        for label, w in (("نوع مرحله", self.kind), ("عنوان مرحله", self.label), ("تاییدکنندگان", self.approvers),
+                         ("شیوهٔ تایید", self.mode), ("درصد لازم", self.percent), ("مهلت و ارجاع", self.sla),
+                         ("چه باید کرد (راهنما)", self.instructions), ("خانه‌های فرم این مرحله", self.fields),
                          ("فقط وقتی", self.only_if), ("", self.allow_changes)):
             form.addRow(label, w)
         layout.addLayout(form)
+        self.kind.currentIndexChanged.connect(lambda _i: self._sync_kind())
+        self._sync_kind()
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _sync_kind(self) -> None:
+        task = self.kind.currentData() == "TASK"
+        for w, show in ((self.percent, not task), (self.allow_changes, not task)):
+            w.setVisible(show)
+            label = self.form.labelForField(w)
+            if label is not None:
+                label.setVisible(show)
+        for w, text in ((self.approvers, "مسئولان انجام کار" if task else "تاییدکنندگان"),
+                        (self.mode, "شیوهٔ انجام" if task else "شیوهٔ تایید")):
+            label = self.form.labelForField(w)
+            if label is not None:
+                label.setText(text)
+        self.instructions.setPlaceholderText("مثلاً: از دست‌کم سه تامین‌کننده قیمت بگیرید و بهترین را بنویسید"
+                                             if task else "مثلاً: مبلغ و ضرورت خرید را بررسی کنید")
 
     def level(self) -> builder.ApprovalLevel:
         try:
             pct = int(numerals.to_ascii_digits(self.percent.text().strip() or "50"))
         except ValueError:
             pct = 50
-        return builder.ApprovalLevel(self.label.text().strip() or "تایید", self.approvers.specs, self.mode.currentData(),
-                                     pct if self.mode.currentData() == "PERCENT" else None, self.sla.currentData(),
-                                     self.only_if.rule(), self.allow_changes.isChecked(), self.instructions.text().strip())
+        task = self.kind.currentData() == "TASK"
+        mode = self.mode.currentData()
+        if task and mode not in ("ANY", "ALL"):
+            mode = "ANY"
+        return builder.ApprovalLevel(self.label.text().strip() or ("انجام کار" if task else "تایید"), self.approvers.specs, mode,
+                                     pct if mode == "PERCENT" and not task else None, self.sla.currentData(),
+                                     self.only_if.rule(), self.allow_changes.isChecked() and not task,
+                                     self.instructions.text().strip(), kind="TASK" if task else "APPROVAL",
+                                     fields=self.fields.fields())
 
 
 class WizardDialog(QDialog):
@@ -493,6 +586,8 @@ class WizardDialog(QDialog):
         nav.addWidget(self.publish_now)
         nav.addWidget(self.finish_btn)
         layout.addLayout(nav)
+        self.reject_doc.setVisible(False)
+        self._sync_trigger()
         self.go(0)
 
     # --- گام‌ها -------------------------------------------------------------------------------------------
@@ -529,8 +624,11 @@ class WizardDialog(QDialog):
         self.at = QLineEdit("08:00")
         self.scan = combo([])
         self.ttype.currentIndexChanged.connect(lambda _i: self._sync_trigger())
+        # R323: پیش‌فرض روشن — بدون آن، سند جدا از گردش کار هم تصویب می‌شد
+        self.gate = QCheckBox("قفل تایید: تا تایید همین فرایند، سند دستی تصویب یا به مرحلهٔ بعد فرستاده نشود")
+        self.gate.setChecked(True)
         for label, x in (("نوع شروع", self.ttype), ("رویدادها", self.events), ("تکرار", self.every), ("ساعت", self.at),
-                         ("بررسی دوره‌ای", self.scan)):
+                         ("بررسی دوره‌ای", self.scan), ("", self.gate)):
             form.addRow(label, x)
         self.trigger_form = form
         return w
@@ -543,11 +641,14 @@ class WizardDialog(QDialog):
         return w
 
     def _p_levels(self) -> QWidget:
-        w, form = self._page("مرحله‌های تایید را به ترتیب اضافه کنید. هر مرحله می‌تواند فقط در شرایط خاص اجرا شود.")
-        self.t_levels = table(["مرحله", "تاییدکنندگان", "شیوه", "شرط"])
+        w, form = self._page("مرحله‌ها را به ترتیب اضافه کنید: «تایید» (تایید یا رد) یا «انجام کار» (مثلاً استعلام قیمت) "
+                             "با فرم مشخص خودش. هر مرحله می‌تواند فقط در شرایط خاص اجرا شود.")
+        self.t_levels = table(["مرحله", "تاییدکنندگان / مسئولان", "شیوه", "شرط"])
         form.addRow(self.t_levels)
         row = QHBoxLayout()
-        for label, slot in (("افزودن مرحلهٔ تایید", lambda: self.edit_level(new=True)), ("ویرایش مرحله", self.edit_level),
+        for label, slot in (("افزودن مرحلهٔ تایید", lambda: self.edit_level(new=True)),
+                            ("افزودن مرحلهٔ انجام کار", lambda: self.edit_level(new=True, kind="TASK")),
+                            ("ویرایش مرحله", self.edit_level),
                             ("حذف مرحله", self.remove_level), ("بالا بردن", lambda: self.move_level(-1)),
                             ("پایین بردن", lambda: self.move_level(1))):
             row.addWidget(_btn(label, slot))
@@ -556,7 +657,8 @@ class WizardDialog(QDialog):
         return w
 
     def _p_actions(self) -> QWidget:
-        w, form = self._page("پس از تایید نهایی، کدام کارها خودکار انجام شود؟ (به همین ترتیب)")
+        w, form = self._page("پس از تایید نهایی، کدام کارها خودکار انجام شود؟ (به همین ترتیب) — اگر «قفل تایید» روشن است، "
+                             "اقدام تصویب همان سند را تیک بزنید تا پس از آخرین مرحله خودکار تصویب شود.")
         self.actions = QListWidget()
         form.addRow(self.actions)
         return w
@@ -575,8 +677,11 @@ class WizardDialog(QDialog):
         self.notify_rej = QCheckBox("علت رد برای درخواست‌کننده فرستاده شود")
         self.notify_rej.setChecked(True)
         self.changes_all = QCheckBox("در همهٔ مرحله‌ها «برگشت برای اصلاح» فعال باشد")
+        self.reject_doc = QCheckBox("با رد در گردش کار، خود سند هم «ردشده» شود")
+        self.reject_doc.setChecked(True)
         form.addRow(self.notify_rej)
         form.addRow(self.changes_all)
+        form.addRow(self.reject_doc)
         return w
 
     def _p_review(self) -> QWidget:
@@ -611,15 +716,19 @@ class WizardDialog(QDialog):
             item.setCheckState(Qt.Unchecked)
             self.actions.addItem(item)
         for i, level in enumerate(self.levels):
-            self.levels[i] = builder.ApprovalLevel(level.label, level.approvers, level.mode, level.percent, level.sla_policy_id,
-                                                   None, level.allow_changes, level.instructions)
+            self.levels[i] = dataclasses.replace(level, only_if=None)
         self.notify_extra.entity_type = et
+        adapter = registry.get_adapter(et)
+        self.gate.setVisible(bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses)))
+        self.reject_doc.setVisible(any(code == "entity.reject" for code, _l, _r in registry.action_choices(et)))
         self._sync_trigger()
 
     def _sync_trigger(self) -> None:
         t = self.ttype.currentData()
+        adapter = registry.get_adapter(self.entity.currentData())
+        gated = bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses))
         for w, show in ((self.events, t == "EVENT"), (self.every, t == "SCHEDULE"), (self.at, t == "SCHEDULE"),
-                        (self.scan, t == "SCAN")):
+                        (self.scan, t == "SCAN"), (self.gate, gated and t in ("EVENT", "MANUAL"))):
             w.setVisible(show)
             label = self.trigger_form.labelForField(w)
             if label is not None:
@@ -677,19 +786,24 @@ class WizardDialog(QDialog):
         items = self.t_levels.selectedItems()
         return items[0].row() if items else self.t_levels.currentRow()
 
-    def edit_level(self, new: bool = False, level: builder.ApprovalLevel | None = None) -> bool:
+    def edit_level(self, new: bool = False, level: builder.ApprovalLevel | None = None, kind: str | None = None) -> bool:
         row = self._level_row()
         if not new and not 0 <= row < len(self.levels):
             _warn(self, "مراحل تایید", "یک مرحله را انتخاب کنید.")
             return False
         if level is None:
-            dlg = LevelDialog(self.entity.currentData(), None if new else self.levels[row], self)
+            dlg = LevelDialog(self.entity.currentData(), None if new else self.levels[row], self, kind=kind)
             ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
             if not ok:
                 return False
             level = dlg.level()
         if not level.approvers:
-            _warn(self, "مراحل تایید", "دست‌کم یک تاییدکننده انتخاب کنید.")
+            _warn(self, "مراحل تایید", "دست‌کم یک مسئول انجام کار انتخاب کنید." if level.kind == "TASK"
+                  else "دست‌کم یک تاییدکننده انتخاب کنید.")
+            return False
+        problems = [f.get("label") for f in level.fields if f.get("kind") == "choice" and not f.get("choices")]
+        if problems:
+            _warn(self, "مراحل تایید", f"برای خانهٔ «{problems[0]}» گزینه‌ها را بنویسید.")
             return False
         if new:
             self.levels.append(level)
@@ -715,7 +829,10 @@ class WizardDialog(QDialog):
     def _fill_levels(self) -> None:
         adapter = registry.get_adapter(self.entity.currentData())
         labels = adapter.labels() if adapter else {}
-        fill(self.t_levels, [[lv.label, builder._approvers_text(company_id(), lv.approvers), dict(MODES).get(lv.mode, ""),
+        fill(self.t_levels, [[("کار: " if lv.kind == "TASK" else "") + lv.label + (f" (فرم {P(len(lv.fields))} خانه‌ای)" if lv.fields else ""),
+                              builder._approvers_text(company_id(), lv.approvers),
+                              ("یک نفر کافی است" if lv.mode != "ALL" else "همه باید انجام دهند") if lv.kind == "TASK"
+                              else dict(MODES).get(lv.mode, ""),
                               conditions.describe(lv.only_if, labels) if lv.only_if else "همیشه"] for lv in self.levels])
 
     def spec(self) -> builder.WizardSpec:
@@ -727,12 +844,15 @@ class WizardDialog(QDialog):
             trigger.update(every=self.every.currentData(), at=numerals.to_ascii_digits(self.at.text().strip() or "08:00"))
         elif t == "SCAN":
             trigger.update(scan=self.scan.currentData(), every_minutes=60)
-        levels = [builder.ApprovalLevel(lv.label, lv.approvers, lv.mode, lv.percent, lv.sla_policy_id, lv.only_if,
-                                        lv.allow_changes or self.changes_all.isChecked(), lv.instructions) for lv in self.levels]
+        if not self.gate.isHidden() and self.gate.isChecked() and t in ("EVENT", "MANUAL"):
+            trigger["gate"] = True
+        levels = [dataclasses.replace(lv, allow_changes=(lv.allow_changes or self.changes_all.isChecked()) and lv.kind != "TASK")
+                  for lv in self.levels]
+        reject_actions = ["entity.reject"] if not self.reject_doc.isHidden() and self.reject_doc.isChecked() else []
         return builder.WizardSpec(self.name.text().strip(), self.code.text().strip(), self.entity.currentData(),
                                   self.description.text().strip(), trigger, self.start_rule.rule(), levels,
                                   self._checked(self.actions), self.notify_ok.isChecked(), self.notify_rej.isChecked(),
-                                  self.notify_extra.specs)
+                                  self.notify_extra.specs, reject_actions)
 
     def graph(self) -> dict | None:
         graph, ok = _run(self, "ساخت فرایند", builder.build_graph, self.spec())
@@ -1099,8 +1219,7 @@ class DesignerScreen(QWidget):
                     box = QCheckBox(label)
                     box.setChecked(bool(node.get(key, default)))
                     self._row(key, "", box)
-            else:
-                self._row("fields", "خانه‌های فرم کار", self._fields_editor(node.get("fields") or []))
+            self._row("fields", "خانه‌های فرم این مرحله", FieldsEditor(node.get("fields") or []))
         elif t == "ACTION":
             box = combo([(label + (" (حساس)" if risk == "HIGH" else ""), code)
                          for code, label, risk in registry.action_choices(self.entity_type)], "—")
@@ -1137,39 +1256,6 @@ class DesignerScreen(QWidget):
             box = combo([(label, code) for code, label in OUTCOMES.items()])
             set_combo(box, node.get("outcome") or "DONE")
             self._row("outcome", "نتیجه", box)
-
-    def _fields_editor(self, fields: list[dict]) -> QWidget:
-        box = QWidget()
-        lay = QVBoxLayout(box)
-        lay.setContentsMargins(0, 0, 0, 0)
-        t = QTableWidget(0, 4)
-        t.setHorizontalHeaderLabels(["کلید لاتین", "عنوان", "نوع", "الزامی"])
-        t.setMaximumHeight(130)
-
-        def add(f: dict | None = None) -> None:
-            r = t.rowCount()
-            t.insertRow(r)
-            t.setItem(r, 0, QTableWidgetItem((f or {}).get("key", "")))
-            t.setItem(r, 1, QTableWidgetItem((f or {}).get("label", "")))
-            kind = combo([(label, code) for code, label in FIELD_KINDS])
-            set_combo(kind, (f or {}).get("kind", "text"))
-            t.setCellWidget(r, 2, kind)
-            req = QTableWidgetItem()
-            req.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            req.setCheckState(Qt.Checked if (f or {}).get("required") else Qt.Unchecked)
-            t.setItem(r, 3, req)
-
-        for f in fields:
-            add(f)
-        row = QHBoxLayout()
-        row.addWidget(_icon_button("➕", "افزودن خانه", lambda: add()))
-        row.addWidget(_icon_button("➖", "حذف خانه", lambda: t.removeRow(t.currentRow()) if t.currentRow() >= 0 else None))
-        row.addStretch(1)
-        lay.addWidget(t)
-        lay.addLayout(row)
-        box.table = t
-        box.add = add
-        return box
 
     def _build_trigger_form(self) -> None:
         trigger = self.graph.get("trigger") or {}
@@ -1261,16 +1347,7 @@ class DesignerScreen(QWidget):
                 put("percent", int(num("percent") or 50) if node["mode"] == "PERCENT" else None)
                 for key in ("allow_delegate", "require_comment_on_reject", "distinct_approvers", "step_up"):
                     node[key] = w[key].isChecked()
-            else:
-                table_w = w["fields"].table
-                fields = []
-                for r in range(table_w.rowCount()):
-                    key = (table_w.item(r, 0).text() if table_w.item(r, 0) else "").strip()
-                    label = (table_w.item(r, 1).text() if table_w.item(r, 1) else "").strip()
-                    if key or label:
-                        fields.append({"key": key, "label": label, "kind": table_w.cellWidget(r, 2).currentData(),
-                                       "required": table_w.item(r, 3).checkState() == Qt.Checked})
-                put("fields", fields)
+            put("fields", w["fields"].fields())
             put("sla_policy_id", w["sla"].currentData())
             put("timeout_hours", num("timeout_hours"))
             put("instructions", w["instructions"].text().strip())

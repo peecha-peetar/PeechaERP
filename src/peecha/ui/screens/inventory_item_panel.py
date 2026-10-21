@@ -59,6 +59,7 @@ _KIND_LABELS = {
 }
 _LIFECYCLE_LABELS = {"DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "DISCONTINUED": "متوقف‌شده"}
 from peecha.services.costing.strategies import METHOD_LABELS as _METHOD_LABELS  # noqa: E402
+from peecha.ui.persian_numbers import NumberEdit
 
 _COSTING_LABELS = {"": "(پیش‌فرض شرکت)", **_METHOD_LABELS}
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
@@ -436,7 +437,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         remove_conversion_button.setToolTip("حذف/غیرفعال‌سازی واحد (واحد استفاده‌شده فقط غیرفعال می‌شود)")
         remove_conversion_button.clicked.connect(self._remove_uom_conversion)
         unit_buttons.addWidget(remove_conversion_button)
-        self.unit_price_field = QLineEdit()
+        self.unit_price_field = NumberEdit()
         self.unit_price_field.setPlaceholderText("قیمت واحد انتخاب‌شده")
         unit_buttons.addWidget(self.unit_price_field, stretch=1)
         set_price_button = QPushButton("💲 ثبت قیمت واحد")
@@ -494,7 +495,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.purchase_lead_time_field = QLineEdit()
         self.purchase_min_order_field = QLineEdit()
-        self.purchase_package_qty_field = QLineEdit()
+        self.purchase_package_qty_field = NumberEdit()
 
         self.purchasing_grid = FieldGrid([
             FieldSpec("lead_time", "زمان تامین (روز)", self.purchase_lead_time_field, span=1),
@@ -685,7 +686,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.variant_price_list_combo = QComboBox()
         self.variant_price_list_combo.currentIndexChanged.connect(self._load_variant_price)
         price_row.addWidget(self.variant_price_list_combo, stretch=1)
-        self.variant_price_field = QLineEdit()
+        self.variant_price_field = NumberEdit()
         self.variant_price_field.setPlaceholderText("قیمت فروش")
         price_row.addWidget(self.variant_price_field, stretch=1)
         save_price_button = QPushButton("💾")
@@ -1045,7 +1046,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.warranty_months_field = QLineEdit()
         # طبقِ درخواستِ صریح: درصدِ مالیاتِ این کالا (بعدِ تخفیف) — اگر
         # خالی بماند، هنگامِ صدورِ سند از تنظیماتِ کلیِ شرکت خوانده می‌شود.
-        self.default_tax_percent_field = QLineEdit()
+        self.default_tax_percent_field = NumberEdit()
 
         self.sales_extra_grid = FieldGrid([
             FieldSpec("max_discount", "حداکثر درصد تخفیف", self.max_discount_field, span=1),
@@ -1074,7 +1075,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(create_bom_button, alignment=Qt.AlignLeft)
 
         self.bom_component_combo = QComboBox()
-        self.bom_qty_field = QLineEdit()
+        self.bom_qty_field = NumberEdit()
         self.bom_qty_field.setPlaceholderText("مقدار مصرفی")
         bom_row = QHBoxLayout()
         bom_row.addWidget(self.bom_component_combo, stretch=2)
@@ -1306,8 +1307,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.acquisition_date_field = JalaliDateEdit()
         self.acquisition_date_field.setDate(datetime.date.today())
 
-        self.acquisition_cost_field = QLineEdit()
-        self.salvage_value_field = QLineEdit()
+        self.acquisition_cost_field = NumberEdit()
+        self.salvage_value_field = NumberEdit()
 
         self.asset_grid = FieldGrid([
             FieldSpec("asset_tag", "شمارهٔ اموال", self.asset_tag_field, span=1),
