@@ -679,6 +679,12 @@ class PurchaseRequestScreen(QWidget):
 
     def submit(self) -> None:
         self._transition(lambda: pr_service.submit_request(self._request_id, self._company_id()), "درخواست برای تصویب ارسال شد.")
+        # R326: اگر فرایند تایید «دستی» تعریف شده، همین ارسال آن را شروع می‌کند (وگرنه درخواست بی‌صاحب می‌ماند)
+        if self._request_id is not None and self._status == "SUBMITTED":
+            self.workflow_bar.set_entity("PURCHASE_REQUEST", self._request_id)
+            if self.workflow_bar.start_if_pending():
+                self.edit_document(self._request_id)
+                theme.set_status_label(self.status_label, "درخواست برای تایید به مسئول مرحلهٔ اول فرستاده شد.", ok=True)
 
     def approve(self) -> None:
         self._transition(lambda: pr_service.approve_request(self._request_id, self._company_id(), self._user_id()), "درخواست تصویب شد.")

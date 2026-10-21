@@ -58,6 +58,9 @@ def open_cartable_source(main_window, form_code: str, source_record_id: int) -> 
 def open_operational_task(main_window, kind: str, document_type_code: str, document_id: int) -> bool:
     if main_window is None:
         return False
+    if kind == "PR_APPROVAL":   # R326
+        main_window.open_screen("PURCH_REQUESTS", then=lambda screen: screen.edit_document(document_id))
+        return True
     if kind == "GOODS_RECEIPT":
         main_window.open_screen("PURCH_GOODS_RECEIPT")
         return True
@@ -116,7 +119,7 @@ ms.ICONS.update({
 # نوع کار ← (آیکن، رنگ تم)
 TONES = {"approve": ("🖊️", "INFO"), "task": ("📋", "CHART_TEAL"), "doc": ("📦", "CHART_PURPLE"),
          "followup": ("📞", "CHART_ORANGE"), "customer": ("👤", "SUCCESS"), "mine": ("📨", "ACCENT")}
-DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "GOODS_RECEIPT": "📦", "PRE_SALES_WAREHOUSE": "🏬", "SETTLEMENT_APPROVAL": "💰",
+DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "PR_APPROVAL": "📝", "GOODS_RECEIPT": "📦", "PRE_SALES_WAREHOUSE": "🏬", "SETTLEMENT_APPROVAL": "💰",
               "CONVERT_TO_INVOICE": "🔁", "POST_ORDER": "📌", "INVENTORY_RESIDUAL": "🧮", "PUTAWAY_PENDING": "📥", "QC_PENDING": "🧪", "EXPIRY_NEAR": "⏳", "EXPIRED_STOCK": "⌛", "TRANSIT_ARRIVING": "🚚", "CROSS_DOCK": "🔀",
               "MNT_MY_WORK": "🧰", "MNT_TO_VERIFY": "🛡️", "MNT_NEW_REQUEST": "📝", "MNT_APPROVAL": "🗓️",
               "BUD_REVIEW": "🔍", "BUD_APPROVE": "✅", "BUD_PUBLISH": "📢", "BUD_REVISE": "📝", "BUD_EXCEPTION": "🛂",

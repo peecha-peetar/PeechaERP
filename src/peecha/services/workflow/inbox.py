@@ -19,7 +19,7 @@ KINDS = {"APPROVAL": "تایید", "TASK": "کار", "STEP": "مرحلهٔ سن�
 _REQUEST_TYPES = {"CREATE": "ثبت و تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
 # مرحلهٔ منتظر اسناد ← جملهٔ کاری که کاربر باید انجام دهد
 DOC_ACTIONS = {
-    "MANAGER_APPROVAL": "سند را تصویب کنید", "GOODS_RECEIPT": "رسید یا حوالهٔ انبار را تایید کنید",
+    "MANAGER_APPROVAL": "سند را تصویب کنید", "PR_APPROVAL": "درخواست خرید را باز کنید و تصویب یا رد کنید", "GOODS_RECEIPT": "رسید یا حوالهٔ انبار را تایید کنید",
     "PRE_SALES_WAREHOUSE": "تایید انبار سفارش را بزنید", "SETTLEMENT_APPROVAL": "نحوهٔ تسویه را تایید کنید",
     "CONVERT_TO_INVOICE": "سند را به فاکتور تبدیل کنید", "POST_ORDER": "سفارش را ثبت نهایی کنید",
     "INVENTORY_RESIDUAL": "سند اصلاح ماندهٔ ریالی را ثبت کنید",

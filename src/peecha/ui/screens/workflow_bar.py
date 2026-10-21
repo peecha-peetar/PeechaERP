@@ -145,6 +145,14 @@ class WorkflowBar(QWidget):
         self.setVisible(bool(rows) or bool(manual))
 
     # --- کارها -----------------------------------------------------------------------------------------------
+    def start_if_pending(self) -> bool:
+        """R326: «ارسال برای تصویب» خود سند، فرایند تایید دستی را هم شروع می‌کند (کاربر دو دکمه را جدا نمی‌زند)؛
+        اگر فرایندی در جریان است یا تعریف‌نشده، کاری نمی‌کند."""
+        self.refresh()
+        if self.instance_id is not None and not self.send_button.isEnabled():
+            return False
+        return self.send() if self.send_button.isEnabled() else False
+
     def send(self) -> bool:
         manual = self._manual()
         if not manual or not self.entity_id:

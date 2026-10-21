@@ -30,6 +30,7 @@ _DOC_TYPE_TITLES = {
 # نوعِ کار -> برچسب
 KIND_LABELS = {
     "MANAGER_APPROVAL": "تصویب مدیر",
+    "PR_APPROVAL": "تصویب درخواست خرید",
     "GOODS_RECEIPT": "تایید انبار (رسید/حواله)",
     "PRE_SALES_WAREHOUSE": "تایید انبار سفارش",
     "SETTLEMENT_APPROVAL": "تایید نحوهٔ تسویه",
@@ -132,6 +133,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
         else:
             manager_docs, plan_docs = [], []
     tasks += _rows(company_id, manager_docs, "MANAGER_APPROVAL")
+    tasks += _purchase_request_approvals(company_id, is_manager)
 
     # R230/R232: سفارشی که تا ثبتِ نهایی نشود به تاییدِ رسید/حوالهٔ انبار نمی‌رسد
     for order_type in ("PURCHASE_ORDER", "SALES_ORDER"):
@@ -189,6 +191,27 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
                 f"{len(residuals)} کالا با موجودی صفر و ماندهٔ ریالی — پیشنهاد سند تسعیر", "", None, "",
             ))
     return tasks
+
+
+def _purchase_request_approvals(company_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R326: درخواست خرید ارسال‌شده برای تصویب، برای مدیر. اگر گردش کار تایید آن را در دست دارد، کارش همان‌جا
+    (کار تایید در کارتابل تاییدکننده) دیده می‌شود و این‌جا تکرار نمی‌شود."""
+    if not is_manager:
+        return []
+    from peecha.db.models.commercial import PurchaseRequest
+    from peecha.db.models.workflow import WfInstance
+    from peecha.services.workflow.common import OPEN_INSTANCE_STATUSES
+
+    with new_session() as session:
+        rows = list(session.scalars(select(PurchaseRequest).where(
+            PurchaseRequest.company_id == company_id, PurchaseRequest.status_code == "SUBMITTED"
+        ).order_by(PurchaseRequest.request_id)))
+        governed = set(session.scalars(select(WfInstance.entity_id).where(
+            WfInstance.company_id == company_id, WfInstance.entity_type == "PURCHASE_REQUEST",
+            WfInstance.status_code.in_(OPEN_INSTANCE_STATUSES)))) if rows else set()
+    return [OperationalTask("PR_APPROVAL", KIND_LABELS["PR_APPROVAL"], r.request_id, "PURCHASE_REQUEST",
+                            f"درخواست خرید شمارهٔ {r.request_no}", "", r.request_date, r.status_code)
+            for r in rows if r.request_id not in governed]
 
 
 def _putaway_pending(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
