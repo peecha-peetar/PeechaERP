@@ -210,6 +210,8 @@ class ConvertToOrderDialog(QDialog):
 
 
 class PurchaseRequestScreen(QWidget):
+    scroll_in_mdi = True  # R325: پنجرهٔ کوچک‌تر از فرم: اسکرول، نه له‌شدن ارتفاع فیلدها
+
     def __init__(self, main_window=None) -> None:
         super().__init__()
         self._main_window = main_window
@@ -237,7 +239,9 @@ class PurchaseRequestScreen(QWidget):
         layout.addLayout(title_row)
 
         splitter = QSplitter(Qt.Vertical)
+        splitter.setChildrenCollapsible(False)  # R325: فرم ویرایش با کشیدن جداکننده له نشود
         self.list_table = QTableWidget(0, 8)
+        self.list_table.setMinimumHeight(110)
         self.list_table.setHorizontalHeaderLabels(
             ["شماره", "تاریخ", "درخواست‌کننده", "اولویت", "تاریخ نیاز", "وضعیت", "وضعیت سفارش", "شرح"])
         self.list_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -307,6 +311,7 @@ class PurchaseRequestScreen(QWidget):
         self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         persist_column_widths(self.lines_table, "purchaseRequest/lines", skip_columns=(0,))
+        self.lines_table.setMinimumHeight(130)
         self.lines_table.cellDoubleClicked.connect(lambda row, _c: self.edit_line(row))
         ed.addWidget(self.lines_table, stretch=1)
         # R295: نوار گردش کار تایید (فقط وقتی فرایندی فعال است)

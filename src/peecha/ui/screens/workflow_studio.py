@@ -188,7 +188,7 @@ class SpecListEditor(QWidget):
         kinds += [(f"مسیریاب: {r.label}", f"RESOLVER:{code}") for code, r in registry.resolvers().items()]
         kind_box = combo(kinds)
         user_box = combo(company_user_choices(), "—")
-        role_box = combo([(r.code, r.role_id) for r in roles_service.list_roles(company_id())], "—") if company_id() else combo([])
+        role_box = combo([(r.label, r.role_id) for r in roles_service.list_roles(company_id())], "—") if company_id() else combo([])
         adapter = registry.get_adapter(self.entity_type)
         field_box = combo([(f.label, f.key) for f in (adapter.fields if adapter else ()) if f.kind == "user"], "—")
         from peecha.services import hr as hr_service

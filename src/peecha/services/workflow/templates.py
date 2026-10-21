@@ -423,7 +423,9 @@ def legacy_chains(company_id: int) -> list[dict]:
     with new_session() as session:
         forms = list(session.scalars(select(Form.code).join(ApprovalWorkflow, ApprovalWorkflow.form_id == Form.form_id)
                                      .where(ApprovalWorkflow.company_id == company_id).order_by(Form.code)))
-        role_names = {r.role_id: r.code for r in session.scalars(select(Role).where(Role.company_id == company_id))}
+        from peecha.services.roles import role_label
+
+        role_names = {r.role_id: role_label(r.code) for r in session.scalars(select(Role).where(Role.company_id == company_id))}
     movable = {a.form_code for a in registry.adapters() if a.form_code}
     out = []
     for form in forms:

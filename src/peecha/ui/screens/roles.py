@@ -193,9 +193,9 @@ class RolesScreen(FieldHelpMixin, QWidget):
 
         self.role_list.clear()
         for role in self._roles:
-            item = QListWidgetItem(role.code + ("" if role.is_active else " (غیرفعال)"))
+            item = QListWidgetItem(role.label + ("" if role.is_active else " (غیرفعال)"))
             item.setData(Qt.UserRole, role.role_id)
-            item.setToolTip(item.text())
+            item.setToolTip(item.text() + (f" -- کد: {role.code}" if role.label != role.code else ""))
             self.role_list.addItem(item)
         self._filter_roles(self.role_search_field.text())
 
@@ -204,8 +204,8 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.edit_parent_combo.clear()
         self.edit_parent_combo.addItem("— بدون والد —", None)
         for role in self._roles:
-            self.parent_role_combo.addItem(role.code, role.role_id)
-            self.edit_parent_combo.addItem(role.code, role.role_id)
+            self.parent_role_combo.addItem(role.label, role.role_id)
+            self.edit_parent_combo.addItem(role.label, role.role_id)
 
         self._editing_role_id = None
         self.detail_title.setText("یک نقش را از فهرست انتخاب کنید")
@@ -219,7 +219,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         if role is None:
             return
         self._editing_role_id = role_id
-        self.detail_title.setText(f"نقش: {role.code}")
+        self.detail_title.setText(f"نقش: {role.label}")
         self.edit_code_field.setText(role.code)
         index = self.edit_parent_combo.findData(role.parent_role_id)
         self.edit_parent_combo.setCurrentIndex(max(0, index))

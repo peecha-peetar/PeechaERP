@@ -62,6 +62,8 @@ _RAW_GRID_PREVIEW_ROWS = 30
 
 
 class CommercialPricingScreen(FieldHelpMixin, QWidget):
+    scroll_in_mdi = True  # R325: پنجرهٔ کوچک‌تر از فرم: اسکرول، نه له‌شدن ارتفاع فیلدها
+
     def __init__(self) -> None:
         super().__init__()
         self._price_lists: list = []

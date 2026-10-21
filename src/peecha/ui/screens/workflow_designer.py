@@ -45,7 +45,7 @@ class _StepRow(QWidget):
 
         self.role_combo = QComboBox()
         for role in roles:
-            self.role_combo.addItem(role.code, role.role_id)
+            self.role_combo.addItem(role.label, role.role_id)
         if selected_role_id is not None:
             index = self.role_combo.findData(selected_role_id)
             if index >= 0:

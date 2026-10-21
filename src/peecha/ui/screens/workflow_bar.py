@@ -16,7 +16,8 @@ from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.fixed_assets import FormDialog, combo, company_id, fill, table, user_id
 
 ms.ICONS.update({"ارسال برای تایید": ("📨", "primary"), "تاریخچهٔ گردش کار": ("🕘", ""),
-                 "انجام مرحلهٔ جاری": ("📋", "primary"), "یادداشت روی مرحله": ("💬", "")})
+                 "انجام مرحلهٔ جاری": ("📋", "primary"), "یادداشت روی مرحله": ("💬", ""),
+                 "ارجاع به فرد مناسب": ("↗️", "primary")})
 
 _GLYPH = {"done": "✔", "current": "●", "pending": "○", "failed": "✖"}
 _COLOR = {"done": "#10B981", "current": "#3B82F6", "pending": "#94A3B8", "failed": "#EF4444"}
@@ -66,13 +67,25 @@ class WorkflowBar(QWidget):
         self.step_button.clicked.connect(lambda _c=False: self.open_step())
         self.note_button = QPushButton("یادداشت روی مرحله")
         self.note_button.clicked.connect(lambda _c=False: self.add_note())
+        # R325: مرحلهٔ بی‌گیرنده (مثلاً تنها تاییدکننده خود درخواست‌کننده است) — بدون این، سند بی‌صدا گیر می‌کرد
+        self.reassign_button = QPushButton("ارجاع به فرد مناسب")
+        self.reassign_button.clicked.connect(lambda _c=False: self.reassign())
+        self.warning = QLabel("")
+        self.warning.setWordWrap(True)
+        self.warning.setStyleSheet("color: #EF4444;")
+        self.warning.setVisible(False)
+        self.unassigned_ids: list[int] = []
         self.main_window = None
         self.open_task_ids: list[int] = []
         self.my_task_ids: list[int] = []
-        for b in (self.send_button, self.step_button, self.note_button, self.history_button):
+        for b in (self.send_button, self.step_button, self.note_button, self.reassign_button, self.history_button):
             ms.style_button(b)
-        outer.addWidget(ms.header_card(self.title, self.path, self.send_button, self.step_button, self.note_button,
-                                       self.history_button))
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addWidget(ms.header_card(self.title, self.path, self.send_button, self.step_button, self.note_button,
+                                        self.reassign_button, self.history_button))
+        column.addWidget(self.warning)
+        outer.addLayout(column)
         self.setVisible(False)
 
     # --- وضعیت ---------------------------------------------------------------------------------------------
@@ -115,6 +128,16 @@ class WorkflowBar(QWidget):
         except Exception:  # noqa: BLE001
             self.open_task_ids, mine = [], set()
         self.my_task_ids = [t for t in self.open_task_ids if t in mine]
+        try:
+            self.unassigned_ids = [t.task_id for t in tasks.list_unassigned(cid, entity_type=self.entity_type,
+                                                                            entity_id=int(self.entity_id))] if running else []
+            can_fix = tasks.can_reassign(cid, user_id())
+            stuck_message = model_events.busy(cid, self.entity_type, int(self.entity_id)) if self.unassigned_ids else None
+        except Exception:  # noqa: BLE001
+            self.unassigned_ids, can_fix, stuck_message = [], False, None
+        self.reassign_button.setVisible(bool(self.unassigned_ids) and can_fix)
+        self.warning.setText(stuck_message or "")
+        self.warning.setVisible(bool(stuck_message))
         self.step_button.setEnabled(bool(self.open_task_ids))
         self.step_button.setToolTip("انجام مرحلهٔ جاری -- " + ("این مرحله منتظر شماست" if self.my_task_ids else
                                                                 "دیدن فرم مرحله؛ تصمیم با مسئول همان مرحله است"))
@@ -159,6 +182,26 @@ class WorkflowBar(QWidget):
         if dlg.decided and self.on_started:
             self.on_started()
         return bool(ok and dlg.decided)
+
+    def reassign(self, to_user_id: int | None = None) -> bool:
+        if not self.unassigned_ids:
+            return False
+        if to_user_id is None:
+            from peecha.ui.screens.workflow_center import company_user_choices
+
+            dlg = FormDialog("ارجاع به فرد مناسب", [("to", "انجام‌دهنده", combo(company_user_choices()))],
+                             self.warning.text() or "فردی را که باید این مرحله را انجام دهد انتخاب کنید.", self)
+            ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
+            if not ok:
+                return False
+            to_user_id = dlg.values().get("to")
+        try:
+            tasks.reassign_task(company_id(), self.unassigned_ids[0], user_id(), [to_user_id])
+        except WorkflowError as exc:
+            QMessageBox.warning(self, "ارجاع به فرد مناسب", str(exc))
+            return False
+        self.refresh()
+        return True
 
     def add_note(self, text: str | None = None) -> bool:
         task_id = (self.my_task_ids or self.open_task_ids or [None])[0]

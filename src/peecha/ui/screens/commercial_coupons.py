@@ -36,6 +36,8 @@ _SYNC_STATUS_LABELS = {"PENDING": "همگام‌نشده", "SYNCED": "همگام
 
 
 class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
+    scroll_in_mdi = True  # R325: پنجرهٔ کوچک‌تر از فرم: اسکرول، نه له‌شدن ارتفاع فیلدها
+
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []

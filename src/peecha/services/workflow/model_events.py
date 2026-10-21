@@ -255,6 +255,15 @@ def _busy_text(conn, company_id: int, entity_type: str | None, entity_id: int | 
     steps = running_steps(conn, company_id, entity_type, entity_id)
     if steps is None:
         return None
+    stuck = conn.execute(text(
+        "SELECT t.node_id FROM wf.tasks t JOIN wf.instances i ON i.instance_id = t.instance_id "
+        "WHERE i.company_id = :c AND i.entity_type = :et AND i.entity_id = :id AND t.status_code = 'OPEN' "
+        "AND NOT EXISTS (SELECT 1 FROM wf.task_assignees a WHERE a.task_id = t.task_id AND a.status_code IN ('ACTIVE', 'QUEUED')) "
+        "LIMIT 1"), {"c": company_id, "et": entity_type, "id": entity_id}).first()
+    if stuck:  # R325: کار بی‌گیرنده — بدون راهنما، سند بی‌صدا گیر می‌کرد
+        name = f"«{steps[0]}» " if steps else ""
+        return (f"این سند در جریان تایید است، اما مرحلهٔ {name}گیرنده ندارد؛ مدیر باید آن را از «کارتابل من» یا نوار "
+                "گردش کار همین سند به فرد مناسب ارجاع دهد.")
     where = f" (مرحلهٔ جاری: «{'»، «'.join(steps[:3])}»)" if steps else ""
     return f"این سند در جریان تایید است{where}؛ تا همهٔ مراحل گردش کار در «کارتابل من» انجام نشود، این کار ممکن نیست."
 

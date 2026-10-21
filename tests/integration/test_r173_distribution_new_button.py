@@ -54,7 +54,7 @@ online = CommercialDocumentsListScreen(None, type_filter_codes=("SALES_ORDER",),
 generic = CommercialDocumentsListScreen(None, type_filter_codes=("SALES_ORDER", "SALES_INVOICE"))
 
 def count_new_buttons(screen):
-    return sum(1 for w in screen.findChildren(QPushButton) if w.text().startswith("➕"))
+    return sum(1 for w in screen.findChildren(QPushButton) if w.toolTip().startswith("ساخت "))  # R325: آیکن جدا برای هر نوع
 
 check(count_new_buttons(pre_sales) == 2, f"دکمه‌های «سند تازه» در تب پخش سرد نمایش داده می‌شوند (got {count_new_buttons(pre_sales)})")
 check(count_new_buttons(online) == 0, f"دکمه‌های «سند تازه» در تب فروش اینترنتی (همگام‌سازی‌محور) همچنان پنهانند (got {count_new_buttons(online)})")

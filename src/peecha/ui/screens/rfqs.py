@@ -92,6 +92,8 @@ class QuoteDialog(QDialog):
 
 
 class RfqScreen(QWidget):
+    scroll_in_mdi = True  # R325: پنجرهٔ کوچک‌تر از فرم: اسکرول، نه له‌شدن ارتفاع فیلدها
+
     def __init__(self, main_window=None) -> None:
         super().__init__()
         self._main_window = main_window

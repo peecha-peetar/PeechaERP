@@ -78,6 +78,12 @@ _TYPE_TO_NAV_CODE = {
 # R321: درخواست خرید هم در «اسناد خرید» دیده می‌شود (جدول جدای خودش را دارد و در فرم خودش باز می‌شود)
 _PR_TYPE = "PURCHASE_REQUEST"
 _PR_TITLE = "درخواست خرید"
+# R325: آیکن جدا برای «سند تازه» هر نوع (به‌جای چند ➕ یکسان)؛ نام سند در تول‌تیپ
+_NEW_GLYPHS = {
+    "PURCHASE_REQUEST": "📝", "PURCHASE_PROFORMA": "📋", "PURCHASE_ORDER": "🛒", "PURCHASE_INVOICE": "🧾",
+    "PURCHASE_RETURN": "↩️", "CONSIGNMENT_IN": "📥", "SALES_PROFORMA": "📋", "SALES_ORDER": "🛍️",
+    "SALES_INVOICE": "🧾", "SALES_RETURN": "↪️", "CONSIGNMENT_OUT": "📤",
+}
 
 
 @dataclass
@@ -176,16 +182,16 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
 
         new_buttons = QHBoxLayout()
         if self._with_requests:
-            button = QPushButton(f"➕ {_PR_TITLE}")
+            button = QPushButton(f"{_NEW_GLYPHS[_PR_TYPE]} {_PR_TITLE}")
             button.setObjectName("primaryButton")
-            button.setToolTip("درخواست خرید تازه")
+            button.setToolTip("ساخت درخواست خرید تازه")
             button.clicked.connect(lambda _checked=False: self._open_request(None))
             new_buttons.addWidget(button)
         if channel_type_code not in _SYNC_ONLY_CHANNEL_TYPES:
             for code in visible_types:
-                button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
+                button = QPushButton(f"{_NEW_GLYPHS.get(code, '➕')} {DOC_TYPE_TITLES[code]}")
                 button.setObjectName("primaryButton")
-                button.setToolTip(f"سند {DOC_TYPE_TITLES[code]}ی تازه")
+                button.setToolTip(f"ساخت {DOC_TYPE_TITLES[code]} تازه")
                 button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
                 new_buttons.addWidget(button)
         layout.addLayout(new_buttons)

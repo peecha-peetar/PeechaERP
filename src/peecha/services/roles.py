@@ -18,6 +18,7 @@ get-or-create که برای سال مالی در journal_entries.py استفاد
 from __future__ import annotations
 
 import datetime
+import functools
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -116,6 +117,28 @@ class RoleRow:
     parent_role_id: int | None
     parent_code: str | None
     is_active: bool
+    label: str = ""  # R325: نام فارسی برای نمایش (کد نقش ثابت می‌ماند)
+    parent_label: str | None = None
+
+
+_BUILTIN_ROLE_LABELS = {"ADMIN": "مدیر سیستم", "SUPERVISOR": "سرپرست", "MANAGER": "مدیر"}
+
+
+@functools.lru_cache(maxsize=1)
+def role_labels() -> dict[str, str]:
+    """R325: نام فارسی نقش‌های آماده‌ای که برنامه خودش می‌سازد (از همان الگوهای نقش هر ماژول)."""
+    import importlib
+
+    labels = dict(_BUILTIN_ROLE_LABELS)
+    for module in ("budgeting", "crm", "maintenance", "opening", "production"):
+        templates = importlib.import_module(f"peecha.services.{module}.roles_setup").TEMPLATES
+        labels.update({code: label for code, (label, _perms) in templates.items()})
+    return labels
+
+
+def role_label(code: str | None) -> str:
+    """کد نقش ← نام فارسی؛ نقشی که کاربر خودش با نام دلخواه ساخته همان نام را نشان می‌دهد."""
+    return role_labels().get((code or "").strip().upper(), code or "")
 
 
 def list_roles(company_id: int) -> list[RoleRow]:
@@ -131,6 +154,8 @@ def list_roles(company_id: int) -> list[RoleRow]:
                 parent_role_id=r.parent_role_id,
                 parent_code=codes_by_id.get(r.parent_role_id) if r.parent_role_id else None,
                 is_active=r.is_active,
+                label=role_label(r.code),
+                parent_label=role_label(codes_by_id.get(r.parent_role_id)) if r.parent_role_id else None,
             )
             for r in roles
         ]

@@ -14,7 +14,7 @@ from peecha.services.workflow import tasks
 from peecha.services.workflow.common import PRIORITIES, WorkflowError, now
 
 SOURCES = {"WF": "گردش کار", "CARTABLE": "کارتابل اسناد", "DOC": "اسناد خرید، فروش و انبار", "CRM": "پیگیری مشتری",
-           "CUSTOMER": "مشتری تازه", "MINE": "درخواست‌های من"}
+           "CUSTOMER": "مشتری تازه", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده"}
 KINDS = {"APPROVAL": "تایید", "TASK": "کار", "STEP": "مرحلهٔ سند", "FOLLOWUP": "پیگیری", "REQUEST": "درخواست من"}
 _REQUEST_TYPES = {"CREATE": "ثبت و تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
 # مرحلهٔ منتظر اسناد ← جملهٔ کاری که کاربر باید انجام دهد
@@ -215,7 +215,38 @@ def _customer_items(company_id: int, user_id: int) -> list[WorkItem]:
     return out
 
 
-_PROVIDERS = {"WF": _wf_items, "CARTABLE": _cartable_items, "DOC": _doc_items, "CRM": _crm_items, "CUSTOMER": _customer_items}
+def _stuck_items(company_id: int, user_id: int) -> list[WorkItem]:
+    """R325: مرحلهٔ گردش کاری که کسی برای انجامش پیدا نشد؛ مدیر باید ارجاعش دهد وگرنه سند گیر می‌کند."""
+    if not tasks.can_reassign(company_id, user_id):
+        return []
+    from sqlalchemy import select
+
+    from peecha.db.base import new_session
+    from peecha.db.models.workflow import WfException, WfTask
+
+    rows = tasks.list_unassigned(company_id)
+    if not rows:
+        return []
+    with new_session() as session:
+        reasons = {(e.instance_id, e.node_id): e.reason for e in session.scalars(select(WfException).where(
+            WfException.company_id == company_id, WfException.status_code.in_(("OPEN", "ESCALATED")),
+            WfException.instance_id.in_({t.instance_id for t in rows if t.instance_id})))}
+        nodes = dict(session.execute(select(WfTask.task_id, WfTask.node_id).where(WfTask.task_id.in_([t.task_id for t in rows]))).all())
+    out = []
+    for t in rows:
+        path = _wf_path(company_id, t.instance_id)
+        step_no, step_total = _progress(path)
+        reason = reasons.get((t.instance_id, nodes.get(t.task_id))) or "کسی برای انجام این مرحله پیدا نشد."
+        out.append(WorkItem(f"STUCK:{t.task_id}", "STUCK", SOURCES["STUCK"], "STEP", "مرحلهٔ بی‌گیرنده", t.task_id, t.title,
+                            t.requested_by, t.due_at, t.is_overdue, "HIGH", PRIORITIES["HIGH"], t.created_at, False, reason,
+                            {"instance_id": t.instance_id, "entity_type": t.entity_type, "entity_id": t.entity_id,
+                             "open_nav": t.open_nav, "definition": t.definition_name, "requested_by_user_id": t.requested_by_user_id},
+                            "این مرحله گیرنده ندارد؛ آن را به فرد مناسب ارجاع دهید", "task", step_no, step_total, path))
+    return out
+
+
+_PROVIDERS = {"WF": _wf_items, "CARTABLE": _cartable_items, "DOC": _doc_items, "CRM": _crm_items, "CUSTOMER": _customer_items,
+              "STUCK": _stuck_items}
 
 
 def my_work(company_id: int, user_id: int, *, sources: tuple[str, ...] | None = None) -> list[WorkItem]:
@@ -329,6 +360,12 @@ def detail(company_id: int, user_id: int, key: str) -> dict:
     source, _sep, rest = key.partition(":")
     empty = {"path": [], "history": [], "decisions": [], "assignees": [], "form_fields": [], "instructions": "", "due_at": None,
              "sla": "", "row_version": None}
+    if source == "STUCK":
+        d = tasks.task_detail(company_id, int(rest), user_id)
+        item = next((w for w in _stuck_items(company_id, user_id) if w.key == key), None)
+        return {**empty, "title": d.row.title, "requester": d.row.requested_by, "context": d.context, "path": d.path,
+                "history": d.history, "instructions": item.status_note if item else "", "due_at": d.row.due_at,
+                "row_version": d.row.row_version}
     if source == "WF":
         d = tasks.task_detail(company_id, int(rest), user_id)
         return {"title": d.row.title, "requester": d.row.requested_by, "context": d.context, "path": d.path,

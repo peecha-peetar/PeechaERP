@@ -39,7 +39,10 @@ def role_users(session, company_id: int, role_id: int) -> list[int]:
 
 def role_names(session, role_ids) -> dict[int, str]:
     ids = {r for r in role_ids if r}
-    return dict(session.execute(select(Role.role_id, Role.code).where(Role.role_id.in_(ids))).all()) if ids else {}
+    from peecha.services.roles import role_label
+
+    return {rid: role_label(code) for rid, code in session.execute(select(Role.role_id, Role.code).where(Role.role_id.in_(ids)))} \
+        if ids else {}
 
 
 def describe_spec(spec: dict, role_label: dict[int, str] | None = None, user_label: dict[int, str] | None = None) -> str:

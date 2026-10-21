@@ -110,6 +110,7 @@ ms.ICONS.update({
     "واگذاری به همکار": ("👥", ""), "یادداشت": ("💬", ""), "بازکردن سند": ("📂", ""), "تایید گروهی": ("☑️", ""),
     "تازه‌سازی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
     "انجام کار": ("✔️", "primary"), "بازکردن پروندهٔ مشتری": ("👤", ""), "فرم کامل مرحله": ("📋", ""),
+    "ارجاع به فرد مناسب": ("↗️", "primary"),
 })
 
 # نوع کار ← (آیکن، رنگ تم)
@@ -273,6 +274,8 @@ class WorkCard(QFrame):
                 [("فرم کامل مرحله", lambda: s.open_form())] if it.source == "WF" else []) + [("بازکردن سند", lambda: s.open_selected())]
         if it.source == "WF" and it.kind == "TASK":
             return [("انجام کار", lambda: s.approve_selected()), ("بازکردن سند", lambda: s.open_selected())]
+        if it.source == "STUCK":
+            return [("ارجاع به فرد مناسب", lambda: s.reassign_stuck()), ("بازکردن سند", lambda: s.open_selected())]
         if it.source == "CRM":
             return [("بازکردن پروندهٔ مشتری", lambda: s.open_selected())]
         return [("انجام کار", lambda: s.open_selected())]
@@ -588,7 +591,7 @@ class MyTasksScreen(QWidget):
         self.buttons["approve"].setEnabled(decidable or task)
         self.buttons["reject"].setEnabled(decidable)
         self.buttons["changes"].setEnabled(decidable and "CHANGES" in allowed)
-        self.buttons["delegate"].setEnabled(bool(item) and item.source == "WF")
+        self.buttons["delegate"].setEnabled(bool(item) and item.source in ("WF", "STUCK"))
         self.buttons["form"].setEnabled(bool(item) and item.source == "WF")
         self.buttons["note"].setEnabled(bool(item) and item.source == "WF")
         self.buttons["open"].setEnabled(bool(item))
@@ -709,6 +712,8 @@ class MyTasksScreen(QWidget):
 
     def delegate(self, to_user_id: int | None = None) -> bool:
         item = self._require()
+        if item is not None and item.source == "STUCK":
+            return self.reassign_stuck(to_user_id)
         if item is None or item.source != "WF":
             return False
         if to_user_id is None:
@@ -718,6 +723,25 @@ class MyTasksScreen(QWidget):
                 return False
             to_user_id = values["to"]
         _r, ok = _run(self, "واگذاری", tasks.delegate_task, company_id(), item.ref_id, user_id(), to_user_id,
+                      self.comment.toPlainText().strip())
+        if ok:
+            self.comment.clear()
+            self.current = None
+            self.reload()
+        return ok
+
+    def reassign_stuck(self, to_user_id: int | None = None) -> bool:
+        """R325: مرحلهٔ بی‌گیرنده به فرد مناسب سپرده می‌شود (فقط مدیر)."""
+        item = self._require()
+        if item is None or item.source != "STUCK":
+            return False
+        if to_user_id is None:
+            values = _ask(self, "ارجاع به فرد مناسب", [("to", "انجام‌دهنده", combo(company_user_choices()))],
+                          item.status_note or "این مرحله گیرنده ندارد؛ فردی را که باید انجامش دهد انتخاب کنید.")
+            if values is None:
+                return False
+            to_user_id = values["to"]
+        _r, ok = _run(self, "ارجاع به فرد مناسب", tasks.reassign_task, company_id(), item.ref_id, user_id(), [to_user_id],
                       self.comment.toPlainText().strip())
         if ok:
             self.comment.clear()

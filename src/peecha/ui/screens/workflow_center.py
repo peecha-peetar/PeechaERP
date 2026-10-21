@@ -117,7 +117,7 @@ def open_entity(main_window, entity_type: str | None, entity_id: int | None) -> 
 def open_work_item(main_window, item: inbox.WorkItem) -> bool:
     from peecha.ui.screens import my_tasks
 
-    if item.source == "WF":
+    if item.source in ("WF", "STUCK"):
         return open_entity(main_window, item.extra.get("entity_type"), item.extra.get("entity_id"))
     if item.source == "CARTABLE":
         return my_tasks.open_cartable_source(main_window, item.extra["form_code"], item.extra["source_record_id"])
@@ -546,7 +546,7 @@ class CalendarPanel(QWidget):
 def _escalation_choices() -> list[tuple[str, object]]:
     out: list[tuple[str, object]] = [("مدیر مستقیم گیرنده", "[]"), ("مدیران شرکت", '[{"kind": "MANAGERS"}]')]
     for r in roles_service.list_roles(company_id()):
-        out.append((f"نقش «{r.code}»", f'[{{"kind": "ROLE", "role_id": {r.role_id}}}]'))
+        out.append((f"نقش «{r.label}»", f'[{{"kind": "ROLE", "role_id": {r.role_id}}}]'))
     for name, uid in company_user_choices():
         out.append((name, f'[{{"kind": "USER", "user_id": {uid}}}]'))
     return out

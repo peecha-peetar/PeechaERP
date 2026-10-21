@@ -23,7 +23,7 @@ from peecha.ui.screens.fixed_assets import P, company_id, date_field, fill, tabl
 from peecha.ui.widgets import JalaliDateEdit, mark_invalid
 
 ms.ICONS.update({"برگشت برای اصلاح": ("↩️", ""), "ثبت یادداشت": ("💬", ""), "بازکردن سند": ("📂", ""),
-                 "بستن فرم": ("✖️", "")})
+                 "بستن فرم": ("✖️", ""), "ارجاع به فرد مناسب": ("↗️", "primary")})
 _DECISION_BUTTONS = {"APPROVE": "تایید", "DONE": "انجام شد", "REJECT": "رد", "CHANGES": "برگشت برای اصلاح"}
 
 
@@ -152,12 +152,13 @@ class TaskFormDialog(QDialog):
             b.clicked.connect(lambda _c=False, d=code: self.decide(d))
             self.buttons[code] = b
         for code, label, slot in (("note", "ثبت یادداشت", self.add_note), ("open", "بازکردن سند", self.open_document),
-                                  ("close", "بستن فرم", self.reject)):
+                                  ("reassign", "ارجاع به فرد مناسب", self.reassign), ("close", "بستن فرم", self.reject)):
             b = QPushButton(label)
             b.clicked.connect(lambda _c=False, f=slot: f())
             self.buttons[code] = b
         layout.addWidget(ms.footer([[self.buttons[c] for c in ("APPROVE", "DONE", "REJECT", "CHANGES")],
-                                    [self.buttons["note"], self.buttons["open"]], [self.buttons["close"]]]))
+                                    [self.buttons["note"], self.buttons["reassign"], self.buttons["open"]],
+                                    [self.buttons["close"]]]))
         self.fields: list[dict] = []
         self.field_widgets: dict[str, QWidget] = {}
         self.load()
@@ -192,7 +193,13 @@ class TaskFormDialog(QDialog):
         editable = bool(allowed)
         for w in self.field_widgets.values():
             w.setEnabled(editable)
-        if not editable:
+        unassigned = row.status_code == "OPEN" and any(
+            t.task_id == self.task_id for t in tasks.list_unassigned(company_id(), entity_type=row.entity_type, entity_id=row.entity_id))
+        self.buttons["reassign"].setVisible(unassigned and tasks.can_reassign(company_id(), user_id()))
+        if unassigned:
+            self.status.setText("این مرحله گیرنده ندارد؛ " + ("آن را به فرد مناسب ارجاع دهید." if self.buttons["reassign"].isVisibleTo(self)
+                                                             else "مدیر باید آن را به فرد مناسب ارجاع دهد."))
+        elif not editable:
             self.status.setText("این مرحله برای شما نیست یا بسته شده است؛ فقط می‌توانید آن را ببینید و یادداشت بگذارید."
                                 if row.status_code == "OPEN" else f"این مرحله {row.status_label} است.")
 
@@ -281,6 +288,26 @@ class TaskFormDialog(QDialog):
         self.note.clear()
         self.status.setText("یادداشت ثبت شد و برای افراد این مرحله فرستاده شد.")
         self.reload_history()
+        return True
+
+    def reassign(self, to_user_id: int | None = None) -> bool:
+        """R325: مرحلهٔ بی‌گیرنده به فرد مناسب سپرده می‌شود (فقط مدیر)."""
+        if to_user_id is None:
+            from peecha.ui.screens.fixed_assets import FormDialog, combo
+            from peecha.ui.screens.workflow_center import company_user_choices
+
+            dlg = FormDialog("ارجاع به فرد مناسب", [("to", "انجام‌دهنده", combo(company_user_choices()))],
+                             "فردی را که باید این مرحله را انجام دهد انتخاب کنید.", self)
+            if dlg.exec() != QDialog.Accepted:
+                return False
+            to_user_id = dlg.values().get("to")
+        try:
+            tasks.reassign_task(company_id(), self.task_id, user_id(), [to_user_id], self.note.toPlainText().strip())
+        except WorkflowError as exc:
+            self.status.setText(str(exc))
+            return False
+        self.load()
+        self.status.setText("مرحله ارجاع شد.")
         return True
 
     def open_document(self) -> bool:

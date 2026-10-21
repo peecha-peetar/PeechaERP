@@ -1270,6 +1270,8 @@ class _FlowTab(QWidget):
 
 
 class WarehouseOperationsScreen(QWidget):
+    scroll_in_mdi = True  # R325: پنجرهٔ کوچک‌تر از فرم: اسکرول، نه له‌شدن ارتفاع فیلدها
+
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)

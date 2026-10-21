@@ -127,9 +127,11 @@ def _human_node(run: runtime.Run) -> runtime.NodeResult:
         excluded.add(requester)
     if kind == "APPROVAL" and node.get("distinct_approvers"):
         excluded |= _previous_approvers(session, inst.instance_id)
-    users = [u for u in resolve(specs) if u not in excluded]
+    candidates = resolve(specs)
+    users = [u for u in candidates if u not in excluded]
     if not users and node.get("fallback"):
-        users = [u for u in resolve(node["fallback"]) if u not in excluded]
+        candidates = resolve(node["fallback"])
+        users = [u for u in candidates if u not in excluded]
     raw_mode = (node.get("mode") or "ANY").upper()
     mode = raw_mode if kind == "APPROVAL" else ("ALL" if raw_mode == "ALL" else "ANY")
     whens = {e.get("when") for e in definitions.outgoing(run.graph, node["id"])}
@@ -158,10 +160,14 @@ def _human_node(run: runtime.Run) -> runtime.NodeResult:
             active.append(uid)
     session.flush()
     if not seats:
-        runtime._raise_exception(
-            session, inst, node, f"برای «{node.get('label') or KINDS[kind]}» کسی پیدا نشد",
-            "هیچ کاربر فعالی با تنظیمات این مرحله منطبق نیست (یا تنها گزینه خود درخواست‌کننده است). "
-            "کار را از «مرکز تایید» به فرد مناسب ارجاع دهید.", None)
+        # R325: علت روشن؛ کار در «کارتابل من» مدیران دیده می‌شود تا ارجاع شود (وگرنه سند گیر می‌کرد)
+        if requester and requester in candidates:
+            reason = ("تنها گیرندهٔ این مرحله خود درخواست‌کننده است و تایید درخواست خود مجاز نیست. کار را از «کارتابل من» "
+                      "به همکار دیگری ارجاع دهید؛ اگر شرکت یک‌نفره است، در «گردش کار ← قواعد» تایید درخواست خود را مجاز کنید.")
+        else:
+            reason = ("هیچ کاربر فعالی با گیرندگان این مرحله منطبق نیست (مثلاً «مدیر مستقیم» در منابع انسانی تعریف نشده). "
+                      "کار را از «کارتابل من» به فرد مناسب ارجاع دهید.")
+        runtime._raise_exception(session, inst, node, f"برای «{node.get('label') or KINDS[kind]}» کسی پیدا نشد", reason, None)
     _notify_seats(session, task, active)
     for hook in TASK_CREATED_HOOKS:
         hook(session, task, node)
@@ -426,7 +432,8 @@ def _check_target(session, task: WfTask, to_user_id: int) -> None:
         raise WorkflowError("کاربر انتخاب‌شده در این شرکت فعال نیست.")
     if task.kind == "APPROVAL" and to_user_id == task.requested_by_user_id and \
             not settings(task.company_id).get("allow_self_approval"):
-        raise WorkflowError("تفکیک وظایف: کار تایید را نمی‌توان به خود درخواست‌کننده سپرد.")
+        raise WorkflowError("تفکیک وظایف: کار تایید را نمی‌توان به خود درخواست‌کننده سپرد. اگر شرکت یک‌نفره است، در "
+                            "«گردش کار ← قواعد» گزینهٔ «درخواست‌کننده بتواند درخواست خودش را تایید کند» را روشن کنید.")
 
 
 def delegate_task(company_id: int, task_id: int, user_id: int, to_user_id: int, comment: str = "") -> None:
@@ -702,6 +709,23 @@ def list_my_tasks(company_id: int, user_id: int, *, kind: str | None = None, inc
             q = q.where(WfTask.kind == kind)
         tasks = list(dict.fromkeys(session.scalars(q.order_by(WfTask.due_at.asc().nulls_last(), WfTask.task_id))))
         return _rows(session, tasks, user_id)
+
+
+def list_unassigned(company_id: int, *, entity_type: str | None = None, entity_id: int | None = None) -> list[TaskRow]:
+    """R325: کارهای باز بی‌گیرنده (کسی پیدا نشد یا همه کنار رفتند) — برای ارجاع مدیر از «کارتابل من»."""
+    live = select(WfTaskAssignee.assignee_id).where(WfTaskAssignee.task_id == WfTask.task_id,
+                                                    WfTaskAssignee.status_code.in_(_LIVE)).exists()
+    with new_session() as session:
+        q = select(WfTask).where(WfTask.company_id == company_id, WfTask.status_code == "OPEN", ~live)
+        if entity_type:
+            q = q.where(WfTask.entity_type == entity_type)
+        if entity_id:
+            q = q.where(WfTask.entity_id == entity_id)
+        return _rows(session, list(session.scalars(q.order_by(WfTask.task_id))))
+
+
+def can_reassign(company_id: int, user_id: int | None) -> bool:
+    return bool(user_id) and _is_manager(user_id, company_id)
 
 
 def list_tasks(company_id: int, *, status: str | None = None, instance_id: int | None = None,
