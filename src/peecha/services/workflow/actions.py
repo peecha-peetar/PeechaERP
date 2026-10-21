@@ -166,10 +166,9 @@ def _set_variable(ctx: ActionContext) -> dict:
 
 
 def _add_comment(ctx: ActionContext) -> dict:
-    text = render(ctx.params.get("text") or "", ctx.context)
-    if not text.strip():
-        raise WorkflowError("متن یادداشت خالی است.")
-    return {"comment": text}
+    # R327: ویزارد متن این اقدام را نمی‌گیرد؛ بدون متن، توضیح آخرین تصمیم (یا متن پیش‌فرض) یادداشت می‌شود، نه شکست فرایند
+    text = render(ctx.params.get("text") or "", ctx.context).strip() or str(ctx.context.get("last_comment") or "").strip()
+    return {"comment": text or "این مرحله در گردش کار ثبت شد."}
 
 
 def _create_followup(ctx: ActionContext) -> dict:

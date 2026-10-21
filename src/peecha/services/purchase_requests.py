@@ -185,10 +185,11 @@ def submit_request(request_id: int, company_id: int) -> None:
         session.commit()
 
 
-def approve_request(request_id: int, company_id: int, approved_by_user_id: int) -> None:
+def approve_request(request_id: int, company_id: int, approved_by_user_id: int, *, by_workflow: bool = False) -> None:
     from peecha.services import roles as roles_service
 
-    if not roles_service.is_manager(approved_by_user_id, company_id):
+    # R327: در گردش کار، تاییدکننده را خود تعریف فرایند تعیین کرده است؛ نقش «مدیر» فقط برای تصویب دستی لازم است
+    if not by_workflow and not roles_service.is_manager(approved_by_user_id, company_id):
         raise ValueError("تصویب درخواست خرید فقط برای مدیر ممکن است.")
     with new_session() as session:
         row = _get(session, request_id, company_id)

@@ -250,7 +250,7 @@ def pr_context(company_id: int, request_id: int) -> dict:
 def _pr_approve(ctx: ActionContext) -> dict:
     from peecha.services import purchase_requests
 
-    purchase_requests.approve_request(int(ctx.entity_id), ctx.company_id, ctx.user_id)
+    purchase_requests.approve_request(int(ctx.entity_id), ctx.company_id, ctx.user_id, by_workflow=True)
     return {"status": "APPROVED"}
 
 

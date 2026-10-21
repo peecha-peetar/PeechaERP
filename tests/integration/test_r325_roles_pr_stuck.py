@@ -43,9 +43,10 @@ check(names[manager_role.role_id] == "مدیر", "workflow approver descriptions
 from peecha.ui.screens.purchase_requests import PurchaseRequestScreen
 from peecha.ui.screens.rfqs import RfqScreen
 
-check(PurchaseRequestScreen.scroll_in_mdi and RfqScreen.scroll_in_mdi,
-      "request/RFQ forms scroll inside a small window instead of squeezing the fields")
 pr_scr = PurchaseRequestScreen()
+# R327: بدنهٔ فرم درخواست خودش اسکرول می‌شود تا دکمه‌های پایین فرم همیشه دیده شوند
+check(pr_scr.body_scroll is not None and RfqScreen.scroll_in_mdi,
+      "request/RFQ forms scroll inside a small window instead of squeezing the fields")
 check(pr_scr.lines_table.minimumHeight() >= 130 and pr_scr.list_table.minimumHeight() >= 110, "tables keep a usable height")
 
 # --- ۳: آیکن جدا برای ساخت هر سند --------------------------------------------------------------------------------

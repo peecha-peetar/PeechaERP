@@ -12,8 +12,9 @@ from collections import Counter
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QComboBox, QCompleter, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QInputDialog,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QRadioButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView, QButtonGroup, QComboBox, QCompleter, QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QHeaderView,
+    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QRadioButton, QScrollArea, QSplitter, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from peecha import decimals, numerals, session as app_session
@@ -210,7 +211,6 @@ class ConvertToOrderDialog(QDialog):
 
 
 class PurchaseRequestScreen(QWidget):
-    scroll_in_mdi = True  # R325: پنجرهٔ کوچک‌تر از فرم: اسکرول، نه له‌شدن ارتفاع فیلدها
 
     def __init__(self, main_window=None) -> None:
         super().__init__()
@@ -320,7 +320,6 @@ class PurchaseRequestScreen(QWidget):
         self.workflow_bar = WorkflowBar("PURCHASE_REQUEST")
         self.workflow_bar.on_started = lambda: self._request_id and self.edit_document(self._request_id)
         self.workflow_bar.main_window = self._main_window
-        ed.addWidget(self.workflow_bar)
 
         # R301: دکمه‌های آیکونی، کنار هم سمت راست پایین فرم
         footer = QHBoxLayout()
@@ -335,10 +334,16 @@ class PurchaseRequestScreen(QWidget):
             footer.addWidget(button)
             self.buttons[key] = button
         footer.addWidget(self.status_label, stretch=1)
-        ed.addLayout(footer)
         splitter.addWidget(editor)
         splitter.setSizes([220, 560])
-        layout.addWidget(splitter, stretch=1)
+        # R325/R327: در پنجرهٔ کوچک فقط بدنهٔ فرم اسکرول می‌شود (فیلدها له نمی‌شوند)؛ نوار گردش کار و دکمه‌ها همیشه دیده می‌شوند
+        self.body_scroll = QScrollArea()
+        self.body_scroll.setWidgetResizable(True)
+        self.body_scroll.setFrameShape(QFrame.NoFrame)
+        self.body_scroll.setWidget(splitter)
+        layout.addWidget(self.body_scroll, stretch=1)
+        layout.addWidget(self.workflow_bar)
+        layout.addLayout(footer)
 
         # R322: کنترل همان لحظهٔ ورود، نه هنگام ذخیره
         live_check(self.required_field, self._check_required_date, self.status_label)
@@ -479,8 +484,9 @@ class PurchaseRequestScreen(QWidget):
         self.status_label.setText("")
         self._clear_line_entry()
         self._render_lines()
-        self._update_buttons()
+        self.workflow_bar.gated_resend = False
         self.workflow_bar.set_entity("PURCHASE_REQUEST", None)
+        self._update_buttons()
         self.date_field.setFocus()
 
     def edit_document(self, request_id: int) -> None:
@@ -513,8 +519,9 @@ class PurchaseRequestScreen(QWidget):
         self.info_label.setText("   |   ".join(info))
         self._clear_line_entry()
         self._render_lines()
-        self._update_buttons()
+        self.workflow_bar.gated_resend = row.status_code == "SUBMITTED"
         self.workflow_bar.set_entity("PURCHASE_REQUEST", request_id)
+        self._update_buttons()
 
     def _render_lines(self) -> None:
         ordered = pr_service.ordered_quantities([ln.line_id for ln in self._lines])
@@ -546,21 +553,47 @@ class PurchaseRequestScreen(QWidget):
                 self.line_description_field]:
             widget.setEnabled(editable)
         self.buttons["submit"].setEnabled(editable and self._request_id is not None)
-        # R323: تا گردش کار تعریف‌شده تمام نشده، تصویب/رد/تبدیل فقط از مسیر همان گردش کار است
-        busy = None
-        if self._request_id is not None and self._status in ("SUBMITTED", "APPROVED"):
-            from peecha.services.workflow import model_events
-
-            try:
-                busy = model_events.busy(self._company_id(), "PURCHASE_REQUEST", self._request_id)
-            except Exception:  # noqa: BLE001 -- بررسی کمکی نباید بارگذاری فرم را متوقف کند
-                busy = None
-        self.buttons["approve"].setEnabled(self._status == "SUBMITTED" and is_manager and not busy)
-        self.buttons["reject"].setEnabled(self._status == "SUBMITTED" and is_manager and not busy)
+        busy = self._busy()
+        route, approve_tip = self._approval_route(is_manager, busy)
+        self.buttons["approve"].setEnabled(route is not None)
+        self.buttons["approve"].setToolTip(approve_tip)
+        my_step = self._status == "SUBMITTED" and bool(self.workflow_bar.my_task_ids)
+        self.buttons["reject"].setEnabled(my_step or (self._status == "SUBMITTED" and is_manager and not busy))
         self.buttons["cancel"].setEnabled(self._request_id is not None and self._status != "CANCELLED")
         self.buttons["convert"].setEnabled(self._status == "APPROVED" and not busy)
-        for key, label in (("approve", "تصویب"), ("reject", "رد"), ("convert", "تبدیل به سفارش خرید")):
-            self.buttons[key].setToolTip(f"{label} -- {busy}" if busy else label)
+        self.buttons["reject"].setToolTip("رد -- رد در همان مرحلهٔ گردش کار که منتظر شماست" if my_step else
+                                          f"رد -- {busy}" if busy else "رد")
+        self.buttons["convert"].setToolTip(f"تبدیل به سفارش خرید -- {busy}" if busy else "تبدیل به سفارش خرید")
+
+    def _busy(self) -> str | None:
+        """R323: تا گردش کار تعریف‌شده تمام نشده، تصویب/رد/تبدیل فقط از مسیر همان گردش کار است."""
+        if self._request_id is None or self._status not in ("SUBMITTED", "APPROVED"):
+            return None
+        from peecha.services.workflow import model_events
+
+        try:
+            return model_events.busy(self._company_id(), "PURCHASE_REQUEST", self._request_id)
+        except Exception:  # noqa: BLE001 -- بررسی کمکی نباید بارگذاری فرم را متوقف کند
+            return None
+
+    def _approval_route(self, is_manager: bool, busy: str | None) -> tuple[str | None, str]:
+        """R327: «تصویب» همان کاری را می‌کند که این لحظه درست است: تایید مرحلهٔ گردش کار که منتظر همین کاربر است، اجرای
+        دوبارهٔ تصویبی که پس از تایید انجام نشد، فرستادن به گردش کار تایید، یا تصویب مستقیم مدیر (بی‌گردش کار)."""
+        if self._request_id is None or self._status != "SUBMITTED":
+            return None, "تصویب -- فقط درخواستی که برای تصویب ارسال شده است"
+        bar = self.workflow_bar
+        if bar.my_task_ids:
+            return "TASK", "تصویب -- تایید مرحلهٔ گردش کار که منتظر شماست"
+        if bar.retry_exception_id and bar.can_retry:
+            return "RETRY", "تصویب -- تایید در گردش کار داده شده اما ثبت نشد؛ با این دکمه دوباره اجرا می‌شود"
+        if bar.running and busy:
+            who = "، ".join(bar.waiting_names)
+            return None, f"تصویب -- این درخواست در جریان تایید است و منتظر تصمیم {who} است" if who else f"تصویب -- {busy}"
+        if not is_manager:
+            return None, "تصویب -- با مدیر یا تاییدکنندهٔ گردش کار است"
+        if bar.gated_ids:
+            return "SEND", "تصویب -- این درخواست باید در گردش کار تایید شود؛ با این دکمه برای تایید فرستاده می‌شود"
+        return "MANUAL", "تصویب"
 
     def _fields(self) -> pr_service.RequestFields:
         return pr_service.RequestFields(
@@ -687,14 +720,56 @@ class PurchaseRequestScreen(QWidget):
                 theme.set_status_label(self.status_label, "درخواست برای تایید به مسئول مرحلهٔ اول فرستاده شد.", ok=True)
 
     def approve(self) -> None:
-        self._transition(lambda: pr_service.approve_request(self._request_id, self._company_id(), self._user_id()), "درخواست تصویب شد.")
+        is_manager = bool(self._user_id()) and roles_service.is_manager(self._user_id(), self._company_id())
+        route, _tip = self._approval_route(is_manager, self._busy())
+        if route == "TASK":
+            self._decide_step("APPROVE")
+        elif route == "RETRY":
+            if self.workflow_bar.retry_failed():
+                self._after_workflow("درخواست تصویب شد.")
+        elif route == "SEND":
+            if self.workflow_bar.send():
+                self._after_workflow("درخواست برای تایید به گردش کار فرستاده شد.")
+        else:
+            self._transition(lambda: pr_service.approve_request(self._request_id, self._company_id(), self._user_id()),
+                             "درخواست تصویب شد.")
 
     def reject(self, reason: str | None = None) -> None:
         if reason is None:
             reason, ok = QInputDialog.getText(self, "رد درخواست", "علت رد:")
             if not ok:
                 return
+        if self._status == "SUBMITTED" and self.workflow_bar.my_task_ids:
+            self._decide_step("REJECT", reason)
+            return
         self._transition(lambda: pr_service.reject_request(self._request_id, self._company_id(), reason), "درخواست رد شد.")
+
+    def _decide_step(self, decision: str, comment: str = "") -> bool:
+        """R327: تصمیم روی مرحلهٔ گردش کار که منتظر همین کاربر است، از داخل خود درخواست (مثل «کارتابل من»)."""
+        from peecha.services.workflow import tasks as wf_tasks
+
+        task_id = self.workflow_bar.my_task_ids[0]
+        if decision == "APPROVE" and wf_tasks.task_detail(self._company_id(), task_id, self._user_id()).form_fields:
+            decided = self.workflow_bar.open_step()  # خانه‌های فرم مرحله پیش از تایید پر می‌شوند
+        else:
+            decided = self._run(lambda: wf_tasks.decide(self._company_id(), task_id, self._user_id(), decision, comment), "")
+        if decided:
+            self._after_workflow("درخواست رد شد." if decision == "REJECT" else "تایید شما ثبت شد.")
+        return decided
+
+    def _after_workflow(self, success: str) -> None:
+        self.edit_document(self._request_id)
+        self._reload_list()
+        failure = self.workflow_bar.warning.text() if self.workflow_bar.warning.isVisible() else ""
+        if self._status == "APPROVED":
+            success = "درخواست تصویب شد."
+        elif self._status == "SUBMITTED" and self.workflow_bar.running and not failure:
+            who = "، ".join(self.workflow_bar.waiting_names)
+            success = f"{success} درخواست اکنون منتظر تصمیم {who} است." if who else success
+        if failure:
+            self.status_label.setText(failure)
+        else:
+            theme.set_status_label(self.status_label, success, ok=True)
 
     def cancel(self, reason_id: int | None = None, confirm: bool = True) -> None:
         if self._request_id is None:

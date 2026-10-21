@@ -254,20 +254,41 @@ with new_session() as s:
 
 # ===== ۸) شکست اقدام ← مورد نیازمند بررسی ← حل انسانی =====
 install("PURCHASE_REQUEST_APPROVAL")
-req = pr_service.create_request(company_id, staff, pr_service.RequestFields(request_date=today, warehouse_id=warehouse_id))
-pr_service.add_line(req, company_id, item_a, pcs, D(3))
-pr_service.submit_request(req, company_id)
-check(any(t.entity_id == req for t in tasks.list_my_tasks(company_id, boss)), "PR goes to requester's direct manager")
+
+
+def new_pr():
+    r = pr_service.create_request(company_id, staff, pr_service.RequestFields(request_date=today, warehouse_id=warehouse_id))
+    pr_service.add_line(r, company_id, item_a, pcs, D(3))
+    pr_service.submit_request(r, company_id)
+    return r
+
+
+req0 = new_pr()
+check(any(t.entity_id == req0 for t in tasks.list_my_tasks(company_id, boss)), "PR goes to requester's direct manager")
+approve("PURCHASE_REQUEST", req0, boss)
+# R327: تاییدکنندهٔ تعیین‌شده در فرایند (مدیر مستقیم، بدون نقش «مدیر») خود درخواست را تصویب می‌کند
+check(pr_service.get_request(req0, company_id)[0].status_code == "APPROVED"
+      and inst_of("PURCHASE_REQUEST", req0).status_code == "COMPLETED", "the process's approver approves without the manager role")
+real_approve = pr_service.approve_request
+
+
+def refused(*_a, **_k):
+    raise ValueError("بودجهٔ این مرکز هزینه بسته است.")
+
+
+pr_service.approve_request = refused  # رد واقعی سرویس (مثلاً بودجه) شبیه‌سازی می‌شود
+req = new_pr()
 approve("PURCHASE_REQUEST", req, boss)
+pr_service.approve_request = real_approve
 i8 = inst_of("PURCHASE_REQUEST", req)
 open_ex = [e for e in wf_exc.list_exceptions(company_id) if e.instance_id == i8.instance_id]
-check(i8.status_code in ("WAITING", "RUNNING", "FAILED") and open_ex and "مدیر" in (open_ex[0].reason or ""),
-      "service refusal (approver is not a manager) became an exception with a clear reason")
+check(i8.status_code in ("WAITING", "RUNNING", "FAILED") and open_ex and "بودجه" in (open_ex[0].reason or ""),
+      "service refusal became an exception with a clear reason")
 from peecha.db.models.security import Role  # noqa: E402
 with new_session() as s:
     manager_role = s.scalar(select(Role.role_id).where(Role.company_id == company_id, Role.code == "MANAGER"))
-roles_service.set_user_role(boss, manager_role, company_id, True)
-wf_exc.retry(company_id, open_ex[0].exception_id, uid, "نقش مدیر داده شد")
+roles_service.set_user_role(boss, manager_role, company_id, True)  # بخش‌های بعد مدیر بودن او را فرض می‌کنند
+wf_exc.retry(company_id, open_ex[0].exception_id, uid, "بودجه باز شد")
 check(pr_service.get_request(req, company_id)[0].status_code == "APPROVED" and
       runtime.get_instance(company_id, i8.instance_id).status_code == "COMPLETED", "human fixed the cause and retried: completed")
 

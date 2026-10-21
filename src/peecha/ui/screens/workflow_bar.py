@@ -10,14 +10,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from peecha import numerals
-from peecha.services.workflow import definitions, model_events, registry, runtime, tasks
+from peecha.services.workflow import definitions, exceptions, model_events, registry, runtime, tasks
 from peecha.services.workflow.common import WorkflowError
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.fixed_assets import FormDialog, combo, company_id, fill, table, user_id
 
 ms.ICONS.update({"ارسال برای تایید": ("📨", "primary"), "تاریخچهٔ گردش کار": ("🕘", ""),
                  "انجام مرحلهٔ جاری": ("📋", "primary"), "یادداشت روی مرحله": ("💬", ""),
-                 "ارجاع به فرد مناسب": ("↗️", "primary")})
+                 "ارجاع به فرد مناسب": ("↗️", "primary"), "اجرای دوباره": ("🔁", "primary")})
 
 _GLYPH = {"done": "✔", "current": "●", "pending": "○", "failed": "✖"}
 _COLOR = {"done": "#10B981", "current": "#3B82F6", "pending": "#94A3B8", "failed": "#EF4444"}
@@ -70,6 +70,9 @@ class WorkflowBar(QWidget):
         # R325: مرحلهٔ بی‌گیرنده (مثلاً تنها تاییدکننده خود درخواست‌کننده است) — بدون این، سند بی‌صدا گیر می‌کرد
         self.reassign_button = QPushButton("ارجاع به فرد مناسب")
         self.reassign_button.clicked.connect(lambda _c=False: self.reassign())
+        # R327: اقدام خودکار شکست‌خورده (مثلاً تصویب خود سند پس از تایید) از داخل همین سند دوباره اجرا می‌شود
+        self.retry_button = QPushButton("اجرای دوباره")
+        self.retry_button.clicked.connect(lambda _c=False: self.retry_failed())
         self.warning = QLabel("")
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #EF4444;")
@@ -78,12 +81,19 @@ class WorkflowBar(QWidget):
         self.main_window = None
         self.open_task_ids: list[int] = []
         self.my_task_ids: list[int] = []
-        for b in (self.send_button, self.step_button, self.note_button, self.reassign_button, self.history_button):
+        self.running = False
+        self.waiting_names: list[str] = []
+        self.retry_exception_id: int | None = None
+        self.can_retry = False
+        self.gated_resend = False  # سند (مثلاً درخواست ارسال‌شده) می‌تواند دوباره به فرایند «با دروازه» فرستاده شود
+        self.gated_ids: list[int] = []
+        for b in (self.send_button, self.step_button, self.note_button, self.reassign_button, self.retry_button,
+                  self.history_button):
             ms.style_button(b)
         column = QVBoxLayout()
         column.setContentsMargins(0, 0, 0, 0)
         column.addWidget(ms.header_card(self.title, self.path, self.send_button, self.step_button, self.note_button,
-                                        self.reassign_button, self.history_button))
+                                        self.reassign_button, self.retry_button, self.history_button))
         column.addWidget(self.warning)
         outer.addLayout(column)
         self.setVisible(False)
@@ -97,12 +107,21 @@ class WorkflowBar(QWidget):
         cid = company_id()
         if not cid or not self.entity_type or registry.get_adapter(self.entity_type) is None:
             return []
-        return definitions.manual_definitions(cid, self.entity_type)
+        rows = definitions.manual_definitions(cid, self.entity_type)
+        self.gated_ids = model_events.unsent_gate(cid, self.entity_type, int(self.entity_id)) \
+            if self.gated_resend and self.entity_id else []
+        if self.gated_ids:
+            have = {d.definition_id for d in rows}
+            rows += [d for d in definitions.list_definitions(cid, include_archived=False, entity_type=self.entity_type)
+                     if d.definition_id in self.gated_ids and d.definition_id not in have]
+        return rows
 
     def refresh(self) -> None:
         cid = company_id()
         if not cid or not self.entity_type or not self.entity_id:
             self.instance_id = None
+            self.running, self.open_task_ids, self.my_task_ids, self.waiting_names = False, [], [], []
+            self.retry_exception_id, self.can_retry, self.gated_ids = None, False, []
             self.setVisible(False)
             return
         try:
@@ -112,9 +131,15 @@ class WorkflowBar(QWidget):
             self.setVisible(False)
             return
         self.instance_id = rows[0].instance_id if rows else None
-        running = bool(rows) and rows[0].status_code in ("RUNNING", "WAITING")
+        running = self.running = bool(rows) and rows[0].status_code in ("RUNNING", "WAITING")
+        try:
+            self.waiting_names = tasks.waiting_on(cid, self.instance_id) if running else []
+        except Exception:  # noqa: BLE001
+            self.waiting_names = []
         if rows:
-            self.path.setText(path_html(runtime.status_path(cid, rows[0].instance_id)))
+            waiting = (f" <span style='color:#64748B'>(منتظر تصمیم: {'، '.join(self.waiting_names)})</span>"
+                       if self.waiting_names else "")
+            self.path.setText(path_html(runtime.status_path(cid, rows[0].instance_id)) + waiting)
             self.path.setToolTip(f"{rows[0].definition_name} — {rows[0].status_label}")
         else:
             self.path.setText("<span style='color:#94A3B8'>هنوز برای تایید فرستاده نشده است.</span>")
@@ -136,6 +161,16 @@ class WorkflowBar(QWidget):
         except Exception:  # noqa: BLE001
             self.unassigned_ids, can_fix, stuck_message = [], False, None
         self.reassign_button.setVisible(bool(self.unassigned_ids) and can_fix)
+        try:
+            failure = model_events.failed(cid, self.entity_type, int(self.entity_id)) if running else None
+            owner = next((e.owner_user_id for e in exceptions.list_exceptions(cid, instance_id=self.instance_id)
+                          if failure and e.exception_id == failure[0]), None)
+        except Exception:  # noqa: BLE001
+            failure, owner = None, None
+        self.retry_exception_id = failure[0] if failure else None
+        self.can_retry = bool(failure) and (can_fix or (owner is not None and owner == user_id()))
+        self.retry_button.setVisible(self.can_retry)
+        stuck_message = stuck_message or (failure[1] if failure else None)
         self.warning.setText(stuck_message or "")
         self.warning.setVisible(bool(stuck_message))
         self.step_button.setEnabled(bool(self.open_task_ids))
@@ -190,6 +225,23 @@ class WorkflowBar(QWidget):
         if dlg.decided and self.on_started:
             self.on_started()
         return bool(ok and dlg.decided)
+
+    def retry_failed(self) -> bool:
+        """True یعنی اقدام این بار انجام شد و فرایند جلو رفت."""
+        if not self.retry_exception_id:
+            return False
+        try:
+            exceptions.retry(company_id(), self.retry_exception_id, user_id(), "اجرای دوباره از داخل سند")
+        except WorkflowError as exc:
+            QMessageBox.warning(self, "اجرای دوباره", str(exc))
+            return False
+        self.refresh()
+        if self.on_started:
+            self.on_started()
+        if self.retry_exception_id:
+            QMessageBox.warning(self, "اجرای دوباره", self.warning.text() or "اقدام باز هم انجام نشد.")
+            return False
+        return True
 
     def reassign(self, to_user_id: int | None = None) -> bool:
         if not self.unassigned_ids:

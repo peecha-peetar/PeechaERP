@@ -724,6 +724,18 @@ def list_unassigned(company_id: int, *, entity_type: str | None = None, entity_i
         return _rows(session, list(session.scalars(q.order_by(WfTask.task_id))))
 
 
+def waiting_on(company_id: int, instance_id: int | None) -> list[str]:
+    """R327: نام کسانی که مرحلهٔ باز این فرایند منتظر تصمیم آن‌هاست (برای نمایش در خود سند)."""
+    if not instance_id:
+        return []
+    with new_session() as session:
+        ids = list(session.scalars(select(WfTaskAssignee.user_id).join(WfTask, WfTask.task_id == WfTaskAssignee.task_id).where(
+            WfTask.company_id == company_id, WfTask.instance_id == instance_id, WfTask.status_code == "OPEN",
+            WfTaskAssignee.status_code == "ACTIVE").order_by(WfTaskAssignee.assignee_id)))
+        names = user_names(session, set(ids))
+    return [names[i] for i in dict.fromkeys(ids) if names.get(i)]
+
+
 def can_reassign(company_id: int, user_id: int | None) -> bool:
     return bool(user_id) and _is_manager(user_id, company_id)
 

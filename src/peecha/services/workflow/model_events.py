@@ -215,7 +215,8 @@ def gate_message(conn, company_id: int, entity_type: str, entity_id: int | None,
             "SELECT 1 FROM wf.instances WHERE company_id = :c AND entity_type = :et AND entity_id = :id "
             "AND status_code IN ('RUNNING', 'WAITING') LIMIT 1"), {"c": company_id, "et": entity_type, "id": entity_id}).first()
         if running:
-            return "این سند در جریان تایید است؛ پس از تایید نهایی در «مرکز تایید» خودکار انجام می‌شود."
+            return _failed_text(conn, company_id, entity_type, entity_id) or \
+                "این سند در جریان تایید است؛ پس از تایید نهایی در «مرکز تایید» خودکار انجام می‌شود."
         if _conditions_match(conn, company_id, entity_type, versions, context, entity_id):
             return "این سند پیش از این مرحله باید تایید شود؛ ابتدا آن را «برای تایید بفرستید»."
     return _busy_text(conn, company_id, entity_type, entity_id)
@@ -249,12 +250,73 @@ def running_steps(conn, company_id: int, entity_type: str | None, entity_id: int
         "ORDER BY task_id"), {"ids": list(labels)})]
 
 
+def _failed_text(conn, company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:
+    found = _failed_action(conn, company_id, entity_type, entity_id)
+    return found[1] if found else None
+
+
+def _failed_action(conn, company_id: int, entity_type: str | None, entity_id: int | None) -> tuple[int, str] | None:
+    """R327: اقدام خودکار فرایند در جریان (مثلاً «تصویب درخواست خرید») شکست خورده و منتظر «اجرای دوباره» است:
+    (شمارهٔ مورد بررسی، پیام)."""
+    if not entity_type or not entity_id:
+        return None
+    for exception_id, node_id, reason, graph in conn.execute(text(
+            "SELECT e.exception_id, e.node_id, e.reason, v.graph FROM wf.exceptions e JOIN wf.instances i ON i.instance_id = e.instance_id "
+            "JOIN wf.definition_versions v ON v.version_id = i.version_id WHERE i.company_id = :c AND i.entity_type = :et "
+            "AND i.entity_id = :id AND i.status_code IN ('RUNNING', 'WAITING') "
+            "AND e.status_code IN ('OPEN', 'RETRYING', 'ESCALATED') ORDER BY e.exception_id DESC"),
+            {"c": company_id, "et": entity_type, "id": entity_id}):
+        node = next((n for n in (graph or {}).get("nodes") or [] if n.get("id") == node_id), None)
+        if node is not None and node.get("type") == "ACTION":  # مرحلهٔ انسانی بی‌گیرنده پیام جدای خودش را دارد
+            return exception_id, _failed_message(node.get("label"), reason)
+    return None
+
+
+def _failed_message(label: str | None, reason: str | None) -> str:
+    reason = f" ({reason.strip().rstrip('.')})" if (reason or "").strip() else ""
+    return (f"اقدام خودکار «{label or 'گردش کار'}» برای این سند انجام نشد{reason}؛ مدیر یا مسئول فرایند باید آن را با "
+            "«اجرای دوباره» در نوار گردش کار همین سند (یا «مرکز گردش کار») دوباره اجرا کند.")
+
+
+def failed(company_id: int, entity_type: str | None, entity_id: int | None) -> tuple[int, str] | None:
+    from peecha.db.base import new_session
+
+    if not entity_type or not entity_id:
+        return None
+    with new_session() as session:
+        return _failed_action(session.connection(), company_id, entity_type, int(entity_id))
+
+
+def unsent_gate(company_id: int, entity_type: str | None, entity_id: int | None) -> list[int]:
+    """R327: فرایندهای «با دروازه» که این سند باید از آن‌ها بگذرد ولی فرایندی برایش در جریان نیست (پیش از تعریف فرایند
+    ارسال شده، یا فرایند قبلی لغو/ناموفق شد)؛ «ارسال برای تایید» همین‌ها را شروع می‌کند."""
+    if not entity_type or not entity_id:
+        return []
+    _ensure_loaded()
+    if not all_gated(entity_type):
+        return []
+    from peecha.db.base import new_session
+
+    with new_session() as session:
+        conn = session.connection()
+        versions = gate_definitions(conn, company_id, entity_type)
+        if not versions or approved_by_workflow(conn, company_id, entity_type, entity_id) or conn.execute(text(
+                "SELECT 1 FROM wf.instances WHERE company_id = :c AND entity_type = :et AND entity_id = :id "
+                "AND status_code IN ('RUNNING', 'WAITING') LIMIT 1"),
+                {"c": company_id, "et": entity_type, "id": entity_id}).first():
+            return []
+        return [d for d, v in versions if _conditions_match(conn, company_id, entity_type, [(d, v)], None, entity_id)]
+
+
 def _busy_text(conn, company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:
     if not _lock_while_running(conn, company_id):
         return None
     steps = running_steps(conn, company_id, entity_type, entity_id)
     if steps is None:
         return None
+    failure = _failed_text(conn, company_id, entity_type, entity_id)
+    if failure:
+        return failure
     stuck = conn.execute(text(
         "SELECT t.node_id FROM wf.tasks t JOIN wf.instances i ON i.instance_id = t.instance_id "
         "WHERE i.company_id = :c AND i.entity_type = :et AND i.entity_id = :id AND t.status_code = 'OPEN' "
