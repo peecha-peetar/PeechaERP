@@ -23,7 +23,7 @@ from peecha.db.models.security import Role, User
 from peecha.db.models.workflow import WfDefinition, WfDefinitionTrigger, WfDefinitionVersion, WfInstance
 from peecha.services.workflow import conditions, registry
 from peecha.services.workflow.common import (
-    DEFINITION_STATUS, NODE_TYPES, OPEN_INSTANCE_STATUSES, RUNNABLE_STATUSES, WorkflowError, audit, now,
+    DEFINITION_STATUS, NODE_TYPES, OPEN_INSTANCE_STATUSES, RUNNABLE_STATUSES, WorkflowError, audit, now, settings,
 )
 
 START = "start"
@@ -151,6 +151,29 @@ def _field_issues(node: dict, name: str, nid: str) -> list[Issue]:
     return issues
 
 
+def problems(company_id: int) -> dict[int, list[str]]:
+    """R329: فرایندهای منتشرشده‌ای که با قواعد امروز منتشر نمی‌شدند (مثلاً پیش از این بررسی تعریف شده‌اند)."""
+    out: dict[int, list[str]] = {}
+    with new_session() as session:
+        rows = [(d.definition_id, d.entity_type, v.graph) for d, v in session.execute(
+            select(WfDefinition, WfDefinitionVersion).join(
+                WfDefinitionVersion, WfDefinitionVersion.version_id == WfDefinition.active_version_id).where(
+                WfDefinition.company_id == company_id, WfDefinition.status_code.in_(RUNNABLE_STATUSES)))]
+    for definition_id, entity_type, graph in rows:
+        found = [i.message for i in errors(validate_graph(company_id, graph or {}, entity_type))]
+        if found:
+            out[definition_id] = found
+    return out
+
+
+def _only_requester(node: dict, adapter) -> bool:
+    """R329: همهٔ تاییدکنندگان (و جایگزین‌ها) خود درخواست‌کننده‌اند؟"""
+    submitter = adapter.submitter_field if adapter is not None else None
+    specs = list(node.get("approvers") or []) + list(node.get("fallback") or [])
+    return bool(specs) and all(s.get("kind") in ("STARTER", "OWNER") or
+                               (s.get("kind") == "FIELD" and submitter and s.get("field") == submitter) for s in specs)
+
+
 def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> list[Issue]:
     issues: list[Issue] = []
     adapter = registry.get_adapter(entity_type)
@@ -176,6 +199,15 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
         issues.append(Issue("error", f"نوع سند «{entity_type}» برای گردش کار تعریف نشده است."))
     for msg in conditions.validate(trigger.get("condition"), fields if adapter else None):
         issues.append(Issue("error", f"شرط شروع: {msg}"))
+    if trigger.get("gate") and adapter is not None:
+        from peecha.services.workflow import model_events
+
+        # R329: فرایندی که از همان تعریف معلوم است سند را گیر می‌اندازد منتشر نمی‌شود
+        if not model_events.trigger_reaches_gate(entity_type, trigger):
+            issues.append(Issue("error", model_events.unreachable_gate_text(entity_type)))
+        if not any(n.get("type") == "END" and (n.get("outcome") or "DONE") == "APPROVED" for n in graph.get("nodes") or []):
+            issues.append(Issue("error", "«قفل تایید» فقط وقتی باز می‌شود که فرایند با «تایید شد» تمام شود؛ این فرایند چنین "
+                                         "پایانی ندارد و سند هیچ‌وقت تایید نمی‌شود. یک پایان «تایید شد» بگذارید یا قفل را بردارید."))
 
     nodes = nodes_by_id(graph)
     if len(nodes) != len(graph.get("nodes") or []):
@@ -219,6 +251,9 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
         elif ntype == "APPROVAL":
             if not node.get("approvers"):
                 issues.append(Issue("error", f"برای «{name}» تاییدکننده‌ای تعیین نشده است.", nid))
+            elif _only_requester(node, adapter) and not settings(company_id).get("allow_self_approval"):
+                issues.append(Issue("error", f"تنها تاییدکنندهٔ «{name}» خود درخواست‌کننده است و تایید درخواست خود مجاز "
+                                             "نیست؛ این مرحله هیچ‌وقت انجام نمی‌شود. تاییدکنندهٔ دیگری بگذارید.", nid))
             if not {"approved", "rejected"} <= whens:
                 issues.append(Issue("error", f"«{name}» باید هر دو مسیر «تایید شد» و «رد شد» را داشته باشد.", nid))
             if node.get("mode") == "PERCENT" and not 0 < int(node.get("percent") or 0) <= 100:

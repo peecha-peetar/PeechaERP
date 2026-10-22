@@ -147,14 +147,62 @@ def _transitions(session, conn, include_new: bool = True):
 
 
 # --- دروازهٔ تایید ----------------------------------------------------------------------------------------------
+_AFTER_GATE = ("CANCELLED", "REJECTED")
+
+
+def trigger_reaches_gate(entity_type: str | None, trigger: dict | None) -> bool:
+    """R329: آیا فرایند پیش از وضعیت قفل‌شده شروع می‌شود؟ فرایندی که فقط با خود «تصویب» (یا پس از آن) شروع شود هرگز
+    پیش از تصویب اجرا نمی‌شود و قفلش سند را برای همیشه می‌بست."""
+    trigger = trigger or {}
+    if trigger.get("type") != "EVENT":
+        return True
+    blocked = set(all_gated(entity_type)) | set(_AFTER_GATE)
+    prefix = f"{entity_type}_"
+    return any(not ev.startswith(prefix) or ev[len(prefix):] not in blocked for ev in trigger.get("events") or [])
+
+
+def start_event_hint(entity_type: str | None) -> str:
+    """برچسب رویدادی که فرایند تایید باید با آن شروع شود (مثلاً «ارسال درخواست خرید»)."""
+    from peecha.services.workflow import registry
+
+    adapter = registry.get_adapter(entity_type)
+    if adapter is None:
+        return ""
+    blocked = set(all_gated(entity_type)) | set(_AFTER_GATE) | {"CREATED", "DRAFT"}
+    prefix = f"{entity_type}_"
+    labels = [label for code, label in adapter.events.items() if code.startswith(prefix) and code[len(prefix):] not in blocked]
+    return labels[0] if labels else next(iter(adapter.events.values()), "")
+
+
+def unreachable_gate_text(entity_type: str | None) -> str:
+    hint = start_event_hint(entity_type)
+    return ("با این رویداد، فرایند فقط پس از همان تایید شروع می‌شود و «قفل تایید» هیچ‌وقت باز نمی‌شود. "
+            + (f"برای تایید سند، رویداد «{hint}» را انتخاب کنید؛ " if hint else "")
+            + "اگر فرایند برای پس از تایید است (مثلاً فقط خبر)، تیک «قفل تایید» را بردارید.")
+
+
+def _has_human_step(graph: dict) -> bool:
+    return any(n.get("type") in ("APPROVAL", "TASK") for n in (graph or {}).get("nodes") or [])
+
+
 def gate_definitions(conn, company_id: int, entity_type: str) -> list[tuple[int, int]]:
-    """(تعریف، نسخه) فرایندهای فعال «با دروازه» برای این نوع سند."""
-    return [(r[0], r[1]) for r in conn.execute(text(
-        "SELECT DISTINCT t.definition_id, t.version_id FROM wf.definition_triggers t "
-        "JOIN wf.definitions d ON d.definition_id = t.definition_id "
-        "WHERE t.company_id = :c AND t.entity_type = :et AND t.is_active AND (t.config ->> 'gate') = 'true' "
-        "AND d.status_code IN ('PUBLISHED', 'ACTIVE') AND t.version_id = d.active_version_id"),
-        {"c": company_id, "et": entity_type})]
+    """(تعریف، نسخه) فرایندهای فعال «با دروازه» برای این نوع سند.
+
+    R329: فرایندی که هیچ‌وقت «تایید شد» تمام نمی‌شود، یا پس از تصویب شروع می‌شود و مرحلهٔ تایید ندارد (مثلاً فقط
+    خبر)، جلوی سند را نمی‌گیرد؛ اگر مرحلهٔ تایید دارد، سند از وضعیت پیش از تصویب به آن فرستاده می‌شود (unsent_gate)."""
+    out = []
+    for definition_id, version_id in dict.fromkeys(tuple(r) for r in conn.execute(text(
+            "SELECT t.definition_id, t.version_id FROM wf.definition_triggers t "
+            "JOIN wf.definitions d ON d.definition_id = t.definition_id "
+            "WHERE t.company_id = :c AND t.entity_type = :et AND t.is_active AND (t.config ->> 'gate') = 'true' "
+            "AND d.status_code IN ('PUBLISHED', 'ACTIVE') AND t.version_id = d.active_version_id ORDER BY t.definition_id"),
+            {"c": company_id, "et": entity_type})):
+        graph = conn.execute(text("SELECT graph FROM wf.definition_versions WHERE version_id = :v"),
+                             {"v": version_id}).scalar() or {}
+        approves = any(n.get("type") == "END" and n.get("outcome") == "APPROVED" for n in graph.get("nodes") or [])
+        if approves and (trigger_reaches_gate(entity_type, graph.get("trigger")) or _has_human_step(graph)):
+            out.append((definition_id, version_id))
+    return out
 
 
 def _conditions_match(conn, company_id: int, entity_type: str, versions: list[tuple[int, int]], context: dict | None,
@@ -318,8 +366,12 @@ def unsent_gate(company_id: int, entity_type: str | None, entity_id: int | None)
             trigger = (conn.execute(text("SELECT graph FROM wf.definition_versions WHERE version_id = :v"),
                                     {"v": v}).scalar() or {}).get("trigger") or {}
             events = set(trigger.get("events") or [])
-            # R328: فقط در همان وضعیتی که فرایند را شروع می‌کند (مثلاً «تاییدشده»، نه پیش‌نویس)
-            if trigger.get("type") == "EVENT" and status and f"{entity_type}_{status}" not in events \
+            # R328: فقط در همان وضعیتی که فرایند را شروع می‌کند (مثلاً «تاییدشده»، نه پیش‌نویس)؛ R329: فرایند تاییدی که
+            # رویداد شروعش پس از تصویب است، از هر وضعیت پیش از تصویب (جز پیش‌نویس) فرستاده می‌شود
+            if not trigger_reaches_gate(entity_type, trigger):
+                if status in (None, "DRAFT"):
+                    continue
+            elif trigger.get("type") == "EVENT" and status and f"{entity_type}_{status}" not in events \
                     and f"{entity_type}_CREATED" not in events:
                 continue
             if _conditions_match(conn, company_id, entity_type, [(d, v)], None, entity_id):

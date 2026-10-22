@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals
 from peecha.services import roles as roles_service
-from peecha.services.workflow import builder, conditions, definitions as defs, registry, routing, simulate, sla
+from peecha.services.workflow import builder, conditions, definitions as defs, model_events, registry, routing, simulate, sla
 from peecha.services.workflow import ai as wf_ai, templates as wf_templates
 from peecha.services.workflow.common import DEFINITION_STATUS, NODE_TYPES, OUTCOMES
 from peecha.ui.screens import module_style as ms
@@ -757,6 +757,10 @@ class WizardDialog(QDialog):
                 return "نام و کد فرایند را وارد کنید."
         if index == 1 and self.ttype.currentData() == "EVENT" and not self._checked(self.events):
             return "دست‌کم یک رویداد را انتخاب کنید."
+        if index == 1 and self.ttype.currentData() == "EVENT" and not self.gate.isHidden() and self.gate.isChecked() \
+                and not model_events.trigger_reaches_gate(self.entity.currentData(),
+                                                          {"type": "EVENT", "events": self._checked(self.events)}):
+            return model_events.unreachable_gate_text(self.entity.currentData())  # R329
         if index == 1 and self.ttype.currentData() == "SCAN" and self.scan.currentData() is None:
             return "بررسی دوره‌ای برای این نوع سند تعریف نشده است."
         if index == 2 and self.start_rule.problems():
@@ -1685,7 +1689,7 @@ class ProcessListScreen(QWidget):
         cards, self.cards = ms.summary([("all", "همهٔ فرایندها", "info", "🔀"), ("active", "فعال", "success", "▶️"),
                                         ("draft", "در دست طراحی", "warning", "✏️"), ("running", "اجراهای باز", "neutral", "⏳")])
         outer.addWidget(cards)
-        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس تازه", "اجراهای باز"])
+        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس تازه", "اجراهای باز", "ایراد"])
         self.table.cellDoubleClicked.connect(lambda _r, _c: self.open_designer())
         outer.addWidget(self.table, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (
@@ -1722,6 +1726,10 @@ class ProcessListScreen(QWidget):
         if company_id() is None:
             return
         self.rows = defs.list_definitions(company_id())
+        try:
+            self.definition_problems = defs.problems(company_id())
+        except Exception:  # noqa: BLE001 -- بررسی کمکی نباید فهرست را خالی کند
+            self.definition_problems = {}
         self.cards["all"].setText(P(len(self.rows)))
         self.cards["active"].setText(P(sum(1 for r in self.rows if r.status_code in ("ACTIVE", "PUBLISHED"))))
         self.cards["draft"].setText(P(sum(1 for r in self.rows if r.status_code in ("DRAFT", "TESTING"))))
@@ -1732,10 +1740,18 @@ class ProcessListScreen(QWidget):
         text, status = self.search.text().strip(), self.status_filter.currentData()
         shown = [r for r in self.rows if (not status or r.status_code == status) and (not text or text in r.name or text in r.code)]
         labels = {a.entity_type: a.label for a in registry.adapters()}
+        problems = getattr(self, "definition_problems", {})
         fill(self.table, [[r.name, r.code, labels.get(r.entity_type, "عمومی") if r.entity_type else "عمومی",
                            builder.TRIGGER_LABELS.get(r.trigger_type or "MANUAL", ""), r.status_label,
                            r.active_version_no or "—", "دارد" if r.has_draft and r.active_version_no else "",
-                           r.running] for r in shown], [r.definition_id for r in shown])
+                           r.running, "نیاز به اصلاح" if r.definition_id in problems else ""]
+                          for r in shown], [r.definition_id for r in shown])
+        # R329: فرایند منتشرشده‌ای که با قواعد امروز سند را گیر می‌انداخت؛ علت در راهنمای همان خانه
+        for i, r in enumerate(shown):
+            if r.definition_id in problems:
+                cell = self.table.item(i, 8)
+                cell.setToolTip("\n".join(problems[r.definition_id]))
+                cell.setForeground(QColor("#B91C1C"))
 
     def _selected(self) -> int | None:
         items = self.table.selectedItems()

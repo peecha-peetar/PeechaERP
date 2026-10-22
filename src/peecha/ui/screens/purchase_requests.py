@@ -729,7 +729,11 @@ class PurchaseRequestScreen(QWidget):
                 self._after_workflow("درخواست تصویب شد.")
         elif route == "SEND":
             if self.workflow_bar.send():
-                self._after_workflow("درخواست برای تایید به گردش کار فرستاده شد.")
+                self.edit_document(self._request_id)
+                if self.workflow_bar.my_task_ids:  # R329: «تصویب» زدهٔ همان تاییدکننده: همین‌جا تایید می‌شود
+                    self._decide_step("APPROVE")
+                else:
+                    self._after_workflow("درخواست برای تایید به گردش کار فرستاده شد.")
         else:
             self._transition(lambda: pr_service.approve_request(self._request_id, self._company_id(), self._user_id()),
                              "درخواست تصویب شد.")
