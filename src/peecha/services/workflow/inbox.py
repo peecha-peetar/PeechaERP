@@ -10,11 +10,12 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass, field
 
-from peecha.services.workflow import tasks
+from peecha.services.workflow import registry, tasks
 from peecha.services.workflow.common import PRIORITIES, WorkflowError, now
 
 SOURCES = {"WF": "گردش کار", "CARTABLE": "کارتابل اسناد", "DOC": "اسناد خرید، فروش و انبار", "CRM": "پیگیری مشتری",
-           "CUSTOMER": "مشتری تازه", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده"}
+           "CUSTOMER": "مشتری تازه", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده",
+           "FAILED": "اقدام خودکار ناموفق"}
 KINDS = {"APPROVAL": "تایید", "TASK": "کار", "STEP": "مرحلهٔ سند", "FOLLOWUP": "پیگیری", "REQUEST": "درخواست من"}
 _REQUEST_TYPES = {"CREATE": "ثبت و تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
 # مرحلهٔ منتظر اسناد ← جملهٔ کاری که کاربر باید انجام دهد
@@ -245,8 +246,44 @@ def _stuck_items(company_id: int, user_id: int) -> list[WorkItem]:
     return out
 
 
+def _failed_items(company_id: int, user_id: int) -> list[WorkItem]:
+    """R328: اقدام خودکار فرایند (مثلاً تصویب یا ثبت سند) انجام نشد؛ بدون این کارت فقط یک اعلان می‌رفت و سند بی‌صدا
+    منتظر می‌ماند. برای مدیران و مسئول همان مورد، با «اجرای دوباره»."""
+    from sqlalchemy import select
+
+    from peecha.db.base import new_session
+    from peecha.db.models.workflow import WfDefinitionVersion, WfException, WfInstance
+
+    manager = tasks.can_reassign(company_id, user_id)
+    with new_session() as session:
+        q = select(WfException, WfInstance).join(WfInstance, WfInstance.instance_id == WfException.instance_id).where(
+            WfException.company_id == company_id, WfException.status_code.in_(("OPEN", "RETRYING", "ESCALATED")),
+            WfInstance.status_code.in_(("RUNNING", "WAITING")))
+        if not manager:
+            q = q.where(WfException.owner_user_id == user_id)
+        rows = []
+        for ex, inst in session.execute(q.order_by(WfException.exception_id)):
+            graph = session.get(WfDefinitionVersion, inst.version_id).graph or {}
+            node = next((n for n in graph.get("nodes") or [] if n.get("id") == ex.node_id), {})
+            if node.get("type") == "ACTION":
+                rows.append((ex.exception_id, ex.title, ex.reason, ex.created_at, inst.instance_id, inst.entity_type,
+                             inst.entity_id, inst.title or "", node.get("label") or ""))
+    out = []
+    for exception_id, title, reason, created_at, instance_id, entity_type, entity_id, inst_title, label in rows:
+        adapter = registry.get_adapter(entity_type)
+        path = _wf_path(company_id, instance_id)
+        step_no, step_total = _progress(path)
+        out.append(WorkItem(f"FAILED:{exception_id}", "FAILED", SOURCES["FAILED"], "STEP", "اقدام ناموفق", exception_id,
+                            inst_title or title, label, None, True, "HIGH", PRIORITIES["HIGH"], created_at, False, reason or "",
+                            {"instance_id": instance_id, "entity_type": entity_type, "entity_id": entity_id,
+                             "open_nav": adapter.open_nav if adapter else None, "exception_id": exception_id},
+                            f"«{label or 'اقدام خودکار'}» انجام نشد؛ علت را برطرف کنید و «اجرای دوباره» را بزنید", "task",
+                            step_no, step_total, path))
+    return out
+
+
 _PROVIDERS = {"WF": _wf_items, "CARTABLE": _cartable_items, "DOC": _doc_items, "CRM": _crm_items, "CUSTOMER": _customer_items,
-              "STUCK": _stuck_items}
+              "STUCK": _stuck_items, "FAILED": _failed_items}
 
 
 def my_work(company_id: int, user_id: int, *, sources: tuple[str, ...] | None = None) -> list[WorkItem]:
@@ -360,6 +397,12 @@ def detail(company_id: int, user_id: int, key: str) -> dict:
     source, _sep, rest = key.partition(":")
     empty = {"path": [], "history": [], "decisions": [], "assignees": [], "form_fields": [], "instructions": "", "due_at": None,
              "sla": "", "row_version": None}
+    if source == "FAILED":
+        item = next((w for w in _failed_items(company_id, user_id) if w.key == key), None)
+        if item is None:
+            raise WorkflowError("این مورد دیگر باز نیست.")
+        return {**empty, "title": item.title, "requester": item.subtitle, "path": item.path, "instructions": item.status_note,
+                "context": tasks.context_rows(company_id, item.extra.get("entity_type"), item.extra.get("entity_id"))}
     if source == "STUCK":
         d = tasks.task_detail(company_id, int(rest), user_id)
         item = next((w for w in _stuck_items(company_id, user_id) if w.key == key), None)

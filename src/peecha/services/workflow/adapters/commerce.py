@@ -91,6 +91,18 @@ def _post_doc(ctx: ActionContext) -> dict:
     return {"status": "POSTED"}
 
 
+def _revert_doc(company_id: int, document_id: int) -> None:
+    from peecha.services import commercial_documents as docs
+
+    docs.revert_to_draft(document_id, company_id)
+
+
+def _reject_doc(ctx: ActionContext) -> dict:
+    """R328: رد در گردش کار ← سند به پیش‌نویس برمی‌گردد (اصلاح یا لغو با صادرکننده)؛ وگرنه برای همیشه قفل می‌ماند."""
+    _revert_doc(ctx.company_id, int(ctx.entity_id))
+    return {"status": "DRAFT"}
+
+
 def _release_hold(ctx: ActionContext) -> dict:
     from peecha.services import commercial_credit
 
@@ -138,11 +150,13 @@ for _code, (_label, _nav) in DOC_TYPES.items():
             "release_credit_hold": ActionSpec("release_credit_hold", "آزادسازی قفل اعتباری", _release_hold, risk="HIGH",
                                               is_done=_no_open_hold),
             "post": ActionSpec("post", "ثبت نهایی سند", _post_doc, risk="HIGH", is_done=_doc_status_is("POSTED")),
+            "reject": ActionSpec("reject", "رد و برگشت سند به پیش‌نویس", _reject_doc,
+                                 is_done=_doc_status_is("DRAFT", "CANCELLED"), params=(ParamSpec("reason", "دلیل رد"),)),
         },
         title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')} — {c.get('counterparty_name') or ''}".strip(" —"),
         owner=lambda cid, eid: doc_context(cid, eid)["created_by"], approval_context=_doc_card, open_nav=_nav,
         submitter_field="created_by", gate_statuses=("APPROVED",), form_gate_statuses=("POSTED",),
-        gate_label="تا تایید فرایند، سند قابل تصویب و ثبت نهایی نیست",
+        gate_label="تا تایید فرایند، سند قابل تصویب و ثبت نهایی نیست", reopen=_revert_doc,
         form_code=f"commercial_document_{_code.lower()}"))
 
 model_events.watch(Watch(
@@ -262,6 +276,12 @@ def _pr_reject(ctx: ActionContext) -> dict:
     return {"status": "REJECTED"}
 
 
+def _pr_reopen(company_id: int, request_id: int) -> None:
+    from peecha.services import purchase_requests
+
+    purchase_requests.return_to_draft(request_id, company_id)
+
+
 def _pr_status_is(*statuses: str):
     def check(company_id: int, request_id: int) -> bool:
         with new_session() as session:
@@ -289,6 +309,7 @@ registry.register_adapter(EntityAdapter(
         ("درخواست‌کننده", c["requester_name"]), ("تاریخ", jdate(c["request_date"])), ("تاریخ نیاز", jdate(c["required_date"])),
         ("مبلغ تخمینی", money(c["estimated_amount"])), ("تعداد ردیف", str(c["line_count"]))])(pr_context(cid, eid)),
     open_nav="PURCH_REQUESTS", submitter_field="requester", gate_statuses=("APPROVED",),
+    reopen=_pr_reopen,
     gate_label="تا تایید فرایند، درخواست قابل تصویب نیست", form_code="purchase_requests"))
 
 model_events.watch(Watch(PurchaseRequest, lambda r: "PURCHASE_REQUEST", actor=lambda r: r.requester_user_id))

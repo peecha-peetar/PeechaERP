@@ -61,6 +61,21 @@ def _stock_post(ctx: ActionContext) -> dict:
     return {"journal_entry_id": getattr(result, "journal_entry_id", None)}
 
 
+def _stock_revert(company_id: int, stock_document_id: int) -> None:
+    from peecha.services import inventory_documents
+
+    inventory_documents.revert_to_draft(stock_document_id, company_id)
+
+
+def _stock_reject(ctx: ActionContext) -> dict:
+    """R328: رد در گردش کار ← سند تاییدشده به پیش‌نویس برمی‌گردد."""
+    with new_session() as session:
+        status = session.get(StockDocument, ctx.entity_id).status_code
+    if status == "CONFIRMED":
+        _stock_revert(ctx.company_id, int(ctx.entity_id))
+    return {"status": "DRAFT"}
+
+
 def _stock_posted(company_id: int, stock_document_id: int) -> bool:
     with new_session() as session:
         d = session.get(StockDocument, stock_document_id)
@@ -88,8 +103,10 @@ for _code, (_et, _label, _nav) in STOCK_KINDS.items():
         _et, _label, "INVENTORY", stock_context, fields=STOCK_FIELDS,
         events={f"{_et}_CREATED": f"ثبت «{_label}»", f"{_et}_CONFIRMED": f"تایید «{_label}»",
                 f"{_et}_POSTED": f"ثبت نهایی «{_label}»"},
-        actions={"post": ActionSpec("post", "ثبت نهایی سند انبار", _stock_post, risk="HIGH", is_done=_stock_posted)},
-        title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')}",
+        actions={"post": ActionSpec("post", "ثبت نهایی سند انبار", _stock_post, risk="HIGH", is_done=_stock_posted),
+                 "reject": ActionSpec("reject", "رد و برگشت سند به پیش‌نویس", _stock_reject,
+                                      params=(ParamSpec("reason", "دلیل رد"),))},
+        title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')}", reopen=_stock_revert,
         owner=lambda cid, eid: stock_context(cid, eid)["created_by"], approval_context=_stock_card, open_nav=_nav,
         submitter_field="created_by",
         # اصلاح موجودی یک‌مرحله‌ای است (دروازهٔ سرویس)؛ انتقال فقط پیش‌بررسی فرم

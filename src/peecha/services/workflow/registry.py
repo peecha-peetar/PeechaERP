@@ -75,6 +75,8 @@ class EntityAdapter:
     gate_statuses: tuple[str, ...] = ()  # وضعیت‌هایی که «دروازهٔ تایید» فقط از مسیر فرایند اجازه می‌دهد
     gate_label: str = ""  # متن ساده برای طراح: «تا تایید فرایند، سند قابل ... نیست»
     form_gate_statuses: tuple[str, ...] = ()  # عملیات چندمرحله‌ای: فقط فرم پیش از شروع بررسی می‌کند
+    # R328: «برگشت برای اصلاح» سند قفل‌شده (مثلاً ارسال‌شده) را دوباره قابل ویرایش می‌کند: (company_id, entity_id)
+    reopen: Callable[[int, int], None] | None = None
 
     def field_map(self) -> dict[str, FieldSpec]:
         return {f.key: f for f in self.fields}

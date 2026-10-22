@@ -135,6 +135,7 @@ def _human_node(run: runtime.Run) -> runtime.NodeResult:
     raw_mode = (node.get("mode") or "ANY").upper()
     mode = raw_mode if kind == "APPROVAL" else ("ALL" if raw_mode == "ALL" else "ANY")
     whens = {e.get("when") for e in definitions.outgoing(run.graph, node["id"])}
+    rework = kind == "TASK" and run.token.get("via") == "changes"
     labels = run.labels()
     title = render(node.get("title") or "", {**ctx, "عنوان": inst.title}, labels).strip() or \
         f"{node.get('label') or KINDS[kind]} — {inst.title or ''}".strip(" —")
@@ -145,7 +146,9 @@ def _human_node(run: runtime.Run) -> runtime.NodeResult:
                   required_percent=int(node.get("percent") or 0) or None if mode == "PERCENT" else None,
                   options={"allow_changes": "changes" in whens, "allow_delegate": bool(node.get("allow_delegate", True)),
                            "require_comment_on_reject": bool(node.get("require_comment_on_reject", True)),
-                           "definition_id": inst.definition_id},
+                           "definition_id": inst.definition_id,
+                           # R328: سند برای اصلاح باز شد؛ با ارسال دوباره (همین وضعیت) این کار خودکار بسته می‌شود
+                           **({"rework": True, "resubmit_status": run.variables.get("rework_status")} if rework else {})},
                   form_fields=plain(list(node.get("fields") or [])), priority_code=node.get("priority") or "NORMAL",
                   requested_by_user_id=requester, due_at=DUE_CALCULATOR(node))
     session.add(task)
@@ -353,6 +356,7 @@ def decide(company_id: int, task_id: int, user_id: int, decision: str, comment: 
         _check_sod(task, user_id)
         if decision in ("REJECT", "CHANGES") and (task.options or {}).get("require_comment_on_reject", True) and not comment:
             raise WorkflowError("لطفاً علت رد یا موارد اصلاحی را بنویسید.")
+        _check_resubmitted(company_id, task, decision)
         # R323: فرم مرحلهٔ تایید هم پیش از تایید کامل می‌شود؛ رد/برگشت فقط علت می‌خواهد
         values = _validate_form(task.form_fields or [], data or {}) if decision in ("DONE", "APPROVE") else {}
         session.add(WfTaskDecision(task_id=task_id, user_id=user_id, on_behalf_of_user_id=seat.original_user_id,
@@ -381,11 +385,99 @@ def decide(company_id: int, task_id: int, user_id: int, decision: str, comment: 
                          "WfTask", task_id)
         status = task.status_code
         session.commit()
+    if closing == "CHANGES":
+        _reopen_for_changes(company_id, task_id)
     if closing:
         resume_task(company_id, task_id)
     message = {"APPROVED": "تایید نهایی شد.", "REJECTED": "رد شد.", "CHANGES": "برای اصلاح برگشت داده شد.",
                "DONE": "انجام شد."}.get(closing or "", "تصمیم شما ثبت شد؛ کار منتظر تصمیم بقیه است.")
     return DecisionResult(task_id, status, bool(closing), message)
+
+
+def _check_resubmitted(company_id: int, task: WfTask, decision: str) -> None:
+    wanted = (task.options or {}).get("resubmit_status")
+    if decision != "DONE" or not wanted or not task.entity_id:
+        return
+    try:
+        current = runtime.load_context(company_id, task.entity_type, task.entity_id).get("status")
+    except Exception:  # noqa: BLE001 -- سند پیدا نشد؛ تصمیم با خود کاربر
+        return
+    if current != wanted:
+        raise WorkflowError("سند هنوز دوباره ارسال نشده است. آن را اصلاح کنید و با دکمهٔ خود سند دوباره بفرستید؛ "
+                            "این مرحله پس از ارسال خودکار بسته می‌شود و تایید ادامه می‌یابد.")
+
+
+def _reopen_for_changes(company_id: int, task_id: int) -> None:
+    """R328: «برگشت برای اصلاح» سند قفل‌شده (ارسال‌شده/تاییدشده) را دوباره قابل ویرایش می‌کند؛ بدون این، درخواست‌کننده
+    نه می‌توانست سند را اصلاح کند و نه تایید جلو می‌رفت. وضعیت پیش از بازشدن نگه داشته می‌شود تا ارسال دوباره را بشناسیم."""
+    from peecha.services.workflow import model_events
+
+    with new_session() as session:
+        task = session.get(WfTask, task_id)
+        inst = session.get(WfInstance, task.instance_id) if task is not None and task.instance_id else None
+        if inst is None or not inst.entity_id:
+            return
+        entity_type, entity_id, instance_id, depth = inst.entity_type, int(inst.entity_id), inst.instance_id, inst.depth
+    adapter = registry.get_adapter(entity_type)
+    status = None
+    if adapter is not None and adapter.reopen is not None:
+        try:
+            before = runtime.load_context(company_id, entity_type, entity_id).get("status")
+            with model_events.acting(instance_id, depth):
+                adapter.reopen(company_id, entity_id)
+            status = before
+        except Exception:  # noqa: BLE001 -- سند قابل بازشدن نیست (مثلاً رسید انبار خورده)؛ اصلاح بدون بازکردن سند
+            status = None
+    with new_session() as session:
+        inst = session.scalar(select(WfInstance).where(WfInstance.instance_id == instance_id).with_for_update())
+        variables = dict(inst.variables or {})
+        variables["rework_status"] = status
+        inst.variables = variables
+        session.commit()
+
+
+def complete_rework(company_id: int, entity_type: str | None, entity_id: int | None, status: str | None,
+                    actor_user_id: int | None = None) -> int:
+    """R328: سند برگشت‌خورده برای اصلاح دوباره ارسال شد ← مرحلهٔ «اصلاح» خودکار انجام‌شده ثبت و تایید از سر گرفته می‌شود."""
+    if not entity_type or not entity_id or not status:
+        return 0
+    with new_session() as session:
+        targets = []
+        for t in session.scalars(select(WfTask).where(
+                WfTask.company_id == company_id, WfTask.entity_type == entity_type, WfTask.entity_id == int(entity_id),
+                WfTask.status_code == "OPEN", WfTask.kind == "TASK")):
+            options = t.options or {}
+            if not options.get("rework") or options.get("resubmit_status") != status:
+                continue
+            seats = list(session.scalars(select(WfTaskAssignee.user_id).where(
+                WfTaskAssignee.task_id == t.task_id, WfTaskAssignee.status_code == "ACTIVE")))
+            if seats:
+                targets.append((t.task_id, actor_user_id if actor_user_id in seats else seats[0], list(t.form_fields or [])))
+    note = "سند اصلاح و دوباره ارسال شد."
+    done = 0
+    for task_id, user, fields in targets:
+        data = {f["key"]: note for f in fields if f.get("required") and (f.get("kind") or "text") in ("text", "longtext")}
+        try:
+            decide(company_id, task_id, user, "DONE", note, data=data)
+            done += 1
+        except WorkflowError:
+            continue  # فرم مرحله خانهٔ دیگری لازم دارد؛ خود کاربر از کارتابل انجامش می‌دهد
+    return done
+
+
+def rework_note(company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:
+    """R328: اگر سند برای اصلاح برگشت داده شده، همان توضیح تاییدکننده (برای نمایش در خود سند)."""
+    if not entity_type or not entity_id:
+        return None
+    with new_session() as session:
+        task = session.scalar(select(WfTask).where(
+            WfTask.company_id == company_id, WfTask.entity_type == entity_type, WfTask.entity_id == int(entity_id),
+            WfTask.status_code == "OPEN", WfTask.kind == "TASK").order_by(WfTask.task_id.desc()))
+        if task is None or not (task.options or {}).get("rework"):
+            return None
+        comment = session.scalar(select(WfTaskDecision.comment).join(WfTask, WfTask.task_id == WfTaskDecision.task_id).where(
+            WfTask.instance_id == task.instance_id, WfTaskDecision.decision == "CHANGES").order_by(WfTaskDecision.decision_id.desc()))
+    return comment or ""
 
 
 def resume_task(company_id: int, task_id: int) -> bool:

@@ -305,7 +305,26 @@ def unsent_gate(company_id: int, entity_type: str | None, entity_id: int | None)
                 "AND status_code IN ('RUNNING', 'WAITING') LIMIT 1"),
                 {"c": company_id, "et": entity_type, "id": entity_id}).first():
             return []
-        return [d for d, v in versions if _conditions_match(conn, company_id, entity_type, [(d, v)], None, entity_id)]
+        from peecha.services.workflow import runtime
+
+        try:
+            status = runtime.load_context(company_id, entity_type, entity_id).get("status")
+        except Exception:  # noqa: BLE001
+            status = None
+        if status in ("CANCELLED", "REJECTED") or status in all_gated(entity_type):
+            return []
+        out = []
+        for d, v in versions:
+            trigger = (conn.execute(text("SELECT graph FROM wf.definition_versions WHERE version_id = :v"),
+                                    {"v": v}).scalar() or {}).get("trigger") or {}
+            events = set(trigger.get("events") or [])
+            # R328: فقط در همان وضعیتی که فرایند را شروع می‌کند (مثلاً «تاییدشده»، نه پیش‌نویس)
+            if trigger.get("type") == "EVENT" and status and f"{entity_type}_{status}" not in events \
+                    and f"{entity_type}_CREATED" not in events:
+                continue
+            if _conditions_match(conn, company_id, entity_type, [(d, v)], None, entity_id):
+                out.append(d)
+        return out
 
 
 def _busy_text(conn, company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:

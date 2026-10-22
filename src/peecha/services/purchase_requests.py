@@ -185,6 +185,16 @@ def submit_request(request_id: int, company_id: int) -> None:
         session.commit()
 
 
+def return_to_draft(request_id: int, company_id: int) -> None:
+    """R328: «برگشت برای اصلاح» در گردش کار: درخواست ارسال‌شده دوباره قابل ویرایش می‌شود تا اصلاح و دوباره ارسال شود."""
+    with new_session() as session:
+        row = _get(session, request_id, company_id)
+        if row.status_code != "SUBMITTED":
+            raise ValueError("فقط درخواست ارسال‌شده به پیش‌نویس برمی‌گردد.")
+        row.status_code = "DRAFT"
+        session.commit()
+
+
 def approve_request(request_id: int, company_id: int, approved_by_user_id: int, *, by_workflow: bool = False) -> None:
     from peecha.services import roles as roles_service
 

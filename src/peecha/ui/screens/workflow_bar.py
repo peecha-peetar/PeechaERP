@@ -85,7 +85,9 @@ class WorkflowBar(QWidget):
         self.waiting_names: list[str] = []
         self.retry_exception_id: int | None = None
         self.can_retry = False
-        self.gated_resend = False  # سند (مثلاً درخواست ارسال‌شده) می‌تواند دوباره به فرایند «با دروازه» فرستاده شود
+        # R328: سندی که دروازهٔ تایید دارد ولی فرایندی برایش در جریان نیست (ردشده، لغوشده یا پیش از تعریف فرایند) از همین
+        # نوار دوباره فرستاده می‌شود؛ فقط در وضعیتی که آن فرایند را شروع می‌کند (model_events.unsent_gate)
+        self.gated_resend = True
         self.gated_ids: list[int] = []
         for b in (self.send_button, self.step_button, self.note_button, self.reassign_button, self.retry_button,
                   self.history_button):
@@ -171,13 +173,37 @@ class WorkflowBar(QWidget):
         self.can_retry = bool(failure) and (can_fix or (owner is not None and owner == user_id()))
         self.retry_button.setVisible(self.can_retry)
         stuck_message = stuck_message or (failure[1] if failure else None)
-        self.warning.setText(stuck_message or "")
-        self.warning.setVisible(bool(stuck_message))
+        notice = None if stuck_message else self._notice(cid, rows, running)
+        self.warning.setStyleSheet("color: #EF4444;" if stuck_message else "color: #B45309;")
+        self.warning.setText(stuck_message or notice or "")
+        self.warning.setVisible(bool(stuck_message or notice))
         self.step_button.setEnabled(bool(self.open_task_ids))
         self.step_button.setToolTip("انجام مرحلهٔ جاری -- " + ("این مرحله منتظر شماست" if self.my_task_ids else
                                                                 "دیدن فرم مرحله؛ تصمیم با مسئول همان مرحله است"))
         self.note_button.setEnabled(bool(self.open_task_ids))
         self.setVisible(bool(rows) or bool(manual))
+
+    def _notice(self, cid: int, rows, running: bool) -> str | None:
+        """R328: راهنمای ادامهٔ کار: سند برای اصلاح برگشته، یا فرایند قبلی رد/لغو/متوقف شده و باید دوباره فرستاده شود."""
+        try:
+            rework = tasks.rework_note(cid, self.entity_type, int(self.entity_id)) if running else None
+        except Exception:  # noqa: BLE001
+            rework = None
+        if rework is not None:
+            reason = f": «{rework}»" if rework else ""
+            return (f"این سند برای اصلاح برگشت داده شده است{reason}. سند را اصلاح کنید و دوباره بفرستید؛ تایید از همان "
+                    "مرحله خودکار ادامه می‌یابد.")
+        if running or not rows or not self.gated_ids:
+            return None
+        last = rows[0]
+        again = "با «ارسال برای تایید» دوباره بفرستید."
+        if last.status_code == "COMPLETED" and last.outcome_code == "REJECTED":
+            return f"این سند در گردش کار رد شد. پس از اصلاح، {again}"
+        if last.status_code == "CANCELLED":
+            return f"گردش کار این سند لغو شد{': ' + last.last_error if last.last_error else '.'} {again}"
+        if last.status_code == "FAILED":
+            return f"گردش کار این سند متوقف شد ({last.last_error or 'خطای تعریف فرایند'}). پس از رفع ایراد، {again}"
+        return None
 
     # --- کارها -----------------------------------------------------------------------------------------------
     def start_if_pending(self) -> bool:

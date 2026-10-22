@@ -289,7 +289,8 @@ def start_instance(company_id: int, definition_id: int, entity_type: str | None 
         inst = WfInstance(company_id=company_id, definition_id=definition_id, version_id=v.version_id,
                           entity_type=entity_type, entity_id=entity_id, title=(title or d.name)[:300], status_code="RUNNING",
                           tokens=[{"id": "t1", "node": START, "state": "READY", "visit": 1}], context=plain(context),
-                          variables={"visits": {}, "seq": 1}, correlation_key=correlation_key,
+                          variables={"visits": {}, "seq": 1, "start_status": (context or {}).get("status")},
+                          correlation_key=correlation_key,
                           trigger_event_id=trigger_event_id, started_by_user_id=started_by, depth=depth)
         session.add(inst)
         try:
@@ -523,6 +524,57 @@ def cancel_instance(company_id: int, instance_id: int, user_id: int | None, reas
             raise WorkflowError("این فرایند دیگر در جریان نیست.")
         _close_instance(session, inst, "CANCELLED", outcome="CANCELLED", error=reason or None, actor=user_id)
         session.commit()
+
+
+def running_for(company_id: int, definition_id: int, entity_type: str | None, entity_id: int | None) -> bool:
+    """R328: همین فرایند الان روی همین سند در جریان است؟ (یک سند دوبار وارد یک فرایند نمی‌شود)"""
+    if not entity_type or not entity_id:
+        return False
+    with new_session() as session:
+        return session.scalar(select(WfInstance.instance_id).where(
+            WfInstance.company_id == company_id, WfInstance.definition_id == definition_id,
+            WfInstance.entity_type == entity_type, WfInstance.entity_id == entity_id,
+            WfInstance.status_code.in_(("RUNNING", "WAITING"))).limit(1)) is not None
+
+
+WITHDRAW_REASONS = {"DRAFT": "سند به پیش‌نویس برگشت داده شد؛ پس از اصلاح، دوباره برای تایید فرستاده می‌شود.",
+                    "CANCELLED": "سند لغو شد."}
+
+
+def withdraw(company_id: int, entity_type: str | None, entity_id: int | None, status: str | None,
+             causation_instance_id: int | None = None) -> int:
+    """R328: سندی که کاربر خودش به پیش‌نویس برگرداند یا لغو کرد دیگر منتظر تایید نیست؛ فرایند در جریانش لغو می‌شود
+    (وگرنه تاییدکننده بعداً تایید می‌کرد و اقدام روی سند تغییرکرده شکست می‌خورد و سند گیر می‌کرد)."""
+    if status not in WITHDRAW_REASONS or not entity_type or not entity_id:
+        return 0
+    from peecha.db.models.workflow import WfEvent, WfTask
+
+    with new_session() as session:
+        targets = []
+        for inst in session.scalars(select(WfInstance).where(
+                WfInstance.company_id == company_id, WfInstance.entity_type == entity_type,
+                WfInstance.entity_id == entity_id, WfInstance.status_code.in_(("RUNNING", "WAITING")))):
+            if inst.instance_id == causation_instance_id:
+                continue  # تغییر را خود همین فرایند داده است (مثلاً «برگشت برای اصلاح» یا «رد»)
+            if status == "DRAFT":
+                start = (inst.variables or {}).get("start_status")
+                if start is None and inst.trigger_event_id:
+                    ev = session.get(WfEvent, inst.trigger_event_id)
+                    start = (ev.payload or {}).get("to") if ev is not None else None
+                    if ev is not None and ev.event_type.endswith("_CREATED"):
+                        start = "DRAFT"
+                if start in (None, "DRAFT"):
+                    continue  # فرایند از همان پیش‌نویس شروع شده بود
+                if any((t.options or {}).get("rework") for t in session.scalars(select(WfTask).where(
+                        WfTask.instance_id == inst.instance_id, WfTask.status_code == "OPEN"))):
+                    continue  # سند برای اصلاح باز است؛ با ارسال دوباره همین فرایند ادامه می‌یابد
+            targets.append(inst.instance_id)
+    for instance_id in targets:
+        try:
+            cancel_instance(company_id, instance_id, None, WITHDRAW_REASONS[status])
+        except WorkflowError:
+            continue
+    return len(targets)
 
 
 def recover_stuck(company_id: int | None = None) -> int:

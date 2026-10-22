@@ -113,7 +113,7 @@ ms.ICONS.update({
     "واگذاری به همکار": ("👥", ""), "یادداشت": ("💬", ""), "بازکردن سند": ("📂", ""), "تایید گروهی": ("☑️", ""),
     "تازه‌سازی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
     "انجام کار": ("✔️", "primary"), "بازکردن پروندهٔ مشتری": ("👤", ""), "فرم کامل مرحله": ("📋", ""),
-    "ارجاع به فرد مناسب": ("↗️", "primary"),
+    "ارجاع به فرد مناسب": ("↗️", "primary"), "اجرای دوباره": ("🔁", "primary"),
 })
 
 # نوع کار ← (آیکن، رنگ تم)
@@ -279,6 +279,8 @@ class WorkCard(QFrame):
             return [("انجام کار", lambda: s.approve_selected()), ("بازکردن سند", lambda: s.open_selected())]
         if it.source == "STUCK":
             return [("ارجاع به فرد مناسب", lambda: s.reassign_stuck()), ("بازکردن سند", lambda: s.open_selected())]
+        if it.source == "FAILED":
+            return [("اجرای دوباره", lambda: s.retry_failed()), ("بازکردن سند", lambda: s.open_selected())]
         if it.source == "CRM":
             return [("بازکردن پروندهٔ مشتری", lambda: s.open_selected())]
         return [("انجام کار", lambda: s.open_selected())]
@@ -731,6 +733,24 @@ class MyTasksScreen(QWidget):
             self.comment.clear()
             self.current = None
             self.reload()
+        return ok
+
+    def retry_failed(self) -> bool:
+        """R328: اقدام خودکار ناموفق (پس از رفع علت) دوباره اجرا می‌شود و فرایند از همان‌جا ادامه می‌یابد."""
+        item = self._require()
+        if item is None or item.source != "FAILED":
+            return False
+        from peecha.services.workflow import exceptions as wf_exceptions
+
+        _r, ok = _run(self, "اجرای دوباره", wf_exceptions.retry, company_id(), item.ref_id, user_id(), "اجرای دوباره از کارتابل")
+        if ok:
+            self.current = None
+            self.reload()
+            still = next((w for w in self.items if w.source == "FAILED"
+                          and w.extra.get("instance_id") == item.extra.get("instance_id")), None)
+            if still is not None:
+                _warn(self, "اجرای دوباره", f"باز هم انجام نشد: {still.status_note}")
+                return False
         return ok
 
     def reassign_stuck(self, to_user_id: int | None = None) -> bool:

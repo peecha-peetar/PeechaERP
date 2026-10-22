@@ -117,7 +117,7 @@ def open_entity(main_window, entity_type: str | None, entity_id: int | None) -> 
 def open_work_item(main_window, item: inbox.WorkItem) -> bool:
     from peecha.ui.screens import my_tasks
 
-    if item.source in ("WF", "STUCK"):
+    if item.source in ("WF", "STUCK", "FAILED"):
         return open_entity(main_window, item.extra.get("entity_type"), item.extra.get("entity_id"))
     if item.source == "CARTABLE":
         return my_tasks.open_cartable_source(main_window, item.extra["form_code"], item.extra["source_record_id"])

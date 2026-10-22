@@ -720,7 +720,10 @@ class WizardDialog(QDialog):
         self.notify_extra.entity_type = et
         adapter = registry.get_adapter(et)
         self.gate.setVisible(bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses)))
-        self.reject_doc.setVisible(any(code == "entity.reject" for code, _l, _r in registry.action_choices(et)))
+        reject = next((label for code, label, _r in registry.action_choices(et) if code == "entity.reject"), None)
+        self.reject_doc.setVisible(reject is not None)
+        if reject:  # R328: متن همان اقدام سند (مثلاً «رد و برگشت سند به پیش‌نویس»)
+            self.reject_doc.setText(f"با رد در گردش کار، «{reject}» هم انجام شود")
         self._sync_trigger()
 
     def _sync_trigger(self) -> None:

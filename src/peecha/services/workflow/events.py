@@ -159,6 +159,11 @@ def process_event(event_id: int) -> None:
     try:
         max_depth = int(settings(company_id).get("max_event_depth") or 5)
         context_cache: dict | None = None
+        status_to = data["payload"].get("to")
+        # R328: سند برگشت‌خورده برای اصلاح دوباره ارسال شد ← همان فرایند از مرحلهٔ تایید ادامه می‌یابد (نه فرایند تازه)
+        from peecha.services.workflow import tasks as wf_tasks
+
+        wf_tasks.complete_rework(company_id, data["entity_type"], data["entity_id"], status_to, data["actor"])
         only_def = data["payload"].get("definition_id") if data["event_type"].startswith("SCAN:") else None
         for definition_id, version_id, trig_entity in triggers:
             if only_def and int(only_def) != definition_id:
@@ -170,6 +175,9 @@ def process_event(event_id: int) -> None:
                 continue
             if (definition_id, data["entity_type"], data["entity_id"]) in ancestry:
                 skipped.append("فرایند نمی‌تواند خودش را دوباره روی همان سند شروع کند.")
+                continue
+            if runtime.running_for(company_id, definition_id, data["entity_type"], data["entity_id"]):
+                skipped.append("این سند همین حالا در همین فرایند است.")
                 continue
             if context_cache is None:
                 context_cache = runtime.load_context(company_id, data["entity_type"], data["entity_id"])
@@ -185,6 +193,7 @@ def process_event(event_id: int) -> None:
                                       depth=data["depth"]):
                 started += 1
         runtime.resume_waiting_for_event(company_id, data["event_type"], data["entity_type"], data["entity_id"])
+        runtime.withdraw(company_id, data["entity_type"], data["entity_id"], status_to, data["causation"])
     except Exception as exc:  # noqa: BLE001
         error = friendly_error(exc)[1]
     with new_session() as session:
