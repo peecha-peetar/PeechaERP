@@ -1292,6 +1292,13 @@ class MainWindow(QMainWindow):
             self._clamping_geometry = False
 
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 — نامِ متدِ Qt
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_F12:
+            from peecha.ui import form_locator
+
+            # R334: کلید مخفی مدیر سیستم — فایل پایتون فرم باز
+            if form_locator.is_hotkey(event) and form_locator.allowed():
+                self._form_locator_dialog = form_locator.show_for(self)
+                return True
         if event.type() == QEvent.KeyPress and event.key() == Qt.Key_F2:
             target = QApplication.activeModalWidget() or (
                 self.mdi_area.activeSubWindow().widget() if self.mdi_area.activeSubWindow() else self
