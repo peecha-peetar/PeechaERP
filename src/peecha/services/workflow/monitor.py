@@ -199,7 +199,7 @@ class LogRow:
     detail: str
 
 
-_STEP_STATUS = {"DONE": "انجام شد", "RUNNING": "در حال اجرا", "WAITING": "منتظر", "FAILED": "ناموفق", "SKIPPED": "رد شد",
+_STEP_STATUS = {"DONE": "انجام شد", "RUNNING": "در حال اجرا", "WAITING": "منتظر", "FAILED": "ناموفق", "SKIPPED": "کنار گذاشته شد",
                 "CANCELLED": "لغو شد"}
 _ACTION_STATUS = {"DONE": "انجام شد", "PENDING": "در انتظار تلاش دوباره", "FAILED": "ناموفق"}
 

@@ -80,6 +80,7 @@ registry.register_adapter(EntityAdapter(
             {"CREATED": "ثبت", "PLANNED": "برنامه‌ریزی", "RELEASED": "صدور", "IN_PROGRESS": "شروع تولید",
              "COMPLETED": "تکمیل", "CLOSED": "بستن", "CANCELLED": "لغو"}.items()},
     actions={"release": ActionSpec("release", "صدور دستور تولید", _release, risk="HIGH", requires_status=("DRAFT", "PLANNED"),
+                                   sets_status="RELEASED",
                                    is_done=_status_in("RELEASED", "IN_PROGRESS", "COMPLETED", "CLOSED")),
              "plan": ActionSpec("plan", "برنامه‌ریزی دستور", _plan, is_done=_status_in("PLANNED", "RELEASED", "IN_PROGRESS",
                                                                                            "COMPLETED", "CLOSED"))},

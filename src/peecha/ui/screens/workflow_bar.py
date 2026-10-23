@@ -28,6 +28,26 @@ def path_html(path: list[tuple[str, str]]) -> str:
                       for label, state in path)
 
 
+_STATE_WORD = {"done": "انجام شد", "current": "در جریان", "pending": "بعداً", "failed": "انجام نشد"}
+
+
+def path_tooltip(title: str, steps) -> str:
+    """R331: هر گام فرایند به زبان ساده: چه کاری، چه کسی، کجا و در چه وضعی."""
+    lines = [f"فرایند «{title}»:"]
+    for i, st in enumerate(steps, start=1):
+        n = numerals.to_persian_digits(str(i))
+        if st.kind == "HUMAN":
+            line = f"{n}. {st.label}: {st.who or 'گیرنده ندارد'} — در «کارتابل من»"
+        elif st.kind == "AUTO":
+            line = f"{n}. خودکار، بدون دخالت کسی: {'، '.join(st.members)}"
+        elif st.kind == "START":
+            line = f"{n}. ثبت و ارسال سند"
+        else:
+            line = f"{n}. پایان: {st.label}"
+        lines.append(f"{line} ({_STATE_WORD.get(st.state, '')})")
+    return "\n".join(lines)
+
+
 class TimelineDialog(QDialog):
     def __init__(self, title: str, instance_id: int, parent=None) -> None:
         super().__init__(parent)
@@ -141,10 +161,12 @@ class WorkflowBar(QWidget):
         except Exception:  # noqa: BLE001
             self.waiting_names = []
         if rows:
-            waiting = (f" <span style='color:#64748B'>(منتظر تصمیم: {'، '.join(self.waiting_names)})</span>"
+            # R331: هر مرحله با نام انجام‌دهنده؛ کارهای خودکار سیستم یک گام‌اند تا با کار آدم‌ها اشتباه نشوند
+            steps = runtime.path_steps(cid, rows[0].instance_id)
+            waiting = (f" <span style='color:#64748B'>— اکنون نوبت {'، '.join(self.waiting_names)} در «کارتابل من»</span>"
                        if self.waiting_names else "")
-            self.path.setText(path_html(runtime.status_path(cid, rows[0].instance_id)) + waiting)
-            self.path.setToolTip(f"{rows[0].definition_name} — {rows[0].status_label}")
+            self.path.setText(path_html([(st.text, st.state) for st in steps]) + waiting)
+            self.path.setToolTip(path_tooltip(rows[0].definition_name, steps))
         else:
             self.path.setText("<span style='color:#94A3B8'>هنوز برای تایید فرستاده نشده است.</span>")
             self.path.setToolTip("")

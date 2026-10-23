@@ -94,7 +94,7 @@ for _et, _label in {v[0]: v[1] for v in KINDS.values()}.items():
         events={f"{_et}_CREATED": f"ثبت «{_label}»", f"{_et}_TEMPORARY": f"موقت‌شدن «{_label}»",
                 f"{_et}_PERMANENT": f"دائم‌شدن «{_label}»"},
         actions={"approve": ActionSpec("approve", "تایید نهایی (دائم‌کردن سند)", _approve, risk="HIGH", is_done=_is_permanent,
-                                       requires_status=("TEMPORARY",))},
+                                       requires_status=("TEMPORARY",), sets_status="PERMANENT")},
         title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('temporary_no')} — {money(c.get('amount'))}",
         owner=lambda cid, eid: je_context(cid, eid)["created_by"], approval_context=_card, open_nav="GL_JE",
         open_method="edit_journal_entry", submitter_field="created_by", gate_statuses=("PERMANENT",),

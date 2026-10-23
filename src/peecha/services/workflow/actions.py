@@ -26,7 +26,7 @@ from peecha.services.workflow.registry import ActionContext, ActionSpec, ParamSp
 
 @dataclass
 class ActionOutcome:
-    status: str  # DONE | RETRY | FAILED
+    status: str  # DONE | RETRY | FAILED | SKIPPED (R331: در وضعیت کنونی سند شدنی نیست و کنار گذاشته شد)
     result: dict = field(default_factory=dict)
     error: str | None = None
     technical: str | None = None
@@ -72,15 +72,26 @@ def _finish(execution_id: int, status: str, *, result: dict | None = None, error
         session.commit()
 
 
+def _current_status(company_id: int, entity_type: str | None, entity_id) -> str | None:
+    adapter = registry.get_adapter(entity_type)
+    try:
+        return (adapter.load(company_id, int(entity_id)) or {}).get("status") if adapter else None
+    except Exception:  # noqa: BLE001 -- سند خوانده نشد؛ اجرای خود اقدام تصمیم می‌گیرد
+        return None
+
+
 def execute(company_id: int, *, instance_id: int | None, node: dict, visit: int, entity_type: str | None,
             entity_id: int | None, context: dict, run_as: int | None) -> ActionOutcome:
     code = node.get("action") or ""
     spec = registry.find_action(entity_type, code)
     if spec is None:
         return ActionOutcome("FAILED", error=f"اقدام «{code}» شناخته نشده است.", technical=f"unknown action {code}")
-    if not spec.applies(entity_type):  # R330: تعریف قدیمی (مثلاً پیگیری مشتری روی درخواست خرید): بی‌تلاش رد می‌شود
-        return ActionOutcome("FAILED", error=f"«{spec.label}» به این سند مربوط نیست و انجام نشد.",
-                             technical=f"action {code} not applicable to {entity_type}")
+    # R330/R331: تعریف قدیمی (مثلاً پیگیری مشتری روی درخواست خرید، یا سرویس بی‌نشانی) سند را قفل نمی‌کند؛ کنار گذاشته می‌شود
+    if not spec.applies(entity_type):
+        return ActionOutcome("SKIPPED", error=f"«{spec.label}» به این سند مربوط نیست؛ کنار گذاشته شد.")
+    problem = spec.check(company_id, entity_type, node.get("params") or {}) if spec.check is not None else None
+    if problem:
+        return ActionOutcome("SKIPPED", error=f"«{spec.label}» تنظیم نشده بود ({problem.rstrip('.')})؛ کنار گذاشته شد.")
     key = f"wf:{instance_id}:{node.get('id')}:{visit}"
     execution_id, status, result, attempts = _ledger(company_id, key, instance_id, node.get("id"), code)
     if status == "DONE":
@@ -92,6 +103,12 @@ def execute(company_id: int, *, instance_id: int | None, node: dict, visit: int,
                 return ActionOutcome("DONE", {"already_done": True}, attempts=attempts, execution_id=execution_id)
         except Exception:  # noqa: BLE001 -- بررسی حالت فقط بهینه‌سازی است؛ اجرای اصلی تصمیم نهایی را می‌گیرد
             pass
+    current = _current_status(company_id, entity_type, entity_id) if spec.requires_status and entity_id else None
+    if current and current not in spec.requires_status and current != spec.sets_status:
+        # R331: مثلاً «رد» پس از «تصویب» در تعریف قدیمی؛ به‌جای قفل سند، کنار گذاشته و در تاریخچه ثبت می‌شود
+        reason = f"سند در این مرحله نبود؛ «{spec.label}» کنار گذاشته شد."
+        _finish(execution_id, "DONE", result={"skipped": reason}, company_id=company_id, user_id=run_as)
+        return ActionOutcome("SKIPPED", {"skipped": reason}, error=reason, attempts=attempts, execution_id=execution_id)
     ctx = ActionContext(company_id=company_id, user_id=run_as, entity_type=entity_type, entity_id=entity_id,
                         instance_id=instance_id, context=context, params=dict(node.get("params") or {}),
                         idempotency_key=key)

@@ -150,8 +150,8 @@ tasks.decide(company_id, my_task(mgr, req).task_id, mgr, "APPROVE", "")
 inst = instance(req)
 check(status(req) == "APPROVED" and inst.status_code == "COMPLETED", f"the request is approved, not locked ({inst.status_code})")
 row = next((x for x in monitor.execution_log(company_id, inst.instance_id) if x.step == "ثبت پیگیری یا وظیفه"), None)
-check(row is not None and row.status == "ناموفق" and "مربوط نیست" in row.detail and "مشتری یا سرنخ" not in row.detail,
-      f"the step says it does not belong here ({row and row.detail})")
+check(row is not None and row.status == "کنار گذاشته شد" and "مربوط نیست" in row.detail and "مشتری یا سرنخ" not in row.detail,
+      f"the step says it does not belong here ({row and row.status}: {row and row.detail})")
 
 # سندی که پیش از این نسخه همین‌طور قفل شده بود: یک «اجرای دوباره» از نوار گردش کار همان سند بازش می‌کند
 real_fu = registry._GLOBAL_ACTIONS["create_followup"]

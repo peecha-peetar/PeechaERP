@@ -158,9 +158,9 @@ registry.register_adapter(EntityAdapter(
     events={"CUSTOMER_CREATED": "ثبت مشتری تازه", "CUSTOMER_PENDING_APPROVAL": "ارسال مشتری برای تایید",
             "CUSTOMER_ACTIVE": "فعال شدن مشتری"},
     actions={"approve": ActionSpec("approve", "تایید و فعال‌سازی مشتری", _cust_approve, risk="HIGH", is_done=_cust_status("ACTIVE"),
-                                   requires_status=("PENDING_APPROVAL",)),
+                                   requires_status=("PENDING_APPROVAL",), sets_status="ACTIVE"),
              "reject": ActionSpec("reject", "رد مشتری", _cust_reject, is_done=_cust_status("INACTIVE"),
-                                  requires_status=("PENDING_APPROVAL",),
+                                  requires_status=("PENDING_APPROVAL",), sets_status="INACTIVE",
                                   params=(ParamSpec("reason", "دلیل رد"),))},
     title=lambda c: f"مشتری تازه: {c.get('customer_name')}", owner=lambda cid, eid: customer_context(cid, eid)["submitted_by"],
     approval_context=lambda cid, eid: (lambda c: [

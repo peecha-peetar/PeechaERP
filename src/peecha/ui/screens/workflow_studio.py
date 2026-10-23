@@ -657,8 +657,9 @@ class WizardDialog(QDialog):
         return w
 
     def _p_actions(self) -> QWidget:
-        w, form = self._page("پس از تایید نهایی، کدام کارها خودکار انجام شود؟ (به همین ترتیب) — اگر «قفل تایید» روشن است، "
-                             "اقدام تصویب همان سند را تیک بزنید تا پس از آخرین مرحله خودکار تصویب شود.")
+        w, form = self._page("این کارها را سیستم پس از آخرین تایید، خودکار و بدون دخالت کسی انجام می‌دهد (به همین ترتیب). "
+                             "کاری که باید کسی انجام دهد (مثلاً تبدیل به سفارش) را در گام «مراحل تایید» با «افزودن مرحلهٔ "
+                             "انجام کار» بگذارید. «رد» سند در گام «رد و اصلاح» است.")
         self.actions = QListWidget()
         form.addRow(self.actions)
         return w
@@ -709,19 +710,22 @@ class WizardDialog(QDialog):
             if scan.entity_type == et:
                 self.scan.addItem(scan.label, code)
         self.actions.clear()
+        adapter = registry.get_adapter(et)
+        gated = bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses))
         for code, label, risk in registry.action_choices(et):
             spec = registry.find_action(et, code)
             if spec is not None and spec.check is not None and spec.check(company_id(), et, {}):
                 continue  # R330: اقدامی که تنظیم لازم دارد (مثلاً نشانی سرویس) فقط در طراح گرافیکی
+            if code == "entity.reject":
+                continue  # R331: «رد» پس از تایید سند را قفل می‌کرد؛ جایش گام «رد و اصلاح» است
             item = QListWidgetItem(label + (" (حساس)" if risk == "HIGH" else ""))
             item.setData(Qt.UserRole, code)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
+            item.setCheckState(Qt.Checked if gated and code == "entity.approve" else Qt.Unchecked)
             self.actions.addItem(item)
         for i, level in enumerate(self.levels):
             self.levels[i] = dataclasses.replace(level, only_if=None)
         self.notify_extra.entity_type = et
-        adapter = registry.get_adapter(et)
         self.gate.setVisible(bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses)))
         reject = next((label for code, label, _r in registry.action_choices(et) if code == "entity.reject"), None)
         self.reject_doc.setVisible(reject is not None)
@@ -876,7 +880,7 @@ class WizardDialog(QDialog):
         except ValueError as exc:
             self.issues.addItem(str(exc))
             return
-        for line in builder.describe_graph(graph, self.entity.currentData(), company_id()):
+        for line in builder.plan_lines(graph, self.entity.currentData(), company_id()):  # R331: چه کسی، کجا، چه کاری
             self.summary.addItem(P(line))
         for issue in defs.validate_graph(company_id(), graph, self.entity.currentData()):
             self.issues.addItem(("⛔ " if issue.level == "error" else "⚠ ") + issue.message)

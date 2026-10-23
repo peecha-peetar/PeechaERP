@@ -29,7 +29,7 @@ NODE_TYPES = {"START": "شروع", "CONDITION": "شرط", "APPROVAL": "تایی�
 PRIORITIES = {"LOW": "کم", "NORMAL": "عادی", "HIGH": "بالا", "CRITICAL": "فوری"}
 EXCEPTION_STATUS = {"OPEN": "باز", "RETRYING": "در حال تلاش دوباره", "RESOLVED": "حل‌شده", "IGNORED": "نادیده گرفته شد",
                     "ESCALATED": "ارجاع به سطح بالاتر"}
-STEP_STATUS = {"RUNNING": "در حال اجرا", "DONE": "انجام شد", "WAITING": "در انتظار", "FAILED": "ناموفق", "SKIPPED": "رد شد"}
+STEP_STATUS = {"RUNNING": "در حال اجرا", "DONE": "انجام شد", "WAITING": "در انتظار", "FAILED": "ناموفق", "SKIPPED": "کنار گذاشته شد"}
 TRIGGER_TYPES = {"EVENT": "با رویداد", "MANUAL": "دستی (ارسال کاربر)", "SCHEDULE": "زمان‌بندی‌شده", "SCAN": "بررسی دوره‌ای"}
 
 # روزهای کاری به شمارهٔ روز هفتهٔ پایتون (دوشنبه=۰ ... شنبه=۵، یکشنبه=۶)؛ جمعه (۴) تعطیل، پنجشنبه نیمه‌وقت

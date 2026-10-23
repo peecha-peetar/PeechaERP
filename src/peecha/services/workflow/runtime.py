@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.workflow import (
     WfDefinition, WfDefinitionVersion, WfException, WfInstance, WfInstanceStep, WfTimer,
@@ -34,7 +35,7 @@ STUCK_MINUTES = 10
 
 @dataclass
 class NodeResult:
-    kind: str  # NEXT | WAIT | END | FAIL | CONSUME
+    kind: str  # NEXT | SKIP | WAIT | END | FAIL | CONSUME
     when: str | None = None
     detail: dict = field(default_factory=dict)
     error: str | None = None
@@ -221,7 +222,7 @@ def _raise_exception(session, inst: WfInstance, node: dict, title: str, reason: 
 def _apply(session, inst: WfInstance, graph: dict, node: dict, token: dict, tokens: list, variables: dict,
            result: NodeResult, step: WfInstanceStep | None = None) -> None:
     tokens[:] = [t for t in tokens if t.get("id") != token.get("id")]
-    status = {"NEXT": "DONE", "END": "DONE", "CONSUME": "DONE", "WAIT": "WAITING", "FAIL": "FAILED"}[result.kind]
+    status = {"NEXT": "DONE", "SKIP": "SKIPPED", "END": "DONE", "CONSUME": "DONE", "WAIT": "WAITING", "FAIL": "FAILED"}[result.kind]
     outcome = result.when or result.outcome
     if step is None:
         step = _open_step(session, inst, node, status, outcome=outcome, detail=result.detail, error=result.error,
@@ -231,7 +232,7 @@ def _apply(session, inst: WfInstance, graph: dict, node: dict, token: dict, toke
             if status != "WAITING" else None
     if result.actor_user_id:
         variables["last_actor"] = result.actor_user_id
-    if result.kind == "NEXT":
+    if result.kind in ("NEXT", "SKIP"):
         problem = _advance(session, inst, graph, node, tokens, variables, result.when)
         if problem:
             _close_step(step, "FAILED", error=problem)
@@ -413,6 +414,9 @@ def _complete_action(instance_id: int, token_id: str, outcome: actions.ActionOut
         if outcome.status == "DONE":
             variables.update({"vars": {**variables.get("vars", {}), **(outcome.result.get("variables") or {})}})
             _apply(session, inst, graph, node, token, tokens, variables, NodeResult("NEXT", detail=detail), step)
+        elif outcome.status == "SKIPPED":
+            _apply(session, inst, graph, node, token, tokens, variables,
+                   NodeResult("SKIP", detail=detail, error=outcome.error), step)
         elif outcome.status == "RETRY":
             timer = WfTimer(company_id=inst.company_id, kind="RETRY", instance_id=inst.instance_id, node_id=node["id"],
                             payload={"token_id": token_id}, due_at=outcome.retry_at)
@@ -791,8 +795,28 @@ def timeline(company_id: int, instance_id: int) -> list[TimelineRow]:
                        lambda r: r.status == "FAILED", lambda r, n: setattr(r, "detail", f"{r.detail} — {n} بار"))
 
 
-def status_path(company_id: int, instance_id: int) -> list[tuple[str, str]]:
-    """مسیر اصلی برای نوار وضعیت سند: [(برچسب، done|current|pending|failed)]."""
+@dataclass
+class PathStep:
+    """R331: یک گام مسیر سند برای نمایش: چه کاری، چه کسی، کجا، در چه وضعی."""
+    label: str
+    state: str  # done | current | pending | failed
+    kind: str  # START | HUMAN | AUTO | END
+    who: str = ""
+    members: list[str] = field(default_factory=list)
+    member_states: list[str] = field(default_factory=list)
+
+    @property
+    def text(self) -> str:
+        return f"{self.label} ({self.who})" if self.who else self.label
+
+
+_LAST_DONE = ("DONE", "SKIPPED")
+
+
+def path_steps(company_id: int, instance_id: int) -> list[PathStep]:
+    """مسیر اصلی فرایند همین سند: مرحله‌های انسانی با نام انجام‌دهنده و کارهای خودکار پشت‌سرهم در یک گام."""
+    from peecha.db.models.workflow import WfTask, WfTaskAssignee
+
     with new_session() as session:
         inst = session.get(WfInstance, instance_id)
         if inst is None or inst.company_id != company_id:
@@ -800,33 +824,73 @@ def status_path(company_id: int, instance_id: int) -> list[tuple[str, str]]:
         graph = _graph(session, inst.version_id)
         steps = list(session.scalars(select(WfInstanceStep).where(WfInstanceStep.instance_id == instance_id)
                                      .order_by(WfInstanceStep.step_id)))
+        waiting: dict[str, list[int]] = {}
+        for node_id, uid in session.execute(select(WfTask.node_id, WfTaskAssignee.user_id).join(
+                WfTaskAssignee, WfTaskAssignee.task_id == WfTask.task_id).where(
+                WfTask.instance_id == instance_id, WfTask.status_code == "OPEN", WfTaskAssignee.status_code == "ACTIVE")
+                .order_by(WfTaskAssignee.assignee_id)):
+            waiting.setdefault(node_id, []).append(uid)
+        specs = [x for n in graph.get("nodes") or [] for x in (n.get("approvers") or n.get("assignees") or [])]
+        actor_ids = {st.actor_user_id for st in steps} | {u for ids in waiting.values() for u in ids}
+        users = user_names(session, actor_ids | {x.get("user_id") for x in specs if x.get("user_id")})
+        roles = routing.role_names(session, [x.get("role_id") for x in specs])
+        tokens = list(inst.tokens or [])
     taken: dict[str, str | None] = {}
-    done: set[str] = set()
-    failed: set[str] = set()
-    for s in steps:
-        if s.status_code == "DONE":
-            done.add(s.node_id)
-            taken[s.node_id] = s.outcome
-        elif s.status_code == "FAILED":
-            failed.add(s.node_id)
-    current = {t["node"] for t in inst.tokens or []}
+    last: dict[str, str] = {}
+    actors: dict[str, int] = {}
+    for st in steps:
+        last[st.node_id] = st.status_code
+        if st.status_code == "DONE":
+            taken[st.node_id] = st.outcome
+            if st.actor_user_id:
+                actors[st.node_id] = st.actor_user_id
+    current = {t["node"]: t.get("state") for t in tokens}
     nodes = definitions.nodes_by_id(graph)
-    path, nid, seen = [("ثبت و ارسال", "done")], START, set()
+    out, nid, seen = [PathStep("ثبت و ارسال", "done", "START")], START, set()
     while nid and nid not in seen:
         seen.add(nid)
         node = _node(graph, nid) or {}
-        if nid != START and node.get("type") in ("APPROVAL", "TASK", "ACTION", "END"):
-            state = "current" if nid in current else "failed" if nid in failed else "done" if nid in done else "pending"
-            label = node.get("label") or NODE_TYPES.get(node.get("type"), "")
-            if node.get("type") == "END":
-                label = OUTCOMES.get(inst.outcome_code or node.get("outcome") or "DONE", label) if nid in done else label
-            path.append((label, state))
-        if node.get("type") == "END":
+        ntype = node.get("type")
+        if nid != START and ntype in ("APPROVAL", "TASK", "ACTION", "END"):
+            if nid in current:
+                state = "failed" if current[nid] == "EXCEPTION" else "current"
+            else:
+                state = {"FAILED": "failed"}.get(last.get(nid), "done" if last.get(nid) in _LAST_DONE else "pending")
+            label = node.get("label") or NODE_TYPES.get(ntype, "")
+            if ntype == "ACTION":
+                if out[-1].kind != "AUTO":
+                    out.append(PathStep(label, state, "AUTO"))
+                out[-1].members.append(label)
+                out[-1].member_states.append(state)
+            elif ntype == "END":
+                out.append(PathStep(OUTCOMES.get(inst.outcome_code or node.get("outcome") or "DONE", label)
+                                    if state == "done" else label, state, "END"))
+            else:
+                if state == "current" and waiting.get(nid):
+                    who = "، ".join(users.get(u, "") for u in dict.fromkeys(waiting[nid]) if users.get(u))
+                elif state == "done" and actors.get(nid):
+                    who = users.get(actors[nid], "")
+                else:
+                    who = "، ".join(routing.describe_spec(x, roles, users)
+                                    for x in (node.get("approvers") or node.get("assignees") or []))
+                out.append(PathStep(label, state, "HUMAN", who))
+        if ntype == "END":
             break
-        default = {"CONDITION": "yes", "APPROVAL": "approved", "TASK": "done"}.get(node.get("type"))
+        default = {"CONDITION": "yes", "APPROVAL": "approved", "TASK": "done"}.get(ntype)
         edges = _next_edges(graph, node, taken.get(nid, default)) if nid in nodes or nid == START else []
         nid = edges[0]["to"] if edges else None
-    return path
+    for group in (g for g in out if g.kind == "AUTO"):
+        states = set(group.member_states)
+        group.state = next((x for x in ("failed", "current") if x in states), None) or \
+            (states.pop() if len(states) == 1 else "current")
+        group.label = f"کارهای خودکار سیستم ({numerals.to_persian_digits(str(len(group.members)))})" \
+            if len(group.members) > 1 else f"{group.label} (خودکار)"
+    return out
+
+
+def status_path(company_id: int, instance_id: int) -> list[tuple[str, str]]:
+    """مسیر اصلی برای نوار وضعیت سند: [(برچسب، done|current|pending|failed)]."""
+    return [(st.label, st.state) for st in path_steps(company_id, instance_id)]
 
 
 from peecha.services.workflow import tasks as _tasks  # noqa: E402,F401 -- گره‌های تایید و کار انسانی

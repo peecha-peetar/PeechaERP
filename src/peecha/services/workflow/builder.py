@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import dataclass, field
 
 from peecha.services.workflow import conditions, definitions, registry, routing
@@ -241,6 +242,86 @@ def describe_graph(graph: dict, entity_type: str | None, company_id: int | None 
             lines.append(f"انتظار «{label}»")
         elif t == "END":
             lines.append(f"پایان «{label}» با نتیجهٔ {OUTCOMES.get(n.get('outcome') or 'DONE', '')}")
+    return lines
+
+
+def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = None) -> list[str]:
+    """R331: فرایند گام‌به‌گام به ترتیب اجرا و به زبان ساده: چه کسی، کجا، چه کاری؛ کارهای خودکار جدا از کار آدم‌ها."""
+    from peecha import numerals
+
+    adapter = registry.get_adapter(entity_type)
+    labels = adapter.labels() if adapter else {}
+    nodes = definitions.nodes_by_id(graph)
+    trigger = graph.get("trigger") or {}
+    lines = [f"شروع: {trigger_text(trigger, entity_type)}"]
+    if trigger.get("condition"):
+        lines.append(f"فقط وقتی: {conditions.describe(trigger['condition'], labels)}")
+
+    def follow(nid: str, prefer: str | None) -> str | None:
+        outs = definitions.outgoing(graph, nid)
+        nxt = [e for e in outs if prefer and e.get("when") == prefer] or \
+            [e for e in outs if e.get("when") in (None, "", "default")]
+        return nxt[0]["to"] if nxt else None
+
+    count, auto, cond, reject_from = 0, [], None, None
+
+    def add(text: str) -> None:
+        nonlocal count
+        count += 1
+        lines.append(f"{numerals.to_persian_digits(str(count))}. {text}")
+
+    def flush() -> None:
+        if auto:
+            add(f"سیستم خودکار، بدون دخالت کسی: {'، '.join(auto)}")
+            auto.clear()
+
+    nid, seen = definitions.START, set()
+    while nid and nid not in seen:
+        seen.add(nid)
+        node = nodes.get(nid) or {}
+        t, label = node.get("type"), node.get("label") or NODE_TYPES.get(node.get("type"), "")
+        only = f" (فقط اگر {cond})" if cond else ""
+        if t == "ACTION":
+            auto.append(f"«{label}»")
+        elif t == "CONDITION":
+            flush()
+            cond = conditions.describe(node.get("rule"), labels)
+        elif t in ("APPROVAL", "TASK", "NOTIFY", "WAIT"):
+            flush()
+            if t == "APPROVAL":
+                back = "، یا برای اصلاح برمی‌گرداند" if any(e.get("when") == "changes" for e in definitions.outgoing(graph, nid)) else ""
+                add(f"«{label}»: {_approvers_text(company_id, node.get('approvers') or [])} در «کارتابل من» تایید یا رد "
+                    f"می‌کند{back}{only}")
+                reject_from = reject_from or follow(nid, "rejected")
+            elif t == "TASK":
+                add(f"«{label}»: {_approvers_text(company_id, node.get('assignees') or [])} در «کارتابل من» این کار را انجام "
+                    f"می‌دهد و «انجام شد» می‌زند{only}")
+            elif t == "NOTIFY":
+                title = re.sub(r"\{[^}]*\}", "…", (node.get("title") or label).replace("{عنوان}", "سند"))
+                add(f"خبر به {_approvers_text(company_id, node.get('to') or [])}: {title}")
+            else:
+                add(f"انتظار: «{label}»")
+            cond = None
+        elif t == "END":
+            flush()
+            lines.append(f"پایان: {OUTCOMES.get(node.get('outcome') or 'DONE', '')}")
+            break
+        nid = follow(nid, {"CONDITION": "yes", "APPROVAL": "approved", "TASK": "done"}.get(t))
+    parts, nid, seen = [], reject_from, set()
+    while nid and nid not in seen:
+        seen.add(nid)
+        node = nodes.get(nid) or {}
+        t = node.get("type")
+        if t == "ACTION":
+            parts.append(f"«{node.get('label')}» (خودکار)")
+        elif t == "NOTIFY":
+            parts.append(f"خبر به {_approvers_text(company_id, node.get('to') or [])}")
+        elif t == "END":
+            parts.append(f"پایان «{OUTCOMES.get(node.get('outcome') or 'DONE', '')}»")
+            break
+        nid = follow(nid, None)
+    if parts:
+        lines.append("اگر رد شود: " + " ← ".join(parts))
     return lines
 
 

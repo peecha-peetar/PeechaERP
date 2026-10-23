@@ -183,6 +183,39 @@ def _start_statuses(adapter, trigger: dict) -> set[str]:
     return out
 
 
+def _status_flow(graph: dict, entity_type: str | None, start: set[str]) -> dict[str, dict | None]:
+    """R331: وضعیت‌های ممکن سند هنگام رسیدن به هر مرحله، روی همهٔ مسیرها: {وضعیت: اقدامی که آن را ساخت (None = شروع)}.
+
+    None یعنی نامعلوم (پس از «انجام کار» آدم‌ها ممکن است سند را جلو ببرند)؛ آن‌جا داوری نمی‌شود."""
+    nodes = nodes_by_id(graph)
+    rework = {e.get("to") for e in graph.get("edges") or [] if e.get("when") == "changes"}
+    state: dict[str, dict | None] = {}
+    queue = [(START, {x: None for x in start} if start else None)]
+    while queue:
+        nid, incoming = queue.pop(0)
+        if nid != START:
+            if nid in state:
+                old = state[nid]
+                merged = None if old is None or incoming is None else {**incoming, **old}
+                if merged == old and nid in state:
+                    continue
+                state[nid] = merged
+            else:
+                state[nid] = incoming
+            incoming = state[nid]
+        node = nodes.get(nid) or {}
+        out = incoming
+        if node.get("type") == "TASK" and nid not in rework:
+            out = None
+        spec = registry.find_action(entity_type, node.get("action") or "") if node.get("type") == "ACTION" else None
+        for e in outgoing(graph, nid):
+            nxt = out
+            if spec is not None and spec.sets_status and e.get("when") != "failed":
+                nxt = {spec.sets_status: node.get("label") or spec.label}
+            queue.append((e.get("to"), nxt))
+    return state
+
+
 def _only_requester(node: dict, adapter) -> bool:
     """R329: همهٔ تاییدکنندگان (و جایگزین‌ها) خود درخواست‌کننده‌اند؟"""
     submitter = adapter.submitter_field if adapter is not None else None
@@ -245,9 +278,8 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
 
     reachable = _reachable(graph)
     role_ids, user_ids = set(), set()
-    start_statuses = _start_statuses(adapter, trigger)
     status_labels = dict((fields.get("status").choices or {}) if fields.get("status") else {})
-    has_task = any(n.get("type") == "TASK" for n in nodes.values())  # کار انسانی ممکن است وضعیت سند را جلو ببرد
+    flow = _status_flow(graph, entity_type, _start_statuses(adapter, trigger)) if adapter is not None else {}
     for nid, node in nodes.items():
         ntype, name = node.get("type"), _node_name(node)
         if ntype not in NODE_TYPES or ntype == "START":
@@ -307,11 +339,22 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
                 issues.append(Issue("error", f"«{name}» به «{adapter.label if adapter else 'این فرایند'}» مربوط نیست؛ آن را بردارید.", nid))
             elif spec.check is not None and spec.check(company_id, entity_type, node.get("params") or {}):
                 issues.append(Issue("error", f"«{name}»: {spec.check(company_id, entity_type, node.get('params') or {})}", nid))
-            elif spec.requires_status and start_statuses and not set(spec.requires_status) & start_statuses:
-                wanted = [adapter.events.get(f"{entity_type}_{x}") or status_labels.get(x) for x in spec.requires_status]
-                wanted = " یا ".join(f"«{w}»" for w in wanted if w) or "مرحلهٔ مناسب سند"
-                issues.append(Issue("warning" if has_task else "error",
-                                    f"«{name}» در این مرحلهٔ سند انجام نمی‌شود؛ رویداد شروع را {wanted} بگذارید.", nid))
+            elif spec.code == "reject" and flow.get(nid) and any(flow[nid].values()):
+                # R331: «رد» پس از اقدامی که سند را جلو برده (مثلاً «تصویب») تناقض است؛ جای «رد» مسیر «رد شد» است
+                issues.append(Issue("error", f"«{name}» پس از «{next(v for v in flow[nid].values() if v)}» شدنی نیست؛ "
+                                             "آن را از این مسیر بردارید.", nid))
+            elif spec.requires_status and flow.get(nid) and \
+                    set(flow[nid]) - set(spec.requires_status) - {spec.sets_status}:
+                # R331: روی دست‌کم یک مسیر، سند در وضعیتی است که این اقدام در آن شدنی نیست (مثلاً «رد» پس از «تصویب»)
+                bad = set(flow[nid]) - set(spec.requires_status) - {spec.sets_status}
+                origin = next((flow[nid][x] for x in bad if flow[nid][x]), None)
+                if origin:
+                    issues.append(Issue("error", f"«{name}» پس از «{origin}» شدنی نیست؛ آن را از این مسیر بردارید.", nid))
+                else:
+                    wanted = [adapter.events.get(f"{entity_type}_{x}") or status_labels.get(x) for x in spec.requires_status]
+                    wanted = " یا ".join(f"«{w}»" for w in wanted if w) or "مرحلهٔ مناسب سند"
+                    issues.append(Issue("error", f"«{name}» در این مرحلهٔ سند انجام نمی‌شود؛ رویداد شروع را {wanted} بگذارید.",
+                                        nid))
             elif spec.risk == "HIGH" and not _paths_have_approval_before(graph, nid):
                 issues.append(Issue("error", f"اقدام حساس «{name}» بدون تایید انسانی قبلی مجاز نیست.", nid))
             if spec is not None and node.get("action") == "emit_event" and \
