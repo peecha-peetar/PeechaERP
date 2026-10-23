@@ -145,7 +145,9 @@ def _confirm_doc(ctx: ActionContext) -> dict:
 def _to_invoice(ctx: ActionContext) -> dict:
     from peecha.services import commercial_documents as docs
 
-    return {"invoice_id": docs.convert_to_invoice(int(ctx.entity_id), ctx.company_id, ctx.user_id, datetime.date.today())}
+    target = _TO_INVOICE.get(ctx.entity_type or "")
+    invoice_id = docs.convert_to_invoice(int(ctx.entity_id), ctx.company_id, ctx.user_id, datetime.date.today())
+    return {"invoice_id": invoice_id, "created": [{"entity_type": target, "id": invoice_id}]}
 
 
 def _fully_invoiced(company_id: int, document_id: int) -> bool:
@@ -338,7 +340,7 @@ def _pr_convert(ctx: ActionContext) -> dict:
                 problems.append(str(exc))
     if problems:
         raise ValueError(f"سفارش ساخته شد ولی برای تصویب فرستاده نشد: {problems[0]}")
-    return {"order_ids": order_ids}
+    return {"order_ids": order_ids, "created": [{"entity_type": "PURCHASE_ORDER", "id": i} for i in order_ids]}
 
 
 def _pr_fully_ordered(company_id: int, request_id: int) -> bool:

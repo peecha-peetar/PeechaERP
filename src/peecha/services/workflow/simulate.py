@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from peecha.db.base import new_session
 from peecha.services.workflow import conditions, definitions, registry, routing, runtime
-from peecha.services.workflow.common import NODE_TYPES, OUTCOMES, user_names
+from peecha.services.workflow.common import NODE_TYPES, OUTCOMES, WorkflowError, user_names
 
 
 @dataclass
@@ -72,6 +72,17 @@ def simulate(company_id: int, graph: dict, entity_type: str | None, *, context: 
             spec = registry.find_action(entity_type, node.get("action") or "")
             trace.append(TraceRow(nid, ntype, title, f"اجرا می‌شد: {spec.label if spec else node.get('action')} (بدون تغییر واقعی)",
                                   spec is not None))
+        elif ntype == "SUBPROCESS":
+            from peecha.services.workflow.builder import TARGET_LABELS
+
+            try:
+                name, ok = definitions.get_definition(company_id, int(node.get("definition_id") or 0)).name, True
+            except WorkflowError:
+                name, ok = title, False
+            when = decisions.get(nid) or "done"
+            verdict = f" ← {definitions.EDGE_LABELS.get(when, when)} (فرضی)" if when != "done" else ""
+            trace.append(TraceRow(nid, ntype, title, f"فرایند «{name}» روی {TARGET_LABELS.get(node.get('target') or 'SAME')} "
+                                                     f"اجرا می‌شد و روند منتظر پایان آن می‌ماند{verdict}", ok))
         elif ntype == "NOTIFY":
             users = routing.resolve(company_id, node.get("to") or [], context=ctx, starter=starter, entity_type=entity_type,
                                     entity_id=entity_id)

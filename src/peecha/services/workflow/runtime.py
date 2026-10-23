@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import datetime
+import threading
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -269,7 +270,7 @@ def _fail(session, inst: WfInstance, node: dict, message: str, technical: str | 
 def start_instance(company_id: int, definition_id: int, entity_type: str | None = None, entity_id: int | None = None, *,
                    started_by: int | None = None, context: dict | None = None, correlation_key: str | None = None,
                    trigger_event_id: int | None = None, depth: int = 0, title: str | None = None,
-                   run: bool = True) -> int | None:
+                   run: bool = True, parent: dict | None = None) -> int | None:
     """None یعنی همین رویداد قبلاً این فرایند را شروع کرده بود (اجرای تکراری نمی‌سازد)."""
     with new_session() as session:
         d = session.get(WfDefinition, definition_id)
@@ -290,7 +291,8 @@ def start_instance(company_id: int, definition_id: int, entity_type: str | None 
         inst = WfInstance(company_id=company_id, definition_id=definition_id, version_id=v.version_id,
                           entity_type=entity_type, entity_id=entity_id, title=(title or d.name)[:300], status_code="RUNNING",
                           tokens=[{"id": "t1", "node": START, "state": "READY", "visit": 1}], context=plain(context),
-                          variables={"visits": {}, "seq": 1, "start_status": (context or {}).get("status")},
+                          variables={"visits": {}, "seq": 1, "start_status": (context or {}).get("status"),
+                                     **({"parents": [parent]} if parent else {})},
                           correlation_key=correlation_key,
                           trigger_event_id=trigger_event_id, started_by_user_id=started_by, depth=depth)
         session.add(inst)
@@ -312,6 +314,8 @@ def run_instance(instance_id: int, max_iterations: int = 500) -> None:
     with events.engine_busy():
         for _ in range(max_iterations):
             pending = _step_once(instance_id)
+            for child in _take_children():  # R333: فرایند فرعی پس از ثبت مرحلهٔ والد اجرا می‌شود (نه زیر قفل آن)
+                run_instance(child)
             if pending is None:
                 return
             if pending == "CONTINUE":
@@ -413,6 +417,8 @@ def _complete_action(instance_id: int, token_id: str, outcome: actions.ActionOut
         detail = {"result": outcome.result, "attempts": outcome.attempts, "execution_id": outcome.execution_id}
         if outcome.status == "DONE":
             variables.update({"vars": {**variables.get("vars", {}), **(outcome.result.get("variables") or {})}})
+            if outcome.result.get("created"):  # R333: سندهای ساخته‌شده برای «فرایند فرعی روی سندهای ساخته‌شده»
+                variables["created"] = list(variables.get("created") or []) + list(outcome.result["created"])
             _apply(session, inst, graph, node, token, tokens, variables, NodeResult("NEXT", detail=detail), step)
         elif outcome.status == "SKIPPED":
             _apply(session, inst, graph, node, token, tokens, variables,
@@ -686,6 +692,98 @@ def _join(run: Run) -> NodeResult:
     return NodeResult("CONSUME", detail={"arrived": joins[nid], "needed": needed})
 
 
+# --- R333: فرایند فرعی (روند کلی: چند فرایند پشت‌سرهم یا هم‌زمان) ---------------------------------------------
+CHILD_DONE = "WF_CHILD_DONE"
+_CHILDREN = threading.local()
+
+
+def _take_children() -> list[int]:
+    out = getattr(_CHILDREN, "ids", [])
+    _CHILDREN.ids = []
+    return out
+
+
+def _subprocess(run: Run) -> NodeResult:
+    """فرایند دیگری را روی همین سند (یا سندهایی که مراحل قبل ساخته‌اند) اجرا می‌کند و تا پایان همه منتظر می‌ماند؛
+    اگر همان فرایند روی همان سند در جریان است، به همان می‌پیوندد (دوبار اجرا نمی‌شود)."""
+    node, inst, session = run.node, run.instance, run.session
+    child = session.get(WfDefinition, int(node.get("definition_id") or 0)) if node.get("definition_id") else None
+    if child is None or child.company_id != inst.company_id:
+        return NodeResult("FAIL", error=f"فرایند فرعی «{node.get('label') or ''}» پیدا نشد.")
+    if definitions.runnable_version(session, child.definition_id) is None:
+        return NodeResult("NEXT", when="done", detail={"note": f"فرایند «{child.name}» فعال نیست؛ این مرحله کنار گذاشته شد."})
+    if inst.depth >= int(settings(inst.company_id).get("max_event_depth") or 5):
+        return NodeResult("FAIL", error="روند کلی بیش از حد تودرتو شد (محافظت از اجرای بی‌پایان).")
+    if node.get("target") == "CREATED":
+        targets = [(c.get("entity_type"), int(c["id"])) for c in run.variables.get("created") or []
+                   if c.get("id") and (child.entity_type is None or c.get("entity_type") == child.entity_type)]
+    else:
+        targets = [(inst.entity_type, inst.entity_id)]
+    if not targets:
+        return NodeResult("NEXT", when="done", detail={"note": "سندی برای این مرحله ساخته نشده بود؛ روند ادامه یافت."})
+    link = {"instance_id": inst.instance_id, "token_id": run.token["id"]}
+    waiting: dict[str, str | None] = {}
+    for et, eid in dict.fromkeys(targets):
+        with new_session() as other:
+            existing = other.scalar(select(WfInstance).where(
+                WfInstance.company_id == inst.company_id, WfInstance.definition_id == child.definition_id,
+                WfInstance.entity_type == et, WfInstance.entity_id == eid,
+                WfInstance.status_code.in_(("RUNNING", "WAITING"))).limit(1).with_for_update())
+            if existing is not None:
+                variables = copy.deepcopy(existing.variables or {})
+                variables["parents"] = list(variables.get("parents") or []) + [link]
+                _save(existing, variables=variables)
+                other.commit()
+                waiting[str(existing.instance_id)] = None
+                continue
+        child_id = start_instance(inst.company_id, child.definition_id, et, eid, started_by=inst.started_by_user_id,
+                                  depth=inst.depth + 1, run=False, parent=link)
+        if child_id:
+            waiting[str(child_id)] = None
+            _CHILDREN.ids = getattr(_CHILDREN, "ids", []) + [child_id]
+    if not waiting:
+        return NodeResult("NEXT", when="done", detail={"note": "فرایند فرعی شروع نشد؛ روند ادامه یافت."})
+    return NodeResult("WAIT", detail={"children": list(waiting)}, token_patch={"children": waiting})
+
+
+def _child_outcome(inst: WfInstance, status: str) -> str:
+    return "FAILED" if status in ("FAILED", "CANCELLED") else (inst.outcome_code or "DONE")
+
+
+def _report_to_parents(session, inst: WfInstance, status: str) -> None:
+    """فرایند فرعی تمام شد ← پس از ثبت همین تراکنش، روند والد خبردار می‌شود (رویداد درونی)."""
+    for link in (inst.variables or {}).get("parents") or []:
+        events.publish(session, inst.company_id, CHILD_DONE, inst.entity_type, inst.entity_id,
+                       {"parent": link.get("instance_id"), "token": link.get("token_id"), "child": inst.instance_id,
+                        "outcome": _child_outcome(inst, status)}, causation_instance_id=inst.instance_id)
+
+
+on_close(_report_to_parents)
+
+
+def child_finished(company_id: int, payload: dict) -> bool:
+    """روند والد: نتیجهٔ یک فرایند فرعی ثبت می‌شود؛ وقتی همه تمام شدند، از مسیر همان نتیجه ادامه می‌یابد."""
+    parent_id, token_id, child_id = payload.get("parent"), payload.get("token"), str(payload.get("child"))
+    with new_session() as session:
+        inst = session.scalar(select(WfInstance).where(WfInstance.instance_id == parent_id).with_for_update())
+        if inst is None or inst.company_id != company_id or inst.status_code not in ("RUNNING", "WAITING"):
+            return False
+        tokens = copy.deepcopy(inst.tokens or [])
+        token = next((t for t in tokens if t.get("id") == token_id), None)
+        if token is None or token.get("state") != "WAITING" or child_id not in (token.get("children") or {}):
+            return False
+        token["children"][child_id] = payload.get("outcome") or "DONE"
+        results = list(token["children"].values())
+        _save(inst, tokens=tokens)
+        session.commit()
+    if any(r is None for r in results):
+        return True
+    when = "failed" if {"FAILED", "CANCELLED"} & set(results) else "rejected" if "REJECTED" in results else \
+        "approved" if all(r == "APPROVED" for r in results) else "done"
+    return resume(company_id, parent_id, token_id=token_id, when=when, detail={"children": results})
+
+
+register_node("SUBPROCESS", _subprocess)
 register_node("CONDITION", _condition)
 register_node("NOTIFY", _notify)
 register_node("WAIT", _wait)
@@ -805,7 +903,7 @@ class PathStep:
     """R331: یک گام مسیر سند برای نمایش: چه کاری، چه کسی، کجا، در چه وضعی."""
     label: str
     state: str  # done | current | pending | failed
-    kind: str  # START | HUMAN | AUTO | END
+    kind: str  # START | HUMAN | AUTO | SUB | PARALLEL | END
     who: str = ""
     members: list[str] = field(default_factory=list)
     member_states: list[str] = field(default_factory=list)
@@ -816,6 +914,12 @@ class PathStep:
 
 
 _LAST_DONE = ("DONE", "SKIPPED")
+
+
+def _node_state(nid: str, current: dict, last: dict) -> str:
+    if nid in current:
+        return "failed" if current[nid] == "EXCEPTION" else "current"
+    return {"FAILED": "failed"}.get(last.get(nid), "done" if last.get(nid) in _LAST_DONE else "pending")
 
 
 def path_steps(company_id: int, instance_id: int) -> list[PathStep]:
@@ -856,11 +960,29 @@ def path_steps(company_id: int, instance_id: int) -> list[PathStep]:
         seen.add(nid)
         node = _node(graph, nid) or {}
         ntype = node.get("type")
-        if nid != START and ntype in ("APPROVAL", "TASK", "ACTION", "END"):
-            if nid in current:
-                state = "failed" if current[nid] == "EXCEPTION" else "current"
-            else:
-                state = {"FAILED": "failed"}.get(last.get(nid), "done" if last.get(nid) in _LAST_DONE else "pending")
+        if ntype == "PARALLEL":  # R333: شاخه‌های هم‌زمان یک گام‌اند؛ مسیر از «پیوستن شاخه‌ها» ادامه می‌یابد
+            group, join = PathStep("هم‌زمان", "pending", "PARALLEL"), None
+            for e in definitions.outgoing(graph, nid):
+                bid, guard = e["to"], set()
+                while bid and bid not in guard and (nodes.get(bid) or {}).get("type") not in ("JOIN", "END", None):
+                    guard.add(bid)
+                    bnode = nodes[bid]
+                    if bnode.get("type") in ("APPROVAL", "TASK", "ACTION", "SUBPROCESS"):
+                        group.members.append(bnode.get("label") or NODE_TYPES.get(bnode.get("type"), ""))
+                        group.member_states.append(_node_state(bid, current, last))
+                    nxt = [x for x in definitions.outgoing(graph, bid) if x.get("when") in (None, "", "default", "approved", "done")]
+                    bid = nxt[0]["to"] if nxt else None
+                if bid and (nodes.get(bid) or {}).get("type") == "JOIN":
+                    join = bid
+            states = set(group.member_states)
+            group.state = next((x for x in ("failed", "current") if x in states), None) or \
+                (states.pop() if len(states) == 1 else "current")
+            group.label = "هم‌زمان: " + "، ".join(group.members)
+            out.append(group)
+            nid = join
+            continue
+        if nid != START and ntype in ("APPROVAL", "TASK", "ACTION", "END", "SUBPROCESS"):
+            state = _node_state(nid, current, last)
             label = node.get("label") or NODE_TYPES.get(ntype, "")
             if ntype == "ACTION":
                 if out[-1].kind != "AUTO":
@@ -870,6 +992,8 @@ def path_steps(company_id: int, instance_id: int) -> list[PathStep]:
             elif ntype == "END":
                 out.append(PathStep(OUTCOMES.get(inst.outcome_code or node.get("outcome") or "DONE", label)
                                     if state == "done" else label, state, "END"))
+            elif ntype == "SUBPROCESS":
+                out.append(PathStep(label, state, "SUB", "فرایند فرعی"))
             else:
                 if state == "current" and waiting.get(nid):
                     who = "، ".join(users.get(u, "") for u in dict.fromkeys(waiting[nid]) if users.get(u))
@@ -883,6 +1007,8 @@ def path_steps(company_id: int, instance_id: int) -> list[PathStep]:
             break
         default = {"CONDITION": "yes", "APPROVAL": "approved", "TASK": "done"}.get(ntype)
         edges = _next_edges(graph, node, taken.get(nid, default)) if nid in nodes or nid == START else []
+        edges = [e for e in edges if (nodes.get(e["to"]) or {}).get("outcome") not in ("REJECTED", "CANCELLED")
+                 or taken.get(nid) in ("rejected", "failed")] or edges
         nid = edges[0]["to"] if edges else None
     for group in (g for g in out if g.kind == "AUTO"):
         states = set(group.member_states)

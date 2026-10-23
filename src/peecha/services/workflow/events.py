@@ -155,6 +155,9 @@ def process_event(event_id: int) -> None:
             ancestry.add((src.definition_id, src.entity_type, src.entity_id))
             parent = session.get(WfEvent, src.trigger_event_id) if src.trigger_event_id else None
             cause, hops = (parent.causation_instance_id if parent else None), hops + 1
+    if data["event_type"] == runtime.CHILD_DONE:  # R333: پایان فرایند فرعی ← روند والد ادامه می‌یابد
+        _child_done(event_id, company_id, data["payload"])
+        return
     started, skipped, error = 0, [], None
     try:
         max_depth = int(settings(company_id).get("max_event_depth") or 5)
@@ -206,6 +209,25 @@ def process_event(event_id: int) -> None:
             ev.status_code = "FAILED" if error else ("SKIPPED" if skipped and not started else "DONE")
             ev.last_error = error or ("؛ ".join(skipped) or None)
             ev.processed_at = now()
+        session.commit()
+
+
+def _child_done(event_id: int, company_id: int, payload: dict) -> None:
+    from peecha.services.workflow import runtime
+
+    error = None
+    try:
+        runtime.child_finished(company_id, payload)
+    except Exception as exc:  # noqa: BLE001
+        error = friendly_error(exc)[1]
+    with new_session() as session:
+        ev = session.get(WfEvent, event_id)
+        ev.attempts += 1
+        ev.locked_until = None
+        if error and ev.attempts < 5:
+            ev.last_error = error
+        else:
+            ev.status_code, ev.last_error, ev.processed_at = ("FAILED" if error else "DONE"), error, now()
         session.commit()
 
 

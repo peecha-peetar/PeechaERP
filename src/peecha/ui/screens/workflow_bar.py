@@ -40,6 +40,10 @@ def path_tooltip(title: str, steps) -> str:
             line = f"{n}. {st.label}: {st.who or 'گیرنده ندارد'} — در «کارتابل من»"
         elif st.kind == "AUTO":
             line = f"{n}. خودکار، بدون دخالت کسی: {'، '.join(st.members)}"
+        elif st.kind == "SUB":
+            line = f"{n}. فرایند «{st.label}»؛ روند تا پایان آن منتظر می‌ماند"
+        elif st.kind == "PARALLEL":
+            line = f"{n}. هم‌زمان: {' | '.join(st.members)}؛ پس از پایان همه ادامه می‌یابد"
         elif st.kind == "START":
             line = f"{n}. ثبت و ارسال سند"
         else:

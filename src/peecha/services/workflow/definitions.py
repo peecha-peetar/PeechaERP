@@ -31,6 +31,7 @@ NODE_EDGE_LABELS = {
     "CONDITION": {"yes": "بله", "no": "خیر"},
     "APPROVAL": {"approved": "تایید شد", "rejected": "رد شد", "changes": "نیاز به اصلاح", "timeout": "پایان مهلت"},
     "TASK": {"done": "انجام شد", "timeout": "پایان مهلت"},
+    "SUBPROCESS": {None: "ادامه", "approved": "تایید شد", "rejected": "رد شد", "failed": "ناموفق یا لغو"},
     "WAIT": {None: "پس از انتظار", "timeout": "پایان مهلت"},
     "ACTION": {None: "پس از اجرا", "failed": "در صورت شکست"},
 }
@@ -44,7 +45,7 @@ TRANSITIONS = {
     "PAUSED": {"ACTIVE", "ARCHIVED"},
     "ARCHIVED": {"DRAFT"},
 }
-_HUMAN_OR_WAIT = {"APPROVAL", "TASK", "WAIT"}
+_HUMAN_OR_WAIT = {"APPROVAL", "TASK", "WAIT", "SUBPROCESS"}
 
 
 @dataclass
@@ -160,7 +161,7 @@ def problems(company_id: int) -> dict[int, list[str]]:
                 WfDefinitionVersion, WfDefinitionVersion.version_id == WfDefinition.active_version_id).where(
                 WfDefinition.company_id == company_id, WfDefinition.status_code.in_(RUNNABLE_STATUSES)))]
     for definition_id, entity_type, graph in rows:
-        found = [i.message for i in errors(validate_graph(company_id, graph or {}, entity_type))]
+        found = [i.message for i in errors(validate_graph(company_id, graph or {}, entity_type, definition_id))]
         if found:
             out[definition_id] = found
     return out
@@ -255,7 +256,7 @@ def _status_flow(graph: dict, entity_type: str | None, start: set[str]) -> dict[
             incoming = state[nid]
         node = nodes.get(nid) or {}
         out = incoming
-        if node.get("type") == "TASK" and nid not in rework:
+        if node.get("type") in ("TASK", "SUBPROCESS") and nid not in rework:
             out = None
         spec = registry.find_action(entity_type, node.get("action") or "") if node.get("type") == "ACTION" else None
         for e in outgoing(graph, nid):
@@ -266,6 +267,39 @@ def _status_flow(graph: dict, entity_type: str | None, start: set[str]) -> dict[
     return state
 
 
+def _subprocess_issues(company_id: int, graph: dict, node: dict, name: str, nid: str, entity_type: str | None, adapter,
+                       definition_id: int | None) -> list[Issue]:
+    """R333: فرایند فرعی باید وجود داشته باشد، روی سند درست اجرا شود و روند خودش را دوباره صدا نزند."""
+    if not node.get("definition_id"):
+        return [Issue("error", f"برای «{name}» فرایندی انتخاب نشده است.", nid)]
+    with new_session() as session:
+        child = session.get(WfDefinition, int(node["definition_id"]))
+        child_graph = None
+        if child is not None and child.active_version_id:
+            v = session.get(WfDefinitionVersion, child.active_version_id)
+            child_graph = v.graph if v else None
+    if child is None or child.company_id != company_id:
+        return [Issue("error", f"فرایند «{name}» پیدا نشد.", nid)]
+    out = []
+    calls = {int(n.get("definition_id") or 0) for n in (child_graph or {}).get("nodes") or [] if n.get("type") == "SUBPROCESS"}
+    if definition_id and (child.definition_id == definition_id or definition_id in calls):
+        out.append(Issue("error", f"«{name}» دوباره همین روند را اجرا می‌کند (حلقهٔ بی‌پایان).", nid))
+    child_adapter = registry.get_adapter(child.entity_type)
+    child_label = child_adapter.label if child_adapter else "عمومی"
+    if (node.get("target") or "SAME") == "SAME":
+        if child.entity_type and entity_type and child.entity_type != entity_type:
+            out.append(Issue("error", f"«{child.name}» برای «{child_label}» است نه «{adapter.label if adapter else ''}»؛ "
+                                      "«اجرا روی» را «سندهای ساخته‌شده در مراحل قبل» بگذارید یا فرایند دیگری انتخاب کنید.", nid))
+    elif child.entity_type:
+        made = any(ev.startswith(f"{child.entity_type}_") for n in graph.get("nodes") or [] if n.get("type") == "ACTION"
+                   for ev in getattr(registry.find_action(entity_type, n.get("action") or ""), "creates", ()) or ())
+        if not made:
+            out.append(Issue("error", f"در این روند هیچ مرحله‌ای «{child_label}» نمی‌سازد که «{name}» روی آن اجرا شود.", nid))
+    if child.status_code not in RUNNABLE_STATUSES:
+        out.append(Issue("warning", f"فرایند «{child.name}» هنوز فعال نیست؛ تا فعال نشود، «{name}» کنار گذاشته می‌شود.", nid))
+    return out
+
+
 def _only_requester(node: dict, adapter) -> bool:
     """R329: همهٔ تاییدکنندگان (و جایگزین‌ها) خود درخواست‌کننده‌اند؟"""
     submitter = adapter.submitter_field if adapter is not None else None
@@ -274,7 +308,7 @@ def _only_requester(node: dict, adapter) -> bool:
                                (s.get("kind") == "FIELD" and submitter and s.get("field") == submitter) for s in specs)
 
 
-def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> list[Issue]:
+def validate_graph(company_id: int, graph: dict, entity_type: str | None, definition_id: int | None = None) -> list[Issue]:
     issues: list[Issue] = []
     adapter = registry.get_adapter(entity_type)
     fields = adapter.field_map() if adapter else {}
@@ -423,6 +457,10 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
         elif ntype == "WAIT":
             if not any(node.get(k) for k in ("hours", "minutes", "days", "until_field", "until_event")):
                 issues.append(Issue("error", f"مدت یا شرط پایان انتظار «{name}» تعیین نشده است.", nid))
+        elif ntype == "SUBPROCESS":
+            issues.extend(_subprocess_issues(company_id, graph, node, name, nid, entity_type, adapter, definition_id))
+            if None not in whens and "done" not in whens:
+                issues.append(Issue("error", f"«{name}» باید مسیر «ادامه» داشته باشد.", nid))
         elif ntype == "PARALLEL" and len(outs) < 2:
             issues.append(Issue("error", f"انشعاب «{name}» حداقل دو شاخه لازم دارد.", nid))
         elif ntype == "JOIN" and len(incoming(graph, nid)) < 2:
@@ -569,6 +607,23 @@ def update_info(company_id: int, user_id: int | None, definition_id: int, *, nam
         session.commit()
 
 
+def set_entity_type(company_id: int, user_id: int | None, definition_id: int, entity_type: str | None) -> None:
+    """R333: نوع سند فرایند فقط پیش از نخستین انتشار و اجرا عوض می‌شود (رویدادها و شرط‌ها به آن بسته‌اند)."""
+    adapter = registry.get_adapter(entity_type) if entity_type else None
+    if entity_type and adapter is None:
+        raise WorkflowError(f"نوع سند «{entity_type}» برای گردش کار تعریف نشده است.")
+    with new_session() as session:
+        d = _get(session, company_id, definition_id, lock=True)
+        if d.entity_type == entity_type:
+            return
+        if d.active_version_id is not None or session.scalar(
+                select(func.count()).select_from(WfInstance).where(WfInstance.definition_id == definition_id)):
+            raise WorkflowError("نوع سند فرایند منتشرشده یا اجراشده عوض نمی‌شود؛ از آن کپی بگیرید.")
+        d.entity_type, d.module_code, d.updated_at = entity_type, adapter.module_code if adapter else None, now()
+        audit(session, company_id, user_id, "Definition", definition_id, "UPDATE", {"entity_type": entity_type})
+        session.commit()
+
+
 def _get(session, company_id: int, definition_id: int, lock: bool = False) -> WfDefinition:
     q = select(WfDefinition).where(WfDefinition.definition_id == definition_id)
     d = session.scalar(q.with_for_update() if lock else q)
@@ -637,7 +692,7 @@ def set_status(company_id: int, user_id: int | None, definition_id: int, status_
         if status_code == "TESTING":
             latest = session.scalar(select(WfDefinitionVersion).where(WfDefinitionVersion.definition_id == definition_id)
                                     .order_by(WfDefinitionVersion.version_no.desc()))
-            problems = errors(validate_graph(company_id, latest.graph or {}, d.entity_type))
+            problems = errors(validate_graph(company_id, latest.graph or {}, d.entity_type, d.definition_id))
             if problems:
                 raise WorkflowError("پیش از آزمون این ایرادها را رفع کنید:\n" + "\n".join(f"• {p.message}" for p in problems))
         if status_code == "ACTIVE" and d.active_version_id is None:
@@ -669,7 +724,7 @@ def publish(company_id: int, user_id: int | None, definition_id: int) -> int:
                                 .order_by(WfDefinitionVersion.version_no.desc()))
         if latest.status_code != "DRAFT":
             raise WorkflowError("تغییر تازه‌ای برای انتشار وجود ندارد.")
-        problems = errors(validate_graph(company_id, latest.graph or {}, d.entity_type))
+        problems = errors(validate_graph(company_id, latest.graph or {}, d.entity_type, d.definition_id))
         if problems:
             raise WorkflowError("پیش از انتشار این ایرادها را رفع کنید:\n" + "\n".join(f"• {p.message}" for p in problems))
         for old in session.scalars(select(WfDefinitionVersion).where(WfDefinitionVersion.definition_id == definition_id,

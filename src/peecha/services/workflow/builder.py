@@ -161,6 +161,79 @@ def build_graph(spec: WizardSpec) -> dict:
                         "settings": {"allow_self_approval": False, "max_steps": 200}})
 
 
+# --- R333: روند کلی (چند فرایند و اقدام خودکار، پشت‌سرهم یا هم‌زمان) -------------------------------------------------
+@dataclass
+class FlowStep:
+    kind: str  # PROCESS | ACTION
+    ref: int | str  # شناسهٔ فرایند یا کد اقدام
+    label: str = ""
+    together: bool = False  # هم‌زمان با مرحلهٔ قبل
+    target: str = "SAME"  # SAME: همین سند | CREATED: سندهای ساخته‌شده در مراحل قبل
+
+
+TARGET_LABELS = {"SAME": "همین سند", "CREATED": "سندهای ساخته‌شده در مراحل قبل"}
+
+
+def build_flow(entity_type: str | None, trigger: dict, steps: list[FlowStep]) -> dict:
+    """مرحله‌ها به ترتیب؛ مرحله‌ای که «هم‌زمان با قبلی» است با قبلی در یک انشعاب اجرا می‌شود و روند پیش از مرحلهٔ بعد
+    منتظر پایان همه می‌ماند. رد شدن یک فرایند فرعی روند را با «رد شد» تمام می‌کند؛ شکست/لغوش با «متوقف شد»."""
+    if not steps:
+        raise WorkflowError("دست‌کم یک مرحله لازم است.")
+    stages: list[list[FlowStep]] = []
+    for st in steps:
+        if st.together and stages:
+            stages[-1].append(st)
+        else:
+            stages.append([st])
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    stops: set[str] = set()
+    counter = 0
+
+    def make(st: FlowStep) -> str:
+        nonlocal counter
+        counter += 1
+        if st.kind == "ACTION":
+            spec = registry.find_action(entity_type, str(st.ref))
+            if spec is None:
+                raise WorkflowError(f"اقدام «{st.ref}» شناخته نشده است.")
+            nid = f"act{counter}"
+            nodes.append({"id": nid, "type": "ACTION", "label": st.label or spec.label, "action": str(st.ref),
+                          "retry": {"max": 3, "backoff_minutes": 5}})
+            return nid
+        nid = f"sub{counter}"
+        nodes.append({"id": nid, "type": "SUBPROCESS", "label": st.label or "فرایند فرعی", "definition_id": int(st.ref),
+                      "target": st.target or "SAME"})
+        edges.append({"from": nid, "to": "end_rejected", "when": "rejected"})
+        edges.append({"from": nid, "to": "end_stopped", "when": "failed"})
+        stops.update({"end_rejected", "end_stopped"})
+        return nid
+
+    tail = [definitions.START]
+    for k, stage in enumerate(stages, start=1):
+        if len(stage) == 1:
+            nid = make(stage[0])
+            edges.extend({"from": t, "to": nid} for t in tail)
+            tail = [nid]
+            continue
+        fork, join = f"par{k}", f"join{k}"
+        nodes.append({"id": fork, "type": "PARALLEL", "label": "هم‌زمان"})
+        nodes.append({"id": join, "type": "JOIN", "label": "پایان مرحله‌های هم‌زمان"})
+        edges.extend({"from": t, "to": fork} for t in tail)
+        for st in stage:
+            nid = make(st)
+            edges.append({"from": fork, "to": nid})
+            edges.append({"from": nid, "to": join})
+        tail = [join]
+    nodes.append({"id": "end_ok", "type": "END", "label": "پایان روند", "outcome": "DONE"})
+    edges.extend({"from": t, "to": "end_ok"} for t in tail)
+    if "end_rejected" in stops:
+        nodes.append({"id": "end_rejected", "type": "END", "label": "روند متوقف شد: رد شد", "outcome": "REJECTED"})
+        nodes.append({"id": "end_stopped", "type": "END", "label": "روند متوقف شد", "outcome": "CANCELLED"})
+    return auto_layout({"trigger": copy.deepcopy(trigger or {"type": "MANUAL"}), "nodes": nodes, "edges": edges,
+                        "settings": {"allow_self_approval": False, "max_steps": 200}})
+
+
 def auto_layout(graph: dict, dx: int = 230, dy: int = 120) -> dict:
     """لایه‌بندی از بالا به پایین بر اساس فاصله از «شروع» (یال برگشتی نادیده)."""
     g = copy.deepcopy(graph)
@@ -240,6 +313,8 @@ def describe_graph(graph: dict, entity_type: str | None, company_id: int | None 
             lines.append(f"اعلان به {_approvers_text(company_id, n.get('to') or [])}: {n.get('title') or ''}")
         elif t == "WAIT":
             lines.append(f"انتظار «{label}»")
+        elif t == "SUBPROCESS":
+            lines.append(_sub_text(company_id, n))
         elif t == "END":
             lines.append(f"پایان «{label}» با نتیجهٔ {OUTCOMES.get(n.get('outcome') or 'DONE', '')}")
     return lines
@@ -286,6 +361,21 @@ def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = No
         elif t == "CONDITION":
             flush()
             cond = conditions.describe(node.get("rule"), labels)
+        elif t == "SUBPROCESS":
+            flush()
+            add(f"{_sub_text(company_id, node)} و روند تا پایان آن منتظر می‌ماند{only}")
+            if any(e.get("when") == "rejected" for e in definitions.outgoing(graph, nid)):
+                reject_from = reject_from or follow(nid, "rejected")
+            cond = None
+        elif t == "PARALLEL":
+            flush()
+            branches, join = [], None
+            for e in definitions.outgoing(graph, nid):
+                names, join = _branch(graph, e["to"], company_id)
+                branches.append(names)
+            add("هم‌زمان: " + " | ".join(" ← ".join(b) or "—" for b in branches) + "؛ پس از پایان همه ادامه می‌یابد")
+            nid = join
+            continue
         elif t in ("APPROVAL", "TASK", "NOTIFY", "WAIT"):
             flush()
             if t == "APPROVAL":
@@ -324,6 +414,34 @@ def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = No
     if parts:
         lines.append("اگر رد شود: " + " ← ".join(parts))
     return lines
+
+
+def _sub_text(company_id: int | None, node: dict) -> str:
+    name = node.get("label") or "فرایند فرعی"
+    if company_id is not None and node.get("definition_id"):
+        try:
+            name = definitions.get_definition(company_id, int(node["definition_id"])).name
+        except WorkflowError:
+            pass
+    return f"فرایند «{name}» روی {TARGET_LABELS.get(node.get('target') or 'SAME', 'همین سند')} اجرا می‌شود"
+
+
+def _branch(graph: dict, start: str, company_id: int | None) -> tuple[list[str], str | None]:
+    """گام‌های یک شاخهٔ هم‌زمان تا «پیوستن شاخه‌ها»: (نام‌ها، شناسهٔ پیوستن)."""
+    nodes = definitions.nodes_by_id(graph)
+    names, nid, seen = [], start, set()
+    while nid and nid not in seen and nid in nodes:
+        seen.add(nid)
+        node = nodes[nid]
+        if node.get("type") == "JOIN":
+            return names, nid
+        if node.get("type") == "SUBPROCESS":
+            names.append(_sub_text(company_id, node).split(" روی ")[0].replace("فرایند ", "", 1))
+        elif node.get("type") in ("APPROVAL", "TASK", "ACTION"):
+            names.append(f"«{node.get('label') or NODE_TYPES.get(node.get('type'), '')}»")
+        nxt = [e for e in definitions.outgoing(graph, nid) if e.get("when") in (None, "", "default", "approved", "done")]
+        nid = nxt[0]["to"] if nxt else None
+    return names, None
 
 
 def chain_lines(graph: dict, entity_type: str | None, company_id: int | None) -> list[str]:
@@ -378,12 +496,13 @@ NEW_NODE_DEFAULTS = {
     "PARALLEL": {"label": "انشعاب هم‌زمان"},
     "JOIN": {"label": "پیوستن شاخه‌ها"},
     "END": {"label": "پایان", "outcome": "DONE"},
+    "SUBPROCESS": {"label": "فرایند فرعی", "target": "SAME"},
 }
 
 
 def new_node_id(graph: dict, node_type: str) -> str:
     prefix = {"CONDITION": "c", "APPROVAL": "ap", "TASK": "t", "ACTION": "act", "NOTIFY": "n", "WAIT": "w",
-              "PARALLEL": "p", "JOIN": "j", "END": "e"}.get(node_type, "x")
+              "PARALLEL": "p", "JOIN": "j", "END": "e", "SUBPROCESS": "sub"}.get(node_type, "x")
     existing = set(definitions.nodes_by_id(graph))
     i = 1
     while f"{prefix}{i}" in existing:

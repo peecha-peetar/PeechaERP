@@ -25,7 +25,8 @@ INSTANCE_STATUS = {"RUNNING": "در حال اجرا", "WAITING": "در انتظ�
 OPEN_INSTANCE_STATUSES = ("RUNNING", "WAITING", "SUSPENDED")
 OUTCOMES = {"APPROVED": "تاییدشده", "REJECTED": "ردشده", "DONE": "انجام‌شده", "CANCELLED": "لغوشده"}
 NODE_TYPES = {"START": "شروع", "CONDITION": "شرط", "APPROVAL": "تایید", "TASK": "کار", "ACTION": "اقدام خودکار",
-              "NOTIFY": "اعلان", "WAIT": "انتظار", "PARALLEL": "انشعاب هم‌زمان", "JOIN": "پیوستن شاخه‌ها", "END": "پایان"}
+              "NOTIFY": "اعلان", "WAIT": "انتظار", "PARALLEL": "انشعاب هم‌زمان", "JOIN": "پیوستن شاخه‌ها", "END": "پایان",
+              "SUBPROCESS": "فرایند فرعی"}
 PRIORITIES = {"LOW": "کم", "NORMAL": "عادی", "HIGH": "بالا", "CRITICAL": "فوری"}
 EXCEPTION_STATUS = {"OPEN": "باز", "RETRYING": "در حال تلاش دوباره", "RESOLVED": "حل‌شده", "IGNORED": "نادیده گرفته شد",
                     "ESCALATED": "ارجاع به سطح بالاتر"}
