@@ -297,7 +297,7 @@ def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = No
                 add(f"«{label}»: {_approvers_text(company_id, node.get('assignees') or [])} در «کارتابل من» این کار را انجام "
                     f"می‌دهد و «انجام شد» می‌زند{only}")
             elif t == "NOTIFY":
-                title = re.sub(r"\{[^}]*\}", "…", (node.get("title") or label).replace("{عنوان}", "سند"))
+                title = re.sub(r"\{[^}]*\}", "…", (node.get("title") or label).replace("«{عنوان}»", "سند").replace("{عنوان}", "سند"))
                 add(f"خبر به {_approvers_text(company_id, node.get('to') or [])}: {title}")
             else:
                 add(f"انتظار: «{label}»")
@@ -307,6 +307,7 @@ def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = No
             lines.append(f"پایان: {OUTCOMES.get(node.get('outcome') or 'DONE', '')}")
             break
         nid = follow(nid, {"CONDITION": "yes", "APPROVAL": "approved", "TASK": "done"}.get(t))
+    lines.extend(chain_lines(graph, entity_type, company_id))
     parts, nid, seen = [], reject_from, set()
     while nid and nid not in seen:
         seen.add(nid)
@@ -323,6 +324,24 @@ def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = No
     if parts:
         lines.append("اگر رد شود: " + " ← ".join(parts))
     return lines
+
+
+def chain_lines(graph: dict, entity_type: str | None, company_id: int | None) -> list[str]:
+    """R332: پس از این فرایند چه فرایندی خودکار شروع می‌شود؛ اگر سند تازه فرایندی ندارد، راه ادامهٔ زنجیره."""
+    if company_id is None:
+        return []
+    produced = definitions.produced_events(graph, entity_type)
+    nxt = definitions.followers(company_id, produced)
+    out = [f"سپس خودکار: فرایند «{name}» شروع می‌شود" for _d, name, _e in nxt]
+    started = {e for _d, _n, e in nxt}
+    for node in graph.get("nodes") or []:
+        spec = registry.find_action(entity_type, node.get("action") or "") if node.get("type") == "ACTION" else None
+        if spec is not None and spec.creates and not started & set(spec.creates):
+            adapter = next((a for a in registry.adapters() if spec.creates[0] in a.events), None)
+            if adapter is not None:
+                out.append(f"«{node.get('label') or spec.label}» سند تازه می‌سازد؛ برای ادامهٔ خودکار، فرایندی برای "
+                           f"«{adapter.label}» با رویداد «{adapter.events[spec.creates[0]]}» بسازید.")
+    return out
 
 
 def diff_graphs(old: dict, new: dict) -> list[str]:

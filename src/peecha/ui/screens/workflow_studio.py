@@ -1696,7 +1696,8 @@ class ProcessListScreen(QWidget):
         cards, self.cards = ms.summary([("all", "همهٔ فرایندها", "info", "🔀"), ("active", "فعال", "success", "▶️"),
                                         ("draft", "در دست طراحی", "warning", "✏️"), ("running", "اجراهای باز", "neutral", "⏳")])
         outer.addWidget(cards)
-        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس تازه", "اجراهای باز", "ایراد"])
+        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس تازه", "اجراهای باز", "ایراد",
+                            "پس از آن (خودکار)"])
         self.table.cellDoubleClicked.connect(lambda _r, _c: self.open_designer())
         outer.addWidget(self.table, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (
@@ -1735,8 +1736,9 @@ class ProcessListScreen(QWidget):
         self.rows = defs.list_definitions(company_id())
         try:
             self.definition_problems = defs.problems(company_id())
+            self.definition_chains = defs.chains(company_id())  # R332: کدام فرایندها پس از این یکی خودکار شروع می‌شوند
         except Exception:  # noqa: BLE001 -- بررسی کمکی نباید فهرست را خالی کند
-            self.definition_problems = {}
+            self.definition_problems, self.definition_chains = {}, {}
         self.cards["all"].setText(P(len(self.rows)))
         self.cards["active"].setText(P(sum(1 for r in self.rows if r.status_code in ("ACTIVE", "PUBLISHED"))))
         self.cards["draft"].setText(P(sum(1 for r in self.rows if r.status_code in ("DRAFT", "TESTING"))))
@@ -1748,10 +1750,12 @@ class ProcessListScreen(QWidget):
         shown = [r for r in self.rows if (not status or r.status_code == status) and (not text or text in r.name or text in r.code)]
         labels = {a.entity_type: a.label for a in registry.adapters()}
         problems = getattr(self, "definition_problems", {})
+        chained = getattr(self, "definition_chains", {})
         fill(self.table, [[r.name, r.code, labels.get(r.entity_type, "عمومی") if r.entity_type else "عمومی",
                            builder.TRIGGER_LABELS.get(r.trigger_type or "MANUAL", ""), r.status_label,
                            r.active_version_no or "—", "دارد" if r.has_draft and r.active_version_no else "",
-                           r.running, "نیاز به اصلاح" if r.definition_id in problems else ""]
+                           r.running, "نیاز به اصلاح" if r.definition_id in problems else "",
+                           "، ".join(f"← {n}" for n in chained.get(r.definition_id, []))]
                           for r in shown], [r.definition_id for r in shown])
         # R329: فرایند منتشرشده‌ای که با قواعد امروز سند را گیر می‌انداخت؛ علت در راهنمای همان خانه
         for i, r in enumerate(shown):

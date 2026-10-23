@@ -60,6 +60,8 @@ class ActionSpec:
     sets_status: str | None = None  # R331: وضعیت سند پس از اقدام (برای سنجش ترتیب اقدام‌ها، مثلاً «رد» پس از «تصویب»)
     blocking: bool = True  # False: شکستش فرایند را متوقف نمی‌کند (ثبت و اعلام می‌شود و فرایند ادامه می‌یابد)
     check: Callable[[int, str | None, dict], str | None] | None = None  # (شرکت، نوع سند، پارامترها) ← ایراد تعریف
+    # R332: رویدادهایی که این اقدام پدید می‌آورد (مثلاً «ساخت سفارش از درخواست») تا فرایند بعدی زنجیره شروع شود
+    creates: tuple[str, ...] = ()
 
     def applies(self, entity_type: str | None) -> bool:
         adapter = get_adapter(entity_type)  # نوع ناشناخته (فرایند عمومی/رویداد آزاد): قضاوت ممکن نیست، مجاز است
@@ -88,6 +90,7 @@ class EntityAdapter:
     form_gate_statuses: tuple[str, ...] = ()  # عملیات چندمرحله‌ای: فقط فرم پیش از شروع بررسی می‌کند
     # R328: «برگشت برای اصلاح» سند قفل‌شده (مثلاً ارسال‌شده) را دوباره قابل ویرایش می‌کند: (company_id, entity_id)
     reopen: Callable[[int, int], None] | None = None
+    event_statuses: dict[str, str] = field(default_factory=dict)  # R332: وضعیت سند در رویدادهای غیروضعیتی
 
     def field_map(self) -> dict[str, FieldSpec]:
         return {f.key: f for f in self.fields}

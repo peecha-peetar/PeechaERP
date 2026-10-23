@@ -714,6 +714,11 @@ def convert_to_invoice(
             serial_id=snap["serial_id"], source_line_id=snap["line_id"], description=snap["description"],
             warehouse_id=snap["warehouse_id"],
         )
+    from peecha.services.workflow import model_events
+
+    # R332: فاکتور کامل (با همهٔ ردیف‌ها) ← فرایند بعدی زنجیره، مثلاً ثبت نهایی فاکتور
+    model_events.announce(company_id, f"{target_type}_FROM_ORDER", target_type, new_document_id, {"source_id": document_id},
+                          actor_user_id=created_by_user_id)
     return new_document_id
 
 

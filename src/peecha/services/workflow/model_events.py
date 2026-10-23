@@ -77,6 +77,20 @@ def _acting():
     return getattr(_STATE, "acting", None)
 
 
+def announce(company_id: int | None, event_type: str, entity_type: str, entity_id: int | None, payload: dict | None = None,
+             actor_user_id: int | None = None) -> None:
+    """R332: رویداد «سند کامل شد» (مثلاً سفارش ساخته‌شده از درخواست، با همهٔ ردیف‌ها) تا فرایند بعدی زنجیره شروع شود؛
+    سند ساخته‌شده در اقدام خودکار علت دارد (محافظت از حلقه)، و هر سند فقط یک‌بار اعلام می‌شود."""
+    from peecha.services.workflow import events
+
+    if not company_id or not entity_id or not events.has_listeners(company_id, event_type):
+        return
+    ctx = _acting()
+    events.emit(company_id, event_type, entity_type, int(entity_id), payload or {}, dedupe_key=f"{event_type}:{entity_id}",
+                actor_user_id=actor_user_id, causation_instance_id=ctx[0] if ctx else None,
+                depth=(ctx[1] + 1) if ctx else 0)
+
+
 @contextmanager
 def ungated():
     """عملیاتی که هرگز نباید با دروازه متوقف شود (مثلاً فروش واقعی موبایل که کالایش تحویل شده)."""

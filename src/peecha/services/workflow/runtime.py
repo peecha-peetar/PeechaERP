@@ -783,6 +783,11 @@ def timeline(company_id: int, instance_id: int) -> list[TimelineRow]:
                 detail = definitions.EDGE_LABELS.get(s.outcome, OUTCOMES.get(s.outcome, s.outcome))
             if not detail and (s.detail or {}).get("rule"):
                 detail = s.detail["rule"]
+            made = ((s.detail or {}).get("result") or {}) if s.node_type == "ACTION" else {}
+            if made.get("order_ids"):  # R332: سند بعدی زنجیره در تاریخچه دیده شود
+                detail = f"{numerals.to_persian_digits(str(len(made['order_ids'])))} سفارش خرید ساخته شد"
+            elif made.get("invoice_id"):
+                detail = "فاکتور صادر شد"
             rows.append(TimelineRow(s.ended_at or s.started_at, s.node_type, s.label or NODE_TYPES.get(s.node_type, ""),
                                     detail, names.get(s.actor_user_id, ""), s.status_code))
         for provider in TIMELINE_PROVIDERS:

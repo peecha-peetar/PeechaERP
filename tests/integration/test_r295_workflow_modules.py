@@ -80,7 +80,7 @@ check(status(inv0) == "POSTED", "sales invoice posts normally with listeners loa
 with new_session() as s:
     check(s.scalar(select(func.count()).select_from(WfEvent)) == 0, "no events stored when nobody listens")
 check(len(registry.adapters()) >= 25 and len(registry.scans()) == 4, "module adapters and scans registered")
-check(len(templates.TEMPLATES) == 26, "26 templates (23 standard + 3 extra)")
+check(len(templates.TEMPLATES) == 28, "28 templates (23 standard + 3 extra + 2 purchase chain, R332)")
 
 # ===== ۱) سفارش خرید بالای ۵۰۰ میلیون: مدیر ← مالی ← تصویب خودکار =====
 supplier = partners.create_supplier(company_id, "S-1", "تامین‌کنندهٔ الف", fast_track=True)

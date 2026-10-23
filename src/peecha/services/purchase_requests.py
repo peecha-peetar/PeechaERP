@@ -348,6 +348,11 @@ def convert_to_orders(
                 purchase_request_line_id=ln.line_id,
             )
         order_ids.append(order_id)
+    from peecha.services.workflow import model_events
+
+    for order_id in order_ids:  # R332: سفارش کامل (با همهٔ ردیف‌ها) ← فرایند بعدی زنجیره، مثلاً تایید سفارش
+        model_events.announce(company_id, "PURCHASE_ORDER_FROM_REQUEST", "PURCHASE_ORDER", order_id, {"request_id": request_id},
+                              actor_user_id=user_id)
     return order_ids
 
 

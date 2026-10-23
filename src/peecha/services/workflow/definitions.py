@@ -166,6 +166,56 @@ def problems(company_id: int) -> dict[int, list[str]]:
     return out
 
 
+def produced_events(graph: dict, entity_type: str | None) -> set[str]:
+    """R332: رویدادهایی که اقدام‌های خودکار این فرایند پدید می‌آورند (وضعیت تازهٔ سند، سند تازه، رویداد دلخواه)."""
+    out: set[str] = set()
+    for node in (graph or {}).get("nodes") or []:
+        if node.get("type") != "ACTION":
+            continue
+        spec = registry.find_action(entity_type, node.get("action") or "")
+        if spec is None:
+            continue
+        if spec.sets_status and entity_type:
+            out.add(f"{entity_type}_{spec.sets_status}")
+        out |= set(spec.creates)
+        if node.get("action") == "emit_event" and (node.get("params") or {}).get("event"):
+            out.add(node["params"]["event"])
+    return out
+
+
+def followers(company_id: int, produced: set[str], exclude: int | None = None) -> list[tuple[int, str, str]]:
+    """R332: فرایندهای فعالی که با این رویدادها خودکار شروع می‌شوند: [(شناسه، نام، رویداد)]."""
+    if not produced:
+        return []
+    with new_session() as session:
+        rows = session.execute(select(WfDefinition.definition_id, WfDefinition.name, WfDefinitionTrigger.event_type).join(
+            WfDefinitionTrigger, WfDefinitionTrigger.definition_id == WfDefinition.definition_id).where(
+            WfDefinition.company_id == company_id, WfDefinition.status_code.in_(RUNNABLE_STATUSES),
+            WfDefinitionTrigger.is_active.is_(True), WfDefinitionTrigger.event_type.in_(sorted(produced)),
+            WfDefinitionTrigger.version_id == WfDefinition.active_version_id).order_by(WfDefinition.name)).all()
+    seen, out = set(), []
+    for did, name, ev in rows:
+        if did != exclude and did not in seen:
+            seen.add(did)
+            out.append((did, name, ev))
+    return out
+
+
+def chains(company_id: int) -> dict[int, list[str]]:
+    """R332: برای هر فرایند فعال، نام فرایندهایی که پس از آن خودکار شروع می‌شوند (زنجیرهٔ فرایندها)."""
+    with new_session() as session:
+        rows = [(d.definition_id, d.entity_type, v.graph) for d, v in session.execute(
+            select(WfDefinition, WfDefinitionVersion).join(
+                WfDefinitionVersion, WfDefinitionVersion.version_id == WfDefinition.active_version_id).where(
+                WfDefinition.company_id == company_id, WfDefinition.status_code.in_(RUNNABLE_STATUSES)))]
+    out = {}
+    for did, entity_type, graph in rows:
+        nxt = [name for _d, name, _e in followers(company_id, produced_events(graph, entity_type), exclude=did)]
+        if nxt:
+            out[did] = nxt
+    return out
+
+
 def _start_statuses(adapter, trigger: dict) -> set[str]:
     """R330: وضعیت سند در لحظهٔ شروع فرایند (اگر از رویدادها معلوم است)؛ خالی یعنی نامعلوم."""
     if adapter is None or trigger.get("type") != "EVENT" or not trigger.get("events"):
@@ -174,7 +224,7 @@ def _start_statuses(adapter, trigger: dict) -> set[str]:
     for ev in trigger["events"]:
         if not ev.startswith(prefix):
             return set()
-        status = ev[len(prefix):]
+        status = adapter.event_statuses.get(ev) or ev[len(prefix):]
         if status == "CREATED":
             if not adapter.initial_status:
                 return set()

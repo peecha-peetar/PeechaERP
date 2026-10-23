@@ -119,6 +119,22 @@ TEMPLATES: list[Template] = [
                                        trigger=_event("PURCHASE_ORDER_CONFIRMED", gate=True), condition=gt("total_amount", 500_000_000),
                                        levels=[level("تایید مدیر", MANAGERS), level("تایید مالی", FINANCE)],
                                        actions=["entity.approve"], distinct=True)),
+    # R332: زنجیرهٔ خودکار خرید: درخواست ← سفارش ← (تایید سفارش خرید) ← رسید کالا ← فاکتور
+    Template("PURCHASE_REQUEST_TO_ORDER", "تایید درخواست خرید و تبدیل خودکار به سفارش", "خرید",
+             "پس از تایید مدیر، درخواست خودکار تصویب و به سفارش خرید (یکی برای هر تامین‌کننده) تبدیل و برای تصویب "
+             "فرستاده می‌شود؛ ادامه با فرایند «تایید سفارش خرید».",
+             "PURCHASE_REQUEST", _wizard("PURCHASE_REQUEST_TO_ORDER", "تایید درخواست خرید و تبدیل خودکار به سفارش",
+                                         "PURCHASE_REQUEST", trigger=_event("PURCHASE_REQUEST_SUBMITTED", gate=True),
+                                         levels=[level("تایید مدیر مستقیم", DIRECT_MANAGER)],
+                                         actions=["entity.approve", "entity.convert"], reject_actions=["entity.reject"])),
+    Template("PURCHASE_ORDER_TO_INVOICE", "صدور خودکار فاکتور خرید پس از رسید کالا", "خرید",
+             "سفارش خرید تصویب‌شده به انباردار می‌رسد؛ پس از تایید رسید کالا و «انجام شد»، فاکتور خرید خودکار صادر می‌شود.",
+             "PURCHASE_ORDER", _wizard("PURCHASE_ORDER_TO_INVOICE", "صدور خودکار فاکتور خرید پس از رسید کالا", "PURCHASE_ORDER",
+                                       trigger=_event("PURCHASE_ORDER_APPROVED"),
+                                       levels=[level("تایید رسید کالا در انبار", perm("purchase_goods_receipt"), kind="TASK",
+                                                     instructions="پس از رسیدن کالا، رسید را در «تایید رسید کالا» تایید "
+                                                                  "کنید و سپس «انجام شد» بزنید.")],
+                                       actions=["entity.to_invoice"])),
     Template("SUPPLIER_INVOICE_APPROVAL", "تایید فاکتور خرید", "خرید",
              "فاکتور تامین‌کننده پیش از تصویب و ثبت به تایید واحد مالی می‌رسد.",
              "PURCHASE_INVOICE", _wizard("SUPPLIER_INVOICE_APPROVAL", "تایید فاکتور خرید", "PURCHASE_INVOICE",

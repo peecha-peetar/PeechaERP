@@ -127,6 +127,48 @@ def _no_open_hold(company_id: int, document_id: int) -> bool:
                                                                CreditHold.released_at.is_(None))) is None
 
 
+# --- R332: زنجیرهٔ خودکار: سند بعدی ساخته یا جلو برده می‌شود و فرایند همان سند شروع می‌شود ----------------------------
+_TO_INVOICE = {"SALES_ORDER": "SALES_INVOICE", "SALES_PROFORMA": "SALES_INVOICE", "PURCHASE_ORDER": "PURCHASE_INVOICE",
+               "PURCHASE_PROFORMA": "PURCHASE_INVOICE"}
+CHAIN_EVENTS = {"PURCHASE_ORDER": {"PURCHASE_ORDER_FROM_REQUEST": "ساخت «سفارش خرید» از درخواست خرید"},
+                "SALES_INVOICE": {"SALES_INVOICE_FROM_ORDER": "صدور «فاکتور فروش» از سفارش"},
+                "PURCHASE_INVOICE": {"PURCHASE_INVOICE_FROM_ORDER": "صدور «فاکتور خرید» از سفارش"}}
+
+
+def _confirm_doc(ctx: ActionContext) -> dict:
+    from peecha.services import commercial_documents as docs
+
+    docs.confirm_document(int(ctx.entity_id), ctx.company_id, ctx.user_id)
+    return {"status": "CONFIRMED"}
+
+
+def _to_invoice(ctx: ActionContext) -> dict:
+    from peecha.services import commercial_documents as docs
+
+    return {"invoice_id": docs.convert_to_invoice(int(ctx.entity_id), ctx.company_id, ctx.user_id, datetime.date.today())}
+
+
+def _fully_invoiced(company_id: int, document_id: int) -> bool:
+    from peecha.services import commercial_documents as docs
+
+    ordered, invoiced = docs.get_order_fulfillment_summary(document_id, company_id)
+    return ordered > 0 and invoiced >= ordered
+
+
+def _chain_actions(code: str) -> dict[str, ActionSpec]:
+    out = {"confirm": ActionSpec("confirm", "ارسال سند برای تصویب", _confirm_doc, requires_status=("DRAFT",),
+                                 sets_status="CONFIRMED", is_done=_doc_status_is("CONFIRMED", "APPROVED", "POSTED"),
+                                 description="همان «تایید» کاربر در فرم سند (پیش‌نویس ← تاییدشده)")}
+    target = _TO_INVOICE.get(code)
+    if target:
+        out["to_invoice"] = ActionSpec(
+            "to_invoice", f"صدور خودکار {DOC_TYPES[target][0]} از این سند", _to_invoice, blocking=False,
+            requires_status=("CONFIRMED", "APPROVED", "POSTED"), is_done=_fully_invoiced,
+            creates=(f"{target}_FROM_ORDER", f"{target}_CREATED"),
+            description="ماندهٔ فاکتورنشدهٔ همهٔ ردیف‌ها؛ اگر رسید کالا لازم است، پس از تایید رسید")
+    return out
+
+
 DOC_FIELDS = (
     FieldSpec("total_amount", "جمع کل", "money"), FieldSpec("subtotal_amount", "جمع پیش از تخفیف", "money"),
     FieldSpec("discount_amount", "مبلغ تخفیف", "money"), FieldSpec("discount_percent", "درصد تخفیف", "number"),
@@ -142,7 +184,8 @@ DOC_FIELDS = (
 for _code, (_label, _nav) in DOC_TYPES.items():
     registry.register_adapter(EntityAdapter(
         _code, _label, "PURCHASE" if _code.startswith("PURCHASE") else "SALES", doc_context, fields=DOC_FIELDS,
-        events={f"{_code}_{k}": v for k, v in status_events(_label, DOC_EVENTS).items()} | {f"{_code}_CREATED": f"ثبت «{_label}»"},
+        events={f"{_code}_{k}": v for k, v in status_events(_label, DOC_EVENTS).items()} | {f"{_code}_CREATED": f"ثبت «{_label}»"}
+        | CHAIN_EVENTS.get(_code, {}), event_statuses={ev: "DRAFT" for ev in CHAIN_EVENTS.get(_code, {})},
         actions={
             "approve": ActionSpec("approve", "تصویب سند", _approve_doc, risk="HIGH", requires_status=("CONFIRMED",),
                                   sets_status="APPROVED",
@@ -155,7 +198,7 @@ for _code, (_label, _nav) in DOC_TYPES.items():
             "reject": ActionSpec("reject", "رد و برگشت سند به پیش‌نویس", _reject_doc, requires_status=("CONFIRMED", "APPROVED"),
                                  sets_status="DRAFT",
                                  is_done=_doc_status_is("DRAFT", "CANCELLED"), params=(ParamSpec("reason", "دلیل رد"),)),
-        },
+        } | _chain_actions(_code),
         title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')} — {c.get('counterparty_name') or ''}".strip(" —"),
         owner=lambda cid, eid: doc_context(cid, eid)["created_by"], approval_context=_doc_card, open_nav=_nav,
         submitter_field="created_by", gate_statuses=("APPROVED",), form_gate_statuses=("POSTED",),
@@ -279,6 +322,35 @@ def _pr_reject(ctx: ActionContext) -> dict:
     return {"status": "REJECTED"}
 
 
+def _pr_convert(ctx: ActionContext) -> dict:
+    """R332: درخواست تصویب‌شده ← سفارش خرید (یکی برای هر تامین‌کننده) و، اگر خواسته شده، ارسال سفارش برای تصویب."""
+    from peecha.services import commercial_documents as docs, purchase_requests
+
+    # سفارش به نام درخواست‌کننده؛ به نام تاییدکننده ساخته می‌شد و همو (تفکیک وظایف) نمی‌توانست سفارش را تایید کند
+    maker = int(ctx.context.get("requester") or ctx.user_id)
+    order_ids = purchase_requests.convert_to_orders(int(ctx.entity_id), ctx.company_id, maker)
+    problems = []
+    if str(ctx.params.get("send") or "true") == "true":
+        for order_id in order_ids:
+            try:
+                docs.confirm_document(order_id, ctx.company_id, ctx.user_id)
+            except ValueError as exc:
+                problems.append(str(exc))
+    if problems:
+        raise ValueError(f"سفارش ساخته شد ولی برای تصویب فرستاده نشد: {problems[0]}")
+    return {"order_ids": order_ids}
+
+
+def _pr_fully_ordered(company_id: int, request_id: int) -> bool:
+    from peecha.services import purchase_requests
+
+    with new_session() as session:
+        lines = list(session.scalars(select(PurchaseRequestLine).where(PurchaseRequestLine.request_id == request_id)))
+        session.expunge_all()
+    ordered = purchase_requests.ordered_quantities([ln.line_id for ln in lines])
+    return bool(lines) and all(ordered.get(ln.line_id, ZERO) >= ln.quantity_base for ln in lines)
+
+
 def _pr_reopen(company_id: int, request_id: int) -> None:
     from peecha.services import purchase_requests
 
@@ -307,7 +379,14 @@ registry.register_adapter(EntityAdapter(
                                    is_done=_pr_status_is("APPROVED", "ORDERED")),
              "reject": ActionSpec("reject", "رد درخواست خرید", _pr_reject, is_done=_pr_status_is("REJECTED"),
                                   requires_status=("SUBMITTED",), sets_status="REJECTED",
-                                  params=(ParamSpec("reason", "دلیل رد"),))},
+                                  params=(ParamSpec("reason", "دلیل رد"),)),
+             "convert": ActionSpec("convert", "تبدیل خودکار به سفارش خرید", _pr_convert, blocking=False,
+                                   requires_status=("APPROVED",), is_done=_pr_fully_ordered,
+                                   params=(ParamSpec("send", "ارسال سفارش برای تصویب", "choice", "true",
+                                                     {"true": "بله", "false": "خیر"}),),
+                                   creates=("PURCHASE_ORDER_FROM_REQUEST", "PURCHASE_ORDER_CREATED", "PURCHASE_ORDER_CONFIRMED"),
+                                   description="برای هر تامین‌کنندهٔ پیشنهادی یک سفارش با ماندهٔ ردیف‌ها؛ "
+                                               "ردیف بی‌تامین‌کننده باید دستی تبدیل شود")},
     title=lambda c: f"درخواست خرید شمارهٔ {c.get('request_no')} — {c.get('requester_name') or ''}".strip(" —"),
     owner=lambda cid, eid: pr_context(cid, eid)["requester"],
     approval_context=lambda cid, eid: (lambda c: [
