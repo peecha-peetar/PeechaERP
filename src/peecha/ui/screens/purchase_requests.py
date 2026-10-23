@@ -557,7 +557,7 @@ class PurchaseRequestScreen(QWidget):
         route, approve_tip = self._approval_route(is_manager, busy)
         self.buttons["approve"].setEnabled(route is not None)
         self.buttons["approve"].setToolTip(approve_tip)
-        my_step = self._status == "SUBMITTED" and bool(self.workflow_bar.my_task_ids)
+        my_step = self._status == "SUBMITTED" and bool(self.workflow_bar.my_approval_ids)
         self.buttons["reject"].setEnabled(my_step or (self._status == "SUBMITTED" and is_manager and not busy))
         self.buttons["cancel"].setEnabled(self._request_id is not None and self._status != "CANCELLED")
         self.buttons["convert"].setEnabled(self._status == "APPROVED" and not busy)
@@ -572,7 +572,7 @@ class PurchaseRequestScreen(QWidget):
         from peecha.services.workflow import model_events
 
         try:
-            return model_events.busy(self._company_id(), "PURCHASE_REQUEST", self._request_id)
+            return model_events.busy(self._company_id(), "PURCHASE_REQUEST", self._request_id, self._user_id())
         except Exception:  # noqa: BLE001 -- بررسی کمکی نباید بارگذاری فرم را متوقف کند
             return None
 
@@ -582,8 +582,10 @@ class PurchaseRequestScreen(QWidget):
         if self._request_id is None or self._status != "SUBMITTED":
             return None, "تصویب -- فقط درخواستی که برای تصویب ارسال شده است"
         bar = self.workflow_bar
-        if bar.my_task_ids:
+        if bar.my_approval_ids:
             return "TASK", "تصویب -- تایید مرحلهٔ گردش کار که منتظر شماست"
+        if bar.my_task_ids:
+            return None, "تصویب -- اول مرحلهٔ «انجام کار» را که منتظر شماست با «انجام مرحلهٔ جاری» انجام دهید"
         if bar.retry_exception_id and bar.can_retry:
             return "RETRY", "تصویب -- تایید در گردش کار داده شده اما ثبت نشد؛ با این دکمه دوباره اجرا می‌شود"
         if bar.running and busy:
@@ -730,7 +732,7 @@ class PurchaseRequestScreen(QWidget):
         elif route == "SEND":
             if self.workflow_bar.send():
                 self.edit_document(self._request_id)
-                if self.workflow_bar.my_task_ids:  # R329: «تصویب» زدهٔ همان تاییدکننده: همین‌جا تایید می‌شود
+                if self.workflow_bar.my_approval_ids:  # R329: «تصویب» زدهٔ همان تاییدکننده: همین‌جا تایید می‌شود
                     self._decide_step("APPROVE")
                 else:
                     self._after_workflow("درخواست برای تایید به گردش کار فرستاده شد.")
@@ -743,7 +745,7 @@ class PurchaseRequestScreen(QWidget):
             reason, ok = QInputDialog.getText(self, "رد درخواست", "علت رد:")
             if not ok:
                 return
-        if self._status == "SUBMITTED" and self.workflow_bar.my_task_ids:
+        if self._status == "SUBMITTED" and self.workflow_bar.my_approval_ids:
             self._decide_step("REJECT", reason)
             return
         self._transition(lambda: pr_service.reject_request(self._request_id, self._company_id(), reason), "درخواست رد شد.")
@@ -752,7 +754,7 @@ class PurchaseRequestScreen(QWidget):
         """R327: تصمیم روی مرحلهٔ گردش کار که منتظر همین کاربر است، از داخل خود درخواست (مثل «کارتابل من»)."""
         from peecha.services.workflow import tasks as wf_tasks
 
-        task_id = self.workflow_bar.my_task_ids[0]
+        task_id = self.workflow_bar.my_approval_ids[0]
         if decision == "APPROVE" and wf_tasks.task_detail(self._company_id(), task_id, self._user_id()).form_fields:
             decided = self.workflow_bar.open_step()  # خانه‌های فرم مرحله پیش از تایید پر می‌شوند
         else:

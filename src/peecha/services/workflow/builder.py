@@ -50,7 +50,7 @@ class WizardSpec:
 
 
 def build_graph(spec: WizardSpec) -> dict:
-    """گراف خطی: [شرط؟ ← تایید]... ← اقدام‌ها ← اعلان ← پایان؛ رد ← اعلان ← پایان «رد»؛ اصلاح ← کار درخواست‌کننده ← همان تایید."""
+    """گراف خطی: [شرط؟ ← تایید]... ← اقدام‌ها ← [انجام کار]... ← اعلان ← پایان؛ رد ← اعلان ← پایان «رد»؛ اصلاح ← کار درخواست‌کننده ← همان تایید."""
     if not spec.levels and not spec.actions:
         raise WorkflowError("دست‌کم یک مرحلهٔ تایید یا یک اقدام لازم است.")
     trigger = copy.deepcopy(spec.trigger or {"type": "MANUAL"})
@@ -65,8 +65,25 @@ def build_graph(spec: WizardSpec) -> dict:
             edges.append({"from": src, "to": target, **({"when": when} if when else {})})
         tail.clear()
 
+    def add_actions() -> None:
+        for j, code in enumerate(spec.actions, start=1):
+            action = registry.find_action(spec.entity_type, code)
+            if action is None:
+                raise WorkflowError(f"اقدام «{code}» شناخته نشده است.")
+            aid = f"act{j}"
+            nodes.append({"id": aid, "type": "ACTION", "label": action.label, "action": code,
+                          "retry": {"max": 3, "backoff_minutes": 5}})
+            attach(aid)
+            tail[:] = [(aid, None)]
+
+    # R330: اقدام‌ها (مثلاً «تصویب درخواست») درست پس از آخرین تایید؛ «انجام کار»های بعدی (مثلاً تبدیل به سفارش) روی سند
+    # تصویب‌شده انجام می‌شوند
+    approvals = [i for i, lv in enumerate(spec.levels, start=1) if lv.kind != "TASK"]
+    actions_after = approvals[-1] if approvals else len(spec.levels)
     reject_needed = False
     reject_target = "rja1" if spec.reject_actions else ("rej_note" if spec.notify_on_reject else "end_no")
+    if actions_after == 0:
+        add_actions()
     for i, level in enumerate(spec.levels, start=1):
         is_task = level.kind == "TASK"
         if not level.approvers:
@@ -90,6 +107,8 @@ def build_graph(spec: WizardSpec) -> dict:
                     node[key] = int(value) if key == "sla_policy_id" else value
             nodes.append(node)
             tail[:] = [(ap, "done")] + skip
+            if i == actions_after:
+                add_actions()
             continue
         node = {"id": ap, "type": "APPROVAL", "label": level.label or f"تایید مرحلهٔ {i}", "approvers": copy.deepcopy(level.approvers),
                 "mode": level.mode or "ANY"}
@@ -114,14 +133,8 @@ def build_graph(spec: WizardSpec) -> dict:
             edges.append({"from": ap, "to": fix, "when": "changes"})
             edges.append({"from": fix, "to": ap, "when": "done"})
         tail[:] = [(ap, "approved")] + skip
-    for j, code in enumerate(spec.actions, start=1):
-        action = registry.find_action(spec.entity_type, code)
-        if action is None:
-            raise WorkflowError(f"اقدام «{code}» شناخته نشده است.")
-        aid = f"act{j}"
-        nodes.append({"id": aid, "type": "ACTION", "label": action.label, "action": code, "retry": {"max": 3, "backoff_minutes": 5}})
-        attach(aid)
-        tail[:] = [(aid, None)]
+        if i == actions_after:
+            add_actions()
     if spec.notify_on_approve or spec.notify_extra:
         to = ([{"kind": "STARTER"}] if spec.notify_on_approve else []) + copy.deepcopy(spec.notify_extra)
         nodes.append({"id": "ok_note", "type": "NOTIFY", "label": "خبر تایید", "to": to, "title": "«{عنوان}» تایید شد"})

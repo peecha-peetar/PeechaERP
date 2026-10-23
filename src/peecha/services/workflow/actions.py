@@ -78,6 +78,9 @@ def execute(company_id: int, *, instance_id: int | None, node: dict, visit: int,
     spec = registry.find_action(entity_type, code)
     if spec is None:
         return ActionOutcome("FAILED", error=f"اقدام «{code}» شناخته نشده است.", technical=f"unknown action {code}")
+    if not spec.applies(entity_type):  # R330: تعریف قدیمی (مثلاً پیگیری مشتری روی درخواست خرید): بی‌تلاش رد می‌شود
+        return ActionOutcome("FAILED", error=f"«{spec.label}» به این سند مربوط نیست و انجام نشد.",
+                             technical=f"action {code} not applicable to {entity_type}")
     key = f"wf:{instance_id}:{node.get('id')}:{visit}"
     execution_id, status, result, attempts = _ledger(company_id, key, instance_id, node.get("id"), code)
     if status == "DONE":
@@ -175,14 +178,16 @@ def _create_followup(ctx: ActionContext) -> dict:
     """پیگیری/وظیفه در همان فعالیت‌های CRM (comm.customer_activities) -- بدون جدول کار تازه."""
     from peecha.services.crm import activities as act_service
 
-    customer = ctx.context.get(ctx.params.get("customer_field") or "customer_id")
+    field = ctx.params.get("customer_field")
+    customer = ctx.context.get(field) if field else (ctx.context.get("customer_id") or ctx.context.get("counterparty_id"))
+    lead = ctx.context.get("lead_id")
     due = datetime.date.today() + datetime.timedelta(days=int(ctx.params.get("due_in_days") or 0))
     assignee = ctx.params.get("assign_to")
     if assignee in (None, "", "STARTER"):
         assignee = ctx.user_id
     activity_id = act_service.create_activity(ctx.company_id, ctx.user_id, act_service.ActivityFields(
         ctx.params.get("activity_type") or "FOLLOW_UP", render(ctx.params.get("subject") or "پیگیری", ctx.context)[:200],
-        customer_detail_account_id=int(customer) if customer else None, due_date=due,
+        customer_detail_account_id=int(customer) if customer else None, lead_id=int(lead) if lead else None, due_date=due,
         priority_code=ctx.params.get("priority") or "NORMAL", assigned_to_user_id=int(assignee) if assignee else None,
         description=render(ctx.params.get("description") or "", ctx.context) or None))
     return {"activity_id": activity_id}
@@ -203,14 +208,30 @@ def _call_api(ctx: ActionContext) -> dict:
         return {"status": resp.status}
 
 
-registry.register_action(ActionSpec("emit_event", "انتشار رویداد برای فرایند دیگر", _emit_event,
-                                    params=(ParamSpec("event", "نام رویداد"),)))
-registry.register_action(ActionSpec("set_variable", "ثبت مقدار در فرایند", _set_variable,
-                                    params=(ParamSpec("key", "نام"), ParamSpec("value", "مقدار"))))
-registry.register_action(ActionSpec("add_comment", "افزودن یادداشت", _add_comment, params=(ParamSpec("text", "متن"),)))
+def _need(key: str, message: str):
+    return lambda _company_id, _entity_type, params: None if str((params or {}).get(key) or "").strip() else message
+
+
+def _check_api(company_id: int, _entity_type, params: dict) -> str | None:
+    host = urllib.parse.urlparse(str((params or {}).get("url") or "").strip()).hostname or ""
+    if host not in (settings(company_id).get("api_allowlist") or []):
+        return "نشانی سرویس بیرونی را بنویسید و میزبانش را در «تنظیمات گردش کار» مجاز کنید."
+    return None
+
+
+# R330: اقدام‌های عمومی فرعی‌اند: شکستشان ثبت و اعلام می‌شود ولی سند و فرایند را متوقف نمی‌کند
+registry.register_action(ActionSpec("emit_event", "انتشار رویداد برای فرایند دیگر", _emit_event, blocking=False,
+                                    params=(ParamSpec("event", "نام رویداد"),),
+                                    check=_need("event", "نام رویدادی را که منتشر می‌شود بنویسید.")))
+registry.register_action(ActionSpec("set_variable", "ثبت مقدار در فرایند", _set_variable, blocking=False,
+                                    params=(ParamSpec("key", "نام"), ParamSpec("value", "مقدار")),
+                                    check=_need("key", "نام مقداری را که ثبت می‌شود بنویسید.")))
+registry.register_action(ActionSpec("add_comment", "افزودن یادداشت", _add_comment, params=(ParamSpec("text", "متن"),),
+                                    blocking=False))
 registry.register_action(ActionSpec(
-    "create_followup", "ثبت پیگیری یا وظیفه", _create_followup,
+    "create_followup", "ثبت پیگیری یا وظیفه برای مشتری", _create_followup, blocking=False, modules=("SALES", "CRM"),
     params=(ParamSpec("subject", "موضوع", default="پیگیری"), ParamSpec("activity_type", "نوع", "choice", "FOLLOW_UP"),
             ParamSpec("due_in_days", "موعد (روز بعد)", "int", 0), ParamSpec("assign_to", "مسئول", "user", "STARTER"),
             ParamSpec("priority", "اولویت", "choice", "NORMAL"))))
-registry.register_action(ActionSpec("call_api", "فراخوانی سرویس بیرونی مجاز", _call_api, params=(ParamSpec("url", "نشانی"),)))
+registry.register_action(ActionSpec("call_api", "فراخوانی سرویس بیرونی مجاز", _call_api, params=(ParamSpec("url", "نشانی"),),
+                                    blocking=False, check=_check_api))

@@ -144,19 +144,20 @@ for _code, (_label, _nav) in DOC_TYPES.items():
         _code, _label, "PURCHASE" if _code.startswith("PURCHASE") else "SALES", doc_context, fields=DOC_FIELDS,
         events={f"{_code}_{k}": v for k, v in status_events(_label, DOC_EVENTS).items()} | {f"{_code}_CREATED": f"ثبت «{_label}»"},
         actions={
-            "approve": ActionSpec("approve", "تصویب سند", _approve_doc, risk="HIGH",
+            "approve": ActionSpec("approve", "تصویب سند", _approve_doc, risk="HIGH", requires_status=("CONFIRMED",),
                                   is_done=_doc_status_is("APPROVED", "POSTED"),
                                   description="همان «تصویب مدیر» فرم سند"),
             "release_credit_hold": ActionSpec("release_credit_hold", "آزادسازی قفل اعتباری", _release_hold, risk="HIGH",
                                               is_done=_no_open_hold),
-            "post": ActionSpec("post", "ثبت نهایی سند", _post_doc, risk="HIGH", is_done=_doc_status_is("POSTED")),
-            "reject": ActionSpec("reject", "رد و برگشت سند به پیش‌نویس", _reject_doc,
+            "post": ActionSpec("post", "ثبت نهایی سند", _post_doc, risk="HIGH", is_done=_doc_status_is("POSTED"),
+                               requires_status=("CONFIRMED", "APPROVED")),
+            "reject": ActionSpec("reject", "رد و برگشت سند به پیش‌نویس", _reject_doc, requires_status=("CONFIRMED", "APPROVED"),
                                  is_done=_doc_status_is("DRAFT", "CANCELLED"), params=(ParamSpec("reason", "دلیل رد"),)),
         },
         title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')} — {c.get('counterparty_name') or ''}".strip(" —"),
         owner=lambda cid, eid: doc_context(cid, eid)["created_by"], approval_context=_doc_card, open_nav=_nav,
         submitter_field="created_by", gate_statuses=("APPROVED",), form_gate_statuses=("POSTED",),
-        gate_label="تا تایید فرایند، سند قابل تصویب و ثبت نهایی نیست", reopen=_revert_doc,
+        gate_label="تا تایید فرایند، سند قابل تصویب و ثبت نهایی نیست", reopen=_revert_doc, initial_status="DRAFT",
         form_code=f"commercial_document_{_code.lower()}"))
 
 model_events.watch(Watch(
@@ -299,9 +300,10 @@ registry.register_adapter(EntityAdapter(
             FieldSpec("required_date", "تاریخ نیاز", "date")),
     events={"PURCHASE_REQUEST_CREATED": "ثبت درخواست خرید", "PURCHASE_REQUEST_SUBMITTED": "ارسال درخواست خرید",
             "PURCHASE_REQUEST_APPROVED": "تصویب درخواست خرید", "PURCHASE_REQUEST_REJECTED": "رد درخواست خرید"},
-    actions={"approve": ActionSpec("approve", "تصویب درخواست خرید", _pr_approve, risk="HIGH",
+    actions={"approve": ActionSpec("approve", "تصویب درخواست خرید", _pr_approve, risk="HIGH", requires_status=("SUBMITTED",),
                                    is_done=_pr_status_is("APPROVED", "ORDERED")),
              "reject": ActionSpec("reject", "رد درخواست خرید", _pr_reject, is_done=_pr_status_is("REJECTED"),
+                                  requires_status=("SUBMITTED",),
                                   params=(ParamSpec("reason", "دلیل رد"),))},
     title=lambda c: f"درخواست خرید شمارهٔ {c.get('request_no')} — {c.get('requester_name') or ''}".strip(" —"),
     owner=lambda cid, eid: pr_context(cid, eid)["requester"],
@@ -309,7 +311,7 @@ registry.register_adapter(EntityAdapter(
         ("درخواست‌کننده", c["requester_name"]), ("تاریخ", jdate(c["request_date"])), ("تاریخ نیاز", jdate(c["required_date"])),
         ("مبلغ تخمینی", money(c["estimated_amount"])), ("تعداد ردیف", str(c["line_count"]))])(pr_context(cid, eid)),
     open_nav="PURCH_REQUESTS", submitter_field="requester", gate_statuses=("APPROVED",),
-    reopen=_pr_reopen,
+    reopen=_pr_reopen, initial_status="DRAFT",
     gate_label="تا تایید فرایند، درخواست قابل تصویب نیست", form_code="purchase_requests"))
 
 model_events.watch(Watch(PurchaseRequest, lambda r: "PURCHASE_REQUEST", actor=lambda r: r.requester_user_id))

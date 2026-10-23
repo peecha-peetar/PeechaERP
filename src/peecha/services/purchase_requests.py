@@ -212,11 +212,11 @@ def approve_request(request_id: int, company_id: int, approved_by_user_id: int, 
         session.commit()
 
 
-def _workflow_busy(request_id: int, company_id: int) -> None:
+def _workflow_busy(request_id: int, company_id: int, user_id: int | None = None) -> None:
     """R323: تا پایان گردش کار تعریف‌شده، درخواست دستی رد یا به سفارش تبدیل نمی‌شود."""
     from peecha.services.workflow import model_events
 
-    message = model_events.busy(company_id, "PURCHASE_REQUEST", request_id)
+    message = model_events.busy(company_id, "PURCHASE_REQUEST", request_id, user_id)
     if message:
         raise ValueError(message)
 
@@ -303,7 +303,7 @@ def convert_to_orders(
         row = _get(session, request_id, company_id)
         if row.status_code != "APPROVED":
             raise ValueError("فقط درخواست تصویب‌شده به سفارش تبدیل می‌شود.")
-    _workflow_busy(request_id, company_id)
+    _workflow_busy(request_id, company_id, user_id)
     with new_session() as session:
         row = _get(session, request_id, company_id)
         lines = list(session.scalars(select(PurchaseRequestLine).where(PurchaseRequestLine.request_id == request_id)

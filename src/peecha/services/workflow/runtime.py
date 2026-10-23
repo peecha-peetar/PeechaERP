@@ -23,7 +23,7 @@ from peecha.db.models.workflow import (
 )
 from peecha.services.workflow import actions, conditions, definitions, events, notify, registry, routing
 from peecha.services.workflow.common import (
-    INSTANCE_STATUS, NODE_TYPES, OUTCOMES, WorkflowError, audit, friendly_error, now, plain, render, settings,
+    INSTANCE_STATUS, NODE_TYPES, OUTCOMES, WorkflowError, audit, friendly_error, now, plain, render, settings, squeeze,
     user_names,
 )
 
@@ -428,6 +428,18 @@ def _complete_action(instance_id: int, token_id: str, outcome: actions.ActionOut
         elif any(e.get("when") == "failed" for e in definitions.outgoing(graph, node["id"])):
             _apply(session, inst, graph, node, token, tokens, variables,
                    NodeResult("NEXT", when="failed", detail=detail, error=outcome.error), step)
+        elif not getattr(registry.find_action(inst.entity_type, node.get("action") or ""), "blocking", True):
+            # R330: اقدام فرعی (یادداشت، پیام، پیگیری، سرویس بیرونی): شکستش ثبت و اعلام می‌شود، سند و فرایند متوقف نمی‌شوند
+            tokens[:] = [t for t in tokens if t.get("id") != token_id]
+            _close_step(step, "FAILED", detail=detail, error=outcome.error)
+            notify.send(inst.company_id, _owner_ids(session, inst), "WF_EXCEPTION",
+                        f"«{node.get('label') or 'اقدام خودکار'}» انجام نشد", outcome.error or "", "WfInstance", inst.instance_id)
+            problem = _advance(session, inst, graph, node, tokens, variables, None)
+            if problem:
+                _fail(session, inst, node, problem, None, tokens, variables)
+            else:
+                inst.status_code = "RUNNING" if any(t.get("state") == "READY" for t in tokens) else "WAITING"
+                _save(inst, tokens=tokens, variables=variables)
         else:
             _close_step(step, "FAILED", detail=detail, error=outcome.error)
             title = f"اجرای «{node.get('label') or 'اقدام خودکار'}» در فرایند «{inst.title or ''}» ناموفق بود"
@@ -774,7 +786,9 @@ def timeline(company_id: int, instance_id: int) -> list[TimelineRow]:
         if inst.ended_at:
             rows.append(TimelineRow(inst.ended_at, "END", f"پایان: {INSTANCE_STATUS.get(inst.status_code)}",
                                     OUTCOMES.get(inst.outcome_code or "", inst.last_error or ""), "", inst.status_code))
-        return sorted(rows, key=lambda r: r.at)
+        rows.sort(key=lambda r: r.at)
+        return squeeze(rows, lambda a, b: (a.kind, a.title, a.detail) == (b.kind, b.title, b.detail),
+                       lambda r: r.status == "FAILED", lambda r, n: setattr(r, "detail", f"{r.detail} — {n} بار"))
 
 
 def status_path(company_id: int, instance_id: int) -> list[tuple[str, str]]:

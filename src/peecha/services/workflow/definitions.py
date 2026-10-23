@@ -166,6 +166,23 @@ def problems(company_id: int) -> dict[int, list[str]]:
     return out
 
 
+def _start_statuses(adapter, trigger: dict) -> set[str]:
+    """R330: وضعیت سند در لحظهٔ شروع فرایند (اگر از رویدادها معلوم است)؛ خالی یعنی نامعلوم."""
+    if adapter is None or trigger.get("type") != "EVENT" or not trigger.get("events"):
+        return set()
+    prefix, out = f"{adapter.entity_type}_", set()
+    for ev in trigger["events"]:
+        if not ev.startswith(prefix):
+            return set()
+        status = ev[len(prefix):]
+        if status == "CREATED":
+            if not adapter.initial_status:
+                return set()
+            status = adapter.initial_status
+        out.add(status)
+    return out
+
+
 def _only_requester(node: dict, adapter) -> bool:
     """R329: همهٔ تاییدکنندگان (و جایگزین‌ها) خود درخواست‌کننده‌اند؟"""
     submitter = adapter.submitter_field if adapter is not None else None
@@ -228,6 +245,9 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
 
     reachable = _reachable(graph)
     role_ids, user_ids = set(), set()
+    start_statuses = _start_statuses(adapter, trigger)
+    status_labels = dict((fields.get("status").choices or {}) if fields.get("status") else {})
+    has_task = any(n.get("type") == "TASK" for n in nodes.values())  # کار انسانی ممکن است وضعیت سند را جلو ببرد
     for nid, node in nodes.items():
         ntype, name = node.get("type"), _node_name(node)
         if ntype not in NODE_TYPES or ntype == "START":
@@ -283,6 +303,15 @@ def validate_graph(company_id: int, graph: dict, entity_type: str | None) -> lis
             spec = registry.find_action(entity_type, node.get("action") or "")
             if spec is None:
                 issues.append(Issue("error", f"اقدام «{name}» شناخته نشده است.", nid))
+            elif not spec.applies(entity_type):  # R330: مثلاً پیگیری مشتری روی درخواست خرید
+                issues.append(Issue("error", f"«{name}» به «{adapter.label if adapter else 'این فرایند'}» مربوط نیست؛ آن را بردارید.", nid))
+            elif spec.check is not None and spec.check(company_id, entity_type, node.get("params") or {}):
+                issues.append(Issue("error", f"«{name}»: {spec.check(company_id, entity_type, node.get('params') or {})}", nid))
+            elif spec.requires_status and start_statuses and not set(spec.requires_status) & start_statuses:
+                wanted = [adapter.events.get(f"{entity_type}_{x}") or status_labels.get(x) for x in spec.requires_status]
+                wanted = " یا ".join(f"«{w}»" for w in wanted if w) or "مرحلهٔ مناسب سند"
+                issues.append(Issue("warning" if has_task else "error",
+                                    f"«{name}» در این مرحلهٔ سند انجام نمی‌شود؛ رویداد شروع را {wanted} بگذارید.", nid))
             elif spec.risk == "HIGH" and not _paths_have_approval_before(graph, nid):
                 issues.append(Issue("error", f"اقدام حساس «{name}» بدون تایید انسانی قبلی مجاز نیست.", nid))
             if spec is not None and node.get("action") == "emit_event" and \

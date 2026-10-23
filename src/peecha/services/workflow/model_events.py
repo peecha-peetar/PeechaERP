@@ -176,9 +176,9 @@ def start_event_hint(entity_type: str | None) -> str:
 
 def unreachable_gate_text(entity_type: str | None) -> str:
     hint = start_event_hint(entity_type)
-    return ("با این رویداد، فرایند فقط پس از همان تایید شروع می‌شود و «قفل تایید» هیچ‌وقت باز نمی‌شود. "
-            + (f"برای تایید سند، رویداد «{hint}» را انتخاب کنید؛ " if hint else "")
-            + "اگر فرایند برای پس از تایید است (مثلاً فقط خبر)، تیک «قفل تایید» را بردارید.")
+    return ("این فرایند پس از تایید شروع می‌شود، پس «قفل تایید» هرگز باز نمی‌شود؛ "
+            + (f"رویداد شروع را «{hint}» بگذارید یا " if hint else "")
+            + "تیک «قفل تایید» را بردارید.")
 
 
 def _has_human_step(graph: dict) -> bool:
@@ -264,9 +264,9 @@ def gate_message(conn, company_id: int, entity_type: str, entity_id: int | None,
             "AND status_code IN ('RUNNING', 'WAITING') LIMIT 1"), {"c": company_id, "et": entity_type, "id": entity_id}).first()
         if running:
             return _failed_text(conn, company_id, entity_type, entity_id) or \
-                "این سند در جریان تایید است؛ پس از تایید نهایی در «مرکز تایید» خودکار انجام می‌شود."
+                "این سند در جریان تایید است؛ پس از تایید نهایی خودکار انجام می‌شود."
         if _conditions_match(conn, company_id, entity_type, versions, context, entity_id):
-            return "این سند پیش از این مرحله باید تایید شود؛ ابتدا آن را «برای تایید بفرستید»."
+            return "این سند باید تایید شود؛ اول آن را «برای تایید بفرستید»."
     return _busy_text(conn, company_id, entity_type, entity_id)
 
 
@@ -322,8 +322,7 @@ def _failed_action(conn, company_id: int, entity_type: str | None, entity_id: in
 
 def _failed_message(label: str | None, reason: str | None) -> str:
     reason = f" ({reason.strip().rstrip('.')})" if (reason or "").strip() else ""
-    return (f"اقدام خودکار «{label or 'گردش کار'}» برای این سند انجام نشد{reason}؛ مدیر یا مسئول فرایند باید آن را با "
-            "«اجرای دوباره» در نوار گردش کار همین سند (یا «مرکز گردش کار») دوباره اجرا کند.")
+    return f"«{label or 'اقدام خودکار'}» انجام نشد{reason}؛ مسئول فرایند آن را با «اجرای دوباره» در نوار گردش کار اجرا کند."
 
 
 def failed(company_id: int, entity_type: str | None, entity_id: int | None) -> tuple[int, str] | None:
@@ -395,20 +394,28 @@ def _busy_text(conn, company_id: int, entity_type: str | None, entity_id: int | 
         "LIMIT 1"), {"c": company_id, "et": entity_type, "id": entity_id}).first()
     if stuck:  # R325: کار بی‌گیرنده — بدون راهنما، سند بی‌صدا گیر می‌کرد
         name = f"«{steps[0]}» " if steps else ""
-        return (f"این سند در جریان تایید است، اما مرحلهٔ {name}گیرنده ندارد؛ مدیر باید آن را از «کارتابل من» یا نوار "
-                "گردش کار همین سند به فرد مناسب ارجاع دهد.")
-    where = f" (مرحلهٔ جاری: «{'»، «'.join(steps[:3])}»)" if steps else ""
-    return f"این سند در جریان تایید است{where}؛ تا همهٔ مراحل گردش کار در «کارتابل من» انجام نشود، این کار ممکن نیست."
+        return f"مرحلهٔ {name}گیرنده ندارد؛ مدیر آن را از نوار گردش کار به فرد مناسب ارجاع دهد."
+    where = f" (مرحلهٔ «{'»، «'.join(steps[:3])}»)" if steps else ""
+    return f"این سند در جریان تایید است{where}؛ تا پایان گردش کار این کار ممکن نیست."
 
 
-def busy(company_id: int, entity_type: str | None, entity_id: int | None) -> str | None:
-    """پیش از بردن سند به مرحلهٔ بعد (مثلاً تبدیل درخواست به سفارش یا رد دستی): None یعنی آزاد."""
+def busy(company_id: int, entity_type: str | None, entity_id: int | None, user_id: int | None = None) -> str | None:
+    """پیش از بردن سند به مرحلهٔ بعد (مثلاً تبدیل درخواست به سفارش یا رد دستی): None یعنی آزاد.
+
+    R330: کسی که مرحلهٔ «انجام کار» همین سند (مثلاً «تبدیل به سفارش») منتظر اوست، همان کار را روی سند انجام می‌دهد."""
     if not entity_type or not entity_id or _acting() is not None or getattr(_STATE, "ungated", False):
         return None
     from peecha.db.base import new_session
 
     with new_session() as session:
-        return _busy_text(session.connection(), company_id, entity_type, int(entity_id))
+        conn = session.connection()
+        if user_id and conn.execute(text(
+                "SELECT 1 FROM wf.tasks t JOIN wf.task_assignees a ON a.task_id = t.task_id "
+                "WHERE t.company_id = :c AND t.entity_type = :et AND t.entity_id = :id AND t.status_code = 'OPEN' "
+                "AND t.kind = 'TASK' AND a.user_id = :u AND a.status_code = 'ACTIVE' LIMIT 1"),
+                {"c": company_id, "et": entity_type, "id": int(entity_id), "u": user_id}).first():
+            return None
+        return _busy_text(conn, company_id, entity_type, int(entity_id))
 
 
 def check(company_id: int, entity_type: str | None, entity_id: int | None, target_status: str | None = None,

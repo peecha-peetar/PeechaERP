@@ -81,6 +81,7 @@ class WorkflowBar(QWidget):
         self.main_window = None
         self.open_task_ids: list[int] = []
         self.my_task_ids: list[int] = []
+        self.my_approval_ids: list[int] = []
         self.running = False
         self.waiting_names: list[str] = []
         self.retry_exception_id: int | None = None
@@ -123,6 +124,7 @@ class WorkflowBar(QWidget):
         if not cid or not self.entity_type or not self.entity_id:
             self.instance_id = None
             self.running, self.open_task_ids, self.my_task_ids, self.waiting_names = False, [], [], []
+            self.my_approval_ids = []
             self.retry_exception_id, self.can_retry, self.gated_ids = None, False, []
             self.setVisible(False)
             return
@@ -151,10 +153,11 @@ class WorkflowBar(QWidget):
         try:
             self.open_task_ids = [t.task_id for t in tasks.list_tasks(cid, status="OPEN", instance_id=self.instance_id)] \
                 if running else []
-            mine = {t.task_id for t in tasks.list_my_tasks(cid, user_id())} if self.open_task_ids and user_id() else set()
+            mine = {t.task_id: t.kind for t in tasks.list_my_tasks(cid, user_id())} if self.open_task_ids and user_id() else {}
         except Exception:  # noqa: BLE001
-            self.open_task_ids, mine = [], set()
+            self.open_task_ids, mine = [], {}
         self.my_task_ids = [t for t in self.open_task_ids if t in mine]
+        self.my_approval_ids = [t for t in self.my_task_ids if mine[t] == "APPROVAL"]  # R330: «تایید»، نه «انجام کار»
         try:
             self.unassigned_ids = [t.task_id for t in tasks.list_unassigned(cid, entity_type=self.entity_type,
                                                                             entity_id=int(self.entity_id))] if running else []
@@ -191,18 +194,17 @@ class WorkflowBar(QWidget):
             rework = None
         if rework is not None:
             reason = f": «{rework}»" if rework else ""
-            return (f"این سند برای اصلاح برگشت داده شده است{reason}. سند را اصلاح کنید و دوباره بفرستید؛ تایید از همان "
-                    "مرحله خودکار ادامه می‌یابد.")
+            return f"این سند برای اصلاح برگشت داده شد{reason}؛ پس از اصلاح دوباره بفرستید."
         if running or not rows or not self.gated_ids:
             return None
         last = rows[0]
         again = "با «ارسال برای تایید» دوباره بفرستید."
         if last.status_code == "COMPLETED" and last.outcome_code == "REJECTED":
-            return f"این سند در گردش کار رد شد. پس از اصلاح، {again}"
+            return f"این سند در گردش کار رد شد؛ پس از اصلاح {again}"
         if last.status_code == "CANCELLED":
             return f"گردش کار این سند لغو شد{': ' + last.last_error if last.last_error else '.'} {again}"
         if last.status_code == "FAILED":
-            return f"گردش کار این سند متوقف شد ({last.last_error or 'خطای تعریف فرایند'}). پس از رفع ایراد، {again}"
+            return f"گردش کار این سند متوقف شد ({last.last_error or 'ایراد تعریف فرایند'})؛ پس از رفع ایراد {again}"
         return None
 
     # --- کارها -----------------------------------------------------------------------------------------------

@@ -24,7 +24,7 @@ def _register() -> None:
                 ParamSpec("template_id", "الگوی پیام", "template"), ParamSpec("body", "متن (اگر الگو نیست)"),
                 ParamSpec("recipient", "گیرنده", "choice", "COUNTERPARTY", dict(messengers.RECIPIENTS)),
                 ParamSpec("target", "شماره یا شناسهٔ گیرندهٔ ثابت"), ParamSpec("notify_user_id", "کاربر گیرنده", "user")),
-        description="پس از رویداد سند، الگوی پیام را برای طرف حساب، گیرندهٔ ثابت یا کاربر می‌فرستد."))
+        description="پس از رویداد سند، الگوی پیام را برای طرف حساب، گیرندهٔ ثابت یا کاربر می‌فرستد.", blocking=False))
 
 
 _register()

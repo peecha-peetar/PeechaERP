@@ -710,6 +710,9 @@ class WizardDialog(QDialog):
                 self.scan.addItem(scan.label, code)
         self.actions.clear()
         for code, label, risk in registry.action_choices(et):
+            spec = registry.find_action(et, code)
+            if spec is not None and spec.check is not None and spec.check(company_id(), et, {}):
+                continue  # R330: اقدامی که تنظیم لازم دارد (مثلاً نشانی سرویس) فقط در طراح گرافیکی
             item = QListWidgetItem(label + (" (حساس)" if risk == "HIGH" else ""))
             item.setData(Qt.UserRole, code)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)

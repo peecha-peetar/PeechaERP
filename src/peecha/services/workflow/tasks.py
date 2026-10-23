@@ -165,11 +165,10 @@ def _human_node(run: runtime.Run) -> runtime.NodeResult:
     if not seats:
         # R325: علت روشن؛ کار در «کارتابل من» مدیران دیده می‌شود تا ارجاع شود (وگرنه سند گیر می‌کرد)
         if requester and requester in candidates:
-            reason = ("تنها گیرندهٔ این مرحله خود درخواست‌کننده است و تایید درخواست خود مجاز نیست. کار را از «کارتابل من» "
-                      "به همکار دیگری ارجاع دهید؛ اگر شرکت یک‌نفره است، در «گردش کار ← قواعد» تایید درخواست خود را مجاز کنید.")
+            reason = ("تنها گیرنده خود درخواست‌کننده است؛ کار را به همکار دیگری ارجاع دهید "
+                      "(شرکت یک‌نفره: در «گردش کار ← قواعد» تایید درخواست خود را مجاز کنید).")
         else:
-            reason = ("هیچ کاربر فعالی با گیرندگان این مرحله منطبق نیست (مثلاً «مدیر مستقیم» در منابع انسانی تعریف نشده). "
-                      "کار را از «کارتابل من» به فرد مناسب ارجاع دهید.")
+            reason = ("کاربر فعالی برای این مرحله نیست (مثلاً «مدیر مستقیم» تعریف نشده)؛ کار را به فرد مناسب ارجاع دهید.")
         runtime._raise_exception(session, inst, node, f"برای «{node.get('label') or KINDS[kind]}» کسی پیدا نشد", reason, None)
     _notify_seats(session, task, active)
     for hook in TASK_CREATED_HOOKS:
@@ -403,8 +402,7 @@ def _check_resubmitted(company_id: int, task: WfTask, decision: str) -> None:
     except Exception:  # noqa: BLE001 -- سند پیدا نشد؛ تصمیم با خود کاربر
         return
     if current != wanted:
-        raise WorkflowError("سند هنوز دوباره ارسال نشده است. آن را اصلاح کنید و با دکمهٔ خود سند دوباره بفرستید؛ "
-                            "این مرحله پس از ارسال خودکار بسته می‌شود و تایید ادامه می‌یابد.")
+        raise WorkflowError("سند هنوز دوباره ارسال نشده است؛ آن را اصلاح و از فرم خودش دوباره ارسال کنید تا تایید ادامه یابد.")
 
 
 def _reopen_for_changes(company_id: int, task_id: int) -> None:
@@ -524,8 +522,8 @@ def _check_target(session, task: WfTask, to_user_id: int) -> None:
         raise WorkflowError("کاربر انتخاب‌شده در این شرکت فعال نیست.")
     if task.kind == "APPROVAL" and to_user_id == task.requested_by_user_id and \
             not settings(task.company_id).get("allow_self_approval"):
-        raise WorkflowError("تفکیک وظایف: کار تایید را نمی‌توان به خود درخواست‌کننده سپرد. اگر شرکت یک‌نفره است، در "
-                            "«گردش کار ← قواعد» گزینهٔ «درخواست‌کننده بتواند درخواست خودش را تایید کند» را روشن کنید.")
+        raise WorkflowError("تفکیک وظایف: تایید را نمی‌توان به خود درخواست‌کننده سپرد "
+                            "(شرکت یک‌نفره: در «گردش کار ← قواعد» تایید درخواست خود را مجاز کنید).")
 
 
 def delegate_task(company_id: int, task_id: int, user_id: int, to_user_id: int, comment: str = "") -> None:

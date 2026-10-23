@@ -54,6 +54,15 @@ class ActionSpec:
     params: tuple[ParamSpec, ...] = ()
     is_done: Callable[[int, int], bool] | None = None  # حالت سند: آیا این اقدام قبلاً انجام شده؟
     description: str = ""
+    # R330: ماژول‌هایی که این اقدام برایشان معنا دارد (None = همه)؛ مثلاً پیگیری مشتری برای درخواست خرید نه
+    modules: tuple[str, ...] | None = None
+    requires_status: tuple[str, ...] = ()  # وضعیت‌هایی از سند که اقدام فقط در آن‌ها کار می‌کند (بررسی هنگام تعریف)
+    blocking: bool = True  # False: شکستش فرایند را متوقف نمی‌کند (ثبت و اعلام می‌شود و فرایند ادامه می‌یابد)
+    check: Callable[[int, str | None, dict], str | None] | None = None  # (شرکت، نوع سند، پارامترها) ← ایراد تعریف
+
+    def applies(self, entity_type: str | None) -> bool:
+        adapter = get_adapter(entity_type)  # نوع ناشناخته (فرایند عمومی/رویداد آزاد): قضاوت ممکن نیست، مجاز است
+        return self.modules is None or adapter is None or adapter.module_code in self.modules
 
 
 @dataclass
@@ -74,6 +83,7 @@ class EntityAdapter:
     submitter_field: str | None = None  # کلید context که صادرکننده را نشان می‌دهد (برای منع خودتاییدی)
     gate_statuses: tuple[str, ...] = ()  # وضعیت‌هایی که «دروازهٔ تایید» فقط از مسیر فرایند اجازه می‌دهد
     gate_label: str = ""  # متن ساده برای طراح: «تا تایید فرایند، سند قابل ... نیست»
+    initial_status: str | None = None  # R330: وضعیت سند تازه‌ثبت‌شده (برای سنجش رویداد «ثبت» با اقدام‌ها)
     form_gate_statuses: tuple[str, ...] = ()  # عملیات چندمرحله‌ای: فقط فرم پیش از شروع بررسی می‌کند
     # R328: «برگشت برای اصلاح» سند قفل‌شده (مثلاً ارسال‌شده) را دوباره قابل ویرایش می‌کند: (company_id, entity_id)
     reopen: Callable[[int, int], None] | None = None
@@ -205,7 +215,7 @@ def action_choices(entity_type: str | None) -> list[tuple[str, str, str]]:
     adapter = get_adapter(entity_type)
     if adapter:
         out += [(f"entity.{k}", a.label, a.risk) for k, a in adapter.actions.items()]
-    out += [(k, a.label, a.risk) for k, a in _GLOBAL_ACTIONS.items()]
+    out += [(k, a.label, a.risk) for k, a in _GLOBAL_ACTIONS.items() if a.applies(entity_type)]
     return out
 
 

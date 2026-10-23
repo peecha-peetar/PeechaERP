@@ -19,7 +19,7 @@ from peecha.db.models.workflow import (
 )
 from peecha.services.purchase_reports import DATE, INT, PERCENT, QTY, TEXT, ReportDef, ReportResult
 from peecha.services.workflow import registry
-from peecha.services.workflow.common import INSTANCE_STATUS, NODE_TYPES, OUTCOMES, now, user_names
+from peecha.services.workflow.common import INSTANCE_STATUS, NODE_TYPES, OUTCOMES, now, plain_error, squeeze, user_names
 
 HOURS = QTY  # ساعت با یک رقم اعشار (ستون‌ها در جمع کل نمی‌آیند)
 Q1 = decimal.Decimal("0.1")
@@ -205,7 +205,9 @@ _ACTION_STATUS = {"DONE": "انجام شد", "PENDING": "در انتظار تل�
 
 
 def execution_log(company_id: int, instance_id: int) -> list[LogRow]:
-    """گام‌های اجرا با مدت هر گام، اجرای اقدام‌ها (با تعداد تلاش) و تصمیم‌ها، به ترتیب زمان."""
+    """گام‌های اجرا با مدت هر گام، اجرای اقدام‌ها (با تعداد تلاش) و تصمیم‌ها، به ترتیب زمان.
+
+    R330: اجرای هر اقدام در همان ردیف گامش می‌آید (نه ردیف جدا) و شکست‌های تکراری یک ردیف می‌شوند."""
     with new_session() as session:
         inst = session.get(WfInstance, instance_id)
         if inst is None or inst.company_id != company_id:
@@ -216,26 +218,40 @@ def execution_log(company_id: int, instance_id: int) -> list[LogRow]:
         task_ids = list(session.scalars(select(WfTask.task_id).where(WfTask.instance_id == instance_id)))
         decisions = list(session.scalars(select(WfTaskDecision).where(WfTaskDecision.task_id.in_(task_ids or [-1]))))
         names = user_names(session, {s.actor_user_id for s in steps} | {d.user_id for d in decisions})
-    rows = []
+    runs = {a.idempotency_key: a for a in actions}
+    rows, shown = [], set()
     for s in steps:
         if s.node_type == "START":
             continue
-        detail = s.error or (OUTCOMES.get(s.outcome or "", "") if s.outcome else "")
-        if s.attempt and s.attempt > 1:
-            detail = f"{detail} (تلاش {s.attempt})".strip()
-        rows.append(LogRow(s.started_at, s.label or NODE_TYPES.get(s.node_type, ""), NODE_TYPES.get(s.node_type, s.node_type),
+        detail = plain_error(s.error) or (OUTCOMES.get(s.outcome or "", "") if s.outcome else "")
+        kind = NODE_TYPES.get(s.node_type, s.node_type)
+        if s.node_type == "ACTION":
+            kind = "اجرای اقدام"
+            run = runs.get(f"wf:{instance_id}:{s.node_id}:{s.attempt or 1}")
+            if run is not None:
+                shown.add(run.execution_id)
+                if run.attempts > 1:
+                    detail = f"{detail} ({run.attempts} بار تلاش)".strip()
+        elif s.attempt and s.attempt > 1:
+            detail = f"{detail} (بار {s.attempt})".strip()
+        rows.append(LogRow(s.started_at, s.label or NODE_TYPES.get(s.node_type, ""), kind,
                            _STEP_STATUS.get(s.status_code, s.status_code), _hours(s.started_at, s.ended_at),
                            names.get(s.actor_user_id, ""), detail))
     for a in actions:
+        if a.execution_id in shown:
+            continue
         spec = registry.find_action(inst.entity_type, a.action_code)
         rows.append(LogRow(a.updated_at or a.created_at, spec.label if spec else a.action_code, "اجرای اقدام",
                            _ACTION_STATUS.get(a.status_code, a.status_code), None, "",
-                           f"{a.attempts} بار تلاش" + (f" — {a.last_error[:120]}" if a.last_error else "")))
+                           f"{a.attempts} بار تلاش" + (f" — {plain_error(a.last_error)[:120]}" if a.last_error else "")))
     for d in decisions:
         label = _DECISIONS.get(d.decision)
         if label:
             rows.append(LogRow(d.created_at, "تصمیم", "تصمیم", label, None, names.get(d.user_id, ""), d.comment or ""))
-    return sorted(rows, key=lambda r: r.at or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
+    rows.sort(key=lambda r: r.at or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
+    return squeeze(rows, lambda a, b: (a.step, a.kind, a.detail) == (b.step, b.kind, b.detail),
+                   lambda r: r.status == _STEP_STATUS["FAILED"],
+                   lambda r, n: setattr(r, "detail", f"{r.detail} — {n} بار"))
 
 
 # --- گزارش‌ها روی موتور گزارش برنامه ------------------------------------------------------------------------

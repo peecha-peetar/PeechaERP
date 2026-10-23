@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import re
 import string
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
@@ -65,6 +66,27 @@ def friendly_error(exc: BaseException) -> tuple[str, str]:
     if isinstance(exc, (OperationalError, DBAPIError, ConnectionError, TimeoutError, OSError)):
         return "ارتباط با پایگاه‌داده یا سرویس برقرار نشد؛ دوباره تلاش می‌شود.", technical
     return "اجرای این مرحله با خطای پیش‌بینی‌نشده روبه‌رو شد؛ مدیر سیستم جزئیات فنی را می‌بیند.", technical
+
+
+def plain_error(text: str | None) -> str:
+    """R330: «ValueError: پیام» ← «پیام»؛ نام فنی خطا به کاربر نشان داده نمی‌شود."""
+    return re.sub(r"^[A-Za-z_][\w.]*: ", "", (text or "").strip())
+
+
+def squeeze(rows: list, same: Callable, failed: Callable, mark: Callable) -> list:
+    """R330: ردیف‌های ناموفق پشت‌سرهم و یکسان (مثلاً چند بار «اجرای دوباره» با همان خطا) یک ردیف با شمار می‌شوند."""
+    out, count = [], 0
+    for row in rows:
+        if out and failed(row) and failed(out[-1]) and same(row, out[-1]):
+            count += 1
+            continue
+        if count:
+            mark(out[-1], count + 1)
+        out.append(row)
+        count = 0
+    if count:
+        mark(out[-1], count + 1)
+    return out
 
 
 def is_transient(exc: BaseException) -> bool:

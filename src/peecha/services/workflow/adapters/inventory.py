@@ -103,10 +103,11 @@ for _code, (_et, _label, _nav) in STOCK_KINDS.items():
         _et, _label, "INVENTORY", stock_context, fields=STOCK_FIELDS,
         events={f"{_et}_CREATED": f"ثبت «{_label}»", f"{_et}_CONFIRMED": f"تایید «{_label}»",
                 f"{_et}_POSTED": f"ثبت نهایی «{_label}»"},
-        actions={"post": ActionSpec("post", "ثبت نهایی سند انبار", _stock_post, risk="HIGH", is_done=_stock_posted),
+        actions={"post": ActionSpec("post", "ثبت نهایی سند انبار", _stock_post, risk="HIGH", is_done=_stock_posted,
+                                    requires_status=("DRAFT", "CONFIRMED")),
                  "reject": ActionSpec("reject", "رد و برگشت سند به پیش‌نویس", _stock_reject,
                                       params=(ParamSpec("reason", "دلیل رد"),))},
-        title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')}", reopen=_stock_revert,
+        title=lambda c, _l=_label: f"{_l} شمارهٔ {c.get('document_no')}", reopen=_stock_revert, initial_status="DRAFT",
         owner=lambda cid, eid: stock_context(cid, eid)["created_by"], approval_context=_stock_card, open_nav=_nav,
         submitter_field="created_by",
         # اصلاح موجودی یک‌مرحله‌ای است (دروازهٔ سرویس)؛ انتقال فقط پیش‌بررسی فرم

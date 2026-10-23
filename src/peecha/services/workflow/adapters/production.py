@@ -79,7 +79,7 @@ registry.register_adapter(EntityAdapter(
     events={f"PRODUCTION_ORDER_{k}": f"{v} — دستور تولید" for k, v in
             {"CREATED": "ثبت", "PLANNED": "برنامه‌ریزی", "RELEASED": "صدور", "IN_PROGRESS": "شروع تولید",
              "COMPLETED": "تکمیل", "CLOSED": "بستن", "CANCELLED": "لغو"}.items()},
-    actions={"release": ActionSpec("release", "صدور دستور تولید", _release, risk="HIGH",
+    actions={"release": ActionSpec("release", "صدور دستور تولید", _release, risk="HIGH", requires_status=("DRAFT", "PLANNED"),
                                    is_done=_status_in("RELEASED", "IN_PROGRESS", "COMPLETED", "CLOSED")),
              "plan": ActionSpec("plan", "برنامه‌ریزی دستور", _plan, is_done=_status_in("PLANNED", "RELEASED", "IN_PROGRESS",
                                                                                            "COMPLETED", "CLOSED"))},
