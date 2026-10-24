@@ -93,7 +93,7 @@ po.start_order(company_id, uid, held)
 po.issue_all_remaining(company_id, uid, held)
 dims.set_account_dimension_types(machine_gl.account_id, company_id, [odd_type])
 check(raises(lambda: po.create_order(company_id, uid, po.OrderFields(item_id=px, planned_qty=D(5), project_detail_account_id=my_pj)),
-             "جایی برای آن ندارد"), "a required group the order cannot carry is named at creation")
+             "جایی برای انتخابش ندارد"), "a required group the order cannot carry is named at creation")
 scr.refresh()
 scr.open_order(held)
 asked.clear()

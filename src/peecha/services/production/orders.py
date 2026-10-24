@@ -219,34 +219,50 @@ _POSTING_ROLES = (c.WIP, c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED,
 
 
 def _dimension_rules(session, company_id: int) -> SimpleNamespace:
-    """R337/R338: تفصیلی‌های الزامی حساب‌های تولید. cost_center/project: None یا علت الزام؛ *_types: گروه‌هایی که
+    """R337–R339: تفصیلی‌های الزامی حساب‌های تولید. cost_center/project: None یا علت الزام؛ *_types: گروه‌هایی که
     انتخاب دستور باید از آن‌ها باشد (گروه سیستمی، یا گروه هم‌نامی که کاربر خودش ساخته و روی حساب الزامی کرده)؛
-    other: [(حساب، گروه)] که دستور تولید جایی برای انتخابش ندارد."""
-    from peecha.db.models.accounting import AccountDetailDimension, ChartOfAccount as Account, DetailDimensionType
+    other: [(حساب، گروه، نقش، گروه بی‌تفصیلی است؟)] که دستور تولید جایی برای انتخابش ندارد و تفصیلی ثابت نقش هم
+    (تنظیمات انبار ← تنظیم حساب‌ها) آن را پر نمی‌کند."""
+    from peecha.db.models.accounting import (
+        AccountDetailDimension, ChartOfAccount as Account, DetailAccount, DetailDimensionType,
+    )
+    from peecha.db.models.inventory import InventoryAccountMapping
     from peecha.services import detail_dimensions as dims
 
     types = dims.ensure_specialized_dimensions(session, company_id)
-    accounts = {c.role_account(session, company_id, r) for r in _POSTING_ROLES}
-    accounts.add(engine._resolve_role_account(session, company_id, "INVENTORY_ASSET"))
-    accounts.discard(None)
-    rows = session.execute(select(Account.full_code, DetailDimensionType.dimension_type_id, DetailDimensionType.code).join(
+    roles = {r: c.role_account(session, company_id, r) for r in _POSTING_ROLES}
+    roles["INVENTORY_ASSET"] = engine._resolve_role_account(session, company_id, "INVENTORY_ASSET")
+    accounts = {a for a in roles.values() if a}
+    rows = session.execute(select(Account.account_id, Account.full_code, DetailDimensionType.dimension_type_id,
+                                  DetailDimensionType.code).join(
         AccountDetailDimension, AccountDetailDimension.account_id == Account.account_id).join(
         DetailDimensionType, DetailDimensionType.dimension_type_id == AccountDetailDimension.dimension_type_id).where(
         Account.account_id.in_(accounts), AccountDetailDimension.is_required.is_(True))).all() if accounts else []
+    # تفصیلی ثابتی که برای هر نقش در تنظیم حساب‌ها انتخاب شده، گروه خودش را پر می‌کند
+    fixed = {}
+    for role in roles:
+        mapping = session.get(InventoryAccountMapping, (company_id, role))
+        if mapping is not None and mapping.detail_account_id:
+            fixed[role] = session.scalar(select(DetailAccount.dimension_type_id).where(
+                DetailAccount.detail_account_id == mapping.detail_account_id))
     # کالا از خود دستور، مرکز سود از انبار و اشخاص در این حساب‌ها به کار نمی‌آیند
     automatic = {types[dims.INVENTORY_ITEM_CODE], types[dims.PROFIT_CENTER_CODE], dims.ensure_person_dimension(session, company_id)}
     kinds = {"cost_center": dims.COST_CENTER_CODE, "project": dims.PROJECT_CODE}
     found = {k: {} for k in kinds}
     other = []
-    for full_code, type_id, code in sorted(rows):
-        if type_id in automatic:
-            continue
-        label = dims.SPECIALIZED_DIMENSION_LABELS.get(code, code)
-        kind = next((k for k, sys_code in kinds.items() if code == sys_code or code.strip() == dims.SPECIALIZED_DIMENSION_LABELS[sys_code]), None)
-        if kind is None:
-            other.append((full_code, label))
-        else:
-            found[kind].setdefault(type_id, []).append(full_code)
+    for role, account_id in roles.items():
+        for _acc, full_code, type_id, code in sorted(r for r in rows if r[0] == account_id):
+            if type_id in automatic or fixed.get(role) == type_id:
+                continue
+            label = dims.SPECIALIZED_DIMENSION_LABELS.get(code, code)
+            kind = next((k for k, sys_code in kinds.items()
+                         if code == sys_code or code.strip() == dims.SPECIALIZED_DIMENSION_LABELS[sys_code]), None)
+            if kind is not None:
+                found[kind].setdefault(type_id, []).append(full_code)
+            elif not any(o[0] == full_code and o[1] == label for o in other):
+                empty = not session.scalar(select(func.count()).select_from(DetailAccount).where(
+                    DetailAccount.dimension_type_id == type_id, DetailAccount.is_active.is_(True)))
+                other.append((full_code, label, c.ROLE_LABELS.get(role) or engine.MAPPING_LABELS.get(role, role), empty))
     out = {"other": other}
     for kind, sys_code in kinds.items():
         codes = sorted({code for codes in found[kind].values() for code in codes})
@@ -255,6 +271,21 @@ def _dimension_rules(session, company_id: int) -> SimpleNamespace:
     if out["cost_center"] is None and c.settings(session, company_id).require_cost_center:
         out["cost_center"] = "در تنظیمات تولید الزامی شده است"
     return SimpleNamespace(**out)
+
+
+def _other_advice(item) -> str:
+    account, group, role, empty = item
+    return (f"حساب «{account}» («{role}») تفصیلی گروه «{group}» را الزامی کرده که دستور تولید جایی برای انتخابش ندارد"
+            + ("؛ این گروه هنوز هیچ تفصیلی‌ای هم ندارد" if empty else "") + ". یکی از این دو کار را بکنید: "
+            f"در «تنظیمات انبار › تنظیم حساب‌ها» برای «{role}» یک تفصیلی ثابت از گروه «{group}» انتخاب کنید"
+            + (" (اول در همان گروه یک تفصیلی تعریف کنید)" if empty else "")
+            + f"، یا در «کدینگ حساب‌ها» الزام گروه «{group}» را از این حساب بردارید.")
+
+
+def dimension_problem(company_id: int) -> str | None:
+    """R339: توضیح کامل گروه الزامی‌ای که دستور تولید نمی‌تواند پر کند (برای پیام خطای ثبت)."""
+    rules = dimension_rules(company_id)
+    return _other_advice(rules.other[0]) if rules.other else None
 
 
 def dimension_rules(company_id: int) -> SimpleNamespace:
@@ -274,9 +305,7 @@ def _dimension_type_of(session, detail_account_id: int | None) -> int | None:
 def _check_dimensions(session, company_id: int, cost_center_id: int | None, project_id: int | None) -> None:
     rules = _dimension_rules(session, company_id)
     if rules.other:
-        account, group = rules.other[0]
-        raise ValueError(f"حساب «{account}» انتخاب تفصیلی «{group}» را الزامی کرده، ولی دستور تولید جایی برای آن ندارد؛ "
-                         "در کدینگ حساب‌ها این الزام را از حساب بردارید یا به‌جایش «مرکز هزینه» یا «پروژه» را الزامی کنید.")
+        raise ValueError(_other_advice(rules.other[0]))
     for kind, value, label in (("cost_center", cost_center_id, "مرکز هزینهٔ"), ("project", project_id, "پروژهٔ")):
         reason = getattr(rules, kind)
         if reason and value is None:

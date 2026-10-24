@@ -824,10 +824,11 @@ class OrdersScreen(QWidget):
                     finally:
                         self._skip_confirm, self._dims_retry = skip, False
             else:
-                # R338: پس از تعیین هم همان خطا: حساب تفصیلی دیگری می‌خواهد؛ پیام روشن، بدون پرسش تکراری
-                QMessageBox.warning(self, "دستور تولید", str(exc) + (
+                # R339: تفصیلی الزامی‌ای که دستور جایی برایش ندارد: همان‌جا گفته شود چه باید کرد؛ بدون پرسش تکراری
+                advice = po.dimension_problem(cid) if "الزامی است" in str(exc) else None
+                QMessageBox.warning(self, "دستور تولید", str(exc) + (f"\n\n{advice}" if advice else (
                     "\n\nمرکز هزینه و پروژهٔ دستور تعیین شده، ولی این حساب هنوز تفصیلی دیگری می‌خواهد؛ "
-                    "گروه تفصیلی الزامی همین حساب را در «کدینگ حساب‌ها» بررسی کنید." if retried else ""))
+                    "گروه تفصیلی الزامی همین حساب را در «کدینگ حساب‌ها» بررسی کنید." if retried else "")))
         if ok:
             if key == "release" and result:
                 QMessageBox.information(self, "صدور", "دستور با هشدار کمبود صادر شد: " + "، ".join(a.item_label for a in result))
