@@ -1,0 +1,2263 @@
+"""R294: طراحی فرایند بدون کدنویسی — فهرست فرایندها، ساخت گام‌به‌گام (ویزارد)، طراح گرافیکی، سازندهٔ شرط،
+بررسی ایرادها، اجرای آزمایشی و نسخه‌ها. همه روی همان گراف موتور گردش کار کار می‌کنند.
+"""
+
+from __future__ import annotations
+
+import copy
+import dataclasses
+import math
+
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtWidgets import (
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGraphicsItem, QGraphicsPathItem, QGraphicsRectItem,
+    QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QPushButton, QScrollArea, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit,
+    QVBoxLayout, QWidget,
+)
+
+from peecha import numerals
+from peecha.services import roles as roles_service
+from peecha.services.workflow import builder, conditions, definitions as defs, model_events, registry, routing, simulate, sla
+from peecha.services.workflow import ai as wf_ai, templates as wf_templates
+from peecha.services.workflow.common import DEFINITION_STATUS, NODE_TYPES, OUTCOMES
+from peecha.ui.screens import module_style as ms
+from peecha.ui.screens.fixed_assets import P, combo, company_id, fill, num_field, set_combo, table, user_id
+from peecha.ui.screens.workflow_center import _ask, _run, _warn, company_user_choices
+
+ms.ICONS.update({
+    "ساخت با ویزارد": ("🧙", "primary"), "فرایند خالی": ("🆕", ""), "ویرایش در طراح": ("✏️", ""), "انتشار": ("🚀", ""),
+    "فعال‌سازی": ("▶️", ""), "بازگردانی از بایگانی": ("📤", ""), "آزمون و اجرای آزمایشی": ("🧪", ""),
+    "کپی فرایند": ("📋", ""), "حذف فرایند": ("🗑️", "danger"), "نسخه‌ها": ("🕘", ""), "ذخیرهٔ پیش‌نویس": ("💾", "primary"),
+    "بررسی ایرادها": ("🔍", ""), "چیدمان خودکار": ("🧭", ""), "اتصال دو مرحله": ("🔗", ""),
+    "حذف انتخاب‌شده": ("🗑️", "danger"), "ثبت تغییرات این مرحله": ("✔️", "primary"), "بزرگ‌نمایی": ("➕", ""),
+    "کوچک‌نمایی": ("➖", ""), "مقایسه با نسخهٔ فعال": ("🔀", ""), "بازگردانی به پیش‌نویس": ("↩️", ""),
+    "اجرای آزمایشی": ("▶️", "primary"), "مرحلهٔ قبل": ("▶️", ""), "مرحلهٔ بعد": ("◀️", "primary"),
+    "ساخت فرایند": ("✅", "primary"), "افزودن مرحلهٔ تایید": ("➕", ""), "بالا بردن": ("🔼", ""), "پایین بردن": ("🔽", ""),
+    "افزودن گیرنده": ("➕", ""), "حذف گیرنده": ("➖", "danger"), "افزودن خانه": ("➕", ""), "حذف خانه": ("➖", "danger"),
+    "تنظیم شروع فرایند": ("🚀", ""), "ساخت از قالب": ("📚", "primary"), "انتقال از کارتابل قبلی": ("📥", ""),
+    "نصب قالب": ("✅", "primary"), "ساخت با توصیف متنی": ("✍️", ""), "پیش‌نمایش پیشنهاد": ("👁️", ""),
+    "ساخت پیش‌نویس": ("✅", "primary"), "افزودن مرحلهٔ انجام کار": ("📋", ""),
+    "ساخت روند کلی": ("🧩", ""), "افزودن فرایند": ("🧩", ""), "افزودن کار خودکار": ("⚙️", ""), "هم‌زمان با قبلی": ("🔱", ""),
+})
+
+NODE_ICONS = {"START": "🚀", "CONDITION": "🔀", "APPROVAL": "🖊️", "TASK": "📋", "ACTION": "⚙️", "SUBPROCESS": "🧩",
+              "NOTIFY": "🔔", "WAIT": "⏳", "PARALLEL": "🔱", "JOIN": "🔗", "END": "🏁"}
+NODE_COLORS = {"START": "#6366F1", "CONDITION": "#F59E0B", "APPROVAL": "#3B82F6", "TASK": "#14B8A6", "ACTION": "#8B5CF6",
+               "SUBPROCESS": "#EC4899", "NOTIFY": "#0EA5E9", "WAIT": "#64748B", "PARALLEL": "#A855F7", "JOIN": "#A855F7",
+               "END": "#10B981"}
+MODES = [("ANY", "اولین تصمیم کافی است"), ("SINGLE", "یک نفر"), ("ALL", "همه باید تایید کنند"),
+         ("PERCENT", "درصدی از گیرندگان"), ("SEQUENTIAL", "به ترتیب، یکی پس از دیگری")]
+FIELD_KINDS = [("text", "متن"), ("longtext", "متن بلند"), ("number", "عدد"), ("money", "مبلغ"), ("date", "تاریخ"),
+               ("bool", "بله/خیر"), ("choice", "انتخاب از فهرست")]
+STEP_KINDS = [("APPROVAL", "تایید یا رد"), ("TASK", "انجام کار (با فرم)")]
+
+
+class FieldsEditor(QWidget):
+    """R323: خانه‌های فرم یک مرحله — عنوان، نوع، الزامی و گزینه‌ها؛ کلید داخلی خودکار ساخته می‌شود."""
+
+    def __init__(self, fields: list[dict] | None = None, parent=None) -> None:
+        super().__init__(parent)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["عنوان خانه", "نوع", "الزامی", "گزینه‌ها (با «،» جدا کنید)"])
+        self.table.setMaximumHeight(160)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        row = QHBoxLayout()
+        row.addWidget(_icon_button("➕", "افزودن خانه", lambda: self.add()))
+        row.addWidget(_icon_button("➖", "حذف خانه", lambda: self.table.removeRow(self.table.currentRow())
+                                   if self.table.currentRow() >= 0 else None))
+        row.addStretch(1)
+        lay.addWidget(self.table)
+        lay.addLayout(row)
+        for f in fields or []:
+            self.add(f)
+
+    def add(self, f: dict | None = None) -> int:
+        f = f or {}
+        r = self.table.rowCount()
+        self.table.insertRow(r)
+        title = QTableWidgetItem(f.get("label", ""))
+        title.setData(Qt.UserRole, f.get("key") or "")
+        self.table.setItem(r, 0, title)
+        kind = combo([(label, code) for code, label in FIELD_KINDS])
+        set_combo(kind, f.get("kind", "text"))
+        self.table.setCellWidget(r, 1, kind)
+        req = QTableWidgetItem()
+        req.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+        req.setCheckState(Qt.Checked if f.get("required") else Qt.Unchecked)
+        self.table.setItem(r, 2, req)
+        self.table.setItem(r, 3, QTableWidgetItem("، ".join(str(c) for c in f.get("choices") or [])))
+        return r
+
+    def fields(self) -> list[dict]:
+        out, used = [], set()
+        for r in range(self.table.rowCount()):
+            item = self.table.item(r, 0)
+            label = (item.text() if item else "").strip()
+            if not label:
+                continue
+            key = (item.data(Qt.UserRole) or "").strip()
+            if not key or key in used:
+                n = r + 1
+                while f"f{n}" in used:
+                    n += 1
+                key = f"f{n}"
+            used.add(key)
+            kind = self.table.cellWidget(r, 1).currentData()
+            f = {"key": key, "label": label, "kind": kind, "required": self.table.item(r, 2).checkState() == Qt.Checked}
+            if kind == "choice":
+                raw = numerals.to_persian_digits(self.table.item(r, 3).text() if self.table.item(r, 3) else "")
+                f["choices"] = [c.strip() for c in raw.replace(",", "،").split("،") if c.strip()]
+            out.append(f)
+        return out
+
+
+def _icon_button(glyph: str, tooltip: str, slot, primary: bool = False) -> QPushButton:
+    b = QPushButton(glyph)
+    b.setObjectName("primaryIconButton" if primary else "iconButton")
+    b.setToolTip(tooltip)
+    b.setProperty("label", tooltip)
+    b.setFixedWidth(48 if primary else 44)
+    b.setCursor(Qt.PointingHandCursor)
+    b.clicked.connect(lambda _c=False: slot())
+    return b
+
+
+def _btn(label: str, slot) -> QPushButton:
+    b = ms.style_button(QPushButton(label))
+    b.clicked.connect(lambda _c=False: slot())
+    return b
+
+
+def _sla_choices() -> list[tuple[str, int]]:
+    return [(p.name, p.policy_id) for p in sla.list_policies(company_id(), active_only=True)] if company_id() else []
+
+
+# =========================================================================================================
+# گیرندگان (تاییدکننده / مسئول / گیرندهٔ اعلان)
+# =========================================================================================================
+class SpecListEditor(QWidget):
+    changed = Signal()
+
+    def __init__(self, entity_type: str | None = None, parent=None) -> None:
+        super().__init__(parent)
+        self.entity_type = entity_type
+        self.specs: list[dict] = []
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.list = QListWidget()
+        self.list.setMaximumHeight(90)
+        layout.addWidget(self.list, stretch=1)
+        col = QVBoxLayout()
+        col.addWidget(_icon_button("➕", "افزودن گیرنده", self.add_dialog))
+        col.addWidget(_icon_button("➖", "حذف گیرنده", self.remove_selected))
+        col.addStretch(1)
+        layout.addLayout(col)
+
+    def set_specs(self, specs: list[dict]) -> None:
+        self.specs = copy.deepcopy(list(specs or []))
+        self._redraw()
+
+    def _redraw(self) -> None:
+        self.list.clear()
+        from peecha.db.base import new_session
+        from peecha.services.workflow.common import user_names
+
+        with new_session() as session:
+            roles = routing.role_names(session, [s.get("role_id") for s in self.specs])
+            users = user_names(session, [s.get("user_id") for s in self.specs])
+        for s in self.specs:
+            self.list.addItem(routing.describe_spec(s, roles, users))
+
+    def add_spec(self, spec: dict) -> None:
+        if spec and spec not in self.specs:
+            self.specs.append(copy.deepcopy(spec))
+            self._redraw()
+            self.changed.emit()
+
+    def remove_selected(self) -> None:
+        row = self.list.currentRow()
+        if 0 <= row < len(self.specs):
+            self.specs.pop(row)
+            self._redraw()
+            self.changed.emit()
+
+    def add_dialog(self) -> None:
+        kinds = [(label, kind) for kind, label in routing.KINDS.items() if kind not in ("AMOUNT_TABLE", "RESOLVER")]
+        kinds += [(f"مسیریاب: {r.label}", f"RESOLVER:{code}") for code, r in registry.resolvers().items()]
+        kind_box = combo(kinds)
+        user_box = combo(company_user_choices(), "—")
+        role_box = combo([(r.label, r.role_id) for r in roles_service.list_roles(company_id())], "—") if company_id() else combo([])
+        adapter = registry.get_adapter(self.entity_type)
+        field_box = combo([(f.label, f.key) for f in (adapter.fields if adapter else ()) if f.kind == "user"], "—")
+        from peecha.services import hr as hr_service
+
+        unit_box = combo([(u.name, u.org_unit_id) for u in hr_service.list_org_units(company_id())], "—") if company_id() else combo([])
+        values = _ask(self, "افزودن گیرنده", [("kind", "چه کسی", kind_box), ("user", "کاربر (برای «کاربر مشخص»)", user_box),
+                                             ("role", "نقش (برای «دارندگان یک نقش»)", role_box),
+                                             ("field", "فیلد سند (برای «کاربر ثبت‌شده در سند»)", field_box),
+                                             ("unit", "واحد سازمانی (برای «مدیر واحد»)", unit_box)])
+        if values is None:
+            return
+        self.add_spec(spec_from(values))
+
+
+def spec_from(values: dict) -> dict:
+    kind = values.get("kind") or ""
+    if kind.startswith("RESOLVER:"):
+        return {"kind": "RESOLVER", "code": kind.split(":", 1)[1]}
+    if kind == "USER":
+        return {"kind": "USER", "user_id": values.get("user")} if values.get("user") else {}
+    if kind == "ROLE":
+        return {"kind": "ROLE", "role_id": values.get("role")} if values.get("role") else {}
+    if kind == "FIELD":
+        return {"kind": "FIELD", "field": values.get("field")} if values.get("field") else {}
+    if kind == "ORG_MANAGER":
+        return {"kind": "ORG_MANAGER", "org_unit_id": values.get("unit")} if values.get("unit") else {}
+    return {"kind": kind}
+
+
+# =========================================================================================================
+# سازندهٔ شرط
+# =========================================================================================================
+class _RuleRow(QWidget):
+    def __init__(self, builder_widget: "RuleBuilder", leaf: dict | None = None) -> None:
+        super().__init__()
+        self.rb = builder_widget
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.field = combo([(f.label, f.key) for f in builder_widget.fields])
+        self.op = QComboBox()
+        self.compare_field = QCheckBox("با فیلد دیگر")
+        self.value = QLineEdit()
+        self.value_field = combo([(f.label, f.key) for f in builder_widget.fields])
+        self.unit = QLabel("")
+        for w in (self.field, self.op, self.value, self.value_field, self.unit, self.compare_field):
+            layout.addWidget(w)
+        layout.addWidget(_icon_button("🗑️", "حذف شرط", lambda: builder_widget.remove_row(self)))
+        self.field.currentIndexChanged.connect(lambda _i: self._on_field())
+        self.op.currentIndexChanged.connect(lambda _i: self._sync())
+        self.compare_field.toggled.connect(lambda _c: self._sync())
+        self.value.textChanged.connect(lambda _t: builder_widget.changed.emit())
+        self.value_field.currentIndexChanged.connect(lambda _i: builder_widget.changed.emit())
+        self._on_field()
+        if leaf:
+            self.load(leaf)
+
+    def spec(self):
+        return self.rb.field_map.get(self.field.currentData())
+
+    def _on_field(self) -> None:
+        spec = self.spec()
+        current = self.op.currentData()
+        self.op.blockSignals(True)
+        self.op.clear()
+        for op, label in conditions.ops_for(spec.kind if spec else "text"):
+            self.op.addItem(label, op)
+        idx = self.op.findData(current)
+        self.op.setCurrentIndex(idx if idx >= 0 else 0)
+        self.op.blockSignals(False)
+        self._sync()
+
+    def _sync(self) -> None:
+        spec = self.spec()
+        unary = self.op.currentData() in ("is_empty", "not_empty", "is_true", "is_false")
+        by_field = self.compare_field.isChecked() and not unary
+        self.value.setVisible(not unary and not by_field)
+        self.value_field.setVisible(by_field)
+        self.compare_field.setVisible(not unary)
+        is_date = bool(spec and spec.kind == "date")
+        self.unit.setText("روز نسبت به امروز (منفی یعنی گذشته)" if is_date and not by_field and not unary else "")
+        self.value.setPlaceholderText("مقدار؛ برای «بین» دو عدد با ویرگول" if not is_date else "مثلاً ۰ یعنی امروز")
+        self.rb.changed.emit()
+
+    def load(self, leaf: dict) -> None:
+        set_combo(self.field, leaf.get("field"))
+        self._on_field()
+        set_combo(self.op, leaf.get("op"))
+        if leaf.get("value_field"):
+            self.compare_field.setChecked(True)
+            set_combo(self.value_field, leaf["value_field"])
+        else:
+            v = leaf.get("value")
+            if isinstance(v, dict):
+                v = v.get("days_from_today", -int(v.get("days_ago", 0)))
+            elif isinstance(v, (list, tuple)):
+                v = "، ".join(str(x) for x in v)
+            self.value.setText(P(v) if v is not None else "")
+        self._sync()
+
+    def leaf(self) -> dict | None:
+        key, op = self.field.currentData(), self.op.currentData()
+        if not key or not op:
+            return None
+        out = {"field": key, "op": op}
+        if op in ("is_empty", "not_empty", "is_true", "is_false"):
+            return out
+        if self.compare_field.isChecked():
+            out["value_field"] = self.value_field.currentData()
+            return out
+        text = numerals.to_ascii_digits(self.value.text().strip())
+        spec = self.spec()
+        if spec and spec.kind == "date":
+            try:
+                out["value"] = {"days_from_today": int(text or "0")}
+            except ValueError:
+                out["value"] = text
+        elif op in ("between", "in", "not_in"):
+            out["value"] = [p.strip() for p in text.replace("،", ",").split(",") if p.strip()]
+        else:
+            out["value"] = text
+        return out
+
+
+class RuleBuilder(QWidget):
+    """شرط‌ها روی فیلدهای سند: «همهٔ این شرط‌ها» یا «یکی از این شرط‌ها»، با توضیح فارسی زنده."""
+
+    changed = Signal()
+
+    def __init__(self, entity_type: str | None = None, parent=None) -> None:
+        super().__init__(parent)
+        self.rows: list[_RuleRow] = []
+        self.raw: dict | None = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        head = QHBoxLayout()
+        self.joiner = QComboBox()
+        self.joiner.addItem("همهٔ این شرط‌ها برقرار باشد", "all")
+        self.joiner.addItem("دست‌کم یکی از این شرط‌ها برقرار باشد", "any")
+        self.joiner.currentIndexChanged.connect(lambda _i: self.changed.emit())
+        head.addWidget(self.joiner, stretch=1)
+        head.addWidget(_icon_button("➕", "افزودن شرط", lambda: self.add_row()))
+        layout.addLayout(head)
+        self.rows_box = QVBoxLayout()
+        layout.addLayout(self.rows_box)
+        self.preview = QLabel("")
+        self.preview.setObjectName("sectionHint")
+        self.preview.setWordWrap(True)
+        layout.addWidget(self.preview)
+        self.changed.connect(self._update_preview)
+        self.set_entity(entity_type)
+
+    def set_entity(self, entity_type: str | None) -> None:
+        adapter = registry.get_adapter(entity_type)
+        self.fields = list(adapter.fields) if adapter else []
+        self.field_map = {f.key: f for f in self.fields}
+        self.labels = {f.key: f.label for f in self.fields}
+        self.set_rule(None)
+
+    def add_row(self, leaf: dict | None = None) -> _RuleRow | None:
+        if not self.fields:
+            _warn(self, "شرط", "برای این نوع سند فیلدی جهت شرط تعریف نشده است.")
+            return None
+        row = _RuleRow(self, leaf)
+        self.rows.append(row)
+        self.rows_box.addWidget(row)
+        self.changed.emit()
+        return row
+
+    def remove_row(self, row: _RuleRow) -> None:
+        if row in self.rows:
+            self.rows.remove(row)
+            row.setParent(None)
+            row.deleteLater()
+            self.changed.emit()
+
+    def set_rule(self, rule: dict | None) -> None:
+        for row in list(self.rows):
+            self.remove_row(row)
+        self.raw = None
+        if not rule:
+            self._update_preview()
+            return
+        group = "all" if "all" in rule else "any" if "any" in rule else None
+        leaves = rule.get(group) if group else [rule]
+        if any(not isinstance(x, dict) or "field" not in x for x in leaves or []):
+            self.raw = copy.deepcopy(rule)  # قاعدهٔ تودرتو: دست‌نخورده نگه داشته می‌شود
+        else:
+            set_combo(self.joiner, group or "all")
+            for leaf in leaves:
+                self.add_row(leaf)
+        self._update_preview()
+
+    def rule(self) -> dict | None:
+        if self.raw is not None and not self.rows:
+            return copy.deepcopy(self.raw)
+        leaves = [x for x in (r.leaf() for r in self.rows) if x]
+        if not leaves:
+            return None
+        return leaves[0] if len(leaves) == 1 else {self.joiner.currentData(): leaves}
+
+    def problems(self) -> list[str]:
+        return conditions.validate(self.rule(), self.field_map) if self.rule() else []
+
+    def _update_preview(self) -> None:
+        rule = self.rule()
+        if not rule:
+            self.preview.setText("بدون شرط: همیشه برقرار است.")
+            return
+        issues = self.problems()
+        text = "یعنی: " + conditions.describe(rule, self.labels)
+        self.preview.setText(P(text + ("\n⚠ " + "، ".join(issues) if issues else "")))
+
+
+# =========================================================================================================
+# اجرای آزمایشی
+# =========================================================================================================
+class SimulateDialog(QDialog):
+    def __init__(self, graph: dict, entity_type: str | None, parent=None) -> None:
+        super().__init__(parent)
+        self.graph, self.entity_type = graph, entity_type
+        self.trace: list[simulate.TraceRow] = []
+        self.setWindowTitle("اجرای آزمایشی (بدون هیچ تغییری در اطلاعات)")
+        self.setLayoutDirection(Qt.RightToLeft)
+        layout = QVBoxLayout(self)
+        hint = QLabel("مقادیر نمونه را وارد کنید (یا شمارهٔ یک سند واقعی را) و تصمیم فرضی هر مرحلهٔ تایید را انتخاب کنید.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        form = QFormLayout()
+        adapter = registry.get_adapter(entity_type)
+        self.inputs: dict[str, QLineEdit] = {}
+        for f in (adapter.fields if adapter else ()):
+            w = QLineEdit()
+            if f.kind == "date":
+                w.setPlaceholderText("روز نسبت به امروز، مثلاً -۵")
+            self.inputs[f.key] = w
+            form.addRow(f.label, w)
+        self.entity_id = QLineEdit()
+        self.entity_id.setPlaceholderText("اختیاری")
+        form.addRow("شمارهٔ سند واقعی", self.entity_id)
+        self.decisions: dict[str, QComboBox] = {}
+        for n in graph.get("nodes", []):
+            if n.get("type") in ("APPROVAL", "TASK"):
+                box = QComboBox()
+                for code, label in defs.NODE_EDGE_LABELS[n["type"]].items():
+                    box.addItem(label, code)
+                self.decisions[n["id"]] = box
+                form.addRow(f"تصمیم فرضی «{n.get('label')}»", box)
+        layout.addLayout(form)
+        layout.addWidget(_btn("اجرای آزمایشی", self.run))
+        self.t_trace = table(["", "مرحله", "نتیجه"])
+        layout.addWidget(self.t_trace, stretch=1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _context(self) -> dict:
+        import datetime
+
+        adapter = registry.get_adapter(self.entity_type)
+        kinds = {f.key: f.kind for f in (adapter.fields if adapter else ())}
+        out = {}
+        for key, w in self.inputs.items():
+            text = numerals.to_ascii_digits(w.text().strip())
+            if not text:
+                continue
+            if kinds.get(key) == "date":
+                try:
+                    out[key] = datetime.date.today() + datetime.timedelta(days=int(text))
+                    continue
+                except ValueError:
+                    pass
+            out[key] = text
+        return out
+
+    def run(self, context: dict | None = None, decisions: dict | None = None) -> list:
+        ctx = self._context() if context is None else context
+        dec = {nid: box.currentData() for nid, box in self.decisions.items()} if decisions is None else decisions
+        eid = numerals.to_ascii_digits(self.entity_id.text().strip())
+        self.trace = simulate.simulate(company_id(), self.graph, self.entity_type, context=ctx, decisions=dec,
+                                       entity_id=int(eid) if eid.isdigit() else None, starter=user_id())
+        fill(self.t_trace, [["✔" if t.ok else "✖", t.title, t.result] for t in self.trace])
+        for r, t in enumerate(self.trace):
+            if not t.ok:
+                for c in range(3):
+                    self.t_trace.item(r, c).setForeground(QColor("#EF4444"))
+        return self.trace
+
+
+# =========================================================================================================
+# ویزارد ساخت فرایند (۸ گام)
+# =========================================================================================================
+STEPS = ["اطلاعات پایه", "زمان شروع", "شرط شروع", "مراحل تایید", "اقدام‌های پس از تایید", "اعلان‌ها", "رد و اصلاح",
+         "بازبینی و آزمون"]
+
+
+class LevelDialog(QDialog):
+    def __init__(self, entity_type: str | None, level: builder.ApprovalLevel | None = None, parent=None,
+                 kind: str | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("مرحلهٔ گردش کار")
+        self.setLayoutDirection(Qt.RightToLeft)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.form = form
+        self.kind = combo([(label, code) for code, label in STEP_KINDS])
+        set_combo(self.kind, (level.kind if level else None) or kind or "APPROVAL")
+        self.fields = FieldsEditor(level.fields if level else [])
+        self.label = QLineEdit(level.label if level else "")
+        self.approvers = SpecListEditor(entity_type)
+        self.approvers.set_specs(level.approvers if level else [])
+        self.mode = combo([(label, code) for code, label in MODES])
+        set_combo(self.mode, level.mode if level else "ANY")
+        self.percent = num_field(level.percent if level and level.percent else 50)
+        self.sla = combo(_sla_choices(), "بدون مهلت")
+        set_combo(self.sla, level.sla_policy_id if level else None)
+        self.allow_changes = QCheckBox("تاییدکننده بتواند درخواست را برای اصلاح برگرداند")
+        self.allow_changes.setChecked(bool(level and level.allow_changes))
+        self.instructions = QLineEdit(level.instructions if level else "")
+        self.only_if = RuleBuilder(entity_type)
+        self.only_if.set_rule(level.only_if if level else None)
+        for label, w in (("نوع مرحله", self.kind), ("عنوان مرحله", self.label), ("تاییدکنندگان", self.approvers),
+                         ("شیوهٔ تایید", self.mode), ("درصد لازم", self.percent), ("مهلت و ارجاع", self.sla),
+                         ("چه باید کرد (راهنما)", self.instructions), ("خانه‌های فرم این مرحله", self.fields),
+                         ("فقط وقتی", self.only_if), ("", self.allow_changes)):
+            form.addRow(label, w)
+        layout.addLayout(form)
+        self.kind.currentIndexChanged.connect(lambda _i: self._sync_kind())
+        self._sync_kind()
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _sync_kind(self) -> None:
+        task = self.kind.currentData() == "TASK"
+        for w, show in ((self.percent, not task), (self.allow_changes, not task)):
+            w.setVisible(show)
+            label = self.form.labelForField(w)
+            if label is not None:
+                label.setVisible(show)
+        for w, text in ((self.approvers, "مسئولان انجام کار" if task else "تاییدکنندگان"),
+                        (self.mode, "شیوهٔ انجام" if task else "شیوهٔ تایید")):
+            label = self.form.labelForField(w)
+            if label is not None:
+                label.setText(text)
+        self.instructions.setPlaceholderText("مثلاً: از دست‌کم سه تامین‌کننده قیمت بگیرید و بهترین را بنویسید"
+                                             if task else "مثلاً: مبلغ و ضرورت خرید را بررسی کنید")
+
+    def level(self) -> builder.ApprovalLevel:
+        try:
+            pct = int(numerals.to_ascii_digits(self.percent.text().strip() or "50"))
+        except ValueError:
+            pct = 50
+        task = self.kind.currentData() == "TASK"
+        mode = self.mode.currentData()
+        if task and mode not in ("ANY", "ALL"):
+            mode = "ANY"
+        return builder.ApprovalLevel(self.label.text().strip() or ("انجام کار" if task else "تایید"), self.approvers.specs, mode,
+                                     pct if mode == "PERCENT" and not task else None, self.sla.currentData(),
+                                     self.only_if.rule(), self.allow_changes.isChecked() and not task,
+                                     self.instructions.text().strip(), kind="TASK" if task else "APPROVAL",
+                                     fields=self.fields.fields())
+
+
+class WizardDialog(QDialog):
+    """ساخت فرایند در ۸ گام ساده؛ نتیجه یک پیش‌نویس است که در طراح هم قابل ویرایش است."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ساخت فرایند گام‌به‌گام")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(820, 620)
+        self.dialog_runner = None
+        self.created_id: int | None = None
+        self.levels: list[builder.ApprovalLevel] = []
+        layout = QVBoxLayout(self)
+        self.steps_label = QLabel("")
+        self.steps_label.setTextFormat(Qt.RichText)
+        self.steps_label.setWordWrap(True)
+        layout.addWidget(self.steps_label)
+        self.stack = QStackedWidget()
+        layout.addWidget(self.stack, stretch=1)
+        for build in (self._p_basic, self._p_trigger, self._p_condition, self._p_levels, self._p_actions, self._p_notify,
+                      self._p_reject, self._p_review):
+            self.stack.addWidget(build())
+        nav = QHBoxLayout()
+        self.prev_btn = _btn("مرحلهٔ قبل", self.prev)
+        self.next_btn = _btn("مرحلهٔ بعد", self.next)
+        self.finish_btn = _btn("ساخت فرایند", self.finish)
+        self.publish_now = QCheckBox("پس از ساخت، منتشر و فعال شود")
+        nav.addWidget(self.prev_btn)
+        nav.addWidget(self.next_btn)
+        nav.addStretch(1)
+        nav.addWidget(self.publish_now)
+        nav.addWidget(self.finish_btn)
+        layout.addLayout(nav)
+        self.reject_doc.setVisible(False)
+        self._sync_trigger()
+        self.go(0)
+
+    # --- گام‌ها -------------------------------------------------------------------------------------------
+    def _page(self, hint: str) -> tuple[QWidget, QFormLayout]:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        note = QLabel(hint)
+        note.setObjectName("sectionHint")
+        note.setWordWrap(True)
+        v.addWidget(note)
+        form = QFormLayout()
+        v.addLayout(form)
+        v.addStretch(1)
+        return w, form
+
+    def _p_basic(self) -> QWidget:
+        w, form = self._page("نام فرایند و نوع سندی که این فرایند برایش اجرا می‌شود را مشخص کنید.")
+        self.name = QLineEdit()
+        self.code = QLineEdit()
+        self.code.setPlaceholderText("کد کوتاه لاتین، مثلاً PO_APPROVAL")
+        self.entity = combo([(f"{a.label}", a.entity_type) for a in registry.adapters()], "بدون سند (فرایند عمومی)")
+        self.entity.currentIndexChanged.connect(lambda _i: self._on_entity())
+        self.description = QLineEdit()
+        for label, x in (("نام فرایند", self.name), ("کد", self.code), ("نوع سند", self.entity), ("توضیح", self.description)):
+            form.addRow(label, x)
+        return w
+
+    def _p_trigger(self) -> QWidget:
+        w, form = self._page("فرایند چه زمانی شروع شود؟")
+        self.ttype = combo([(label, code) for code, label in builder.TRIGGER_LABELS.items()])
+        self.events = QListWidget()
+        self.events.setMaximumHeight(140)
+        self.every = combo([(label, code) for code, label in builder.EVERY_LABELS.items()])
+        self.at = QLineEdit("08:00")
+        self.scan = combo([])
+        self.ttype.currentIndexChanged.connect(lambda _i: self._sync_trigger())
+        # R323: پیش‌فرض روشن — بدون آن، سند جدا از گردش کار هم تصویب می‌شد
+        self.gate = QCheckBox("قفل تایید: تا تایید همین فرایند، سند دستی تصویب یا به مرحلهٔ بعد فرستاده نشود")
+        self.gate.setChecked(True)
+        for label, x in (("نوع شروع", self.ttype), ("رویدادها", self.events), ("تکرار", self.every), ("ساعت", self.at),
+                         ("بررسی دوره‌ای", self.scan), ("", self.gate)):
+            form.addRow(label, x)
+        self.trigger_form = form
+        return w
+
+    def _p_condition(self) -> QWidget:
+        w, form = self._page("اگر فرایند فقط برای بعضی اسناد لازم است (مثلاً مبلغ بیش از ۵۰۰ میلیون ریال)، شرط بگذارید؛ "
+                             "وگرنه خالی بگذارید.")
+        self.start_rule = RuleBuilder()
+        form.addRow(self.start_rule)
+        return w
+
+    def _p_levels(self) -> QWidget:
+        w, form = self._page("مرحله‌ها را به ترتیب اضافه کنید: «تایید» (تایید یا رد) یا «انجام کار» (مثلاً استعلام قیمت) "
+                             "با فرم مشخص خودش. هر مرحله می‌تواند فقط در شرایط خاص اجرا شود.")
+        self.t_levels = table(["مرحله", "تاییدکنندگان / مسئولان", "شیوه", "شرط"])
+        form.addRow(self.t_levels)
+        row = QHBoxLayout()
+        for label, slot in (("افزودن مرحلهٔ تایید", lambda: self.edit_level(new=True)),
+                            ("افزودن مرحلهٔ انجام کار", lambda: self.edit_level(new=True, kind="TASK")),
+                            ("ویرایش مرحله", self.edit_level),
+                            ("حذف مرحله", self.remove_level), ("بالا بردن", lambda: self.move_level(-1)),
+                            ("پایین بردن", lambda: self.move_level(1))):
+            row.addWidget(_btn(label, slot))
+        row.addStretch(1)
+        form.addRow(row)
+        return w
+
+    def _p_actions(self) -> QWidget:
+        w, form = self._page("این کارها را سیستم پس از آخرین تایید، خودکار و بدون دخالت کسی انجام می‌دهد (به همین ترتیب). "
+                             "کاری که باید کسی انجام دهد (مثلاً تبدیل به سفارش) را در گام «مراحل تایید» با «افزودن مرحلهٔ "
+                             "انجام کار» بگذارید. «رد» سند در گام «رد و اصلاح» است.")
+        self.actions = QListWidget()
+        form.addRow(self.actions)
+        return w
+
+    def _p_notify(self) -> QWidget:
+        w, form = self._page("چه کسانی از نتیجه باخبر شوند؟")
+        self.notify_ok = QCheckBox("پس از تایید نهایی به درخواست‌کننده خبر داده شود")
+        self.notify_ok.setChecked(True)
+        self.notify_extra = SpecListEditor()
+        form.addRow(self.notify_ok)
+        form.addRow("گیرندگان بیشتر خبر تایید", self.notify_extra)
+        return w
+
+    def _p_reject(self) -> QWidget:
+        w, form = self._page("اگر درخواست رد شود چه اتفاقی بیفتد؟ امکان «برگشت برای اصلاح» را در هر مرحلهٔ تایید فعال کنید.")
+        self.notify_rej = QCheckBox("علت رد برای درخواست‌کننده فرستاده شود")
+        self.notify_rej.setChecked(True)
+        self.changes_all = QCheckBox("در همهٔ مرحله‌ها «برگشت برای اصلاح» فعال باشد")
+        self.reject_doc = QCheckBox("با رد در گردش کار، خود سند هم «ردشده» شود")
+        self.reject_doc.setChecked(True)
+        form.addRow(self.notify_rej)
+        form.addRow(self.changes_all)
+        form.addRow(self.reject_doc)
+        return w
+
+    def _p_review(self) -> QWidget:
+        w, form = self._page("خلاصهٔ فرایند را بازبینی کنید. اگر ایرادی باشد همین‌جا نشان داده می‌شود.")
+        self.summary = QListWidget()
+        self.issues = QListWidget()
+        form.addRow("خلاصه", self.summary)
+        form.addRow("ایرادها", self.issues)
+        form.addRow(_btn("آزمون و اجرای آزمایشی", self.test_run))
+        return w
+
+    # --- منطق ---------------------------------------------------------------------------------------------
+    def _on_entity(self) -> None:
+        et = self.entity.currentData()
+        self.start_rule.set_entity(et)
+        self.events.clear()
+        for code, label in registry.event_choices(et):
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, code)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
+            self.events.addItem(item)
+        self.scan.clear()
+        for code, scan in registry.scans().items():
+            if scan.entity_type == et:
+                self.scan.addItem(scan.label, code)
+        self.actions.clear()
+        adapter = registry.get_adapter(et)
+        gated = bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses))
+        for code, label, risk in registry.action_choices(et):
+            spec = registry.find_action(et, code)
+            if spec is not None and spec.check is not None and spec.check(company_id(), et, {}):
+                continue  # R330: اقدامی که تنظیم لازم دارد (مثلاً نشانی سرویس) فقط در طراح گرافیکی
+            if code == "entity.reject":
+                continue  # R331: «رد» پس از تایید سند را قفل می‌کرد؛ جایش گام «رد و اصلاح» است
+            item = QListWidgetItem(label + (" (حساس)" if risk == "HIGH" else ""))
+            item.setData(Qt.UserRole, code)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if gated and code == "entity.approve" else Qt.Unchecked)
+            self.actions.addItem(item)
+        for i, level in enumerate(self.levels):
+            self.levels[i] = dataclasses.replace(level, only_if=None)
+        self.notify_extra.entity_type = et
+        self.gate.setVisible(bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses)))
+        reject = next((label for code, label, _r in registry.action_choices(et) if code == "entity.reject"), None)
+        self.reject_doc.setVisible(reject is not None)
+        if reject:  # R328: متن همان اقدام سند (مثلاً «رد و برگشت سند به پیش‌نویس»)
+            self.reject_doc.setText(f"با رد در گردش کار، «{reject}» هم انجام شود")
+        self._sync_trigger()
+
+    def _sync_trigger(self) -> None:
+        t = self.ttype.currentData()
+        adapter = registry.get_adapter(self.entity.currentData())
+        gated = bool(adapter and (adapter.gate_statuses or adapter.form_gate_statuses))
+        for w, show in ((self.events, t == "EVENT"), (self.every, t == "SCHEDULE"), (self.at, t == "SCHEDULE"),
+                        (self.scan, t == "SCAN"), (self.gate, gated and t in ("EVENT", "MANUAL"))):
+            w.setVisible(show)
+            label = self.trigger_form.labelForField(w)
+            if label is not None:
+                label.setVisible(show)
+
+    def go(self, index: int) -> None:
+        index = max(0, min(index, len(STEPS) - 1))
+        if index == len(STEPS) - 1:
+            self.refresh_review()
+        self.stack.setCurrentIndex(index)
+        parts = []
+        for i, s in enumerate(STEPS):
+            num = numerals.to_persian_digits(str(i + 1))
+            style = "font-weight:bold; color:#3B82F6" if i == index else ("color:#10B981" if i < index else "color:#94A3B8")
+            parts.append(f"<span style='{style}'>{num}. {s}</span>")
+        self.steps_label.setText(" ← ".join(parts))
+        self.prev_btn.setEnabled(index > 0)
+        self.next_btn.setEnabled(index < len(STEPS) - 1)
+
+    def _step_problem(self, index: int) -> str | None:
+        if index == 0:
+            if not self.name.text().strip() or not self.code.text().strip():
+                return "نام و کد فرایند را وارد کنید."
+        if index == 1 and self.ttype.currentData() == "EVENT" and not self._checked(self.events):
+            return "دست‌کم یک رویداد را انتخاب کنید."
+        if index == 1 and self.ttype.currentData() == "EVENT" and not self.gate.isHidden() and self.gate.isChecked() \
+                and not model_events.trigger_reaches_gate(self.entity.currentData(),
+                                                          {"type": "EVENT", "events": self._checked(self.events)}):
+            return model_events.unreachable_gate_text(self.entity.currentData())  # R329
+        if index == 1 and self.ttype.currentData() == "SCAN" and self.scan.currentData() is None:
+            return "بررسی دوره‌ای برای این نوع سند تعریف نشده است."
+        if index == 2 and self.start_rule.problems():
+            return "شرط شروع: " + "، ".join(self.start_rule.problems())
+        if index == 3 and not self.levels and not self._checked(self.actions):
+            return "دست‌کم یک مرحلهٔ تایید اضافه کنید."
+        return None
+
+    def next(self) -> bool:
+        problem = self._step_problem(self.stack.currentIndex())
+        if problem:
+            _warn(self, "ساخت فرایند", problem)
+            return False
+        self.go(self.stack.currentIndex() + 1)
+        return True
+
+    def prev(self) -> None:
+        self.go(self.stack.currentIndex() - 1)
+
+    @staticmethod
+    def _checked(lst: QListWidget) -> list:
+        return [lst.item(i).data(Qt.UserRole) for i in range(lst.count()) if lst.item(i).checkState() == Qt.Checked]
+
+    def check_item(self, lst: QListWidget, code: str, on: bool = True) -> None:
+        for i in range(lst.count()):
+            if lst.item(i).data(Qt.UserRole) == code:
+                lst.item(i).setCheckState(Qt.Checked if on else Qt.Unchecked)
+
+    def _level_row(self) -> int:
+        items = self.t_levels.selectedItems()
+        return items[0].row() if items else self.t_levels.currentRow()
+
+    def edit_level(self, new: bool = False, level: builder.ApprovalLevel | None = None, kind: str | None = None) -> bool:
+        row = self._level_row()
+        if not new and not 0 <= row < len(self.levels):
+            _warn(self, "مراحل تایید", "یک مرحله را انتخاب کنید.")
+            return False
+        if level is None:
+            dlg = LevelDialog(self.entity.currentData(), None if new else self.levels[row], self, kind=kind)
+            ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
+            if not ok:
+                return False
+            level = dlg.level()
+        if not level.approvers:
+            _warn(self, "مراحل تایید", "دست‌کم یک مسئول انجام کار انتخاب کنید." if level.kind == "TASK"
+                  else "دست‌کم یک تاییدکننده انتخاب کنید.")
+            return False
+        problems = [f.get("label") for f in level.fields if f.get("kind") == "choice" and not f.get("choices")]
+        if problems:
+            _warn(self, "مراحل تایید", f"برای خانهٔ «{problems[0]}» گزینه‌ها را بنویسید.")
+            return False
+        if new:
+            self.levels.append(level)
+        else:
+            self.levels[row] = level
+        self._fill_levels()
+        return True
+
+    def remove_level(self) -> None:
+        row = self._level_row()
+        if 0 <= row < len(self.levels):
+            self.levels.pop(row)
+            self._fill_levels()
+
+    def move_level(self, delta: int) -> None:
+        row = self._level_row()
+        target = row + delta
+        if 0 <= row < len(self.levels) and 0 <= target < len(self.levels):
+            self.levels[row], self.levels[target] = self.levels[target], self.levels[row]
+            self._fill_levels()
+            self.t_levels.setCurrentCell(target, 0)
+
+    def _fill_levels(self) -> None:
+        adapter = registry.get_adapter(self.entity.currentData())
+        labels = adapter.labels() if adapter else {}
+        fill(self.t_levels, [[("کار: " if lv.kind == "TASK" else "") + lv.label + (f" (فرم {P(len(lv.fields))} خانه‌ای)" if lv.fields else ""),
+                              builder._approvers_text(company_id(), lv.approvers),
+                              ("یک نفر کافی است" if lv.mode != "ALL" else "همه باید انجام دهند") if lv.kind == "TASK"
+                              else dict(MODES).get(lv.mode, ""),
+                              conditions.describe(lv.only_if, labels) if lv.only_if else "همیشه"] for lv in self.levels])
+
+    def spec(self) -> builder.WizardSpec:
+        t = self.ttype.currentData()
+        trigger = {"type": t}
+        if t == "EVENT":
+            trigger["events"] = self._checked(self.events)
+        elif t == "SCHEDULE":
+            trigger.update(every=self.every.currentData(), at=numerals.to_ascii_digits(self.at.text().strip() or "08:00"))
+        elif t == "SCAN":
+            trigger.update(scan=self.scan.currentData(), every_minutes=60)
+        if not self.gate.isHidden() and self.gate.isChecked() and t in ("EVENT", "MANUAL"):
+            trigger["gate"] = True
+        levels = [dataclasses.replace(lv, allow_changes=(lv.allow_changes or self.changes_all.isChecked()) and lv.kind != "TASK")
+                  for lv in self.levels]
+        reject_actions = ["entity.reject"] if not self.reject_doc.isHidden() and self.reject_doc.isChecked() else []
+        return builder.WizardSpec(self.name.text().strip(), self.code.text().strip(), self.entity.currentData(),
+                                  self.description.text().strip(), trigger, self.start_rule.rule(), levels,
+                                  self._checked(self.actions), self.notify_ok.isChecked(), self.notify_rej.isChecked(),
+                                  self.notify_extra.specs, reject_actions)
+
+    def graph(self) -> dict | None:
+        graph, ok = _run(self, "ساخت فرایند", builder.build_graph, self.spec())
+        return graph if ok else None
+
+    def refresh_review(self) -> None:
+        self.summary.clear()
+        self.issues.clear()
+        try:
+            graph = builder.build_graph(self.spec())
+        except ValueError as exc:
+            self.issues.addItem(str(exc))
+            return
+        for line in builder.plan_lines(graph, self.entity.currentData(), company_id()):  # R331: چه کسی، کجا، چه کاری
+            self.summary.addItem(P(line))
+        for issue in defs.validate_graph(company_id(), graph, self.entity.currentData()):
+            self.issues.addItem(("⛔ " if issue.level == "error" else "⚠ ") + issue.message)
+        if not self.issues.count():
+            self.issues.addItem("✔ ایرادی پیدا نشد.")
+
+    def test_run(self) -> SimulateDialog | None:
+        graph = self.graph()
+        if graph is None:
+            return None
+        dlg = SimulateDialog(graph, self.entity.currentData(), self)
+        if self.dialog_runner is None:
+            dlg.exec()
+        return dlg
+
+    def finish(self) -> int | None:
+        for i in range(len(STEPS) - 1):
+            problem = self._step_problem(i)
+            if problem:
+                self.go(i)
+                _warn(self, "ساخت فرایند", problem)
+                return None
+        graph = self.graph()
+        if graph is None:
+            return None
+        spec = self.spec()
+        did, ok = _run(self, "ساخت فرایند", defs.create_definition, company_id(), user_id(), code=spec.code, name=spec.name,
+                       entity_type=spec.entity_type, description=spec.description or None, graph=graph)
+        if not ok:
+            return None
+        if self.publish_now.isChecked():
+            _r, published = _run(self, "انتشار", defs.publish, company_id(), user_id(), did)
+            if published:
+                _run(self, "فعال‌سازی", defs.set_status, company_id(), user_id(), did, "ACTIVE")
+        self.created_id = did
+        self.accept()
+        return did
+
+
+# =========================================================================================================
+# طراح گرافیکی
+# =========================================================================================================
+W, H = 180.0, 58.0
+
+
+class NodeItem(QGraphicsRectItem):
+    def __init__(self, designer: "DesignerScreen", node: dict) -> None:
+        super().__init__(0, 0, W, H)
+        self.designer, self.node_id = designer, node["id"]
+        ntype = node.get("type", "START")
+        color = QColor(NODE_COLORS.get(ntype, "#64748B"))
+        if ntype == "END" and node.get("outcome") == "REJECTED":
+            color = QColor("#EF4444")
+        self.setBrush(QBrush(color.lighter(185)))
+        self.setPen(QPen(color, 2))
+        title = QGraphicsSimpleTextItem(f"{NODE_ICONS.get(ntype, '')} {node.get('label') or NODE_TYPES.get(ntype, '')}", self)
+        font = QFont()
+        font.setBold(True)
+        title.setFont(font)
+        title.setPos(10, 8)
+        sub = QGraphicsSimpleTextItem(NODE_TYPES.get(ntype, "") if ntype != "START" else "شروع فرایند", self)
+        sub.setBrush(QBrush(QColor("#475569")))
+        sub.setPos(10, 32)
+        pos = node.get("pos") or [0, 0]
+        self.setPos(float(pos[0]), float(pos[1]))
+        # پس از جای‌گذاری اولیه، تا ساختن صحنه «تغییر ذخیره‌نشده» حساب نشود
+        self.setFlags(QGraphicsItem.ItemIsMovable | QGraphicsItem.ItemIsSelectable | QGraphicsItem.ItemSendsGeometryChanges)
+
+    def itemChange(self, change, value):  # noqa: N802 -- نام متد Qt
+        if change == QGraphicsItem.ItemPositionHasChanged:
+            self.designer.node_moved(self.node_id, self.pos())
+        return super().itemChange(change, value)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(self.brush())
+        pen = QPen(self.pen())
+        if self.isSelected():
+            pen.setWidth(4)
+            pen.setColor(QColor("#1D4ED8"))
+        if self.node_id in self.designer.highlight:
+            pen.setColor(QColor("#10B981") if self.designer.highlight[self.node_id] else QColor("#EF4444"))
+            pen.setWidth(4)
+        painter.setPen(pen)
+        painter.drawRoundedRect(self.rect(), 12, 12)
+
+
+class EdgeItem(QGraphicsPathItem):
+    def __init__(self, designer: "DesignerScreen", edge: dict, src: QPointF, dst: QPointF, back: bool) -> None:
+        super().__init__()
+        self.edge = edge
+        self.setFlags(QGraphicsItem.ItemIsSelectable)
+        start = QPointF(src.x() + W / 2, src.y() + H)
+        end = QPointF(dst.x() + W / 2, dst.y())
+        path = QPainterPath(start)
+        if back:  # مسیر برگشتی از کنار
+            side = max(src.x(), dst.x()) + W + 40
+            path.cubicTo(QPointF(side, start.y() + 40), QPointF(side, end.y() - 40), end)
+        else:
+            mid = (start.y() + end.y()) / 2
+            path.cubicTo(QPointF(start.x(), mid), QPointF(end.x(), mid), end)
+        prev = path.pointAtPercent(0.96)
+        dx, dy = end.x() - prev.x(), end.y() - prev.y()
+        length = math.hypot(dx, dy) or 1.0
+        ux, uy, size = dx / length, dy / length, 10.0
+        left = QPointF(end.x() - ux * size - uy * size * 0.55, end.y() - uy * size + ux * size * 0.55)
+        right = QPointF(end.x() - ux * size + uy * size * 0.55, end.y() - uy * size - ux * size * 0.55)
+        label_at = path.pointAtPercent(0.45)
+        path.addPolygon(QPolygonF([end, left, right, end]))
+        self.setPath(path)
+        color = {"no": "#EF4444", "rejected": "#EF4444", "failed": "#EF4444", "timeout": "#F59E0B",
+                 "changes": "#F59E0B"}.get(edge.get("when") or "", "#475569")
+        self.setPen(QPen(QColor(color), 2))
+        if edge.get("when"):
+            label = QGraphicsSimpleTextItem(defs.EDGE_LABELS.get(edge["when"], edge["when"]), self)
+            label.setBrush(QBrush(QColor(color)))
+            label.setPos(label_at.x() + 6, label_at.y() - 8)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        if self.isSelected():
+            pen = QPen(self.pen())
+            pen.setWidth(4)
+            painter.setPen(pen)
+            painter.drawPath(self.path())
+            return
+        super().paint(painter, option, widget)
+
+
+@ms.styled
+class DesignerScreen(QWidget):
+    """طراح گرافیکی: مرحله‌ها را از نوار کنار اضافه کنید، با «اتصال» به هم وصل کنید و ویژگی هر مرحله را کنار صفحه تنظیم کنید."""
+
+    scroll_in_mdi = False
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        self.definition_id: int | None = None
+        self.entity_type: str | None = None
+        self.saved_entity_type: str | None = None
+        self.entity_editable = False
+        self.graph: dict = defs.empty_graph()
+        self.items: dict[str, NodeItem] = {}
+        self.highlight: dict[str, bool] = {}
+        self.selected_node: str | None = None
+        self.selected_edge: dict | None = None
+        self.dirty = False
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 10, 12, 10)
+        self.title = QLabel("طراح فرایند")
+        self.title.setObjectName("pageTitle")
+        self.status = QLabel("")
+        outer.addWidget(ms.header_card(self.title, self.status))
+        split = QSplitter(Qt.Horizontal)
+        palette = QWidget()
+        pl = QVBoxLayout(palette)
+        pl.setContentsMargins(4, 4, 4, 4)
+        for ntype in ("CONDITION", "APPROVAL", "TASK", "ACTION", "SUBPROCESS", "NOTIFY", "WAIT", "PARALLEL", "JOIN", "END"):
+            pl.addWidget(_icon_button(NODE_ICONS[ntype], f"افزودن مرحلهٔ «{NODE_TYPES[ntype]}»", lambda t=ntype: self.add_node(t)))
+        pl.addStretch(1)
+        split.addWidget(palette)
+        self.scene = QGraphicsScene()
+        self.scene.selectionChanged.connect(self._on_selection)
+        self.view = QGraphicsView(self.scene)
+        self.view.setRenderHint(QPainter.Antialiasing)
+        self.view.setDragMode(QGraphicsView.RubberBandDrag)
+        split.addWidget(self.view)
+        side = QWidget()
+        side.setMinimumWidth(340)
+        self.side_layout = QVBoxLayout(side)
+        self.props_title = QLabel("یک مرحله را انتخاب کنید")
+        self.props_title.setObjectName("sectionTitle")
+        self.side_layout.addWidget(self.props_title)
+        # R333: خانه‌ها با ارتفاع کامل خودشان؛ اگر جا کم بود، فهرست ویژگی‌ها اسکرول می‌خورد نه این‌که خانه‌ها له شوند
+        self.props_host = QWidget()
+        self.props_form = QFormLayout(self.props_host)
+        self.props_form.setRowWrapPolicy(QFormLayout.WrapAllRows)  # عنوان بالای خانه تا خانه تمام‌عرض باشد
+        self.props_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        self.props_scroll = QScrollArea()
+        self.props_scroll.setWidgetResizable(True)
+        self.props_scroll.setFrameShape(QScrollArea.NoFrame)
+        self.props_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.props_scroll.setWidget(self.props_host)
+        self.side_layout.addWidget(self.props_scroll, stretch=3)
+        self.apply_btn = _btn("ثبت تغییرات این مرحله", self.apply_properties)
+        self.side_layout.addWidget(self.apply_btn)
+        issues_title = QLabel("ایرادها")
+        issues_title.setObjectName("sectionTitle")
+        self.side_layout.addWidget(issues_title)
+        self.issues = QListWidget()
+        self.issues.setMaximumHeight(140)
+        self.issues.setWordWrap(True)
+        self.issues.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.issues.itemClicked.connect(self._on_issue_clicked)
+        self.side_layout.addWidget(self.issues, stretch=1)
+        split.addWidget(side)
+        split.setStretchFactor(1, 4)
+        split.setStretchFactor(2, 2)
+        split.setSizes([60, 900, 420])  # بوم بزرگ‌تر از پنل ویژگی‌ها
+        outer.addWidget(split, stretch=1)
+        self.buttons = {k: QPushButton(t) for k, t in (
+            ("save", "ذخیرهٔ پیش‌نویس"), ("validate", "بررسی ایرادها"), ("test", "آزمون و اجرای آزمایشی"),
+            ("publish", "انتشار"), ("start", "تنظیم شروع فرایند"), ("connect", "اتصال دو مرحله"), ("delete", "حذف انتخاب‌شده"),
+            ("layout", "چیدمان خودکار"), ("zoom_in", "بزرگ‌نمایی"), ("zoom_out", "کوچک‌نمایی"))}
+        B = self.buttons
+        B["save"].clicked.connect(lambda: self.save())
+        B["validate"].clicked.connect(lambda: self.validate())
+        B["test"].clicked.connect(lambda: self.test_run())
+        B["publish"].clicked.connect(lambda: self.publish())
+        B["start"].clicked.connect(lambda: self.select_node(defs.START))
+        B["connect"].clicked.connect(lambda: self.connect_selected())
+        B["delete"].clicked.connect(lambda: self.delete_selected())
+        B["layout"].clicked.connect(lambda: self.auto_layout())
+        B["zoom_in"].clicked.connect(lambda: self.view.scale(1.15, 1.15))
+        B["zoom_out"].clicked.connect(lambda: self.view.scale(1 / 1.15, 1 / 1.15))
+        outer.addWidget(ms.footer([[B["save"], B["validate"], B["test"], B["publish"]],
+                                   [B["start"], B["connect"], B["delete"], B["layout"]], [B["zoom_in"], B["zoom_out"]]]))
+
+    # --- بارگذاری و ترسیم ------------------------------------------------------------------------------
+    def refresh(self) -> None:
+        if self.definition_id is not None:
+            self._update_status()
+
+    def load(self, definition_id: int) -> None:
+        d = defs.get_definition(company_id(), definition_id)
+        self.definition_id, self.entity_type = definition_id, d.entity_type
+        self.saved_entity_type, self.entity_editable = d.entity_type, d.active_version_id is None
+        self.graph = defs.get_graph(company_id(), definition_id)
+        if any("pos" not in n for n in self.graph.get("nodes", [])):
+            self.graph = builder.auto_layout(self.graph)
+        self.title.setText(f"طراح فرایند: {d.name}")
+        self.dirty = False
+        self.redraw()
+        self.validate(show=False)
+        self._update_status()
+
+    def _update_status(self) -> None:
+        d = defs.get_definition(company_id(), self.definition_id)
+        version = f"نسخهٔ فعال: {P(d.active_version_no)}" if d.active_version_no else "هنوز منتشر نشده"
+        self.status.setText(P(f"{d.status_label} — {version}" + (" — تغییرات ذخیره‌نشده" if self.dirty else "")))
+
+    def redraw(self) -> None:
+        self.scene.blockSignals(True)
+        self.scene.clear()
+        self.items = {}
+        start = {"id": defs.START, "type": "START", "label": "شروع", "pos": (self.graph.get("layout") or {}).get("start", [0, -120])}
+        for node in [start] + list(self.graph.get("nodes", [])):
+            item = NodeItem(self, node)
+            self.scene.addItem(item)
+            self.items[node["id"]] = item
+        depth = self._depths()
+        for e in self.graph.get("edges", []):
+            a, b = self.items.get(e["from"]), self.items.get(e["to"])
+            if a is None or b is None:
+                continue
+            back = depth.get(e["to"], 0) <= depth.get(e["from"], 0) and e["from"] != defs.START
+            edge = EdgeItem(self, e, a.pos(), b.pos(), back)
+            edge.setZValue(-1)
+            self.scene.addItem(edge)
+        self.scene.blockSignals(False)
+        if self.selected_node in self.items:
+            self.items[self.selected_node].setSelected(True)
+
+    def _depths(self) -> dict[str, int]:
+        depth = {defs.START: 0}
+        queue = [defs.START]
+        while queue:
+            nid = queue.pop(0)
+            for e in defs.outgoing(self.graph, nid):
+                if e["to"] not in depth:
+                    depth[e["to"]] = depth[nid] + 1
+                    queue.append(e["to"])
+        return depth
+
+    def node_moved(self, node_id: str, pos: QPointF) -> None:
+        if node_id == defs.START:
+            self.graph.setdefault("layout", {})["start"] = [pos.x(), pos.y()]
+        else:
+            node = defs.nodes_by_id(self.graph).get(node_id)
+            if node is not None:
+                node["pos"] = [pos.x(), pos.y()]
+        self.dirty = True
+
+    # --- انتخاب و ویژگی‌ها --------------------------------------------------------------------------------
+    def _on_selection(self) -> None:
+        try:
+            sel = self.scene.selectedItems()
+        except RuntimeError:  # هنگام بستن صفحه، بوم پیش از این سیگنال پاک شده است
+            return
+        nodes = [i for i in sel if isinstance(i, NodeItem)]
+        edges = [i for i in sel if isinstance(i, EdgeItem)]
+        if nodes:
+            self.selected_node, self.selected_edge = nodes[-1].node_id, None
+        elif edges:
+            self.selected_node, self.selected_edge = None, edges[-1].edge
+        else:
+            return
+        self._build_properties()
+
+    def select_node(self, node_id: str) -> None:
+        self.selected_node, self.selected_edge = node_id, None
+        self.scene.blockSignals(True)
+        for nid, item in self.items.items():
+            item.setSelected(nid == node_id)
+        self.scene.blockSignals(False)
+        self._build_properties()
+
+    def select_edge(self, src: str, dst: str) -> None:
+        self.selected_node = None
+        self.selected_edge = next((e for e in self.graph.get("edges", []) if e["from"] == src and e["to"] == dst), None)
+        self._build_properties()
+
+    def _clear_form(self) -> None:
+        while self.props_form.rowCount():
+            self.props_form.removeRow(0)
+        self.w: dict[str, QWidget] = {}
+
+    def _row(self, key: str, label: str, widget: QWidget) -> QWidget:
+        self.w[key] = widget
+        self.props_form.addRow(label, widget)
+        return widget
+
+    def _build_properties(self) -> None:
+        self._clear_form()
+        self._fill_properties()
+
+    def _fill_properties(self) -> None:
+        if self.selected_edge is not None:
+            e = self.selected_edge
+            self.props_title.setText("مسیر")
+            box = combo([(label, code) for code, label in builder.edge_choices(self.graph, e["from"])])
+            set_combo(box, e.get("when"))
+            self._row("when", "نتیجه‌ای که از این مسیر می‌رود", box)
+            return
+        nid = self.selected_node
+        if nid is None:
+            self.props_title.setText("یک مرحله را انتخاب کنید")
+            return
+        if nid == defs.START:
+            self._build_trigger_form()
+            return
+        node = defs.nodes_by_id(self.graph).get(nid) or {}
+        t = node.get("type")
+        self.props_title.setText(f"{NODE_ICONS.get(t, '')} {NODE_TYPES.get(t, '')}")
+        self._row("label", "عنوان", QLineEdit(node.get("label") or ""))
+        adapter = registry.get_adapter(self.entity_type)
+        if t == "CONDITION":
+            rb = RuleBuilder(self.entity_type)
+            rb.set_rule(node.get("rule"))
+            self._row("rule", "شرط", rb)
+        elif t in ("APPROVAL", "TASK"):
+            specs = SpecListEditor(self.entity_type)
+            specs.set_specs(node.get("approvers" if t == "APPROVAL" else "assignees") or [])
+            self._row("specs", "تاییدکنندگان" if t == "APPROVAL" else "مسئولان", specs)
+            modes = MODES if t == "APPROVAL" else [("ANY", "یک نفر کافی است"), ("ALL", "همه باید انجام دهند")]
+            mode = combo([(label, code) for code, label in modes])
+            set_combo(mode, node.get("mode") or "ANY")
+            self._row("mode", "شیوه", mode)
+            if t == "APPROVAL":
+                self._row("percent", "درصد لازم", num_field(node.get("percent") or 50))
+            sla_box = combo(_sla_choices(), "بدون مهلت")
+            set_combo(sla_box, node.get("sla_policy_id"))
+            self._row("sla", "مهلت و ارجاع", sla_box)
+            self._row("timeout_hours", "پایان مهلت پس از (ساعت، اختیاری)", num_field(node.get("timeout_hours")))
+            self._row("instructions", "راهنما", QLineEdit(node.get("instructions") or ""))
+            if t == "APPROVAL":
+                for key, label, default in (("allow_delegate", "امکان واگذاری به همکار", True),
+                                            ("require_comment_on_reject", "نوشتن علت رد الزامی باشد", True),
+                                            ("distinct_approvers", "تاییدکنندهٔ مراحل قبل دوباره تایید نکند", False),
+                                            ("step_up", "تایید در موبایل با وارد کردن دوبارهٔ رمز", False)):
+                    box = QCheckBox(label)
+                    box.setChecked(bool(node.get(key, default)))
+                    self._row(key, "", box)
+            self._row("fields", "خانه‌های فرم این مرحله", FieldsEditor(node.get("fields") or []))
+        elif t == "ACTION":
+            box = combo([(label + (" (حساس)" if risk == "HIGH" else ""), code)
+                         for code, label, risk in registry.action_choices(self.entity_type)], "—")
+            set_combo(box, node.get("action"))
+            self._row("action", "اقدام", box)
+            spec = registry.find_action(self.entity_type, node.get("action") or "")
+            for p in (spec.params if spec else ()):
+                self._row(f"param:{p.key}", p.label, QLineEdit(str((node.get("params") or {}).get(p.key, p.default or ""))))
+            self._row("retry", "دفعات تلاش دوباره در خطای موقت", num_field((node.get("retry") or {}).get("max", 3)))
+        elif t == "SUBPROCESS":
+            kinds = {a.entity_type: a.label for a in registry.adapters()}
+            box = combo([(f"{d.name} ({kinds.get(d.entity_type, 'عمومی')})" + ("" if d.active_version_id else " — منتشرنشده"),
+                          d.definition_id) for d in defs.list_definitions(company_id(), include_archived=False)
+                         if d.definition_id != self.definition_id], "—")
+            set_combo(box, node.get("definition_id"))
+            self._row("definition_id", "فرایندی که اجرا می‌شود", box)
+            target = combo([(label, code) for code, label in builder.TARGET_LABELS.items()])
+            set_combo(target, node.get("target") or "SAME")
+            self._row("target", "اجرا روی", target)
+            hint = QLabel("روند تا پایان این فرایند منتظر می‌ماند. برای اجرای چند فرایند با هم، آن‌ها را پس از "
+                          "«شروع هم‌زمان» بگذارید و در «پیوستن شاخه‌ها» به هم برسانید.")
+            hint.setWordWrap(True)
+            hint.setObjectName("sectionHint")
+            self.props_form.addRow(hint)
+        elif t == "NOTIFY":
+            specs = SpecListEditor(self.entity_type)
+            specs.set_specs(node.get("to") or [])
+            self._row("specs", "گیرندگان", specs)
+            self._row("title", "عنوان پیام", QLineEdit(node.get("title") or ""))
+            body = QTextEdit(node.get("body") or "")
+            body.setMaximumHeight(70)
+            self._row("body", "متن پیام", body)
+            hint = QLabel("می‌توانید {عنوان} یا نام فیلدهای سند را داخل {} بنویسید، مثلاً {" +
+                          (adapter.fields[0].label if adapter and adapter.fields else "مبلغ") + "}.")
+            hint.setWordWrap(True)
+            hint.setObjectName("sectionHint")
+            self.props_form.addRow(hint)
+        elif t == "WAIT":
+            self._row("hours", "چند ساعت", num_field(node.get("hours")))
+            self._row("days", "چند روز", num_field(node.get("days")))
+            dates = combo([(f.label, f.key) for f in (adapter.fields if adapter else ()) if f.kind == "date"], "—")
+            set_combo(dates, node.get("until_field"))
+            self._row("until_field", "یا تا تاریخ ثبت‌شده در", dates)
+            events = combo([(label, code) for code, label in registry.event_choices(self.entity_type)], "—")
+            set_combo(events, node.get("until_event"))
+            self._row("until_event", "یا تا رخ دادن رویداد", events)
+            self._row("timeout_hours", "حداکثر انتظار برای رویداد (ساعت)", num_field(node.get("timeout_hours")))
+        elif t == "END":
+            box = combo([(label, code) for code, label in OUTCOMES.items()])
+            set_combo(box, node.get("outcome") or "DONE")
+            self._row("outcome", "نتیجه", box)
+
+    def _build_trigger_form(self) -> None:
+        trigger = self.graph.get("trigger") or {}
+        self.props_title.setText("🚀 شروع فرایند")
+        if self.entity_editable:  # R333: رویدادها مال یک نوع سندند؛ تا منتشر نشده، نوع سند همین‌جا انتخاب می‌شود
+            kind = combo([(a.label, a.entity_type) for a in registry.adapters()], "بدون سند (فرایند عمومی)")
+            set_combo(kind, self.entity_type)
+            kind.currentIndexChanged.connect(lambda _i, b=kind: self.change_entity_type(b.currentData()))
+            self._row("entity_type", "نوع سند", kind)
+        ttype = combo([(label, code) for code, label in builder.TRIGGER_LABELS.items()])
+        set_combo(ttype, trigger.get("type") or "MANUAL")
+        ttype.currentIndexChanged.connect(lambda _i: self._show_trigger_rows())
+        self._row("ttype", "نوع شروع", ttype)
+        events = QListWidget()
+        events.setMinimumHeight(110)
+        events.setMaximumHeight(180)
+        for code, label in registry.event_choices(self.entity_type):
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, code)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if code in (trigger.get("events") or []) else Qt.Unchecked)
+            events.addItem(item)
+        self._row("events", "رویدادها", events)
+        if not events.count():
+            hint = QLabel("برای شروع با رویداد، اول «نوع سند» را انتخاب کنید." if not self.entity_type else
+                          "برای این نوع سند رویدادی تعریف نشده است؛ «دستی» یا «زمان‌بندی» را انتخاب کنید.")
+            hint.setWordWrap(True)
+            hint.setObjectName("sectionHint")
+            self._row("events_hint", "", hint)
+        every = combo([(label, code) for code, label in builder.EVERY_LABELS.items()])
+        set_combo(every, trigger.get("every") or "DAY")
+        self._row("every", "تکرار (زمان‌بندی)", every)
+        self._row("at", "ساعت", QLineEdit(trigger.get("at") or "08:00"))
+        scan = combo([(s.label, c) for c, s in registry.scans().items() if s.entity_type == self.entity_type], "—")
+        set_combo(scan, trigger.get("scan"))
+        self._row("scan", "بررسی دوره‌ای", scan)
+        rb = RuleBuilder(self.entity_type)
+        rb.set_rule(trigger.get("condition"))
+        self._row("condition", "شرط شروع", rb)
+        adapter = registry.get_adapter(self.entity_type)
+        if adapter is not None and (adapter.gate_statuses or adapter.form_gate_statuses):
+            gate = QCheckBox(adapter.gate_label or "تا تایید فرایند، مرحلهٔ حساس سند انجام نشود")
+            gate.setChecked(bool(trigger.get("gate")))
+            gate.setToolTip("اگر روشن باشد، کار حساس سند (مثل تصویب یا ثبت نهایی) فقط پس از تایید همین فرایند ممکن است.")
+            self._row("gate", "قفل تایید", gate)
+        self._show_trigger_rows()
+
+    def _show_trigger_rows(self) -> None:
+        t = self.w["ttype"].currentData()
+        has_events = self.w["events"].count() > 0
+        for key, visible in (("events", t == "EVENT" and has_events), ("events_hint", t == "EVENT"), ("every", t == "SCHEDULE"),
+                             ("at", t == "SCHEDULE"), ("scan", t == "SCAN"), ("gate", t in ("EVENT", "MANUAL"))):
+            if key in self.w:
+                self.props_form.setRowVisible(self.w[key], visible)
+
+    def change_entity_type(self, entity_type: str | None) -> None:
+        """نوع سند عوض شد: رویدادها، شرط و قفل نوع قبلی کنار می‌روند و فهرست رویدادها دوباره پر می‌شود."""
+        if entity_type == self.entity_type:
+            return
+        trigger = {"type": self.w["ttype"].currentData() if "ttype" in self.w else "MANUAL"}
+        if trigger["type"] == "SCHEDULE":
+            trigger.update({k: v for k, v in (self.graph.get("trigger") or {}).items() if k in ("every", "at")})
+        self.entity_type, self.graph["trigger"] = entity_type, trigger
+        self.dirty = True
+        self._build_properties()
+        self.validate(show=False)
+        if self.definition_id is not None:
+            self._update_status()
+
+    def apply_properties(self) -> bool:
+        w = getattr(self, "w", {})
+        if self.selected_edge is not None:
+            e = self.selected_edge
+            when = w["when"].currentData()
+            if when:
+                e["when"] = when
+            else:
+                e.pop("when", None)
+            return self._changed()
+        if self.selected_node == defs.START:
+            t = w["ttype"].currentData()
+            trigger = {"type": t}
+            if t == "EVENT":
+                lst = w["events"]
+                trigger["events"] = [lst.item(i).data(Qt.UserRole) for i in range(lst.count())
+                                     if lst.item(i).checkState() == Qt.Checked]
+            elif t == "SCHEDULE":
+                trigger.update(every=w["every"].currentData(), at=numerals.to_ascii_digits(w["at"].text().strip() or "08:00"))
+            elif t == "SCAN":
+                old = self.graph.get("trigger") or {}
+                trigger.update(scan=w["scan"].currentData(), every_minutes=old.get("every_minutes") or 60)
+                if old.get("params") and old.get("scan") == trigger["scan"]:
+                    trigger["params"] = old["params"]
+            if w["condition"].rule():
+                trigger["condition"] = w["condition"].rule()
+            if "gate" in w and w["gate"].isChecked() and t in ("EVENT", "MANUAL"):
+                trigger["gate"] = True
+            self.graph["trigger"] = trigger
+            return self._changed()
+        node = defs.nodes_by_id(self.graph).get(self.selected_node or "")
+        if node is None:
+            return False
+        t = node["type"]
+        node["label"] = w["label"].text().strip() or NODE_TYPES.get(t, "")
+
+        def num(key):
+            text = numerals.to_ascii_digits(w[key].text().strip()) if key in w else ""
+            try:
+                return float(text) if text else None
+            except ValueError:
+                return None
+
+        def put(key, value):
+            if value in (None, "", []):
+                node.pop(key, None)
+            else:
+                node[key] = value
+
+        if t == "CONDITION":
+            put("rule", w["rule"].rule())
+        elif t in ("APPROVAL", "TASK"):
+            node["approvers" if t == "APPROVAL" else "assignees"] = w["specs"].specs
+            node["mode"] = w["mode"].currentData()
+            if t == "APPROVAL":
+                put("percent", int(num("percent") or 50) if node["mode"] == "PERCENT" else None)
+                for key in ("allow_delegate", "require_comment_on_reject", "distinct_approvers", "step_up"):
+                    node[key] = w[key].isChecked()
+            put("fields", w["fields"].fields())
+            put("sla_policy_id", w["sla"].currentData())
+            put("timeout_hours", num("timeout_hours"))
+            put("instructions", w["instructions"].text().strip())
+        elif t == "SUBPROCESS":
+            put("definition_id", w["definition_id"].currentData())
+            node["target"] = w["target"].currentData() or "SAME"
+            if node.get("definition_id") and node["label"] == NODE_TYPES["SUBPROCESS"]:
+                node["label"] = defs.get_definition(company_id(), node["definition_id"]).name
+        elif t == "ACTION":
+            node["action"] = w["action"].currentData() or ""
+            params = {k.split(":", 1)[1]: v.text().strip() for k, v in w.items() if k.startswith("param:") and v.text().strip()}
+            put("params", params)
+            node["retry"] = {"max": int(num("retry") or 0), "backoff_minutes": 5}
+        elif t == "NOTIFY":
+            node["to"] = w["specs"].specs
+            node["title"] = w["title"].text().strip()
+            put("body", w["body"].toPlainText().strip())
+        elif t == "WAIT":
+            for key in ("hours", "days", "timeout_hours"):
+                put(key, num(key))
+            put("until_field", w["until_field"].currentData())
+            put("until_event", w["until_event"].currentData())
+        elif t == "END":
+            node["outcome"] = w["outcome"].currentData()
+        return self._changed()
+
+    def _changed(self) -> bool:
+        self.dirty = True
+        keep_node, keep_edge = self.selected_node, self.selected_edge
+        self.redraw()
+        self.selected_node, self.selected_edge = keep_node, keep_edge
+        self.validate(show=False)
+        if self.definition_id is not None:
+            self._update_status()
+        return True
+
+    # --- ویرایش ساختار ---------------------------------------------------------------------------------
+    def add_node(self, node_type: str) -> str:
+        center = self.view.mapToScene(self.view.viewport().rect().center())
+        nid = builder.add_node(self.graph, node_type, (center.x() - W / 2, center.y() - H / 2))
+        self.selected_node = nid
+        self._changed()
+        self.select_node(nid)
+        return nid
+
+    def connect_nodes(self, src: str, dst: str, when: str | None = None) -> bool:
+        _r, ok = _run(self, "اتصال", builder.connect, self.graph, src, dst, when)
+        if ok:
+            self._changed()
+        return ok
+
+    def connect_selected(self, when: str | None = None) -> bool:
+        nodes = [i.node_id for i in self.scene.selectedItems() if isinstance(i, NodeItem)]
+        if len(nodes) != 2:
+            _warn(self, "اتصال", "دو مرحله را انتخاب کنید (با نگه‌داشتن Ctrl)؛ اولی مبدأ و دومی مقصد است.")
+            return False
+        src, dst = nodes[0], nodes[1]
+        choices = builder.edge_choices(self.graph, src)
+        if when is None and len(choices) > 1:
+            values = _ask(self, "اتصال", [("when", "کدام نتیجه به این مسیر برود؟", combo([(l, c) for c, l in choices]))])
+            if values is None:
+                return False
+            when = values["when"]
+        elif when is None:
+            when = choices[0][0]
+        return self.connect_nodes(src, dst, when)
+
+    def delete_selected(self) -> bool:
+        if self.selected_edge is not None:
+            self.graph["edges"] = [e for e in self.graph.get("edges", []) if e is not self.selected_edge]
+            self.selected_edge = None
+            return self._changed()
+        if self.selected_node and self.selected_node != defs.START:
+            builder.remove_node(self.graph, self.selected_node)
+            self.selected_node = None
+            self._clear_form()
+            return self._changed()
+        return False
+
+    def auto_layout(self) -> None:
+        self.graph = builder.auto_layout(self.graph)
+        self._changed()
+
+    # --- بررسی، آزمون، ذخیره، انتشار ----------------------------------------------------------------------
+    def validate(self, show: bool = True) -> list:
+        issues = defs.validate_graph(company_id(), self.graph, self.entity_type, self.definition_id)
+        self.issues.clear()
+        for i in issues:
+            item = QListWidgetItem(("⛔ " if i.level == "error" else "⚠ ") + i.message)
+            item.setData(Qt.UserRole, i.node_id)
+            self.issues.addItem(item)
+        if not issues:
+            self.issues.addItem("✔ ایرادی پیدا نشد؛ آمادهٔ انتشار است.")
+        return issues
+
+    def _on_issue_clicked(self, item: QListWidgetItem) -> None:
+        nid = item.data(Qt.UserRole)
+        if nid and nid in self.items:
+            self.select_node(nid)
+            self.view.centerOn(self.items[nid])
+
+    def test_run(self, context: dict | None = None, decisions: dict | None = None) -> list:
+        dlg = SimulateDialog(self.graph, self.entity_type, self)
+        if context is not None or decisions is not None:
+            trace = dlg.run(context or {}, decisions or {})
+        else:
+            dlg.exec()
+            trace = dlg.trace
+        self.highlight = {t.node_id: t.ok for t in trace if t.node_id}
+        self.redraw()
+        return trace
+
+    def save(self) -> bool:
+        if self.definition_id is None:
+            return False
+        if self.entity_type != self.saved_entity_type:
+            _r, ok = _run(self, "نوع سند", defs.set_entity_type, company_id(), user_id(), self.definition_id, self.entity_type)
+            if not ok:
+                return False
+            self.saved_entity_type = self.entity_type
+        _r, ok = _run(self, "ذخیره", defs.save_draft, company_id(), user_id(), self.definition_id, self.graph)
+        if ok:
+            self.dirty = False
+            self._update_status()
+        return ok
+
+    def publish(self) -> bool:
+        if not self.save():
+            return False
+        _r, ok = _run(self, "انتشار", defs.publish, company_id(), user_id(), self.definition_id)
+        if ok:
+            self._update_status()
+        return ok
+
+
+# =========================================================================================================
+# نسخه‌ها
+# =========================================================================================================
+class VersionsDialog(QDialog):
+    def __init__(self, definition_id: int, parent=None) -> None:
+        super().__init__(parent)
+        self.definition_id = definition_id
+        self.setWindowTitle("نسخه‌های فرایند")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(640, 420)
+        layout = QVBoxLayout(self)
+        self.t = table(["نسخه", "وضعیت", "تاریخ انتشار", "یادداشت"])
+        layout.addWidget(self.t, stretch=1)
+        self.diff = QListWidget()
+        self.diff.setMaximumHeight(120)
+        layout.addWidget(self.diff)
+        row = QHBoxLayout()
+        row.addWidget(_btn("مقایسه با نسخهٔ فعال", self.compare))
+        row.addWidget(_btn("بازگردانی به پیش‌نویس", self.restore))
+        row.addStretch(1)
+        layout.addLayout(row)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.reload()
+
+    def reload(self) -> None:
+        from peecha.ui.screens.workflow_center import _dt
+
+        self.rows = defs.list_versions(company_id(), self.definition_id)
+        status = {"DRAFT": "پیش‌نویس", "PUBLISHED": "منتشرشده (فعال)", "SUPERSEDED": "نسخهٔ قبلی"}
+        fill(self.t, [[r.version_no, status.get(r.status_code, r.status_code), _dt(r.published_at), r.notes or ""] for r in self.rows],
+             [r.version_id for r in self.rows])
+
+    def _selected(self):
+        items = self.t.selectedItems()
+        if not items:
+            _warn(self, "نسخه‌ها", "یک نسخه را انتخاب کنید.")
+            return None
+        vid = self.t.item(items[0].row(), 0).data(Qt.UserRole)
+        return next(r for r in self.rows if r.version_id == vid)
+
+    def compare(self) -> list[str]:
+        row = self._selected()
+        if row is None:
+            return []
+        d = defs.get_definition(company_id(), self.definition_id)
+        active = defs.get_graph(company_id(), self.definition_id, d.active_version_id) if d.active_version_id else {}
+        lines = builder.diff_graphs(active, row.graph or {})
+        self.diff.clear()
+        for line in lines:
+            self.diff.addItem(line)
+        return lines
+
+    def restore(self) -> bool:
+        row = self._selected()
+        if row is None:
+            return False
+        _r, ok = _run(self, "نسخه‌ها", defs.save_draft, company_id(), user_id(), self.definition_id, row.graph or {},
+                      f"بازگردانی نسخهٔ {row.version_no}")
+        if ok:
+            self.reload()
+        return ok
+
+
+# =========================================================================================================
+# فهرست فرایندها
+# =========================================================================================================
+@ms.styled
+class TemplateDialog(QDialog):
+    """فهرست قالب‌های آماده؛ نصب یعنی ساخت پیش‌نویس که پس از بازبینی منتشر می‌شود."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ساخت از قالب")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(820, 520)
+        self.created_id: int | None = None
+        layout = QVBoxLayout(self)
+        hint = QLabel("قالب را انتخاب کنید؛ یک پیش‌نویس ساخته می‌شود تا تاییدکننده‌ها و سقف‌ها را ببینید و بعد منتشر کنید.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        installed = wf_templates.installed_codes(company_id()) if company_id() else set()
+        labels = {a.entity_type: a.label for a in registry.adapters()}
+        self.codes = [t.code for t in wf_templates.TEMPLATES]
+        self.table = table(["گروه", "قالب", "نوع سند", "ساخته شده؟"])
+        fill(self.table, [[t.group, t.name, labels.get(t.entity_type, "عمومی"), "بله" if t.code in installed else ""]
+                          for t in wf_templates.TEMPLATES], self.codes)
+        self.table.itemSelectionChanged.connect(self._describe)
+        self.table.cellDoubleClicked.connect(lambda _r, _c: self.install())
+        layout.addWidget(self.table, stretch=1)
+        self.description = QLabel("")
+        self.description.setWordWrap(True)
+        layout.addWidget(self.description)
+        self.install_button = _btn("نصب قالب", self.install)
+        layout.addWidget(ms.footer([[self.install_button]]))
+
+    def select(self, code: str) -> bool:
+        if code not in self.codes:
+            return False
+        self.table.setCurrentCell(self.codes.index(code), 0)
+        return True
+
+    def _code(self) -> str | None:
+        items = self.table.selectedItems()
+        return self.table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
+
+    def _describe(self) -> None:
+        code = self._code()
+        self.description.setText(wf_templates.get(code).description if code else "")
+
+    def install(self) -> int | None:
+        code = self._code()
+        if code is None:
+            _warn(self, "ساخت از قالب", "یک قالب را انتخاب کنید.")
+            return None
+        did, ok = _run(self, "ساخت از قالب", wf_templates.install, company_id(), user_id(), code)
+        if ok:
+            self.created_id = did
+            self.accept()
+        return did if ok else None
+
+
+class AiDraftDialog(QDialog):
+    """توصیف فارسی ← پیش‌نمایش (برداشت‌ها، مراحل، شبیه‌سازی، ایرادها) ← ساخت پیش‌نویس. انتشار جداست."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ساخت با توصیف متنی")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(760, 620)
+        self.created_id: int | None = None
+        self.draft: wf_ai.Draft | None = None
+        layout = QVBoxLayout(self)
+        hint = QLabel("فرایند را ساده بنویسید؛ مثلاً: «اگر سفارش خرید بیشتر از ۵۰۰ میلیون بود، اول مدیر و بعد مالی تایید کند "
+                      "و بعد سفارش تصویب شود؛ تا تایید نشده قفل باشد.» پیش‌نویس فقط پس از تایید شما ساخته می‌شود و "
+                      f"انتشار جداگانه است. (سرویس: {wf_ai.get_provider().name})")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.text = QTextEdit()
+        self.text.setFixedHeight(110)
+        layout.addWidget(self.text)
+        self.preview = QTextEdit()
+        self.preview.setReadOnly(True)
+        layout.addWidget(self.preview, stretch=1)
+        self.name = QLineEdit()
+        self.name.setPlaceholderText("نام فرایند (اختیاری)")
+        layout.addWidget(self.name)
+        self.preview_button = _btn("پیش‌نمایش پیشنهاد", self.make_preview)
+        self.create_button = _btn("ساخت پیش‌نویس", self.create)
+        self.create_button.setEnabled(False)
+        layout.addWidget(ms.footer([[self.preview_button, self.create_button]]))
+
+    def make_preview(self) -> bool:
+        d, ok = _run(self, "ساخت با توصیف متنی", wf_ai.draft, company_id(), self.text.toPlainText())
+        self.draft = d if ok else None
+        self.create_button.setEnabled(bool(ok and d.ok))
+        if not ok:
+            self.preview.clear()
+            return False
+        parts = ["<b>برداشت از متن شما</b><ul>" + "".join(f"<li>{x}</li>" for x in d.spec.assumptions) + "</ul>",
+                 "<b>مراحل فرایند</b><ul>" + "".join(f"<li>{x}</li>" for x in d.summary) + "</ul>",
+                 "<b>شبیه‌سازی با یک سند نمونه</b><ul>" + "".join(f"<li>{x}</li>" for x in d.simulation) + "</ul>"]
+        if d.risky:
+            parts.append("<b style='color:#B45309'>توجه</b><ul>" + "".join(f"<li>{x}</li>" for x in d.risky) + "</ul>")
+        if d.problems:
+            parts.append("<b style='color:#DC2626'>ایرادها</b><ul>" + "".join(f"<li>{x}</li>" for x in d.problems) + "</ul>")
+        self.preview.setHtml("".join(parts))
+        if not self.name.text().strip():
+            self.name.setText(d.spec.name)
+        return True
+
+    def create(self) -> int | None:
+        if self.draft is None:
+            return None
+        did, ok = _run(self, "ساخت پیش‌نویس", wf_ai.create_from_draft, company_id(), user_id(), self.draft,
+                       name=self.name.text().strip() or None)
+        if ok:
+            self.created_id = did
+            self.accept()
+        return did if ok else None
+
+
+@ms.styled
+class FlowDialog(QDialog):
+    """R333: روند کلی: چند فرایند و کار خودکار، پشت‌سرهم یا هم‌زمان؛ هر مرحله پس از پایان مرحلهٔ قبل شروع می‌شود."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ساخت روند کلی")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(900, 700)
+        self.dialog_runner = None
+        self.created_id: int | None = None
+        self.steps: list[builder.FlowStep] = []
+        layout = QVBoxLayout(self)
+        hint = QLabel("چند فرایند و کار خودکار را در یک روند بچینید. هر مرحله پس از پایان مرحلهٔ قبل شروع می‌شود؛ مرحله‌ای "
+                      "که «هم‌زمان با قبلی» باشد همراه قبلی اجرا می‌شود و روند تا پایان همه منتظر می‌ماند. اگر یکی از "
+                      "فرایندها رد شود، روند همان‌جا با «رد شد» تمام می‌شود.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        self.name = QLineEdit()
+        self.code = QLineEdit()
+        self.code.setPlaceholderText("کد کوتاه لاتین، مثلاً PURCHASE_FLOW")
+        self.entity = combo([(a.label, a.entity_type) for a in registry.adapters()], "بدون سند (فرایند عمومی)")
+        self.entity.currentIndexChanged.connect(lambda _i: self._on_entity())
+        self.ttype = combo([(builder.TRIGGER_LABELS[c], c) for c in ("MANUAL", "EVENT")])
+        self.ttype.currentIndexChanged.connect(lambda _i: self._sync())
+        self.events = QListWidget()
+        self.events.setMinimumHeight(90)
+        self.events.setMaximumHeight(130)
+        self.events.itemChanged.connect(lambda _i: self.refresh_review())
+        self.no_events = QLabel("")
+        self.no_events.setObjectName("sectionHint")
+        self.no_events.setWordWrap(True)
+        for label, x in (("نام روند", self.name), ("کد", self.code), ("نوع سند", self.entity), ("شروع", self.ttype),
+                         ("رویدادها", self.events), ("", self.no_events)):
+            form.addRow(label, x)
+        self.form = form
+        layout.addLayout(form)
+        self.t_steps = table(["مرحله", "نوع", "اجرا روی", "ترتیب"])
+        self.t_steps.setMinimumHeight(140)
+        layout.addWidget(self.t_steps, stretch=1)
+        row = QHBoxLayout()
+        for label, slot in (("افزودن فرایند", self.ask_process), ("افزودن کار خودکار", self.ask_action),
+                            ("هم‌زمان با قبلی", self.toggle_together), ("حذف مرحله", self.remove_step),
+                            ("بالا بردن", lambda: self.move_step(-1)), ("پایین بردن", lambda: self.move_step(1))):
+            row.addWidget(_btn(label, slot))
+        row.addStretch(1)
+        layout.addLayout(row)
+        title = QLabel("روند به زبان ساده")
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
+        self.summary = QListWidget()
+        self.summary.setMinimumHeight(110)
+        layout.addWidget(self.summary, stretch=1)
+        self.issues = QListWidget()
+        self.issues.setMaximumHeight(100)
+        layout.addWidget(self.issues)
+        nav = QHBoxLayout()
+        self.publish_now = QCheckBox("پس از ساخت، منتشر و فعال شود")
+        self.finish_btn = _btn("ساخت فرایند", self.finish)
+        nav.addStretch(1)
+        nav.addWidget(self.publish_now)
+        nav.addWidget(self.finish_btn)
+        layout.addLayout(nav)
+        self._on_entity()
+
+    # --- شروع ---------------------------------------------------------------------------------------------
+    def _on_entity(self) -> None:
+        self.events.blockSignals(True)
+        self.events.clear()
+        for code, label in registry.event_choices(self.entity.currentData()):
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, code)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
+            self.events.addItem(item)
+        self.events.blockSignals(False)
+        self._sync()
+
+    def _sync(self) -> None:
+        on_event, has = self.ttype.currentData() == "EVENT", self.events.count() > 0
+        self.form.setRowVisible(self.events, on_event and has)
+        self.form.setRowVisible(self.no_events, on_event and not has)
+        self.no_events.setText("برای شروع با رویداد، اول «نوع سند» را انتخاب کنید." if not self.entity.currentData()
+                               else "برای این نوع سند رویدادی تعریف نشده است؛ شروع «دستی» را انتخاب کنید.")
+        self.refresh_review()
+
+    def trigger(self) -> dict:
+        if self.ttype.currentData() != "EVENT":
+            return {"type": "MANUAL"}
+        return {"type": "EVENT", "events": WizardDialog._checked(self.events)}
+
+    # --- مرحله‌ها -------------------------------------------------------------------------------------------
+    def _actions(self) -> list[tuple[str, str]]:
+        et = self.entity.currentData()
+        out = []
+        for code, label, _risk in registry.action_choices(et):
+            spec = registry.find_action(et, code)
+            if code == "entity.reject" or (spec is not None and spec.check is not None and spec.check(company_id(), et, {})):
+                continue
+            out.append((code, label))
+        return out
+
+    def _row(self) -> int:
+        items = self.t_steps.selectedItems()
+        return items[0].row() if items else self.t_steps.currentRow()
+
+    def ask_process(self) -> bool:
+        rows = defs.list_definitions(company_id(), include_archived=False)
+        if not rows:
+            _warn(self, "افزودن فرایند", "هنوز فرایندی تعریف نشده است؛ اول فرایندهای تایید را بسازید.")
+            return False
+        kinds = {a.entity_type: a.label for a in registry.adapters()}
+        values = _ask(self, "افزودن فرایند", [
+            ("definition", "فرایند", combo([(f"{d.name} ({kinds.get(d.entity_type, 'عمومی')})", d.definition_id) for d in rows])),
+            ("target", "اجرا روی", combo([(label, code) for code, label in builder.TARGET_LABELS.items()])),
+            ("together", "", QCheckBox("هم‌زمان با مرحلهٔ قبل"))])
+        if values is None:
+            return False
+        return self.add_process(values["definition"], values["target"], values["together"])
+
+    def add_process(self, definition_id: int, target: str = "SAME", together: bool = False) -> bool:
+        d = defs.get_definition(company_id(), int(definition_id))
+        self.steps.append(builder.FlowStep("PROCESS", d.definition_id, d.name, bool(together), target or "SAME"))
+        self._fill()
+        return True
+
+    def ask_action(self) -> bool:
+        choices = self._actions()
+        if not choices:
+            _warn(self, "افزودن کار خودکار", "برای این نوع سند کار خودکاری تعریف نشده است.")
+            return False
+        values = _ask(self, "افزودن کار خودکار", [("action", "کار", combo([(label, code) for code, label in choices])),
+                                                   ("together", "", QCheckBox("هم‌زمان با مرحلهٔ قبل"))])
+        if values is None:
+            return False
+        return self.add_action(values["action"], values["together"])
+
+    def add_action(self, code: str, together: bool = False) -> bool:
+        spec = registry.find_action(self.entity.currentData(), code)
+        if spec is None:
+            _warn(self, "افزودن کار خودکار", "این کار برای این نوع سند تعریف نشده است.")
+            return False
+        self.steps.append(builder.FlowStep("ACTION", code, spec.label, bool(together)))
+        self._fill()
+        return True
+
+    def toggle_together(self) -> bool:
+        row = self._row()
+        if row <= 0 or row >= len(self.steps):
+            _warn(self, "هم‌زمان با قبلی", "مرحلهٔ دوم به بعد را انتخاب کنید؛ مرحلهٔ اول با مرحلهٔ دیگری هم‌زمان نمی‌شود.")
+            return False
+        self.steps[row] = dataclasses.replace(self.steps[row], together=not self.steps[row].together)
+        self._fill()
+        self.t_steps.setCurrentCell(row, 0)
+        return True
+
+    def remove_step(self) -> None:
+        row = self._row()
+        if 0 <= row < len(self.steps):
+            self.steps.pop(row)
+            self._fill()
+
+    def move_step(self, delta: int) -> None:
+        row, target = self._row(), self._row() + delta
+        if 0 <= row < len(self.steps) and 0 <= target < len(self.steps):
+            self.steps[row], self.steps[target] = self.steps[target], self.steps[row]
+            self._fill()
+            self.t_steps.setCurrentCell(target, 0)
+
+    def _fill(self) -> None:
+        if self.steps and self.steps[0].together:
+            self.steps[0] = dataclasses.replace(self.steps[0], together=False)
+        fill(self.t_steps, [[st.label, "فرایند" if st.kind == "PROCESS" else "کار خودکار",
+                             builder.TARGET_LABELS.get(st.target, "") if st.kind == "PROCESS" else builder.TARGET_LABELS["SAME"],
+                             "هم‌زمان با قبلی" if st.together else "پس از پایان قبلی"] for st in self.steps])
+        self.refresh_review()
+
+    # --- بازبینی و ساخت -------------------------------------------------------------------------------------
+    def graph(self) -> dict | None:
+        try:
+            return builder.build_flow(self.entity.currentData(), self.trigger(), self.steps)
+        except ValueError:
+            return None
+
+    def refresh_review(self) -> list:
+        self.summary.clear()
+        self.issues.clear()
+        graph = self.graph()
+        if graph is None:
+            self.issues.addItem("مرحله‌ها را با «افزودن فرایند» یا «افزودن کار خودکار» اضافه کنید.")
+            return []
+        for line in builder.plan_lines(graph, self.entity.currentData(), company_id()):
+            self.summary.addItem(P(line))
+        found = defs.validate_graph(company_id(), graph, self.entity.currentData())
+        for issue in found:
+            self.issues.addItem(("⛔ " if issue.level == "error" else "⚠ ") + issue.message)
+        if not found:
+            self.issues.addItem("✔ ایرادی پیدا نشد.")
+        return found
+
+    def problem(self) -> str | None:
+        if not self.name.text().strip() or not self.code.text().strip():
+            return "نام و کد روند را وارد کنید."
+        if not self.steps:
+            return "دست‌کم یک مرحله اضافه کنید."
+        if self.ttype.currentData() == "EVENT" and not self.trigger()["events"]:
+            return "دست‌کم یک رویداد را انتخاب کنید."
+        errors = defs.errors(self.refresh_review())
+        return errors[0].message if errors else None
+
+    def finish(self) -> int | None:
+        problem = self.problem()
+        if problem:
+            _warn(self, "ساخت روند کلی", problem)
+            return None
+        did, ok = _run(self, "ساخت روند کلی", defs.create_definition, company_id(), user_id(), code=self.code.text().strip(),
+                       name=self.name.text().strip(), entity_type=self.entity.currentData(), graph=self.graph())
+        if not ok:
+            return None
+        if self.publish_now.isChecked():
+            _r, published = _run(self, "انتشار", defs.publish, company_id(), user_id(), did)
+            if published:
+                _run(self, "فعال‌سازی", defs.set_status, company_id(), user_id(), did, "ACTIVE")
+        self.created_id = did
+        self.accept()
+        return did
+
+
+class ProcessListScreen(QWidget):
+    scroll_in_mdi = True
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        self.rows: list[defs.DefinitionRow] = []
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        title = QLabel("فرایندها و طراحی")
+        title.setObjectName("pageTitle")
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("جستجو در نام فرایند…")
+        self.search.textChanged.connect(lambda _t: self._fill())
+        self.status_filter = QComboBox()
+        self.status_filter.addItem("همهٔ وضعیت‌ها", None)
+        for code, label in DEFINITION_STATUS.items():
+            self.status_filter.addItem(label, code)
+        self.status_filter.currentIndexChanged.connect(lambda _i: self._fill())
+        outer.addWidget(ms.header_card(title, self.search, self.status_filter))
+        cards, self.cards = ms.summary([("all", "همهٔ فرایندها", "info", "🔀"), ("active", "فعال", "success", "▶️"),
+                                        ("draft", "در دست طراحی", "warning", "✏️"), ("running", "اجراهای باز", "neutral", "⏳")])
+        outer.addWidget(cards)
+        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس جدید", "اجراهای باز", "ایراد",
+                            "پس از آن (خودکار)"])
+        self.table.cellDoubleClicked.connect(lambda _r, _c: self.open_designer())
+        outer.addWidget(self.table, stretch=1)
+        self.buttons = {k: QPushButton(t) for k, t in (
+            ("wizard", "ساخت با ویزارد"), ("blank", "فرایند خالی"), ("design", "ویرایش در طراح"), ("test", "آزمون و اجرای آزمایشی"),
+            ("publish", "انتشار"), ("activate", "فعال‌سازی"), ("pause", "توقف"), ("archive", "بایگانی"),
+            ("unarchive", "بازگردانی از بایگانی"), ("copy", "کپی فرایند"), ("versions", "نسخه‌ها"), ("delete", "حذف فرایند"),
+            ("refresh", "به‌روزرسانی"), ("template", "ساخت از قالب"), ("legacy", "انتقال از کارتابل قبلی"),
+            ("ai", "ساخت با توصیف متنی"), ("flow", "ساخت روند کلی"))}
+        B = self.buttons
+        B["template"].clicked.connect(lambda: self.new_from_template())
+        B["legacy"].clicked.connect(lambda: self.import_legacy())
+        B["ai"].clicked.connect(lambda: self.new_from_text())
+        B["wizard"].clicked.connect(lambda: self.new_with_wizard())
+        B["flow"].clicked.connect(lambda: self.new_flow())
+        B["blank"].clicked.connect(lambda: self.new_blank())
+        B["design"].clicked.connect(lambda: self.open_designer())
+        B["test"].clicked.connect(lambda: self.test())
+        B["publish"].clicked.connect(lambda: self.lifecycle("PUBLISHED"))
+        B["activate"].clicked.connect(lambda: self.lifecycle("ACTIVE"))
+        B["pause"].clicked.connect(lambda: self.lifecycle("PAUSED"))
+        B["archive"].clicked.connect(lambda: self.lifecycle("ARCHIVED"))
+        B["unarchive"].clicked.connect(lambda: self.lifecycle("DRAFT"))
+        B["copy"].clicked.connect(lambda: self.duplicate())
+        B["versions"].clicked.connect(lambda: self.versions())
+        B["delete"].clicked.connect(lambda: self.delete())
+        B["refresh"].clicked.connect(lambda: self.reload())
+        outer.addWidget(ms.footer([[B["template"], B["wizard"], B["flow"], B["ai"], B["blank"], B["legacy"], B["design"], B["test"]],
+                                   [B["publish"], B["activate"], B["pause"], B["archive"], B["unarchive"]],
+                                   [B["copy"], B["versions"], B["delete"], B["refresh"]]]))
+
+    def refresh(self) -> None:
+        self.reload()
+
+    def reload(self) -> None:
+        if company_id() is None:
+            return
+        self.rows = defs.list_definitions(company_id())
+        try:
+            self.definition_problems = defs.problems(company_id())
+            self.definition_chains = defs.chains(company_id())  # R332: کدام فرایندها پس از این یکی خودکار شروع می‌شوند
+        except Exception:  # noqa: BLE001 -- بررسی کمکی نباید فهرست را خالی کند
+            self.definition_problems, self.definition_chains = {}, {}
+        self.cards["all"].setText(P(len(self.rows)))
+        self.cards["active"].setText(P(sum(1 for r in self.rows if r.status_code in ("ACTIVE", "PUBLISHED"))))
+        self.cards["draft"].setText(P(sum(1 for r in self.rows if r.status_code in ("DRAFT", "TESTING"))))
+        self.cards["running"].setText(P(sum(r.running for r in self.rows)))
+        self._fill()
+
+    def _fill(self) -> None:
+        text, status = self.search.text().strip(), self.status_filter.currentData()
+        shown = [r for r in self.rows if (not status or r.status_code == status) and (not text or text in r.name or text in r.code)]
+        labels = {a.entity_type: a.label for a in registry.adapters()}
+        problems = getattr(self, "definition_problems", {})
+        chained = getattr(self, "definition_chains", {})
+        fill(self.table, [[r.name, r.code, labels.get(r.entity_type, "عمومی") if r.entity_type else "عمومی",
+                           builder.TRIGGER_LABELS.get(r.trigger_type or "MANUAL", ""), r.status_label,
+                           r.active_version_no or "—", "دارد" if r.has_draft and r.active_version_no else "",
+                           r.running, "نیاز به اصلاح" if r.definition_id in problems else "",
+                           "، ".join(f"← {n}" for n in chained.get(r.definition_id, []))]
+                          for r in shown], [r.definition_id for r in shown])
+        # R329: فرایند منتشرشده‌ای که با قواعد امروز سند را گیر می‌انداخت؛ علت در راهنمای همان خانه
+        for i, r in enumerate(shown):
+            if r.definition_id in problems:
+                cell = self.table.item(i, 8)
+                cell.setToolTip("\n".join(problems[r.definition_id]))
+                cell.setForeground(QColor("#B91C1C"))
+
+    def _selected(self) -> int | None:
+        items = self.table.selectedItems()
+        if not items:
+            _warn(self, "فرایندها", "یک فرایند را انتخاب کنید.")
+            return None
+        return self.table.item(items[0].row(), 0).data(Qt.UserRole)
+
+    def select_definition(self, definition_id: int) -> bool:
+        for r in range(self.table.rowCount()):
+            if self.table.item(r, 0).data(Qt.UserRole) == definition_id:
+                self.table.setCurrentCell(r, 0)
+                return True
+        return False
+
+    def new_with_wizard(self) -> int | None:
+        dlg = WizardDialog(self)
+        if self.dialog_runner is not None:
+            self.dialog_runner(dlg)
+        else:
+            dlg.exec()
+        self.reload()
+        return dlg.created_id
+
+    def new_flow(self) -> int | None:
+        dlg = FlowDialog(self)
+        if self.dialog_runner is not None:
+            self.dialog_runner(dlg)
+        else:
+            dlg.exec()
+        self.reload()
+        if dlg.created_id:
+            self.select_definition(dlg.created_id)
+        return dlg.created_id
+
+    def new_from_template(self, code: str | None = None) -> int | None:
+        dlg = TemplateDialog(self)
+        if code is not None:
+            dlg.select(code)
+            did = dlg.install()
+        else:
+            if self.dialog_runner is not None:
+                self.dialog_runner(dlg)
+            else:
+                dlg.exec()
+            did = dlg.created_id
+        self.reload()
+        if did:
+            self.select_definition(did)
+        return did
+
+    def new_from_text(self, text: str | None = None) -> int | None:
+        dlg = AiDraftDialog(self)
+        if text is not None:
+            dlg.text.setPlainText(text)
+            if not dlg.make_preview():
+                return None
+            did = dlg.create()
+        else:
+            if self.dialog_runner is not None:
+                self.dialog_runner(dlg)
+            else:
+                dlg.exec()
+            did = dlg.created_id
+        self.reload()
+        if did:
+            self.select_definition(did)
+        return did
+
+    def import_legacy(self, form_code: str | None = None) -> int | None:
+        if form_code is None:
+            flows = wf_templates.legacy_workflows(company_id())
+            if not flows:
+                _warn(self, "انتقال از کارتابل قبلی", "گردش کار کارتابلی برای انتقال پیدا نشد.")
+                return None
+            values = _ask(self, "انتقال از کارتابل قبلی", [("form", "گردش کار", combo(
+                [(f"{label} — {P(steps)} مرحله" + ("" if active else " (غیرفعال)"), form) for form, label, steps, active in flows]))],
+                "مراحل همان کارتابل به یک پیش‌نویس فرایند تبدیل می‌شود؛ کارتابل قبلی تا انتشار فرایند جدید مثل قبل کار می‌کند.")
+            if values is None:
+                return None
+            form_code = values["form"]
+        did, ok = _run(self, "انتقال از کارتابل قبلی", wf_templates.import_legacy, company_id(), user_id(), form_code)
+        if ok:
+            self.reload()
+            self.select_definition(did)
+        return did if ok else None
+
+    def new_blank(self, values: dict | None = None) -> int | None:
+        if values is None:
+            values = _ask(self, "فرایند خالی", [("name", "نام", QLineEdit()), ("code", "کد لاتین", QLineEdit()),
+                                                ("entity_type", "نوع سند", combo([(a.label, a.entity_type) for a in registry.adapters()],
+                                                                                 "بدون سند (فرایند عمومی)"))])
+            if values is None:
+                return None
+        did, ok = _run(self, "فرایند جدید", defs.create_definition, company_id(), user_id(), code=values.get("code") or "",
+                       name=values.get("name") or "", entity_type=values.get("entity_type"))
+        if ok:
+            self.reload()
+            self.select_definition(did)
+            self.open_designer()
+        return did
+
+    def open_designer(self) -> DesignerScreen | None:
+        did = self._selected()
+        if did is None:
+            return None
+        if self._main_window is not None:
+            self._main_window.open_screen("WF_DESIGNER", then=lambda s: s.load(did))
+            return None
+        screen = DesignerScreen()
+        screen.load(did)
+        return screen
+
+    def lifecycle(self, status: str) -> bool:
+        did = self._selected()
+        if did is None:
+            return False
+        _r, ok = _run(self, "وضعیت فرایند", defs.set_status, company_id(), user_id(), did, status)
+        if ok:
+            self.reload()
+            self.select_definition(did)
+        return ok
+
+    def test(self) -> SimulateDialog | None:
+        did = self._selected()
+        if did is None:
+            return None
+        d = defs.get_definition(company_id(), did)
+        if d.status_code == "DRAFT":
+            _r, ok = _run(self, "آزمون", defs.set_status, company_id(), user_id(), did, "TESTING")
+            if not ok:
+                return None
+        dlg = SimulateDialog(defs.get_graph(company_id(), did), d.entity_type, self)
+        if self.dialog_runner is None:
+            dlg.exec()
+        self.reload()
+        return dlg
+
+    def duplicate(self, code: str | None = None, name: str | None = None) -> int | None:
+        did = self._selected()
+        if did is None:
+            return None
+        src = defs.get_definition(company_id(), did)
+        if code is None:
+            values = _ask(self, "کپی فرایند", [("code", "کد جدید", QLineEdit(f"{src.code}_2")),
+                                               ("name", "نام جدید", QLineEdit(f"{src.name} (کپی)"))])
+            if values is None:
+                return None
+            code, name = values.get("code") or "", values.get("name") or ""
+        new_id, ok = _run(self, "کپی فرایند", defs.duplicate, company_id(), user_id(), did, code, name)
+        if ok:
+            self.reload()
+        return new_id
+
+    def versions(self) -> VersionsDialog | None:
+        did = self._selected()
+        if did is None:
+            return None
+        dlg = VersionsDialog(did, self)
+        if self.dialog_runner is None:
+            dlg.exec()
+        return dlg
+
+    def delete(self) -> bool:
+        did = self._selected()
+        if did is None:
+            return False
+        confirm = getattr(self, "confirm", None)
+        question = "فرایند انتخاب‌شده حذف شود؟ (فرایندی که سابقهٔ اجرا دارد فقط بایگانی می‌شود)"
+        if confirm is not None:
+            if not confirm(question):
+                return False
+        else:
+            from PySide6.QtWidgets import QMessageBox
+
+            if QMessageBox.question(self, "حذف فرایند", question) != QMessageBox.Yes:
+                return False
+        _r, ok = _run(self, "حذف فرایند", defs.delete_definition, company_id(), user_id(), did)
+        if ok:
+            self.reload()
+        return ok

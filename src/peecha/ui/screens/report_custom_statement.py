@@ -1,6 +1,6 @@
-"""اجرایِ یک الگویِ گزارشِ سفارشی (طراحِ گزارش، فازِ ۲) — الگوها در
-«طراحیِ الگویِ گزارش» (statement_template_designer.py) ساخته می‌شوند؛
-این صفحه فقط یک الگو را انتخاب و برایِ بازه‌یِ تاریخِ دلخواه اجرا می‌کند."""
+"""اجرای یک الگوی گزارش سفارشی (طراح گزارش، فاز ۲) — الگوها در
+«طراحی الگوی گزارش» (statement_template_designer.py) ساخته می‌شوند؛
+این صفحه فقط یک الگو را انتخاب و برای بازهٔ تاریخ دلخواه اجرا می‌کند."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from peecha.ui.screens.reports_common import ReportScreenBase
 
 class CustomStatementScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("گزارشِ سفارشی (طبقِ الگو)")
+        super().__init__("گزارش سفارشی (طبق الگو)")
 
         self.extra_filter_row.addWidget(QLabel("الگو:"))
         self.template_combo = QComboBox()
@@ -27,7 +27,7 @@ class CustomStatementScreen(ReportScreenBase):
         self.add_field_help([
             (
                 self.template_combo,
-                "الگویِ گزارشی که می‌خواهید اجرا کنید. الگوها در «طراحیِ الگویِ گزارش» ساخته می‌شوند؛ این صفحه فقط آن‌ها را برایِ بازه‌یِ تاریخِ دلخواه اجرا می‌کند.",
+                "الگوی گزارشی که می‌خواهید اجرا کنید. الگوها در «طراحی الگوی گزارش» ساخته می‌شوند؛ این صفحه فقط آن‌ها را برای بازهٔ تاریخ دلخواه اجرا می‌کند.",
             ),
         ])
 

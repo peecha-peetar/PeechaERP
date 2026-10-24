@@ -1,11 +1,11 @@
 """سرویس مدیریت سال‌های مالی (acc.fiscal_years/acc.fiscal_periods).
 
-با ثبتِ سند حسابداری، سالِ مالیِ لازم به‌صورت خودکار ساخته می‌شود
-(journal_entries._get_or_create_fiscal_year) — این سرویس همان منطقِ محاسبه‌ی
-بازه (journal_entries.fiscal_year_bounds) را برای تعریفِ صریح/از‌پیش سال
-مالی به‌کار می‌برد تا کدها/تاریخ‌ها هیچ‌وقت با هم ناسازگار نشوند، و برخلافِ
-مسیرِ خودکار، ۱۲ دوره‌ی ماهانه هم می‌سازد (چون آنجا فقط خودِ سند لازم است،
-نه گزارش‌گیریِ دوره‌ای)."""
+با ثبت سند حسابداری، سال مالی لازم به‌صورت خودکار ساخته می‌شود
+(journal_entries._get_or_create_fiscal_year) — این سرویس همان منطق محاسبه‌ی
+بازه (journal_entries.fiscal_year_bounds) را برای تعریف صریح/از‌پیش سال
+مالی به‌کار می‌برد تا کدها/تاریخ‌ها هیچ‌وقت با هم ناسازگار نشوند، و برخلاف
+مسیر خودکار، ۱۲ دورهٔ ماهانه هم می‌سازد (چون آنجا فقط خود سند لازم است،
+نه گزارش‌گیری دوره‌ای)."""
 
 from __future__ import annotations
 
@@ -60,9 +60,9 @@ def list_fiscal_years(company_id: int) -> list[FiscalYearRow]:
 
 
 def pick_current(company_id: int, on_date: datetime.date) -> FiscalYearRow | None:
-    """سالِ مالیِ دربرگیرنده‌ی on_date را برمی‌گرداند (برای پیش‌فرضِ سوییچرِ
-    «سالِ مالیِ فعال» در هدر)؛ اگر چنین سالی تعریف نشده بود، جدیدترین سالِ
-    مالیِ موجود (طبق end_date) را برمی‌گرداند، وگرنه None (هنوز هیچ سالِ
+    """سال مالی دربرگیرنده‌ی on_date را برمی‌گرداند (برای پیش‌فرض سوییچر
+    «سال مالی فعال» در هدر)؛ اگر چنین سالی تعریف نشده بود، جدیدترین سال
+    مالی موجود (طبق end_date) را برمی‌گرداند، وگرنه None (هنوز هیچ سال
     مالی‌ای برای این شرکت تعریف نشده)."""
     years = list_fiscal_years(company_id)
     if not years:
@@ -74,13 +74,13 @@ def pick_current(company_id: int, on_date: datetime.date) -> FiscalYearRow | Non
 
 
 def _days_in_jalali_month(year: int, month: int) -> int:
-    """تعدادِ روزهایِ واقعیِ یک ماهِ جلالی در یک سالِ *مشخص* — برخلافِ
-    _DAYS_IN_MONTH (که آرایه‌ی ثابتِ jdatetime.j_days_in_month است و
-    اسفند را همیشه ۲۹روزه فرض می‌کند)، این تابع سالِ کبیسه را واقعاً
-    می‌بیند: اسفندِ سالِ کبیسه ۳۰ روز دارد. باگِ پیداشده در حسابرسی: قبلاً
-    _clamp_day مستقیم از رویِ آرایه‌ی ثابت می‌خواند، پس در هر سالِ مالیِ
+    """تعداد روزهای واقعی یک ماه جلالی در یک سال *مشخص* — برخلاف
+    _DAYS_IN_MONTH (که آرایهٔ ثابت jdatetime.j_days_in_month است و
+    اسفند را همیشه ۲۹روزه فرض می‌کند)، این تابع سال کبیسه را واقعاً
+    می‌بیند: اسفند سال کبیسه ۳۰ روز دارد. باگ پیداشده در حسابرسی: قبلاً
+    _clamp_day مستقیم از روی آرایهٔ ثابت می‌خواند، پس در هر سال مالی
     کبیسه که fiscal_year_start_day به ۳۰ برسد (یا از آن بزرگ‌تر بود)،
-    آخرین روزِ سالِ مالی/دوره‌یِ اسفند یک روز زودتر از حدِ واقعی بریده
+    آخرین روز سال مالی/دورهٔ اسفند یک روز زودتر از حد واقعی بریده
     می‌شد."""
     if month != 12:
         return _DAYS_IN_MONTH[month - 1]
@@ -111,13 +111,13 @@ def _generate_periods(start_month: int, start_day: int, code: str) -> list[tuple
 def create_fiscal_year_for_date(
     company_id: int, start_month: int, start_day: int, on_date: datetime.date
 ) -> FiscalYear:
-    """سالِ مالیِ دربرگیرنده‌ی on_date را می‌سازد (طبقِ الگوی شروعِ سالِ مالیِ
-    شرکت) — برای صفحه‌ی «افزودن سال مالی» که کاربر فقط یک تاریخِ دلخواه در
+    """سال مالی دربرگیرنده‌ی on_date را می‌سازد (طبق الگوی شروع سال مالی
+    شرکت) — برای صفحهٔ «افزودن سال مالی» که کاربر فقط یک تاریخ دلخواه در
     آن سال را وارد می‌کند، نه مستقیم کد/تاریخ شروع/پایان را."""
     code, start, end = fiscal_year_bounds(start_month, start_day, on_date)
     with new_session() as session:
         if session.scalar(select(FiscalYear).where(FiscalYear.company_id == company_id, FiscalYear.code == code)):
-            raise ValueError(f"سالِ مالیِ «{code}» قبلاً برای این شرکت تعریف شده است.")
+            raise ValueError(f"سال مالی «{code}» قبلاً برای این شرکت تعریف شده است.")
 
         fiscal_year = FiscalYear(company_id=company_id, code=code, start_date=start, end_date=end, is_closed=False)
         session.add(fiscal_year)
@@ -158,8 +158,8 @@ class FiscalPeriodRow:
 
 
 def list_periods(fiscal_year_id: int, company_id: int) -> list[FiscalPeriodRow]:
-    """طبقِ حسابرسیِ صریح: قبلاً هیچ راهی برایِ دیدن/بستنِ تک‌تکِ دوره‌هایِ
-    ماهانه‌یِ یک سالِ مالی نبود — این جدول در دیتابیس ساخته می‌شد ولی کاملاً
+    """طبق حسابرسی صریح: قبلاً هیچ راهی برای دیدن/بستن تک‌تک دوره‌های
+    ماهانهٔ یک سال مالی نبود — این جدول در دیتابیس ساخته می‌شد ولی کاملاً
     بلااستفاده می‌ماند."""
     with new_session() as session:
         fiscal_year = session.get(FiscalYear, fiscal_year_id)
@@ -186,9 +186,9 @@ def set_period_closed(fiscal_period_id: int, company_id: int, is_closed: bool) -
     with new_session() as session:
         period = session.get(FiscalPeriod, fiscal_period_id)
         if period is None:
-            raise ValueError("دوره‌ی مالی نامعتبر است.")
+            raise ValueError("دورهٔ مالی نامعتبر است.")
         fiscal_year = session.get(FiscalYear, period.fiscal_year_id)
         if fiscal_year is None or fiscal_year.company_id != company_id:
-            raise ValueError("دوره‌ی مالی نامعتبر است.")
+            raise ValueError("دورهٔ مالی نامعتبر است.")
         period.is_closed = is_closed
         session.commit()

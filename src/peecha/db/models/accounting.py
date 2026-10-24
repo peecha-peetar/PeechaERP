@@ -86,9 +86,9 @@ class AccountType(Base):
 
 
 class CashFlowSection(Base):
-    """طبقه‌بندیِ حساب از نقطه‌نظرِ صورتِ گردشِ وجوهِ نقد — عملیاتی/
-    سرمایه‌گذاری/تامینِ مالی؛ برخلافِ نوع/دسته/ماهیت، اختیاری است (فقط
-    حساب‌هایِ ترازنامه‌ایِ غیرِنقدی به آن نیاز دارند)."""
+    """طبقه‌بندی حساب از نقطه‌نظر صورت گردش وجوه نقد — عملیاتی/
+    سرمایه‌گذاری/تامین مالی؛ برخلاف نوع/دسته/ماهیت، اختیاری است (فقط
+    حساب‌های ترازنامه‌ای غیرنقدی به آن نیاز دارند)."""
 
     __tablename__ = "cash_flow_sections"
     __table_args__ = {"schema": "acc"}
@@ -100,9 +100,9 @@ class CashFlowSection(Base):
 
 
 class LiquidityClass(Base):
-    """طبقه‌بندیِ حساب از نقطه‌نظرِ نقدینگی — جاری/غیرِجاری/موجودی؛
-    اختیاری، فقط برایِ حساب‌هایِ دارایی/بدهی که در نسبتِ جاری/آنی
-    (گزارشِ نسبت‌هایِ مالی) باید دیده شوند."""
+    """طبقه‌بندی حساب از نقطه‌نظر نقدینگی — جاری/غیرجاری/موجودی؛
+    اختیاری، فقط برای حساب‌های دارایی/بدهی که در نسبت جاری/آنی
+    (گزارش نسبت‌های مالی) باید دیده شوند."""
 
     __tablename__ = "liquidity_classes"
     __table_args__ = {"schema": "acc"}
@@ -112,10 +112,10 @@ class LiquidityClass(Base):
 
 
 class BalanceSheetSide(Base):
-    """طبقِ درخواستِ صریح («ترازنامه دو ستونِ چپ/راست داشته باشد و در
-    تنظیمات مشخص کنیم کدام گروه در کدام سمت باشد») — سمتِ نمایشِ گروهِ
-    حساب در ترازنامه؛ اختیاری، NULL یعنی سمت از رویِ category_code
-    خودکار تعیین می‌شود (دارایی=راست، بدهی/حقوقِ‌صاحبانِ‌سهام=چپ)."""
+    """طبق درخواست صریح («ترازنامه دو ستون چپ/راست داشته باشد و در
+    تنظیمات مشخص کنیم کدام گروه در کدام سمت باشد») — سمت نمایش گروه
+    حساب در ترازنامه؛ اختیاری، NULL یعنی سمت از روی category_code
+    خودکار تعیین می‌شود (دارایی=راست، بدهی/حقوق‌صاحبان‌سهام=چپ)."""
 
     __tablename__ = "balance_sheet_sides"
     __table_args__ = {"schema": "acc"}
@@ -164,9 +164,9 @@ class CompanyAccountingSettings(Base):
 
 
 class ChartOfAccountLevelConfig(Base):
-    """تنظیماتِ رقم/بازه‌یِ هر سطحِ کدینگِ حساب‌ها — اختیاری؛ سطحی که ردیفی
-    این‌جا نداشته باشد بدونِ محدودیت می‌ماند. بعدِ اولینِ سندِ شرکت، سرویس
-    اجازه‌ی تغییرِ این تنظیمات را نمی‌دهد (چکِ تراکنشی، نه اینجا)."""
+    """تنظیمات رقم/بازهٔ هر سطح کدینگ حساب‌ها — اختیاری؛ سطحی که ردیفی
+    این‌جا نداشته باشد بدون محدودیت می‌ماند. بعد اولین سند شرکت، سرویس
+    اجازهٔ تغییر این تنظیمات را نمی‌دهد (چک تراکنشی، نه اینجا)."""
 
     __tablename__ = "chart_of_account_level_config"
     __table_args__ = {"schema": "acc"}
@@ -179,10 +179,10 @@ class ChartOfAccountLevelConfig(Base):
 
 
 class DetailLevelDigitConfig(Base):
-    """تعدادِ رقمِ سراسریِ هر سطحِ تفصیلی (۱ تا ۴) — یکسان برایِ همه‌ی
-    گروه‌ها (کالا/بانک/مشتری/...)؛ فقط بازه‌ی از-تا مخصوصِ هر گروه می‌ماند
+    """تعداد رقم سراسری هر سطح تفصیلی (۱ تا ۴) — یکسان برای همه‌ی
+    گروه‌ها (کالا/بانک/مشتری/...)؛ فقط بازهٔ از-تا مخصوص هر گروه می‌ماند
     (acc.detail_group_levels). اختیاری؛ سطحی که ردیفی این‌جا نداشته باشد
-    بدونِ محدودیتِ طول می‌ماند. هم‌الگو با acc.chart_of_account_level_config."""
+    بدون محدودیت طول می‌ماند. هم‌الگو با acc.chart_of_account_level_config."""
 
     __tablename__ = "detail_level_digit_config"
     __table_args__ = {"schema": "acc"}
@@ -210,6 +210,10 @@ class DetailDimensionType(Base):
     # رنگِ اختصاصیِ این گروه (مثلاً "#15A672") — طبقِ درخواستِ صریح، در فهرستِ
     # تفصیلی‌ها و کمبویِ تفصیلیِ سندِ حسابداری استفاده می‌شود.
     color: Mapped[str | None] = mapped_column(String(7))
+    # طبقِ درخواستِ صریح («برایِ گروه‌هایی که تیک می‌زنیم عکس آپلود
+    # کرد»): وقتی True، فرمِ حسابِ تفصیلیِ این گروه امکانِ آپلودِ عکس
+    # را نشان می‌دهد.
+    photo_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class DetailAccount(Base):
@@ -231,9 +235,9 @@ class DetailAccount(Base):
 
 
 class DetailGroupLevel(Base):
-    """طولِ کدِ هر سطح (۱ تا ۴) به تفکیکِ گروهِ تفصیلی — اختیاری؛ گروهی که
-    ردیفی این‌جا نداشته باشد تخت/بدونِ محدودیتِ طول می‌ماند (سازگار با
-    گروه‌های موجود مثلِ مشتری/مرکز هزینه که پیش از این ویژگی ساخته شده‌اند)."""
+    """طول کد هر سطح (۱ تا ۴) به تفکیک گروه تفصیلی — اختیاری؛ گروهی که
+    ردیفی این‌جا نداشته باشد تخت/بدون محدودیت طول می‌ماند (سازگار با
+    گروه‌های موجود مثل مشتری/مرکز هزینه که پیش از این ویژگی ساخته شده‌اند)."""
 
     __tablename__ = "detail_group_levels"
     __table_args__ = {"schema": "acc"}
@@ -250,9 +254,9 @@ class DetailGroupLevel(Base):
 
 
 class DetailGroupField(Base):
-    """تعریفِ فیلدِ اختصاصیِ یک گروهِ تفصیلی — طبقِ درخواستِ صریح، کاربر
-    باید بتواند برایِ گروهِ تازه‌تعریف‌شده (مثلاً «بانک») ویژگی‌هایی شبیهِ
-    مشتری تعریف کند؛ مقدارِ هر فیلد در DetailAccount.extra_fields (JSONB،
+    """تعریف فیلد اختصاصی یک گروه تفصیلی — طبق درخواست صریح، کاربر
+    باید بتواند برای گروه تازه‌تعریف‌شده (مثلاً «بانک») ویژگی‌هایی شبیه
+    مشتری تعریف کند؛ مقدار هر فیلد در DetailAccount.extra_fields (JSONB،
     کلید=field_key) ذخیره می‌شود."""
 
     __tablename__ = "detail_group_fields"
@@ -283,8 +287,8 @@ class AccountDetailDimension(Base):
 
 
 class PersonGroup(Base):
-    """گروهِ تفصیلیِ اشخاص (مشتری/تامین‌کننده/پرسنل) — طبقه‌بندیِ هر شخص،
-    و مبنایِ محدودکردنِ یک معین به گروهِ خاصی (acc.account_person_groups)."""
+    """گروه تفصیلی اشخاص (مشتری/تامین‌کننده/پرسنل) — طبقه‌بندی هر شخص،
+    و مبنای محدودکردن یک معین به گروه خاصی (acc.account_person_groups)."""
 
     __tablename__ = "person_groups"
     __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "acc"})
@@ -302,6 +306,8 @@ class PersonGroup(Base):
     # طبقِ درخواستِ صریح: «کدام گروه(هایِ) تفصیلی = پرسنل» باید از تنظیمات
     # کنترل شود، نه هاردکدِ PERSONNEL_GROUP_CODE در کد.
     is_personnel: Mapped[bool] = mapped_column(Boolean, default=False)
+    # هم‌الگو با DetailDimensionType.photo_enabled.
+    photo_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AccountPersonGroup(Base):
@@ -326,6 +332,10 @@ class CustomerDetail(Base):
     address: Mapped[str | None] = mapped_column(String(400))
     credit_limit: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
     notes: Mapped[str | None] = mapped_column(String(500))
+    customer_type_code: Mapped[str | None] = mapped_column(String(20))
+    person_type_code: Mapped[str | None] = mapped_column(String(10))
+    customer_class: Mapped[str | None] = mapped_column(String(1))
+    geographic_region: Mapped[str | None] = mapped_column(String(100))
 
 
 class SupplierDetail(Base):
@@ -442,9 +452,46 @@ class JournalEntryLineDetail(Base):
     detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
+class DetailOperation(Base):
+    """R318: انتقال ماندهٔ تفصیلی با سند یا ادغام کامل گردش (برگشت‌پذیر)."""
+
+    __tablename__ = "detail_operations"
+    __table_args__ = {"schema": "acc"}
+
+    operation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    operation_type: Mapped[str] = mapped_column(String(20))  # TRANSFER | MERGE
+    source_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    target_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    status_code: Mapped[str] = mapped_column(String(20), default="DONE")  # DONE | REVERSED
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    reversal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    operation_date: Mapped[datetime.date] = mapped_column(Date)
+    description: Mapped[str | None]
+    source_was_active: Mapped[bool | None] = mapped_column(Boolean)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    reversed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    reversed_at: Mapped[datetime.datetime | None]
+
+
+class DetailMergeRow(Base):
+    """R318: هر ردیفی که در ادغام از مبدأ به مقصد رفت (row_key = [[ستون کلید، مقدار، مقایسهٔ متنی]])."""
+
+    __tablename__ = "detail_merge_rows"
+    __table_args__ = {"schema": "acc"}
+
+    merge_row_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_operations.operation_id", ondelete="CASCADE"))
+    table_name: Mapped[str] = mapped_column(String(130))
+    column_name: Mapped[str] = mapped_column(String(130))
+    row_key: Mapped[list] = mapped_column(JSONB)
+
+
 class StatementTemplate(Base):
-    """یک الگویِ گزارشِ سفارشی (طراحِ گزارش، فازِ ۲) — مجموعه‌ای از ردیف‌هایِ
-    ترتیب‌دار که هرکدام از جمعِ چند حساب یا چند ردیفِ دیگر ساخته می‌شود."""
+    """یک الگوی گزارش سفارشی (طراح گزارش، فاز ۲) — مجموعه‌ای از ردیف‌های
+    ترتیب‌دار که هرکدام از جمع چند حساب یا چند ردیف دیگر ساخته می‌شود."""
 
     __tablename__ = "statement_templates"
     __table_args__ = {"schema": "acc"}
@@ -470,9 +517,9 @@ class StatementRow(Base):
 
 
 class StatementRowAccount(Base):
-    """جزءِ یک ردیفِ ACCOUNTS — یا یک حسابِ مشخص (ACCOUNT)، یا یک بازه‌یِ کد
-    در یک سطح (RANGE)، یا کلِ یک طبقه (دارایی/بدهی/...) در یک سطح
-    (CATEGORY)؛ فقط ستون‌هایِ مربوط به همان selector_type پر می‌شوند."""
+    """جزء یک ردیف ACCOUNTS — یا یک حساب مشخص (ACCOUNT)، یا یک بازهٔ کد
+    در یک سطح (RANGE)، یا کل یک طبقه (دارایی/بدهی/...) در یک سطح
+    (CATEGORY)؛ فقط ستون‌های مربوط به همان selector_type پر می‌شوند."""
 
     __tablename__ = "statement_row_accounts"
     __table_args__ = {"schema": "acc"}

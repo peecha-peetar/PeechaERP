@@ -1,19 +1,19 @@
-"""زبانِ محدودِ فرمولِ آیتمِ حقوقی (Pay Item Formula DSL) — فصلِ ۶ از سندِ
-طراحی: «عبارتِ کاربر هرگز با eval() اجرا نمی‌شود». این فایل یک
-tokenizer/parser/evaluator کاملاً دستی (بدونِ ast.literal_eval یا eval
-پایتون) برایِ زیرمجموعه‌ای بسیار محدود از عبارات ریاضی می‌سازد:
+"""زبان محدود فرمول آیتم حقوقی (Pay Item Formula DSL) — فصل ۶ از سند
+طراحی: «عبارت کاربر هرگز با eval() اجرا نمی‌شود». این فایل یک
+tokenizer/parser/evaluator کاملاً دستی (بدون ast.literal_eval یا eval
+پایتون) برای زیرمجموعه‌ای بسیار محدود از عبارات ریاضی می‌سازد:
 
     + - * / ( )                  عملگرها
     اعداد                        ثابت
     BASE_SALARY, WORKED_DAYS,
     CALENDAR_DAYS, CHILDREN_COUNT,
-    WEEKLY_HOURS                 متغیرهایِ مجاز
-    {ITEM_CODE}                  ارجاع به مقدارِ محاسبه‌شدهٔ آیتمِ دیگر
-    POLICY(CODE)                 مقدارِ جاریِ یک قانونِ حقوقی (فصلِ ۷)
+    WEEKLY_HOURS                 متغیرهای مجاز
+    {ITEM_CODE}                  ارجاع به مقدار محاسبه‌شدهٔ آیتم دیگر
+    POLICY(CODE)                 مقدار جاری یک قانون حقوقی (فصل ۷)
 
-پیش از اجرا: پارس با گرامرِ whitelist، ساختِ گراف‌وابستگی از ارجاع‌هایِ
-{ITEM_CODE}، و مرتب‌سازیِ توپولوژیک برایِ ترتیبِ اجرا (نه صرفاً
-display_order) — طبقِ سند."""
+پیش از اجرا: پارس با گرامر whitelist، ساخت گراف‌وابستگی از ارجاع‌های
+{ITEM_CODE}، و مرتب‌سازی توپولوژیک برای ترتیب اجرا (نه صرفاً
+display_order) — طبق سند."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def _tokenize(text: str) -> list[_Token]:
     while pos < len(text):
         match = _TOKEN_RE.match(text, pos)
         if match is None or match.end() == pos:
-            raise ValueError(f"نویسه‌ی غیرمجاز در فرمول: «{text[pos]}»")
+            raise ValueError(f"نویسهٔ غیرمجاز در فرمول: «{text[pos]}»")
         kind = match.lastgroup
         if kind != "WS":
             tokens.append(_Token(kind, match.group()))
@@ -143,13 +143,13 @@ class _Parser:
     def parse(self) -> object:
         node = self._parse_expr()
         if self._peek() is not None:
-            raise ValueError(f"نویسه‌ی اضافه در فرمول: «{self._peek().text}»")
+            raise ValueError(f"نویسهٔ اضافه در فرمول: «{self._peek().text}»")
         return node
 
     def parse_condition(self) -> object:
         node = self._parse_or()
         if self._peek() is not None:
-            raise ValueError(f"نویسه‌ی اضافه در شرط: «{self._peek().text}»")
+            raise ValueError(f"نویسهٔ اضافه در شرط: «{self._peek().text}»")
         return node
 
     def _parse_or(self) -> object:
@@ -219,13 +219,13 @@ class _Parser:
                 self._expect("RPAREN")
                 return PolicyCall(code.text)
             if token.text not in ALLOWED_VARIABLES:
-                raise ValueError(f"متغیرِ نامعتبر در فرمول: «{token.text}»")
+                raise ValueError(f"متغیر نامعتبر در فرمول: «{token.text}»")
             return Var(token.text)
-        raise ValueError(f"نویسه‌ی غیرمنتظره در فرمول: «{token.text}»")
+        raise ValueError(f"نویسهٔ غیرمنتظره در فرمول: «{token.text}»")
 
 
 def parse_formula(text: str) -> object:
-    """متنِ فرمول را پارس می‌کند؛ برایِ فرمولِ نامعتبر ValueError می‌دهد."""
+    """متن فرمول را پارس می‌کند؛ برای فرمول نامعتبر ValueError می‌دهد."""
     text = text.strip()
     if not text:
         raise ValueError("فرمول نمی‌تواند خالی باشد.")
@@ -233,8 +233,8 @@ def parse_formula(text: str) -> object:
 
 
 def parse_condition(text: str) -> object:
-    """شرطِ تخصیص (فصلِ ۷) را پارس می‌کند — همان گرامرِ فرمول به‌علاوهِ
-    عملگرهایِ مقایسه (>، <، >=، <=، =) و AND/OR."""
+    """شرط تخصیص (فصل ۷) را پارس می‌کند — همان گرامر فرمول به‌علاوهٔ
+    عملگرهای مقایسه (>، <، >=، <=، =) و AND/OR."""
     text = text.strip()
     if not text:
         raise ValueError("شرط نمی‌تواند خالی باشد.")
@@ -242,8 +242,8 @@ def parse_condition(text: str) -> object:
 
 
 def extract_item_refs(node: object) -> set[str]:
-    """کدهایِ {ITEM_CODE}ی که این عبارت به آن‌ها ارجاع می‌دهد — برایِ
-    ساختِ گرافِ وابستگی."""
+    """کدهای {ITEM_CODE}ی که این عبارت به آن‌ها ارجاع می‌دهد — برای
+    ساخت گراف وابستگی."""
     if isinstance(node, ItemRef):
         return {node.code}
     if isinstance(node, BinOp):
@@ -265,16 +265,16 @@ def evaluate(
         return node.value
     if isinstance(node, Var):
         if node.name not in variables:
-            raise ValueError(f"متغیرِ «{node.name}» برایِ این کارمند در دسترس نیست.")
+            raise ValueError(f"متغیر «{node.name}» برای این کارمند در دسترس نیست.")
         return variables[node.name]
     if isinstance(node, ItemRef):
         if node.code not in resolved_items:
-            raise ValueError(f"آیتمِ ارجاع‌داده‌شده «{node.code}» هنوز محاسبه نشده است.")
+            raise ValueError(f"آیتم ارجاع‌داده‌شده «{node.code}» هنوز محاسبه نشده است.")
         return resolved_items[node.code]
     if isinstance(node, PolicyCall):
         value = policy_resolver(node.code)
         if value is None:
-            raise ValueError(f"قانونِ «{node.code}» تعریف نشده است.")
+            raise ValueError(f"قانون «{node.code}» تعریف نشده است.")
         return value
     if isinstance(node, Neg):
         return -evaluate(node.operand, variables, resolved_items, policy_resolver)
@@ -311,13 +311,13 @@ def evaluate(
         return bool(evaluate(node.left, variables, resolved_items, policy_resolver)) or bool(
             evaluate(node.right, variables, resolved_items, policy_resolver)
         )
-    raise ValueError("گرهِ نامعتبر در فرمول.")
+    raise ValueError("گرهٔ نامعتبر در فرمول.")
 
 
 def topological_order(formulas: dict[str, object]) -> list[str]:
-    """formulas: {item_code: ast}. ترتیبِ اجرا را بر اساسِ گرافِ
-    وابستگیِ {ITEM_CODE} برمی‌گرداند؛ برایِ ارجاعِ دایره‌ای ValueError
-    می‌دهد. آیتم‌هایی که در formulas نیستند (مثلاً فرمول ندارند) به‌عنوانِ
+    """formulas: {item_code: ast}. ترتیب اجرا را بر اساس گراف
+    وابستگی {ITEM_CODE} برمی‌گرداند؛ برای ارجاع دایره‌ای ValueError
+    می‌دهد. آیتم‌هایی که در formulas نیستند (مثلاً فرمول ندارند) به‌عنوان
     برگ در نظر گرفته می‌شوند و در گراف شرکت نمی‌کنند."""
     deps = {code: extract_item_refs(ast) & formulas.keys() for code, ast in formulas.items()}
     visited: dict[str, int] = {}  # 0 = در حالِ بازدید، 1 = تمام‌شده
@@ -329,7 +329,7 @@ def topological_order(formulas: dict[str, object]) -> list[str]:
             return
         if state == 0:
             cycle = " -> ".join((*stack, code))
-            raise ValueError(f"ارجاعِ دایره‌ای در فرمول‌ها: {cycle}")
+            raise ValueError(f"ارجاع دایره‌ای در فرمول‌ها: {cycle}")
         visited[code] = 0
         for dep in deps.get(code, ()):
             visit(dep, (*stack, code))

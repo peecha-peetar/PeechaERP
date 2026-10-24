@@ -1,6 +1,6 @@
-"""تشخیصِ سندهایِ ناقص/آنومالی — چهار بررسیِ مشخص (نه یک موتورِ AI مبهم):
-اسنادِ موقتِ معوق، سندهایِ بدونِ شرح، احتمالِ سندِ تکراری، تراکنشِ
-نامتعارفِ آماری."""
+"""تشخیص سندهای ناقص یا غیرعادی — چهار بررسی مشخص (نه یک موتور AI مبهم):
+اسناد موقت معوق، سندهای بدون شرح، احتمال سند تکراری، تراکنش
+نامتعارف آماری."""
 
 from __future__ import annotations
 
@@ -15,19 +15,19 @@ from peecha.ui.screens.reports_common import ReportScreenBase
 
 class AnomaliesScreen(ReportScreenBase):
     def __init__(self) -> None:
-        super().__init__("تشخیصِ سندهایِ ناقص/آنومالی")
+        super().__init__("تشخیص سندهای ناقص یا غیرعادی")
 
-        self.extra_filter_row.addWidget(QLabel("آستانه‌یِ روزِ پیش‌نویسِ معوق:"))
+        self.extra_filter_row.addWidget(QLabel("آستانهٔ روز پیش‌نویس معوق:"))
         self.stale_days_spin = QSpinBox()
         self.stale_days_spin.setRange(1, 90)
         self.stale_days_spin.setValue(7)
         self.extra_filter_row.addWidget(self.stale_days_spin)
 
-        self.outlier_checkbox = QCheckBox("تشخیصِ تراکنشِ نامتعارف")
+        self.outlier_checkbox = QCheckBox("تشخیص تراکنش نامتعارف")
         self.outlier_checkbox.setChecked(True)
         self.extra_filter_row.addWidget(self.outlier_checkbox)
 
-        self.extra_filter_row.addWidget(QLabel("ضریبِ آستانه (Z):"))
+        self.extra_filter_row.addWidget(QLabel("ضریب آستانه (Z):"))
         self.outlier_z_spin = QDoubleSpinBox()
         self.outlier_z_spin.setRange(1.0, 5.0)
         self.outlier_z_spin.setSingleStep(0.5)
@@ -37,24 +37,24 @@ class AnomaliesScreen(ReportScreenBase):
         self.add_field_help([
             (
                 self.stale_days_spin,
-                "پیش‌نویسی که این‌قدر روز از تاریخِ سندش گذشته و هنوز قطعی نشده، «معوق» شناخته می‌شود و در گزارش می‌آید.",
+                "پیش‌نویسی که این‌قدر روز از تاریخ سندش گذشته و هنوز قطعی نشده، «معوق» شناخته می‌شود و در گزارش می‌آید.",
             ),
             (
                 self.outlier_checkbox,
-                "اگر فعال باشد، سندهایی با مبلغِ خیلی متفاوت از حدِ معمول هم در گزارش نشان داده می‌شوند.",
+                "اگر فعال باشد، سندهایی با مبلغ خیلی متفاوت از حد معمول هم در گزارش نشان داده می‌شوند.",
             ),
             (
                 self.outlier_z_spin,
-                "هرچه این عدد بزرگ‌تر باشد، فقط مبالغِ خیلی دور از حدِ معمول گزارش می‌شوند و سندهایِ کمتری نامتعارف تشخیص داده می‌شود. "
-                "عددِ کوچک‌تر یعنی حساسیتِ بیشتر — سندهایِ بیشتری نامتعارف شناخته می‌شوند.",
+                "هرچه این عدد بزرگ‌تر باشد، فقط مبالغ خیلی دور از حد معمول گزارش می‌شوند و سندهای کمتری نامتعارف تشخیص داده می‌شود. "
+                "عدد کوچک‌تر یعنی حساسیت بیشتر — سندهای بیشتری نامتعارف شناخته می‌شوند.",
             ),
         ])
 
     def extra_filters_summary(self) -> list[tuple[str, str]]:
-        parts = [("آستانه‌یِ روزِ پیش‌نویسِ معوق", str(self.stale_days_spin.value()))]
-        parts.append(("تشخیصِ تراکنشِ نامتعارف", "بله" if self.outlier_checkbox.isChecked() else "خیر"))
+        parts = [("آستانهٔ روز پیش‌نویس معوق", str(self.stale_days_spin.value()))]
+        parts.append(("تشخیص تراکنش نامتعارف", "بله" if self.outlier_checkbox.isChecked() else "خیر"))
         if self.outlier_checkbox.isChecked():
-            parts.append(("ضریبِ آستانه (Z)", str(self.outlier_z_spin.value())))
+            parts.append(("ضریب آستانه (Z)", str(self.outlier_z_spin.value())))
         return parts
 
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
@@ -67,7 +67,7 @@ class AnomaliesScreen(ReportScreenBase):
             outlier_z=self.outlier_z_spin.value(),
         )
 
-        headers = ["نوع", "تاریخ", "شماره‌یِ سند", "شرح", "جزئیات"]
+        headers = ["نوع", "تاریخ", "شمارهٔ سند", "شرح", "جزئیات"]
         rows: list[list] = []
         self._all_row_bold = []
 
@@ -95,5 +95,5 @@ class AnomaliesScreen(ReportScreenBase):
                 )
                 self._all_row_bold.append(False)
 
-        footer = ["جمعِ کل", "", "", "", f"{len(anomalies)} مورد"] if anomalies else None
+        footer = ["جمع کل", "", "", "", f"{len(anomalies)} مورد"] if anomalies else None
         return headers, rows, footer

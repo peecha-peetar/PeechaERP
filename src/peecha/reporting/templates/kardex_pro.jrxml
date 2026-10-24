@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- R320: طرح حرفه‌ای (راست‌به‌چپ) — ساخته‌شده با tools/report_designs/build_pro_templates.py از kardex.jrxml؛
+     پارامترها و فیلدها همان قالب پایه است. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="kardex_pro" pageWidth="842" pageHeight="595" orientation="Landscape"
+              columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20"
+              whenNoDataType="AllSectionsNoDetail">
+    <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Title" fontName="Vazirmatn" fontSize="15" isBold="true"/>
+    <style name="TitleMeta" fontName="Vazirmatn" fontSize="8"/>
+    <style name="BoxTitle" fontName="Vazirmatn" fontSize="8" isBold="true" forecolor="#1F3A5F"/>
+    <style name="BoxStrong" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+    <style name="BoxText" fontName="Vazirmatn" fontSize="7.5"/>
+    <style name="MetaLabel" fontName="Vazirmatn" fontSize="7" forecolor="#5A6B82"/>
+    <style name="MetaValue" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+    <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
+    <style name="Cell" fontName="Vazirmatn" fontSize="8"/>
+    <style name="TotalLabel" fontName="Vazirmatn" fontSize="8.5" isBold="true" forecolor="#1F3A5F"/>
+    <style name="TotalValue" fontName="Vazirmatn" fontSize="8.5" isBold="true"/>
+    <style name="GrandLabel" fontName="Vazirmatn" fontSize="10.5" isBold="true"/>
+    <style name="GrandValue" fontName="Vazirmatn" fontSize="11" isBold="true"/>
+    <style name="Note" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Footer" fontName="Vazirmatn" fontSize="7" forecolor="#5A6B82"/>
+    <parameter name="companyName" class="java.lang.String">
+
+        <parameterDescription><![CDATA[نام شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="itemName" class="java.lang.String">
+        <parameterDescription><![CDATA[نام کالا]]></parameterDescription>
+    </parameter>
+    <parameter name="warehouseName" class="java.lang.String">
+        <parameterDescription><![CDATA[انبار]]></parameterDescription>
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازهٔ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخ تولید گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="companyLogoPath" class="java.lang.String">
+        <defaultValueExpression><![CDATA[""]]></defaultValueExpression>
+    </parameter>
+    <parameter name="companyLogoPosition" class="java.lang.String">
+        <defaultValueExpression><![CDATA["NONE"]]></defaultValueExpression>
+    </parameter>
+    <field name="movement_date_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="movement_date_display"/>
+
+        <fieldDescription><![CDATA[تاریخ حرکت]]></fieldDescription>
+
+    </field>
+    <field name="document_type_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="document_type_label"/>
+        <fieldDescription><![CDATA[نوع سند]]></fieldDescription>
+    </field>
+    <field name="document_no_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="document_no_display"/>
+        <fieldDescription><![CDATA[شمارهٔ سند]]></fieldDescription>
+    </field>
+    <field name="warehouse_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="warehouse_name"/>
+        <fieldDescription><![CDATA[انبار]]></fieldDescription>
+    </field>
+    <field name="counterparty_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="counterparty_label"/>
+        <fieldDescription><![CDATA[طرف‌حساب]]></fieldDescription>
+    </field>
+    <field name="quantity_in_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_in_display"/>
+        <fieldDescription><![CDATA[ورود]]></fieldDescription>
+    </field>
+    <field name="quantity_out_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_out_display"/>
+        <fieldDescription><![CDATA[خروج]]></fieldDescription>
+    </field>
+    <field name="unit_cost_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="unit_cost_display"/>
+        <fieldDescription><![CDATA[بهای واحد]]></fieldDescription>
+    </field>
+    <field name="value_in_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="value_in_display"/>
+        <fieldDescription><![CDATA[بهای کل ورود]]></fieldDescription>
+    </field>
+    <field name="value_out_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="value_out_display"/>
+        <fieldDescription><![CDATA[بهای کل خروج]]></fieldDescription>
+    </field>
+    <field name="sale_price_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="sale_price_display"/>
+        <fieldDescription><![CDATA[قیمت فروش]]></fieldDescription>
+    </field>
+    <field name="running_balance_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="running_balance_display"/>
+        <fieldDescription><![CDATA[مانده]]></fieldDescription>
+    </field>
+    <field name="running_value_balance_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="running_value_balance_display"/>
+        <fieldDescription><![CDATA[ماندهٔ ریالی]]></fieldDescription>
+    </field>
+    <pageHeader>
+        <band height="96">
+            <rectangle radius="4"><reportElement x="0" y="0" width="802" height="50" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank"><reportElement x="740" y="5" width="56" height="40"><printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "RIGHT".equals($P{companyLogoPosition})]]></printWhenExpression></reportElement><imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression></image>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank"><reportElement x="6" y="5" width="56" height="40"><printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "LEFT".equals($P{companyLogoPosition})]]></printWhenExpression></reportElement><imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression></image>
+            <textField><reportElement style="Title" x="70" y="4" width="662" height="24" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["کاردکس کالا"]]></textFieldExpression></textField>
+            <textField><reportElement style="TitleMeta" x="70" y="28" width="662" height="18" forecolor="#D6E2F2"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{companyName}]]></textFieldExpression></textField>
+            <rectangle radius="4"><reportElement x="0" y="58" width="802" height="30" mode="Opaque" backcolor="#E8EEF6" forecolor="#E8EEF6"></reportElement><graphicElement><pen lineWidth="0" lineColor="#E8EEF6"/></graphicElement></rectangle>
+            <staticText><reportElement style="MetaLabel" x="535" y="59" width="267" height="13"><printWhenExpression><![CDATA[$P{itemName} != null && !$P{itemName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[کالا]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="535" y="72" width="267" height="15"><printWhenExpression><![CDATA[$P{itemName} != null && !$P{itemName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{itemName}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="268" y="59" width="267" height="13"><printWhenExpression><![CDATA[$P{warehouseName} != null && !$P{warehouseName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[انبار]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="268" y="72" width="267" height="15"><printWhenExpression><![CDATA[$P{warehouseName} != null && !$P{warehouseName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{warehouseName}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="1" y="59" width="267" height="13"><printWhenExpression><![CDATA[$P{dateRangeLabel} != null && !$P{dateRangeLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[بازهٔ گزارش]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="1" y="72" width="267" height="15"><printWhenExpression><![CDATA[$P{dateRangeLabel} != null && !$P{dateRangeLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{dateRangeLabel}]]></textFieldExpression></textField>
+        </band>
+    </pageHeader>
+    <columnHeader>
+        <band height="22">
+            <rectangle radius="0"><reportElement x="0" y="0" width="802" height="22" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <staticText><reportElement style="Header" x="732" y="0" width="70" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[تاریخ]]></text></staticText>
+            <staticText><reportElement style="Header" x="667" y="0" width="65" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[نوع سند]]></text></staticText>
+            <staticText><reportElement style="Header" x="622" y="0" width="45" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[شماره]]></text></staticText>
+            <staticText><reportElement style="Header" x="552" y="0" width="70" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[انبار]]></text></staticText>
+            <staticText><reportElement style="Header" x="462" y="0" width="90" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[طرف حساب]]></text></staticText>
+            <staticText><reportElement style="Header" x="417" y="0" width="45" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ورود]]></text></staticText>
+            <staticText><reportElement style="Header" x="372" y="0" width="45" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[خروج]]></text></staticText>
+            <staticText><reportElement style="Header" x="307" y="0" width="65" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[بهای واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="239" y="0" width="68" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[بهای کل ورود]]></text></staticText>
+            <staticText><reportElement style="Header" x="171" y="0" width="68" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[بهای کل خروج]]></text></staticText>
+            <staticText><reportElement style="Header" x="111" y="0" width="60" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[قیمت فروش]]></text></staticText>
+            <staticText><reportElement style="Header" x="66" y="0" width="45" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[مانده]]></text></staticText>
+            <staticText><reportElement style="Header" x="0" y="0" width="66" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ماندهٔ ریالی]]></text></staticText>
+        </band>
+    </columnHeader>
+    <detail>
+        <band height="18">
+            <rectangle radius="0"><reportElement x="0" y="0" width="802" height="18" mode="Opaque" backcolor="#F6F8FB" forecolor="#F6F8FB"><printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 == 0]]></printWhenExpression></reportElement><graphicElement><pen lineWidth="0" lineColor="#F6F8FB"/></graphicElement></rectangle>
+            <line><reportElement x="0" y="17" width="802" height="1" forecolor="#C9D3E0"/></line>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="732" y="0" width="70" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{movement_date_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="667" y="0" width="65" height="17"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{document_type_label}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="622" y="0" width="45" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{document_no_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="552" y="0" width="70" height="17"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{warehouse_name}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="462" y="0" width="90" height="17"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{counterparty_label}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="417" y="0" width="45" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{quantity_in_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="372" y="0" width="45" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{quantity_out_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="307" y="0" width="65" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{unit_cost_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="239" y="0" width="68" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{value_in_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="171" y="0" width="68" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{value_out_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="111" y="0" width="60" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{sale_price_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="66" y="0" width="45" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{running_balance_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="0" y="0" width="66" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{running_value_balance_display}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+    <pageFooter>
+        <band height="20">
+            <line><reportElement x="0" y="2" width="802" height="1" forecolor="#1F3A5F"/></line>
+            <textField evaluationTime="Master"><reportElement style="Footer" x="642" y="5" width="160" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="1" leftIndent="1"/></textElement><textFieldExpression><![CDATA["صفحهٔ " + String.valueOf($V{MASTER_CURRENT_PAGE}).replace("0","۰").replace("1","۱").replace("2","۲").replace("3","۳").replace("4","۴").replace("5","۵").replace("6","۶").replace("7","۷").replace("8","۸").replace("9","۹") + " از " + String.valueOf($V{MASTER_TOTAL_PAGES}).replace("0","۰").replace("1","۱").replace("2","۲").replace("3","۳").replace("4","۴").replace("5","۵").replace("6","۶").replace("7","۷").replace("8","۸").replace("9","۹")]]></textFieldExpression></textField>
+            <textField><reportElement style="Footer" x="0" y="5" width="632" height="14"><printWhenExpression><![CDATA[$P{generatedAt} != null && !$P{generatedAt}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["تاریخ چاپ: " + $P{generatedAt}]]></textFieldExpression></textField>
+        </band>
+    </pageFooter>
+    <summary>
+        <band height="14">
+            
+        </band>
+    </summary>
+</jasperReport>
