@@ -18,7 +18,7 @@ for module in ("COSTING", "FA", "PRD"):
     check(len(items) >= 5 and all(code in flat for code, _ in items), f"{module} ribbon shortcuts")
 
 # ۲) دستورِ تولید و دارایی: کارت‌هایِ خلاصه + نوارِ دکمه‌هایِ آیکونی با تول‌تیپ
-for scr, n_actions in ((prd.OrdersScreen(), 18), (fa.AssetsScreen(), 12)):
+for scr, n_actions in ((prd.OrdersScreen(), 19), (fa.AssetsScreen(), 12)):
     name = type(scr).__name__
     check(len(scr.findChildren(SummaryCard)) == 8 and all(lbl.text() == "—" for lbl in scr.cards.values()), f"{name}: 8 summary cards")
     acts = list(scr.actions.values())

@@ -60,6 +60,8 @@ class PrdLookups:
         self.uoms = {i.item_id: i.base_uom_id for i in items}
         self.warehouses = [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations.list_warehouses(cid, active_only=True)]
         self.cost_centers = leaf_options(cid, dims.COST_CENTER_CODE)  # R322: فقط آخرین سطح
+        self.projects = leaf_options(cid, dims.PROJECT_CODE)
+        self.dimension_rules = po.dimension_rules(cid)  # R337: مرکز هزینه/پروژهٔ الزامی دستور تولید
         self.branches = [(b.name, b.branch_id) for b in masters.list_branches(cid)]
         self.employees = [(f"{e.employee_code} — {e.full_name}", e.employee_id) for e in hr_service.list_employees(cid)]
         self.work_centers = [(f"{w.code} — {w.name}", w.work_center_id) for w in pm.list_work_centers(cid, active_only=True)]
@@ -88,6 +90,11 @@ def _combo_at(box: QComboBox, value) -> QComboBox:
     """R276: فهرست فرم ویرایش روی مقدار فعلی ردیف."""
     set_combo(box, value)
     return box
+
+
+def _missing_dimension(message: str) -> bool:
+    """R337: خطای «مرکز هزینه/پروژهٔ الزامی» سند حسابداری یا دستور تولید."""
+    return "«پروژه»" in message or "«مرکز هزینه»" in message or "دستور تولید را انتخاب کنید" in message
 
 
 def _run(parent, title: str, fn, *args, **kwargs):
@@ -214,7 +221,14 @@ class ProductionWizard(QDialog):
         self._page("نسخهٔ معتبر فهرست مواد پیش‌فرض انتخاب شده است.", [("فهرست مواد", self.bom_box)])
         self.qty_edit = qty_field(100, item_combo=self.item_box)
         self.due_edit = date_field()
-        self._page("مقدار و تاریخ تحویل.", [("مقدار تولید", self.qty_edit), ("تاریخ پایان", self.due_edit)])
+        rules = lookups.dimension_rules
+        self.cost_center_box = combo(lookups.cost_centers, "—")
+        self.project_box = combo(lookups.projects, "—")
+        self._page("مقدار، تاریخ تحویل و مرکز هزینه/پروژه (اگر حساب‌های تولید آن را الزامی کرده‌اند، همین‌جا انتخاب کنید؛ "
+                   "بعد از شروع تولید عوض نمی‌شود).",
+                   [("مقدار تولید", self.qty_edit), ("تاریخ پایان", self.due_edit),
+                    ("مرکز هزینه" + (" (الزامی)" if rules.cost_center else ""), self.cost_center_box),
+                    ("پروژه" + (" (الزامی)" if rules.project else ""), self.project_box)])
         self.avail_table = table(["ماده", "نیاز", "موجود", "کمبود", "وضعیت"])
         self._page_widget("موجودی مواد (🟢 موجود، 🟡 بخشی، 🔴 کمبود). در این مرحله دستور ساخته و صادر می‌شود.", self.avail_table)
         self.reserve_label = QLabel("")
@@ -310,7 +324,9 @@ class ProductionWizard(QDialog):
                 if self.order_id is None:
                     self.order_id = po.create_order(cid, uid, po.OrderFields(
                         item_id=self.item_box.currentData(), planned_qty=dec(self.qty_edit.text()), bom_id=self.bom_box.currentData(),
-                        due_date=max(self.due_edit.date(), datetime.date.today())))
+                        due_date=max(self.due_edit.date(), datetime.date.today()),
+                        cost_center_detail_account_id=self.cost_center_box.currentData(),
+                        project_detail_account_id=self.project_box.currentData()))
                     po.release_order(cid, uid, self.order_id, reserve=False)
                 self.reserve_label.setText(P("دستور " + po.get_order(cid, self.order_id).order_code + " صادر شد."))
             if i == 4:
@@ -380,14 +396,15 @@ class OrdersScreen(QWidget):
                ("hold", "توقف", "prd_orders"), ("resume", "ادامه", "prd_orders"), ("complete", "اتمام تولید", "prd_complete"),
                ("close", "بستن دستور", "prd_close"), ("reopen", "بازگشایی", "prd_cost_adjust"), ("cancel", "لغو", "prd_orders"),
                ("children", "دستور نیمه‌ساخته‌ها", "prd_orders"), ("reserve", "رزرو مواد", "prd_release"),
-               ("reverse", "برگشت تولید", "prd_cost_adjust"))
+               ("reverse", "برگشت تولید", "prd_cost_adjust"), ("dims", "مرکز هزینه و پروژه", "prd_orders"))
     ALLOWED = {"release": ("DRAFT", "PLANNED"), "start": ("RELEASED",), "issue": ("RELEASED", "IN_PROGRESS"),
                "issue_all": ("RELEASED", "IN_PROGRESS"), "return": ("RELEASED", "IN_PROGRESS", "ON_HOLD", "COMPLETED"),
                "receipt": ("RELEASED", "IN_PROGRESS"), "scrap": ("RELEASED", "IN_PROGRESS"), "labor": ("RELEASED", "IN_PROGRESS", "COMPLETED"),
                "machine": ("RELEASED", "IN_PROGRESS", "COMPLETED"), "hold": ("RELEASED", "IN_PROGRESS"), "resume": ("ON_HOLD",),
                "complete": ("RELEASED", "IN_PROGRESS"), "close": ("COMPLETED",), "reopen": ("CLOSED",),
                "cancel": ("DRAFT", "PLANNED", "RELEASED", "IN_PROGRESS", "ON_HOLD"), "children": ("DRAFT", "PLANNED", "RELEASED"),
-               "reserve": ("RELEASED", "IN_PROGRESS"), "reverse": ("IN_PROGRESS", "COMPLETED", "RELEASED")}
+               "reserve": ("RELEASED", "IN_PROGRESS"), "reverse": ("IN_PROGRESS", "COMPLETED", "RELEASED"),
+               "dims": ("DRAFT", "PLANNED", "RELEASED", "IN_PROGRESS", "ON_HOLD", "COMPLETED")}
 
     def __init__(self, main_window=None) -> None:
         super().__init__()
@@ -428,6 +445,9 @@ class OrdersScreen(QWidget):
         self.header = QLabel("")
         self.header.setObjectName("pageTitle")
         dl.addWidget(self.header)
+        self.dims_label = QLabel("")
+        self.dims_label.setObjectName("sectionHint")
+        dl.addWidget(self.dims_label)
         # R295: نوار گردش کار تایید صدور (فقط وقتی فرایندی فعال است)
         from peecha.ui.screens.workflow_bar import WorkflowBar
 
@@ -476,7 +496,7 @@ class OrdersScreen(QWidget):
             [A["issue"], A["issue_all"], A["return"], A["scrap"]],
             [A["labor"], A["machine"]],
             [A["receipt"], A["reverse"], A["complete"], A["close"], A["reopen"]],
-            [A["children"]]]))
+            [A["children"], A["dims"]]]))
 
     # --- بارگذاری ----------------------------------------------------------------------------
     def refresh(self) -> None:
@@ -524,6 +544,7 @@ class OrdersScreen(QWidget):
         self.workflow_bar.set_entity("PRODUCTION_ORDER", order_id)
         show_cost = can("prd_cost_view", "VIEW")
         self.header.setText(P(f"دستور تولید {o.order_code}"))
+        self.dims_label.setText(P(self._dims_text(o)))
         values = {"product": o.item_label, "status": "● " + o.status_label + (f" ({o.hold_reason})" if o.hold_reason else ""),
                   "planned": qty(o.planned_qty, o.item_id), "produced": qty(o.produced_qty, o.item_id),
                   "scrapped": qty(o.scrapped_qty, o.item_id),
@@ -607,8 +628,37 @@ class OrdersScreen(QWidget):
             ("material_warehouse_id", "انبار مواد", _combo_at(combo(lk.warehouses, "— پیش‌فرض —"), g("material_warehouse_id"))),
             ("fg_warehouse_id", "انبار محصول", _combo_at(combo(lk.warehouses, "— پیش‌فرض —"), g("fg_warehouse_id"))),
             ("branch_id", "شعبه", _combo_at(combo(lk.branches, "—"), g("branch_id"))),
-            ("cost_center_detail_account_id", "مرکز هزینه", _combo_at(combo(lk.cost_centers, "—"), g("cost_center_detail_account_id"))),
+            *self._dims_fields(g),
             ("notes", "توضیحات", QLineEdit(g("notes") or ""))]
+
+    def _dims_fields(self, g) -> list:
+        """R337: مرکز هزینه و پروژه؛ اگر حساب‌های تولید آن‌ها را الزامی کرده‌اند «(الزامی)» دارند."""
+        rules = self.lk.dimension_rules
+        return [("cost_center_detail_account_id", "مرکز هزینه" + (" (الزامی)" if rules.cost_center else ""),
+                 _combo_at(combo(self.lk.cost_centers, "—"), g("cost_center_detail_account_id"))),
+                ("project_detail_account_id", "پروژه" + (" (الزامی)" if rules.project else ""),
+                 _combo_at(combo(self.lk.projects, "—"), g("project_detail_account_id")))]
+
+    def _dims_text(self, o) -> str:
+        cc = self.lk.cost_centers.legacy.get(o.cost_center_detail_account_id) if o.cost_center_detail_account_id else None
+        pj = self.lk.projects.legacy.get(o.project_detail_account_id) if o.project_detail_account_id else None
+        return f"مرکز هزینه: {cc or '—'}   ·   پروژه: {pj or '—'}"
+
+    def set_dimensions(self, values: dict | None = None) -> bool:
+        """R337: تعیین مرکز هزینه/پروژهٔ دستوری که صادر شده (مقدار خالی پر می‌شود)."""
+        if self.view is None:
+            return False
+        o = self.view.order
+        if values is None:
+            values = _ask(self, f"مرکز هزینه و پروژهٔ {o.order_code}", self._dims_fields(lambda name: getattr(o, name)),
+                          "پس از صدور دستور، فقط مقدار خالی تعیین می‌شود؛ مقدار ثبت‌شده عوض نمی‌شود چون اسناد قبلی با همان ثبت شده‌اند.")
+            if values is None:
+                return False
+        _r, ok = _run(self, "مرکز هزینه و پروژه", po.set_order_dimensions, company_id(), user_id(), o.order_id,
+                      values.get("cost_center_detail_account_id"), values.get("project_detail_account_id"))
+        if ok:
+            self.load_order(o.order_id)
+        return ok
 
     def edit_order(self, values: dict | None = None) -> bool:
         """R280: ویرایش دستور؛ دستور صادرشدهٔ بدون گردش اول به پیش‌نویس برمی‌گردد."""
@@ -630,10 +680,11 @@ class OrdersScreen(QWidget):
             if values is None:
                 return False
         values["priority"] = int(values.get("priority") or 3)
+        values.setdefault("project_detail_account_id", order.project_detail_account_id)
         same_item = values["item_id"] == order.item_id
         fields = po.OrderFields(**values, bom_id=order.bom_id if same_item else None, routing_id=order.routing_id if same_item else None,
                                 wip_warehouse_id=order.wip_warehouse_id, scrap_warehouse_id=order.scrap_warehouse_id,
-                                project_detail_account_id=order.project_detail_account_id, work_center_id=order.work_center_id if same_item else None,
+                                work_center_id=order.work_center_id if same_item else None,
                                 responsible_user_id=order.responsible_user_id, sales_order_line_id=order.sales_order_line_id,
                                 parent_order_id=order.parent_order_id, joint_cost_method=order.joint_cost_method)
         _r, ok = _run(self, "ویرایش دستور تولید", po.update_order, cid, uid, oid, fields)
@@ -670,6 +721,8 @@ class OrdersScreen(QWidget):
         """values برای تست/اتوماسیون؛ بدون آن فرم مربوط نمایش داده می‌شود."""
         if self.view is None:
             return False
+        if key == "dims":
+            return self.set_dimensions(values)
         cid, uid, oid = company_id(), user_id(), self.view.order.order_id
         mats = [(m.item_label, m.material_id) for m in self.view.materials]
         mat_items = {m.material_id: m.item_id for m in self.view.materials}
@@ -744,7 +797,21 @@ class OrdersScreen(QWidget):
             "children": lambda: po.create_child_orders(cid, uid, oid),
             "reverse": lambda: po.reverse_production(cid, uid, values["txn_id"], values.get("reason") or ""),
         }[key]
-        result, ok = _run(self, "دستور تولید", fn)
+        try:
+            result, ok = fn(), True
+        except ValueError as exc:
+            result, ok = None, False
+            # R337: مرکز هزینه/پروژهٔ الزامی جاافتاده: همین‌جا تعیین و عملیات دوباره انجام می‌شود
+            if _missing_dimension(str(exc)) and self.confirm(
+                    f"{exc}\n\nمرکز هزینه و پروژهٔ این دستور را الان تعیین می‌کنید؟ سپس همین عملیات دوباره انجام می‌شود.") \
+                    and self.set_dimensions():
+                skip, self._skip_confirm = getattr(self, "_skip_confirm", False), True
+                try:
+                    return self.action(key, values)
+                finally:
+                    self._skip_confirm = skip
+            elif not _missing_dimension(str(exc)):
+                QMessageBox.warning(self, "دستور تولید", str(exc))
         if ok:
             if key == "release" and result:
                 QMessageBox.information(self, "صدور", "دستور با هشدار کمبود صادر شد: " + "، ".join(a.item_label for a in result))

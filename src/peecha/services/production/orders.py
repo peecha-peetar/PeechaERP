@@ -214,6 +214,46 @@ def _apply_defaults(session, company_id: int, f: OrderFields) -> None:
     f.joint_cost_method = f.joint_cost_method or st.default_joint_cost_method
 
 
+# R337: حساب‌هایی که دستور تولید رویشان سند می‌زند (همراه حساب موجودی)
+_POSTING_ROLES = (c.WIP, c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.VARIANCE, c.SCRAP_LOSS)
+
+
+def _dimension_rules(session, company_id: int) -> SimpleNamespace:
+    """R337: آیا مرکز هزینه/پروژه برای دستور تولید الزامی است؟ هر کدام None یا علت الزام."""
+    from peecha.db.models.accounting import AccountDetailDimension, ChartOfAccount as Account
+    from peecha.services import detail_dimensions as dims
+
+    types = dims.ensure_specialized_dimensions(session, company_id)
+    accounts = {c.role_account(session, company_id, r) for r in _POSTING_ROLES}
+    accounts.add(engine._resolve_role_account(session, company_id, "INVENTORY_ASSET"))
+    accounts.discard(None)
+    out = {}
+    for key, code in (("cost_center", dims.COST_CENTER_CODE), ("project", dims.PROJECT_CODE)):
+        codes = sorted(session.scalars(select(Account.full_code).join(
+            AccountDetailDimension, AccountDetailDimension.account_id == Account.account_id).where(
+            Account.account_id.in_(accounts), AccountDetailDimension.dimension_type_id == types[code],
+            AccountDetailDimension.is_required.is_(True)))) if accounts else []
+        out[key] = f"حساب «{'، '.join(codes)}» بدون آن ثبت نمی‌شود" if codes else None
+    if out["cost_center"] is None and c.settings(session, company_id).require_cost_center:
+        out["cost_center"] = "در تنظیمات تولید الزامی شده است"
+    return SimpleNamespace(**out)
+
+
+def dimension_rules(company_id: int) -> SimpleNamespace:
+    with new_session() as session:
+        rules = _dimension_rules(session, company_id)
+        session.commit()
+        return rules
+
+
+def _check_dimensions(session, company_id: int, cost_center_id: int | None, project_id: int | None) -> None:
+    rules = _dimension_rules(session, company_id)
+    if rules.cost_center and cost_center_id is None:
+        raise ValueError(f"مرکز هزینهٔ دستور تولید را انتخاب کنید؛ {rules.cost_center}.")
+    if rules.project and project_id is None:
+        raise ValueError(f"پروژهٔ دستور تولید را انتخاب کنید؛ {rules.project}.")
+
+
 def _validate(session, company_id: int, f: OrderFields) -> None:
     f.planned_qty = decimal.Decimal(f.planned_qty)
     if f.planned_qty <= 0:
@@ -237,6 +277,7 @@ def _validate(session, company_id: int, f: OrderFields) -> None:
     if f.joint_cost_method not in c.JOINT_METHODS:
         raise ValueError("روش تخصیص تولید مشترک نامعتبر است.")
     pm.check_lot_size(session, f.item_id, f.planned_qty)
+    _check_dimensions(session, company_id, f.cost_center_detail_account_id, f.project_detail_account_id)
 
 
 def create_order(company_id: int, user_id: int, fields: OrderFields, idempotency_key: str | None = None) -> int:
@@ -282,6 +323,30 @@ def update_order(company_id: int, user_id: int, order_id: int, fields: OrderFiel
                 setattr(order, k, v)
         if changes:
             c.audit(session, company_id, user_id, "ProductionOrder", order_id, "UPDATE", {**changes, "reason": reason})
+        session.commit()
+
+
+def set_order_dimensions(company_id: int, user_id: int, order_id: int, cost_center_id: int | None,
+                         project_id: int | None) -> None:
+    """R337: مرکز هزینه/پروژهٔ دستور در جریان. مقدار خالی پر می‌شود؛ مقدار ثبت‌شده پس از صدور عوض نمی‌شود،
+    چون اسناد قبلی دستور با همان ثبت شده‌اند."""
+    labels = {"cost_center_detail_account_id": "مرکز هزینه", "project_detail_account_id": "پروژه"}
+    with new_session() as session:
+        order = lock_order(session, company_id, order_id)
+        if order.status_code in ("CLOSED", "CANCELLED"):
+            raise ValueError("دستور بسته یا لغوشده تغییر نمی‌کند.")
+        changes = {}
+        for attr, value in (("cost_center_detail_account_id", cost_center_id), ("project_detail_account_id", project_id)):
+            current = getattr(order, attr)
+            if value == current:
+                continue
+            if current is not None and order.status_code not in EDITABLE_STATUSES:
+                raise ValueError(f"{labels[attr]} این دستور پس از صدور عوض نمی‌شود، چون اسناد قبلی با همان ثبت شده‌اند.")
+            setattr(order, attr, value)
+            changes[attr] = [str(current), str(value)]
+        _check_dimensions(session, company_id, order.cost_center_detail_account_id, order.project_detail_account_id)
+        if changes:
+            c.audit(session, company_id, user_id, "ProductionOrder", order_id, "DIMENSIONS", changes)
         session.commit()
 
 
@@ -477,8 +542,7 @@ def _preflight(session, company_id: int, order: ProductionOrder, st) -> None:
         raise ValueError("انبار مواد مشخص نشده است.")
     if order.fg_warehouse_id is None:
         raise ValueError("انبار محصول مشخص نشده است.")
-    if st.require_cost_center and order.cost_center_detail_account_id is None:
-        raise ValueError("مرکز هزینه برای دستور تولید الزامی است.")
+    _check_dimensions(session, company_id, order.cost_center_detail_account_id, order.project_detail_account_id)
     c.require_roles(session, company_id, (c.WIP,))
     if engine._resolve_role_account(session, company_id, "INVENTORY_ASSET") is None:
         raise ValueError("حساب موجودی تعیین نشده است.")
@@ -1498,7 +1562,8 @@ def order_view(company_id: int, order_id: int) -> SimpleNamespace:
         return SimpleNamespace(order=SimpleNamespace(**{k: getattr(order, k) for k in (
             "order_id", "order_code", "item_id", "bom_id", "routing_id", "planned_qty", "produced_qty", "scrapped_qty", "status_code",
             "start_date", "due_date", "actual_start_date", "actual_end_date", "material_warehouse_id", "fg_warehouse_id",
-            "scrap_warehouse_id", "cost_center_detail_account_id", "priority", "hold_reason", "parent_order_id",
+            "scrap_warehouse_id", "cost_center_detail_account_id", "project_detail_account_id", "priority", "hold_reason",
+            "parent_order_id",
             "planned_unit_cost", "standard_unit_cost", "joint_cost_method", "work_center_id")},
             item_label=labels.get(order.item_id, ""), status_label=STATUS_LABELS[order.status_code],
             progress=order.progress_percent, remaining_qty=order.remaining_qty),
