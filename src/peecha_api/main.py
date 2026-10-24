@@ -42,6 +42,16 @@ from peecha.services.workflow import registry as _wf_registry  # noqa: E402
 
 _wf_registry.ensure_loaded()
 
+
+@app.on_event("startup")
+def _upgrade_database() -> None:
+    """R335: سرور موبایل پیش از پذیرفتن درخواست، دیتابیس را با همان قفل و پشتیبان دسکتاپ ارتقا می‌دهد؛
+    اگر دیتابیس از این نسخه جلوتر باشد، سرور بالا نمی‌آید تا اطلاعات ناقص ثبت نشود."""
+    from peecha.db.base import get_engine
+    from peecha.db.schema_bootstrap import apply_pending_schema_files
+
+    apply_pending_schema_files(get_engine(), source="api", wait_seconds=300)
+
 app.include_router(auth.router)
 app.include_router(workflow.router)  # R297
 app.include_router(sync.router)

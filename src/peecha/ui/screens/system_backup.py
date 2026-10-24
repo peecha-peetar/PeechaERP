@@ -14,11 +14,15 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
@@ -26,7 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
+from peecha.db import schema_bootstrap
 from peecha.db.base import get_engine
 from peecha.services import backup as backup_service
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
@@ -43,6 +48,16 @@ _SCHEMA_LABELS = {
     "audit": "حسابرسی",
     "public": "سایر",
 }
+
+
+_UPGRADE_SOURCES = {"desktop": "برنامهٔ دسکتاپ", "api": "سرور موبایل", "settings": "تنظیمات اتصال",
+                    "restore": "بازیابی پشتیبان"}
+_UPGRADE_STATUS = {"DONE": "انجام شد", "FAILED": "ناموفق؛ دیتابیس دست‌نخورده ماند", "RUNNING": "نیمه‌تمام"}
+
+
+def _ltr(text: str) -> str:
+    """نام فایل و مسیر لاتین داخل جملهٔ فارسی به هم نریزد."""
+    return f"\u2066{text}\u2069"
 
 
 class SystemBackupScreen(FieldHelpMixin, QWidget):
@@ -104,6 +119,24 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         self.status_text.setPlaceholderText("نتیجهٔ آخرین بک‌آپ/بازیابی این‌جا نشان داده می‌شود.")
         layout.addWidget(self.status_text)
 
+        # R335: هر ارتقای دیتابیس با نسخه، سیستم، فایل‌ها و پشتیبان پیش از آن
+        upgrades_title = QLabel("ارتقاهای دیتابیس")
+        upgrades_title.setObjectName("sectionTitle")
+        layout.addWidget(upgrades_title)
+        self.upgrade_summary = QLabel("")
+        self.upgrade_summary.setObjectName("sectionHint")
+        self.upgrade_summary.setWordWrap(True)
+        layout.addWidget(self.upgrade_summary)
+        self.upgrades_table = QTableWidget(0, 6)
+        self.upgrades_table.setHorizontalHeaderLabels(
+            ["زمان", "نسخهٔ برنامه", "از کجا", "تعداد فایل", "نتیجه", "پشتیبان پیش از ارتقا"])
+        self.upgrades_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.upgrades_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.upgrades_table.verticalHeader().setVisible(False)
+        self.upgrades_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.upgrades_table.setMinimumHeight(150)
+        layout.addWidget(self.upgrades_table)
+
         self.export_button = QPushButton("📦 گرفتن بک‌آپ از موارد انتخاب‌شده")
         self.export_button.setObjectName("primaryButton")
         self.export_button.clicked.connect(self._on_export)
@@ -130,6 +163,42 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         engine = get_engine()
         self._tables = backup_service.list_backup_tables(engine)
         self._rebuild_tree()
+        self._fill_upgrades(engine)
+
+    def _fill_upgrades(self, engine) -> None:
+        status = schema_bootstrap.schema_status(engine)
+        names = lambda items: "، ".join(_ltr(n) for n in items)  # noqa: E731
+        parts = [f"فایل‌های اجراشده: {numerals.to_persian_digits(str(status.applied))}"
+                 + (f" (آخرین: {_ltr(status.latest)})" if status.latest else ""),
+                 f"پشتیبان خودکار پیش از هر ارتقا در پوشهٔ «{_ltr(str(schema_bootstrap.backup_dir()))}» نگه داشته "
+                 f"می‌شود ({numerals.to_persian_digits(str(schema_bootstrap.KEEP_BACKUPS))} پشتیبان آخر)."]
+        if status.pending:
+            parts.append(f"در انتظار اجرا: {names(status.pending)}")
+        if status.newer:
+            parts.append(f"⛔ دیتابیس فایل‌هایی دارد که این نسخهٔ برنامه نمی‌شناسد: {names(status.newer)}؛ برنامه را به‌روز کنید.")
+        if status.changed:
+            parts.append(f"⚠ این فایل‌ها پس از اجرا ویرایش شده‌اند و تغییرشان روی این دیتابیس اعمال نشده است: "
+                         f"{names(status.changed)}")
+        first_file = next(iter(schema_bootstrap.list_schema_files()), None)
+        self.upgrade_summary.setText("\n".join(parts))
+        self.upgrades_table.setRowCount(len(status.upgrades))
+        for r, u in enumerate(status.upgrades):
+            values = [numerals.format_jalali_datetime(u.started_at), u.app_version or "",
+                      _UPGRADE_SOURCES.get(u.source or "", u.source or ""), numerals.to_persian_digits(str(len(u.files))),
+                      _UPGRADE_STATUS.get(u.status, u.status),
+                      u.backup_path.replace("\\", "/").rsplit("/", 1)[-1] if u.backup_path else
+                      ("نصب تازه؛ پشتیبان لازم نبود" if first_file and first_file.name in u.files else "بدون پشتیبان")]
+            for c, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if c == 3:
+                    item.setToolTip("\n".join(u.files))
+                if c == 4 and u.error:
+                    item.setToolTip(u.error)
+                if c == 5 and u.backup_path:
+                    item.setToolTip(u.backup_path)
+                self.upgrades_table.setItem(r, c, item)
+        self.upgrades_table.resizeColumnsToContents()
+        self.upgrades_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
 
     def _rebuild_tree(self) -> None:
         self.tree.blockSignals(True)

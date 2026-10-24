@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QApplication,
     QGridLayout,
     QLabel,
     QLineEdit,
@@ -38,7 +39,7 @@ from peecha.config import (
 from peecha.db.base import get_engine, new_session, reset_engine
 from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
-from peecha.db.schema_bootstrap import apply_pending_schema_files
+from peecha.db.schema_bootstrap import SchemaUpgradeError, apply_pending_schema_files, pending_schema_files
 from peecha.services.auth import authenticate, has_any_user
 from peecha.services.bootstrap import bootstrap_system
 from peecha.ui import theme
@@ -168,14 +169,32 @@ class LoginWindow(QStackedWidget):
         self.status_label.setStyleSheet("")
         self.status_label.setText("")
         self.bootstrap_button.setVisible(False)
+        self.schema_blocked = None
         try:
-            apply_pending_schema_files(get_engine())
+            if pending_schema_files(get_engine()):
+                # R335: ارتقا پیش از ورود؛ اول پشتیبان گرفته می‌شود، پس ممکن است چند لحظه طول بکشد
+                self.status_label.setObjectName("sectionHint")
+                self.status_label.setStyleSheet("")
+                self.status_label.setText("در حال ارتقای دیتابیس؛ پیش از آن خودکار پشتیبان گرفته می‌شود…")
+                QApplication.processEvents()
+            apply_pending_schema_files(get_engine(), source="desktop", wait_seconds=10)
             no_users = not has_any_user()
+        except SchemaUpgradeError as exc:
+            self.schema_blocked = str(exc)
+            self.status_label.setObjectName("statusError")
+            self.status_label.setStyleSheet("")
+            self.status_label.setText(self.schema_blocked)
+            return
         except SQLAlchemyError as exc:
             detail = str(exc.__cause__ or exc)
+            self.status_label.setObjectName("statusError")
+            self.status_label.setStyleSheet("")
             self.status_label.setText(f"اتصال به دیتابیس برقرار نشد: {detail}")
             self.username_field.setFocus()
             return
+        self.status_label.setObjectName("statusError")
+        self.status_label.setStyleSheet("")
+        self.status_label.setText("")
 
         if no_users:
             self.bootstrap_button.setVisible(True)
@@ -185,6 +204,10 @@ class LoginWindow(QStackedWidget):
         self.username_field.setFocus()
 
     def _attempt_login(self) -> None:
+        if getattr(self, "schema_blocked", None):  # R335: نسخهٔ قدیمی یا ارتقای نیمه‌کاره؛ دوباره بررسی می‌شود
+            self._refresh_login_state()
+            if self.schema_blocked:
+                return
         username = self.username_field.text().strip()
         password = self.password_field.text()
         if not username or not password:
@@ -360,11 +383,13 @@ class LoginWindow(QStackedWidget):
         config = self._current_connection_config()
         engine = create_engine(config.sqlalchemy_url, future=True)
         try:
-            applied = apply_pending_schema_files(engine)
+            applied = apply_pending_schema_files(engine, source="settings", wait_seconds=10)
             if applied:
                 self._set_connection_status("جدول‌های دیتابیس با موفقیت ساخته/به‌روزرسانی شدند.", ok=True)
             else:
                 self._set_connection_status("جدول‌ها از قبل ساخته شده‌اند؛ کاری لازم نبود.", ok=True)
+        except SchemaUpgradeError as exc:
+            self._set_connection_status(str(exc), ok=False)
         except SQLAlchemyError as exc:
             self._set_connection_status(f"ساخت جدول‌ها ناموفق بود: {exc.__cause__ or exc}", ok=False)
         finally:

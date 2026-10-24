@@ -179,7 +179,7 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
     # طبقِ طراحی: اول ساختارِ مقصد را کاملاً به‌روز می‌کنیم — همان
     # مکانیزمِ استارت‌آپِ برنامه — تا بازیابی همیشه رویِ آخرین نسخهٔ
     # ساختار انجام شود، صرفِ‌نظر از اینکه فایلِ بک‌آپ چه زمانی گرفته شده.
-    apply_pending_schema_files(engine)
+    apply_pending_schema_files(engine, source="restore", backup=False)
 
     with _open(path, "rt") as f:
         payload = json.load(f)
