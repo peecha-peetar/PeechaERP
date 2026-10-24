@@ -1230,10 +1230,14 @@ def _post_stock_document_core(session, stock_document_id: int, company_id: int, 
     # نمی‌فرستادند — اگر حسابِ نقش‌محورشان به آن بُعدها هم نیاز
     # داشت، ثبتِ نهایی همیشه رد می‌شد.
     extra_dims: dict[int, int] = {}
-    if doc.cost_center_detail_account_id is not None:
-        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = doc.cost_center_detail_account_id
-    if doc.project_detail_account_id is not None:
-        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = doc.project_detail_account_id
+    for detail_id, code in ((doc.cost_center_detail_account_id, dimensions_service.COST_CENTER_CODE),
+                            (doc.project_detail_account_id, dimensions_service.PROJECT_CODE)):
+        if detail_id is not None:
+            # R338: زیر گروه واقعی همان تفصیلی (گروه «پروژه»ی که کاربر خودش ساخته هم پذیرفته شود)
+            detail = session.get(DetailAccount, detail_id)
+            type_id = detail.dimension_type_id if detail is not None else \
+                dimensions_service.get_specialized_dimension_type_id(company_id, code)
+            extra_dims[type_id] = detail_id
     # «مرکزِ سود» هیچ فیلدی در سرِسند ندارد — تنها منبعِ آن انبارِ خودِ
     # سند است (که از قبل در فرمِ انبارها قابلِ تعریف است). بدونِ این،
     # هر حسابِ نقش‌محوری که این بُعد را الزامی کند، ثبت را همیشه با

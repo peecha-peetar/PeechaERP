@@ -28,7 +28,7 @@ from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.fixed_assets import (
-    FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, leaf_options, money, num_field, qty_field,
+    FormDialog, LeafOptions, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, qty_field,
     qty_precision_problem, set_combo, table, user_id,
 )
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
@@ -47,7 +47,6 @@ def qty(value, item_id: int | None = None, uom_id: int | None = None) -> str:
 
 class PrdLookups:
     def __init__(self, cid: int) -> None:
-        from peecha.services import detail_dimensions as dims
         from peecha.services import hr as hr_service
         from peecha.services import inventory_catalog as catalog
         from peecha.services import inventory_locations as locations
@@ -59,9 +58,10 @@ class PrdLookups:
                      if i.item_kind_code in ("FINISHED_GOOD", "SEMI_FINISHED", "GOOD")]
         self.uoms = {i.item_id: i.base_uom_id for i in items}
         self.warehouses = [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations.list_warehouses(cid, active_only=True)]
-        self.cost_centers = leaf_options(cid, dims.COST_CENTER_CODE)  # R322: فقط آخرین سطح
-        self.projects = leaf_options(cid, dims.PROJECT_CODE)
-        self.dimension_rules = po.dimension_rules(cid)  # R337: مرکز هزینه/پروژهٔ الزامی دستور تولید
+        self.dimension_rules = rules = po.dimension_rules(cid)  # R337: مرکز هزینه/پروژهٔ الزامی دستور تولید
+        # R338: فهرست از همان گروهی که حساب‌های تولید الزامی کرده‌اند (گروه سیستمی یا گروه هم‌نام کاربر)
+        self.cost_centers = _group_options(cid, rules.cost_center_types)
+        self.projects = _group_options(cid, rules.project_types)
         self.branches = [(b.name, b.branch_id) for b in masters.list_branches(cid)]
         self.employees = [(f"{e.employee_code} — {e.full_name}", e.employee_id) for e in hr_service.list_employees(cid)]
         self.work_centers = [(f"{w.code} — {w.name}", w.work_center_id) for w in pm.list_work_centers(cid, active_only=True)]
@@ -90,6 +90,17 @@ def _combo_at(box: QComboBox, value) -> QComboBox:
     """R276: فهرست فرم ویرایش روی مقدار فعلی ردیف."""
     set_combo(box, value)
     return box
+
+
+def _group_options(cid: int, type_ids) -> LeafOptions:
+    from peecha.services import detail_dimensions as dims
+
+    label = lambda d: f"{d.code} — {d.name or ''}"  # noqa: E731
+    items, legacy = [], {}
+    for type_id in type_ids:
+        items += [(label(d), d.detail_account_id) for d in dims.list_leaf_detail_accounts(cid, type_id)]
+        legacy.update({d.detail_account_id: label(d) for d in dims.list_detail_accounts(cid, type_id)})
+    return LeafOptions(items, legacy)
 
 
 def _missing_dimension(message: str) -> bool:
@@ -640,9 +651,10 @@ class OrdersScreen(QWidget):
                  _combo_at(combo(self.lk.projects, "—"), g("project_detail_account_id")))]
 
     def _dims_text(self, o) -> str:
-        cc = self.lk.cost_centers.legacy.get(o.cost_center_detail_account_id) if o.cost_center_detail_account_id else None
-        pj = self.lk.projects.legacy.get(o.project_detail_account_id) if o.project_detail_account_id else None
-        return f"مرکز هزینه: {cc or '—'}   ·   پروژه: {pj or '—'}"
+        other = "از گروهی که حساب‌ها نمی‌خواهند"  # R338
+        cc = (self.lk.cost_centers.legacy.get(o.cost_center_detail_account_id) or other) if o.cost_center_detail_account_id else "—"
+        pj = (self.lk.projects.legacy.get(o.project_detail_account_id) or other) if o.project_detail_account_id else "—"
+        return f"مرکز هزینه: {cc}   ·   پروژه: {pj}"
 
     def set_dimensions(self, values: dict | None = None) -> bool:
         """R337: تعیین مرکز هزینه/پروژهٔ دستوری که صادر شده (مقدار خالی پر می‌شود)."""
@@ -801,17 +813,21 @@ class OrdersScreen(QWidget):
             result, ok = fn(), True
         except ValueError as exc:
             result, ok = None, False
-            # R337: مرکز هزینه/پروژهٔ الزامی جاافتاده: همین‌جا تعیین و عملیات دوباره انجام می‌شود
-            if _missing_dimension(str(exc)) and self.confirm(
-                    f"{exc}\n\nمرکز هزینه و پروژهٔ این دستور را الان تعیین می‌کنید؟ سپس همین عملیات دوباره انجام می‌شود.") \
-                    and self.set_dimensions():
-                skip, self._skip_confirm = getattr(self, "_skip_confirm", False), True
-                try:
-                    return self.action(key, values)
-                finally:
-                    self._skip_confirm = skip
-            elif not _missing_dimension(str(exc)):
-                QMessageBox.warning(self, "دستور تولید", str(exc))
+            # R337: مرکز هزینه/پروژهٔ الزامی جاافتاده: همین‌جا تعیین و عملیات یک بار دیگر انجام می‌شود
+            retried = getattr(self, "_dims_retry", False)
+            if _missing_dimension(str(exc)) and not retried:
+                if self.confirm(f"{exc}\n\nمرکز هزینه و پروژهٔ این دستور را الان تعیین می‌کنید؟ سپس همین عملیات دوباره انجام می‌شود.") \
+                        and self.set_dimensions():
+                    skip, self._skip_confirm, self._dims_retry = getattr(self, "_skip_confirm", False), True, True
+                    try:
+                        return self.action(key, values)
+                    finally:
+                        self._skip_confirm, self._dims_retry = skip, False
+            else:
+                # R338: پس از تعیین هم همان خطا: حساب تفصیلی دیگری می‌خواهد؛ پیام روشن، بدون پرسش تکراری
+                QMessageBox.warning(self, "دستور تولید", str(exc) + (
+                    "\n\nمرکز هزینه و پروژهٔ دستور تعیین شده، ولی این حساب هنوز تفصیلی دیگری می‌خواهد؛ "
+                    "گروه تفصیلی الزامی همین حساب را در «کدینگ حساب‌ها» بررسی کنید." if retried else ""))
         if ok:
             if key == "release" and result:
                 QMessageBox.information(self, "صدور", "دستور با هشدار کمبود صادر شد: " + "، ".join(a.item_label for a in result))

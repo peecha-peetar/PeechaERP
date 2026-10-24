@@ -219,21 +219,39 @@ _POSTING_ROLES = (c.WIP, c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED,
 
 
 def _dimension_rules(session, company_id: int) -> SimpleNamespace:
-    """R337: آیا مرکز هزینه/پروژه برای دستور تولید الزامی است؟ هر کدام None یا علت الزام."""
-    from peecha.db.models.accounting import AccountDetailDimension, ChartOfAccount as Account
+    """R337/R338: تفصیلی‌های الزامی حساب‌های تولید. cost_center/project: None یا علت الزام؛ *_types: گروه‌هایی که
+    انتخاب دستور باید از آن‌ها باشد (گروه سیستمی، یا گروه هم‌نامی که کاربر خودش ساخته و روی حساب الزامی کرده)؛
+    other: [(حساب، گروه)] که دستور تولید جایی برای انتخابش ندارد."""
+    from peecha.db.models.accounting import AccountDetailDimension, ChartOfAccount as Account, DetailDimensionType
     from peecha.services import detail_dimensions as dims
 
     types = dims.ensure_specialized_dimensions(session, company_id)
     accounts = {c.role_account(session, company_id, r) for r in _POSTING_ROLES}
     accounts.add(engine._resolve_role_account(session, company_id, "INVENTORY_ASSET"))
     accounts.discard(None)
-    out = {}
-    for key, code in (("cost_center", dims.COST_CENTER_CODE), ("project", dims.PROJECT_CODE)):
-        codes = sorted(session.scalars(select(Account.full_code).join(
-            AccountDetailDimension, AccountDetailDimension.account_id == Account.account_id).where(
-            Account.account_id.in_(accounts), AccountDetailDimension.dimension_type_id == types[code],
-            AccountDetailDimension.is_required.is_(True)))) if accounts else []
-        out[key] = f"حساب «{'، '.join(codes)}» بدون آن ثبت نمی‌شود" if codes else None
+    rows = session.execute(select(Account.full_code, DetailDimensionType.dimension_type_id, DetailDimensionType.code).join(
+        AccountDetailDimension, AccountDetailDimension.account_id == Account.account_id).join(
+        DetailDimensionType, DetailDimensionType.dimension_type_id == AccountDetailDimension.dimension_type_id).where(
+        Account.account_id.in_(accounts), AccountDetailDimension.is_required.is_(True))).all() if accounts else []
+    # کالا از خود دستور، مرکز سود از انبار و اشخاص در این حساب‌ها به کار نمی‌آیند
+    automatic = {types[dims.INVENTORY_ITEM_CODE], types[dims.PROFIT_CENTER_CODE], dims.ensure_person_dimension(session, company_id)}
+    kinds = {"cost_center": dims.COST_CENTER_CODE, "project": dims.PROJECT_CODE}
+    found = {k: {} for k in kinds}
+    other = []
+    for full_code, type_id, code in sorted(rows):
+        if type_id in automatic:
+            continue
+        label = dims.SPECIALIZED_DIMENSION_LABELS.get(code, code)
+        kind = next((k for k, sys_code in kinds.items() if code == sys_code or code.strip() == dims.SPECIALIZED_DIMENSION_LABELS[sys_code]), None)
+        if kind is None:
+            other.append((full_code, label))
+        else:
+            found[kind].setdefault(type_id, []).append(full_code)
+    out = {"other": other}
+    for kind, sys_code in kinds.items():
+        codes = sorted({code for codes in found[kind].values() for code in codes})
+        out[kind] = f"حساب «{'، '.join(codes)}» بدون آن ثبت نمی‌شود" if codes else None
+        out[f"{kind}_types"] = list(found[kind]) or [types[sys_code]]
     if out["cost_center"] is None and c.settings(session, company_id).require_cost_center:
         out["cost_center"] = "در تنظیمات تولید الزامی شده است"
     return SimpleNamespace(**out)
@@ -246,12 +264,26 @@ def dimension_rules(company_id: int) -> SimpleNamespace:
         return rules
 
 
+def _dimension_type_of(session, detail_account_id: int | None) -> int | None:
+    from peecha.db.models.accounting import DetailAccount
+
+    return session.scalar(select(DetailAccount.dimension_type_id).where(DetailAccount.detail_account_id == detail_account_id)) \
+        if detail_account_id else None
+
+
 def _check_dimensions(session, company_id: int, cost_center_id: int | None, project_id: int | None) -> None:
     rules = _dimension_rules(session, company_id)
-    if rules.cost_center and cost_center_id is None:
-        raise ValueError(f"مرکز هزینهٔ دستور تولید را انتخاب کنید؛ {rules.cost_center}.")
-    if rules.project and project_id is None:
-        raise ValueError(f"پروژهٔ دستور تولید را انتخاب کنید؛ {rules.project}.")
+    if rules.other:
+        account, group = rules.other[0]
+        raise ValueError(f"حساب «{account}» انتخاب تفصیلی «{group}» را الزامی کرده، ولی دستور تولید جایی برای آن ندارد؛ "
+                         "در کدینگ حساب‌ها این الزام را از حساب بردارید یا به‌جایش «مرکز هزینه» یا «پروژه» را الزامی کنید.")
+    for kind, value, label in (("cost_center", cost_center_id, "مرکز هزینهٔ"), ("project", project_id, "پروژهٔ")):
+        reason = getattr(rules, kind)
+        if reason and value is None:
+            raise ValueError(f"{label} دستور تولید را انتخاب کنید؛ {reason}.")
+        if reason and _dimension_type_of(session, value) not in getattr(rules, f"{kind}_types"):
+            raise ValueError(f"{label} انتخاب‌شده از گروه تفصیلی‌ای نیست که حساب‌های تولید می‌خواهند ({reason})؛ "
+                             "از فهرست همین فرم دوباره انتخاب کنید.")
 
 
 def _validate(session, company_id: int, f: OrderFields) -> None:
@@ -335,12 +367,16 @@ def set_order_dimensions(company_id: int, user_id: int, order_id: int, cost_cent
         order = lock_order(session, company_id, order_id)
         if order.status_code in ("CLOSED", "CANCELLED"):
             raise ValueError("دستور بسته یا لغوشده تغییر نمی‌کند.")
+        rules = _dimension_rules(session, company_id)
         changes = {}
-        for attr, value in (("cost_center_detail_account_id", cost_center_id), ("project_detail_account_id", project_id)):
+        for attr, value, kind in (("cost_center_detail_account_id", cost_center_id, "cost_center"),
+                                  ("project_detail_account_id", project_id, "project")):
             current = getattr(order, attr)
             if value == current:
                 continue
-            if current is not None and order.status_code not in EDITABLE_STATUSES:
+            # R338: مقداری که از گروه الزامی حساب‌ها نیست، با هیچ سندی جور نمی‌شود و قابل اصلاح است
+            usable = not getattr(rules, kind) or _dimension_type_of(session, current) in getattr(rules, f"{kind}_types")
+            if current is not None and usable and order.status_code not in EDITABLE_STATUSES:
                 raise ValueError(f"{labels[attr]} این دستور پس از صدور عوض نمی‌شود، چون اسناد قبلی با همان ثبت شده‌اند.")
             setattr(order, attr, value)
             changes[attr] = [str(current), str(value)]
