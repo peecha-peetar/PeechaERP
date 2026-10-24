@@ -294,7 +294,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         new_sale_button = QPushButton("🆕")
         new_sale_button.setObjectName("iconButton")
         new_sale_button.setFixedWidth(44)
-        new_sale_button.setToolTip("فروش تازه")
+        new_sale_button.setToolTip("فروش جدید")
         new_sale_button.clicked.connect(self._reset_sale)
         scan_row.addWidget(new_sale_button)
         self.scan_field = QLineEdit()
@@ -433,7 +433,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
             (self.price_list_combo, "فهرست قیمتی که بهای پیشنهادی هر کالا از روی آن خوانده می‌شود — خالی یعنی فهرست پیش‌فرض شرکت."),
             (
                 self.tax_exempt_checkbox,
-                "با روشن‌کردنش، مالیات همهٔ ردیف‌های همین فاکتور — ازپیش‌ثبت‌شده و تازه — بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیات قبلی را برنمی‌گرداند.",
+                "با روشن‌کردنش، مالیات همهٔ ردیف‌های همین فاکتور — ازپیش‌ثبت‌شده و جدید — بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیات قبلی را برنمی‌گرداند.",
             ),
             (self.scan_field, "بارکد را با دستگاه اسکن کنید یا کد/نام کالا را تایپ و Enter بزنید — با یک اسکن دیگر همان کالا، فقط تعداد همان ردیف زیاد می‌شود."),
         ])
@@ -1138,7 +1138,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
     ) -> bool:
         uom_id = uom_id or item.base_uom_id
         if self._is_confirmed:
-            self.status_label.setText("این فروش قبلاً تایید شده — برای فروش تازه، «فروش تازه» را بزنید.")
+            self.status_label.setText("این فروش قبلاً تایید شده — برای فروش جدید، «فروش جدید» را بزنید.")
             return False
         # طبقِ رفعِ باگِ گزارش‌شده («کالایِ متغیردار پیشنهاد داده
         # نمی‌شود، چیزی برایِ ثبت نیست»): پیش از حتی ساختنِ پیش‌نویسِ

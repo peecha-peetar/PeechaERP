@@ -82,7 +82,7 @@ export function CrmTasksScreen({ apiClient, offlineQueue, onBack, onOpenCustomer
     >
       <View style={{ flexDirection: "row", gap: spacing.sm }}>
         <Button label="بازگشت" variant="secondary" onPress={onBack} fullWidth={false} size="md" />
-        <Button label="ثبت سرنخ تازه" onPress={onNewLead} fullWidth={false} size="md" />
+        <Button label="ثبت سرنخ جدید" onPress={onNewLead} fullWidth={false} size="md" />
       </View>
       <Text style={[typography.h2, { color: colors.textPrimary }]}>کارهای من</Text>
       {total === 0 && tickets.length === 0 ? <EmptyState title="کار بازی ندارید" /> : null}

@@ -43,7 +43,7 @@ def save_lead_source(company_id: int, code: str, name: str, source_id: int | Non
             raise ValueError("این کد منبع قبلاً تعریف شده است.")
         row = session.get(LeadSource, source_id) if source_id else None
         if source_id and (row is None or row.company_id != company_id):
-            raise ValueError("منابع پیش‌فرض سیستم قابل ویرایش نیستند؛ منبع تازه بسازید.")
+            raise ValueError("منابع پیش‌فرض سیستم قابل ویرایش نیستند؛ منبع جدید بسازید.")
         row = row or LeadSource(company_id=company_id)
         row.code, row.name, row.sort_order, row.is_active = code, name, sort_order, is_active
         session.add(row)

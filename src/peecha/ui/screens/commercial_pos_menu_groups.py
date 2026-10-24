@@ -96,7 +96,7 @@ class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
         new_button = QPushButton("🆕")
         new_button.setObjectName("iconButton")
         new_button.setFixedWidth(44)
-        new_button.setToolTip("گروه تازه")
+        new_button.setToolTip("گروه جدید")
         new_button.clicked.connect(self._reset_form)
         form_row.addWidget(new_button)
         delete_button = QPushButton("🗑️")

@@ -654,7 +654,7 @@ def cancel_stock_document(stock_document_id: int, company_id: int, user_id: int 
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code not in ("DRAFT", "CONFIRMED"):
-            raise ValueError("سند ثبت‌شده هرگز لغو نمی‌شود — برای اصلاح، سند تازه‌ای ثبت کنید.")
+            raise ValueError("سند ثبت‌شده هرگز لغو نمی‌شود — برای اصلاح، سند جدیدی ثبت کنید.")
         doc.status_code = "CANCELLED"
         audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="StockDocument",
                                    entity_id=stock_document_id, action="CANCEL",

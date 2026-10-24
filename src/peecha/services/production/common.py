@@ -13,7 +13,7 @@ import decimal
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import DetailAccount
+from peecha.db.models.accounting import AccountDetailDimension, DetailAccount
 from peecha.db.models.inventory import InventoryAccountMapping, Item
 from peecha.db.models.production import ProductionSettings
 
@@ -135,11 +135,17 @@ def require_roles(session, company_id: int, roles: tuple[str, ...]) -> None:
 
 
 def post_journal(session, company_id: int, user_id: int, date: datetime.date, description: str,
-                 lines: list[tuple[str, decimal.Decimal, decimal.Decimal, tuple[int | None, ...]]]) -> int | None:
-    """سند حسابداری تولید در همان تراکنش. هر ردیف: (نقش، بدهکار، بستانکار، تفصیلی‌ها)؛ ردیف‌های هم‌حساب تجمیع می‌شوند."""
+                 lines: list[tuple[str, decimal.Decimal, decimal.Decimal, tuple[int | None, ...]]],
+                 item_id: int | None = None) -> int | None:
+    """سند حسابداری تولید در همان تراکنش. هر ردیف: (نقش، بدهکار، بستانکار، تفصیلی‌ها)؛ ردیف‌های هم‌حساب تجمیع می‌شوند.
+    item_id: کالای دستور تولید؛ حسابی که تفصیلی «کالا» می‌خواهد (مثل کالای در جریان ساخت) تفصیلی همین کالا را می‌گیرد."""
+    from peecha.services import detail_dimensions as dimensions_service
     from peecha.services import journal_entries as je_service
 
-    merged: dict[tuple, decimal.Decimal] = {}
+    item_detail = session.scalar(select(Item.item_detail_account_id).where(Item.item_id == item_id)) if item_id else None
+    item_dim = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE) \
+        if item_detail else None
+    rows = []
     for role, debit, credit, details in lines:
         account_id = role_account(session, company_id, role)
         if account_id is None:
@@ -148,6 +154,17 @@ def post_journal(session, company_id: int, user_id: int, date: datetime.date, de
         ids = {d for d in details if d}
         if mapping is not None and mapping.detail_account_id:
             ids.add(mapping.detail_account_id)
+        rows.append((account_id, ids, debit, credit))
+    needs_item = set(session.scalars(select(AccountDetailDimension.account_id).where(
+        AccountDetailDimension.account_id.in_({r[0] for r in rows}), AccountDetailDimension.dimension_type_id == item_dim,
+        AccountDetailDimension.is_required.is_(True)))) if item_dim else set()
+    given = {d for r in rows for d in r[1]}
+    given_dims = dict(session.execute(select(DetailAccount.detail_account_id, DetailAccount.dimension_type_id)
+                                      .where(DetailAccount.detail_account_id.in_(given))).all()) if given else {}
+    merged: dict[tuple, decimal.Decimal] = {}
+    for account_id, ids, debit, credit in rows:
+        if account_id in needs_item and not any(given_dims.get(d) == item_dim for d in ids):
+            ids = ids | {item_detail}
         key = (account_id, tuple(sorted(ids)))
         merged[key] = merged.get(key, ZERO) + money(debit) - money(credit)
     all_ids = {d for k in merged for d in k[1]}

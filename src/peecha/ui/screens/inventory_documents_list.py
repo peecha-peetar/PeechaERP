@@ -87,7 +87,7 @@ class InventoryDocumentsListScreen(FieldHelpMixin, QWidget):
                 continue
             button = QPushButton(f"➕ {label}")
             button.setObjectName("primaryButton")
-            button.setToolTip(f"سند {label}ی تازه")
+            button.setToolTip(f"سند {label}ی جدید")
             button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
             new_buttons.addWidget(button)
         layout.addLayout(new_buttons)

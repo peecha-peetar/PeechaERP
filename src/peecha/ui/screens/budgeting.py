@@ -290,7 +290,7 @@ class BudgetsScreen(QWidget):
         self.t_lines = table([])
         self.t_lines.cellDoubleClicked.connect(lambda _r, _c: self.edit_line())
         self.tabs.addTab(self.t_lines, "ردیف‌ها و توزیع دوره‌ای")
-        self.t_hist = table(["زمان", "گام", "وضعیت تازه", "کاربر", "نظر"])
+        self.t_hist = table(["زمان", "گام", "وضعیت جدید", "کاربر", "نظر"])
         self.tabs.addTab(self.t_hist, "تاریخچهٔ تصمیم")
         self.t_periods = table(["دوره", "از", "تا", "وضعیت", "بسته‌شده توسط", "یادداشت"])
         self.tabs.addTab(self.t_periods, "دوره‌ها")
@@ -525,7 +525,7 @@ class BudgetsScreen(QWidget):
         if line is None:
             return False
         fields = [f for f in self._line_fields(line) if f[0] not in ("basis", "account", "cc", "pj", "branch", "dept", "cat", "ptype")]
-        v = _ask(self, "ویرایش ردیف بودجه", fields, f"ابعاد ردیف: {line.label} (برای تغییر ابعاد، ردیف تازه بسازید).")
+        v = _ask(self, "ویرایش ردیف بودجه", fields, f"ابعاد ردیف: {line.label} (برای تغییر ابعاد، ردیف جدید بسازید).")
         if v is None:
             return False
         weights, ok = self._weights(v["weights"])

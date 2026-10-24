@@ -97,7 +97,7 @@ class _ReportTemplatesTab(QWidget):
 
         self.pro_box = QCheckBox("چاپ با طرح حرفه‌ای")
         self.pro_box.setToolTip(
-            "فاکتور و سند انبار بدون گزارش تعریف‌شده با طرح حرفه‌ای چاپ می‌شوند و گزارش تازه از طرح حرفه‌ای شروع می‌شود."
+            "فاکتور و سند انبار بدون گزارش تعریف‌شده با طرح حرفه‌ای چاپ می‌شوند و گزارش جدید از طرح حرفه‌ای شروع می‌شود."
         )
         self.pro_box.toggled.connect(self._toggle_pro)
         layout.addWidget(self.pro_box)

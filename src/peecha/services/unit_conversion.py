@@ -186,7 +186,7 @@ def get_factor(item_id: int, uom_id: int, require_active: bool = False) -> decim
         if row is None:
             raise ValueError("برای این واحد، تبدیل به واحد پایهٔ کالا در فرم کالا تعریف نشده است.")
         if require_active and not row.is_active:
-            raise ValueError("این واحد برای این کالا غیرفعال است و در سند تازه قابل‌استفاده نیست.")
+            raise ValueError("این واحد برای این کالا غیرفعال است و در سند جدید قابل‌استفاده نیست.")
         return row.conversion_factor
 
 
@@ -210,7 +210,7 @@ def validate_quantity(
     if unit is None:
         raise ValueError("این واحد برای این کالا تعریف نشده است — واحد را از «واحدها و بسته‌بندی» فرم کالا اضافه کنید.")
     if require_active and not unit.is_active and not unit.is_base:
-        raise ValueError(f"واحد «{unit.label}» برای این کالا غیرفعال است و در سند تازه قابل‌استفاده نیست.")
+        raise ValueError(f"واحد «{unit.label}» برای این کالا غیرفعال است و در سند جدید قابل‌استفاده نیست.")
     if purpose == "PURCHASE" and not (unit.is_purchase_unit or unit.is_base):
         raise ValueError(f"واحد «{unit.label}» برای خرید مجاز نیست.")
     if purpose == "SALES" and not (unit.is_sales_unit or unit.is_base):

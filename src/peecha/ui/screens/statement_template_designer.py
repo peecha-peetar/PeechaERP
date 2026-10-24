@@ -310,7 +310,7 @@ class _RowEditorDialog(QDialog):
         existing: statement_templates_service.StatementRowInfo | None = None,
     ) -> None:
         super().__init__()
-        self.setWindowTitle("ویرایش ردیف" if existing else "افزودن ردیف تازه")
+        self.setWindowTitle("ویرایش ردیف" if existing else "افزودن ردیف جدید")
         self.resize(560, 620)
 
         layout = QVBoxLayout(self)
@@ -432,7 +432,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.new_name_field,
-                "نام الگوی تازه‌ای که می‌خواهید بسازید، مثلاً «صورت سود و زیان خلاصه».",
+                "نام الگوی جدیدی که می‌خواهید بسازید، مثلاً «صورت سود و زیان خلاصه».",
             ),
             (
                 self.new_type_combo,
@@ -444,7 +444,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
             ),
             (
                 self.rename_field,
-                "نام تازه برای الگوی انتخاب‌شده. برای اعمال، دکمهٔ «تغییر نام» را بزنید.",
+                "نام جدید برای الگوی انتخاب‌شده. برای اعمال، دکمهٔ «تغییر نام» را بزنید.",
             ),
         ])
 
@@ -458,7 +458,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         layout.addWidget(title)
 
         self.new_name_field = QLineEdit()
-        self.new_name_field.setPlaceholderText("نام الگوی تازه...")
+        self.new_name_field.setPlaceholderText("نام الگوی جدید...")
         layout.addWidget(self.new_name_field)
 
         self.new_type_combo = QComboBox()

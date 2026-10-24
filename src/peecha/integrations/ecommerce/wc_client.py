@@ -157,7 +157,7 @@ def fetch_new_orders(wcapi: API, *, status: str = "processing", per_page: int = 
     خود ERP انجام می‌شود، نه این‌جا."""
     resp = retry.call_with_retry(wcapi.get, "orders", params={"status": status, "per_page": per_page})
     if resp.status_code >= 400:
-        _raise_for_status(resp, "دریافت سفارش‌های تازه")
+        _raise_for_status(resp, "دریافت سفارش‌های جدید")
     rows = resp.json()
     if not isinstance(rows, list):
         return []

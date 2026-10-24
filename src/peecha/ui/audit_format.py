@@ -37,7 +37,7 @@ _TOKENS = {
     "reason": "علت", "note": "یادداشت", "customer": "مشتری", "supplier": "تامین‌کننده", "person": "شخص",
     "asset": "دارایی", "category": "طبقه", "batch": "بچ", "serial": "سریال", "expiry": "انقضا", "count": "تعداد",
     "budget": "بودجه", "project": "پروژه", "center": "مرکز", "equipment": "تجهیز", "task": "کار", "ticket": "تیکت",
-    "lead": "سرنخ", "opportunity": "فرصت", "campaign": "کمپین", "is": "", "active": "فعال", "new": "تازه", "old": "قبلی",
+    "lead": "سرنخ", "opportunity": "فرصت", "campaign": "کمپین", "is": "", "active": "فعال", "new": "جدید", "old": "قبلی",
 }
 VALUE_LABELS = {
     "DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "INACTIVE": "غیرفعال", "APPROVED": "تاییدشده", "REJECTED": "ردشده",

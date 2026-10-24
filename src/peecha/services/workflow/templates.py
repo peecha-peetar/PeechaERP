@@ -222,7 +222,7 @@ TEMPLATES: list[Template] = [
                  [{"from": "start", "to": "n1"}, {"from": "n1", "to": "t1"}, {"from": "t1", "to": "end", "when": "done"}])),
     # --- ارتباط با مشتری ------------------------------------------------------------------------------------------
     Template("LEAD_ASSIGNMENT", "واگذاری خودکار سرنخ", "ارتباط با مشتری",
-             "سرنخ تازه‌ای که مسئول مشخصی ندارد به نوبت به کم‌کارترین کارشناس فروش واگذار و به او خبر داده می‌شود.",
+             "سرنخ جدیدی که مسئول مشخصی ندارد به نوبت به کم‌کارترین کارشناس فروش واگذار و به او خبر داده می‌شود.",
              "LEAD", _graph(
                  {**_event("LEAD_CREATED"), "condition": {"any": [
                      {"field": "owner_user_id", "op": "is_empty"},
@@ -230,7 +230,7 @@ TEMPLATES: list[Template] = [
                  [{"id": "a1", "type": "ACTION", "label": "واگذاری سرنخ", "action": "entity.assign",
                    "retry": {"max": 3, "backoff_minutes": 5}},
                   {"id": "n1", "type": "NOTIFY", "label": "خبر به مسئول", "to": [{"kind": "FIELD", "field": "owner_user_id"}],
-                   "title": "سرنخ تازه به شما واگذار شد: {عنوان}"},
+                   "title": "سرنخ جدید به شما واگذار شد: {عنوان}"},
                   {"id": "end", "type": "END", "label": "پایان", "outcome": "DONE"}],
                  [{"from": "start", "to": "a1"}, {"from": "a1", "to": "n1"}, {"from": "n1", "to": "end"}])),
     Template("OPPORTUNITY_APPROVAL", "تایید فرصت فروش بزرگ", "ارتباط با مشتری",
@@ -238,9 +238,9 @@ TEMPLATES: list[Template] = [
              "OPPORTUNITY", _wizard("OPPORTUNITY_APPROVAL", "تایید فرصت فروش بزرگ", "OPPORTUNITY",
                                     trigger=_event("OPPORTUNITY_CREATED"), condition=gt("amount", 1_000_000_000),
                                     levels=[level("تایید مدیر فروش", perm("crm_pipeline"))])),
-    Template("CUSTOMER_ONBOARDING", "تایید مشتری تازه", "ارتباط با مشتری",
-             "مشتری تازه‌ای که منتظر تایید است به مدیر فروش می‌رسد؛ با تایید فعال و با رد غیرفعال می‌شود.",
-             "CUSTOMER", _wizard("CUSTOMER_ONBOARDING", "تایید مشتری تازه", "CUSTOMER",
+    Template("CUSTOMER_ONBOARDING", "تایید مشتری جدید", "ارتباط با مشتری",
+             "مشتری جدیدی که منتظر تایید است به مدیر فروش می‌رسد؛ با تایید فعال و با رد غیرفعال می‌شود.",
+             "CUSTOMER", _wizard("CUSTOMER_ONBOARDING", "تایید مشتری جدید", "CUSTOMER",
                                  trigger=_event("CUSTOMER_PENDING_APPROVAL", gate=True),
                                  levels=[level("تایید مدیر فروش", perm("detail_dimensions"))],
                                  actions=["entity.approve"], reject_actions=["entity.reject"])),

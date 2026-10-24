@@ -723,7 +723,7 @@ def publish(company_id: int, user_id: int | None, definition_id: int) -> int:
         latest = session.scalar(select(WfDefinitionVersion).where(WfDefinitionVersion.definition_id == definition_id)
                                 .order_by(WfDefinitionVersion.version_no.desc()))
         if latest.status_code != "DRAFT":
-            raise WorkflowError("تغییر تازه‌ای برای انتشار وجود ندارد.")
+            raise WorkflowError("تغییر جدیدی برای انتشار وجود ندارد.")
         problems = errors(validate_graph(company_id, latest.graph or {}, d.entity_type, d.definition_id))
         if problems:
             raise WorkflowError("پیش از انتشار این ایرادها را رفع کنید:\n" + "\n".join(f"• {p.message}" for p in problems))

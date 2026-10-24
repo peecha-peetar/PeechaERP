@@ -19,7 +19,7 @@ _FIELD_LABELS = {
     "warehouse_id": "انبار", "requested_delivery_date": "تاریخ تحویل", "purchase_type_id": "نوع خرید", "status_code": "وضعیت",
 }
 _ACTIONS = {"ADD_LINE": "افزودن ردیف", "UPDATE_LINE": "ویرایش ردیف", "DELETE_LINE": "حذف ردیف",
-            "UPDATE_HEADER": "ویرایش سر سند", "STATUS": "تغییر وضعیت"}
+            "UPDATE_HEADER": "ویرایش سر سند", "STATUS": "تغییر وضعیت", "CLOSE": "اتمام سفارش", "REOPEN": "بازگشایی سفارش"}
 _STATUSES = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبت نهایی", "CANCELLED": "لغوشده"}
 
 

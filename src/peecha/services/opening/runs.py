@@ -156,7 +156,7 @@ def set_people(company_id: int, user_id: int, run_id: int, module_code: str, own
         _run(session, company_id, run_id)
         m = _module(session, run_id, module_code, lock=True)
         if m.status_code in LOCKED_MODULE:
-            raise ValueError("ماژول ثبت‌شده مسئول تازه نمی‌گیرد.")
+            raise ValueError("ماژول ثبت‌شده مسئول جدید نمی‌گیرد.")
         m.owner_user_id, m.approver_user_id = owner_user_id, approver_user_id
         c.event(session, run_id, "PEOPLE", user_id, module_code, details={"owner": owner_user_id, "approver": approver_user_id})
         session.commit()

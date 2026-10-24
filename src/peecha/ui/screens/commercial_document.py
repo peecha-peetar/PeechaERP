@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -791,7 +792,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         item_row_layout.setSpacing(3)
         self.item_combo = _make_searchable_combo(item_options)
         item_row_layout.addWidget(self.item_combo, stretch=1)
-        add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریف کالای تازه")
+        add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریف کالای جدید")
 
         self.variant_combo = _make_searchable_combo([])
         # طبقِ درخواستِ صریح («وقتی کالای دارایِ چند متغیر را وارد
@@ -963,7 +964,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
                 if index >= 0:
                     self.warehouse_combo.setCurrentIndex(index)
             warehouse_row_layout.addWidget(self.warehouse_combo, stretch=1)
-            add_quick_add_button(warehouse_row_layout, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
+            add_quick_add_button(warehouse_row_layout, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار جدید")
             field_specs.append(FieldSpec("warehouse", "انبار", warehouse_row_widget, span=1))
         field_specs.append(FieldSpec("description", "توضیح", self.description_field, span=3))
 
@@ -2416,6 +2417,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = "DRAFT"
         self._corrects_document_id: int | None = None
         self._lines: list = []
+        self._discount_type_choice: dict[int, str] = {}  # R336: نوع تخفیف انتخاب‌شده برای ردیف بی‌تخفیف
         self._items: list[catalog_service.ItemRow] = []
         self._decimal_places = 0
         self._uom_decimal_places: dict[int, int] = {}
@@ -2426,6 +2428,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._one_step_invoice_post = False
         self._goods_receipt_enabled = False
         self._warehouse_approved = False
+        self._close_state = None  # R336
         self._locked_line_ids: set[int] = set()
         self._cost_center_required = False
         self._project_required = False
@@ -2495,7 +2498,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         counterparty_row.addWidget(self.counterparty_combo, stretch=1)
         add_quick_add_button(
             counterparty_row, self.counterparty_combo, main_window, "GL_DIM",
-            "تعریف مشتری تازه" if self._is_sales else "تعریف تامین‌کنندهٔ تازه",
+            "تعریف مشتری جدید" if self._is_sales else "تعریف تامین‌کنندهٔ جدید",
         )
         header_grid.addLayout(counterparty_row, 1, 1)
 
@@ -2506,7 +2509,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         warehouse_row.setSpacing(3)
         self.warehouse_combo = _EnterComboBox()
         warehouse_row.addWidget(self.warehouse_combo, stretch=1)
-        add_quick_add_button(warehouse_row, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
+        add_quick_add_button(warehouse_row, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار جدید")
         header_grid.addLayout(warehouse_row, 1, 2)
 
         # طبقِ درخواستِ صریح («فیلدِ شماره‌یِ سفارش روی هدر باز بشه»):
@@ -2570,7 +2573,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         cost_center_row.setSpacing(3)
         self.cost_center_combo = _EnterComboBox()
         cost_center_row.addWidget(self.cost_center_combo, stretch=1)
-        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریف مرکز هزینهٔ تازه")
+        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریف مرکز هزینهٔ جدید")
         row2_grid.addLayout(cost_center_row, 1, 3)
 
         self.project_box = QWidget()
@@ -2584,7 +2587,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         project_row.setSpacing(3)
         self.project_combo = _EnterComboBox()
         project_row.addWidget(self.project_combo, stretch=1)
-        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریف پروژهٔ تازه")
+        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریف پروژهٔ جدید")
         project_layout.addLayout(project_row)
         row2_grid.addWidget(self.project_box, 0, 4, 2, 1)
 
@@ -2627,7 +2630,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         consignment_warehouse_row.setSpacing(3)
         self.consignment_warehouse_combo = _EnterComboBox()
         consignment_warehouse_row.addWidget(self.consignment_warehouse_combo, stretch=1)
-        add_quick_add_button(consignment_warehouse_row, self.consignment_warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
+        add_quick_add_button(consignment_warehouse_row, self.consignment_warehouse_combo, main_window, "INV_WAREHOUSES", "تعریف انبار جدید")
         consignment_warehouse_layout.addLayout(consignment_warehouse_row)
         row2_grid.addWidget(self.consignment_warehouse_box, 0, 6, 2, 1)
         self.consignment_warehouse_box.setVisible(document_type_code == "CONSIGNMENT_OUT")
@@ -3041,7 +3044,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.correct_button.setToolTip(
             "اصلاح فاکتور ثبت‌شده — فقط برای مدیر و در صورت فعال‌بودن تنظیم «اجازهٔ اصلاح فاکتور ثبت‌شده».\n"
             "سند فعلی عیناً و با تاریخ امروز برگشت می‌خورد (بدون تغییر تاریخ فاکتورهای قبلی) "
-            "و یک پیش‌نویس تازه برای ویرایش باز می‌شود."
+            "و یک پیش‌نویس جدید برای ویرایش باز می‌شود."
         )
         self.correct_button.clicked.connect(self._correct_invoice)
         _set_initial_visibility(self.correct_button, document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
@@ -3066,10 +3069,26 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.convert_button = QPushButton("→")
         self.convert_button.setObjectName("primaryIconButton")
         self.convert_button.setFixedWidth(48)
-        self.convert_button.setToolTip("تبدیل به فاکتور — از مقدار باقی‌ماندهٔ این سند، فاکتور تازه می‌سازد")
+        self.convert_button.setToolTip("تبدیل به فاکتور — از مقدار باقی‌ماندهٔ این سند، فاکتور جدید می‌سازد")
         self.convert_button.clicked.connect(self._convert_to_invoice)
         _set_initial_visibility(self.convert_button, document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
         self.footer_layout.addWidget(self.convert_button)
+
+        # R336: سفارش نیمه‌تمامی که کامل نمی‌شود، «اتمام» می‌شود تا مانده‌اش دیگر به فاکتور تبدیل نشود
+        self.close_order_button = QPushButton("🏁")
+        self.close_order_button.setObjectName("iconButton")
+        self.close_order_button.setFixedWidth(44)
+        self.close_order_button.setToolTip("اتمام سفارش")
+        self.close_order_button.clicked.connect(lambda _c=False: self._close_order())
+        _set_initial_visibility(self.close_order_button, document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
+        self.footer_layout.addWidget(self.close_order_button)
+        self.reopen_order_button = QPushButton("🔓")
+        self.reopen_order_button.setObjectName("iconButton")
+        self.reopen_order_button.setFixedWidth(44)
+        self.reopen_order_button.setToolTip("بازگشایی سفارش اتمام‌شده؛ ماندهٔ آن دوباره به فاکتور تبدیل می‌شود")
+        self.reopen_order_button.clicked.connect(self._reopen_order)
+        self.reopen_order_button.hide()
+        self.footer_layout.addWidget(self.reopen_order_button)
 
         # طبقِ درخواستِ صریح («در انتهایِ فرم‌هایِ بازرگانی دکمه‌ای که
         # مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب نمایش داده بشه»): فقط وقتی
@@ -3121,7 +3140,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             ),
             (
                 self.tax_exempt_checkbox,
-                "با روشن‌کردنش، مالیات همهٔ ردیف‌های این سند — ازپیش‌ثبت‌شده و تازه — بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیات قبلی را برنمی‌گرداند.",
+                "با روشن‌کردنش، مالیات همهٔ ردیف‌های این سند — ازپیش‌ثبت‌شده و جدید — بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیات قبلی را برنمی‌گرداند.",
             ),
             (self.description_field, "توضیح آزاد داخلی دربارهٔ این سند."),
         ])
@@ -3385,6 +3404,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = doc.status_code
         self._refresh_workflow_bar()
         self._warehouse_approved = doc.warehouse_approved_at is not None
+        self._close_state = documents_service.order_close_state(self._document_id, company_id) \
+            if self.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES and doc.status_code != "DRAFT" else None
         self._locked_line_ids = documents_service.get_quantity_locked_line_ids(self._document_id, company_id)
         self._corrects_document_id = doc.corrects_document_id
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]} #{numerals.to_persian_digits(str(doc.document_no))}")
@@ -3607,7 +3628,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             if ln.line_id == line_id:
                 ln.bin_location_id = combo.currentData()
 
-    def _make_inline_discount_widget(self, dp: int, discount_amount: decimal.Decimal, discount_percent: decimal.Decimal) -> QWidget:
+    def _make_inline_discount_widget(self, dp: int, discount_amount: decimal.Decimal, discount_percent: decimal.Decimal,
+                                     chosen_type: str | None = None) -> QWidget:
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(2, 0, 2, 0)
@@ -3624,7 +3646,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # حالا هم‌الگو با عرضِ تازه‌یِ خودِ ستون (نگاه کن: _line_column_widths)
         # کمی بیشتر است.
         type_combo.setMaximumWidth(74)
-        if discount_percent:
+        if discount_percent or (chosen_type == "PERCENT" and not discount_amount):
             type_combo.setCurrentIndex(type_combo.findData("PERCENT"))
             field.setValue(float(discount_percent))
         else:
@@ -3667,7 +3689,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         price_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
         self.lines_table.setCellWidget(row_index, 3, price_field)
 
-        discount_container = self._make_inline_discount_widget(dp, ln.discount_amount, ln.discount_percent)
+        discount_container = self._make_inline_discount_widget(dp, ln.discount_amount, ln.discount_percent,
+                                                                self._discount_type_choice.get(ln.line_id))
         discount_field = discount_container.findChild(_AmountField, "inlineDiscountField")
         discount_type_combo = discount_container.findChild(_EnterComboBox, "inlineDiscountType")
         discount_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
@@ -3696,6 +3719,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setCellWidget(row_index, _ACTIONS_COL, self._make_line_actions_widget(row_index))
 
     def _on_inline_discount_type_changed(self, row_index: int, discount_field) -> None:
+        combo = discount_field.parentWidget().findChild(_EnterComboBox, "inlineDiscountType") \
+            if discount_field.parentWidget() is not None else None
+        if combo is not None and 0 <= row_index < len(self._lines):
+            # R336: پس از ذخیره و بارگذاری دوباره، ردیف بی‌تخفیف همان نوع انتخاب‌شده را نشان دهد
+            self._discount_type_choice[self._lines[row_index].line_id] = combo.currentData()
         discount_field.setValue(0)
         self._commit_inline_line_edit(row_index)
 
@@ -3724,7 +3752,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         unchanged = (
             quantity == line.quantity and unit_price == line.unit_price and tax_percent == line.tax_percent
             and (
-                (is_percent_discount and discount_value == current_discount_percent)
+                # R336: «درصدی» با همان درصد؛ تخفیف مبلغی قبلی (درصد صفر) تغییر حساب می‌شود و پاک می‌شود
+                (is_percent_discount and discount_value == current_discount_percent
+                 and (current_discount_percent or not current_discount_amount))
                 or (not is_percent_discount and current_discount_percent == 0 and discount_value == current_discount_amount)
             )
         )
@@ -4406,7 +4436,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._delete_line_object(self._lines[row_index])
 
     def _apply_status_state(self) -> None:
-        self.status_badge.setText(STATUS_LABELS.get(self._status_code, self._status_code))
+        is_closed = self._close_state is not None and self._close_state.closed
+        self.status_badge.setText(STATUS_LABELS.get(self._status_code, self._status_code) + (" — اتمام‌شده" if is_closed else ""))
         is_draft = self._status_code == "DRAFT"
         is_confirmed = self._status_code == "CONFIRMED"
         is_approved = self._status_code == "APPROVED"
@@ -4524,13 +4555,27 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
         needs_receipt = self._goods_receipt_enabled and not self._warehouse_approved
-        self.convert_button.setEnabled((is_confirmed or is_approved or is_posted) and not needs_receipt)
+        self.convert_button.setEnabled((is_confirmed or is_approved or is_posted) and not needs_receipt and not is_closed)
         self.convert_button.setToolTip(
+            "تبدیل به فاکتور — غیرفعال است، چون این سفارش اتمام شده؛ برای ادامه آن را بازگشایی کنید (🔓)." if is_closed else
             ("تبدیل به فاکتور — غیرفعال است، چون حوالهٔ انبار این سفارش هنوز توسط انباردار تایید نشده."
              if self.document_type_code == "SALES_ORDER" else
              "تبدیل به فاکتور — غیرفعال است، چون رسید کالای این سفارش هنوز توسط انباردار تایید نشده.")
-            if needs_receipt else "تبدیل به فاکتور — از مقدار باقی‌ماندهٔ این سند، فاکتور تازه می‌سازد"
+            if needs_receipt else "تبدیل به فاکتور — از مقدار باقی‌ماندهٔ این سند، فاکتور جدید می‌سازد"
         )
+        if self.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES:
+            state = self._close_state
+            self.close_order_button.setVisible(not is_closed)
+            self.reopen_order_button.setVisible(is_closed)
+            self.close_order_button.setEnabled(state is not None and state.can_close)
+            self.close_order_button.setToolTip(
+                f"اتمام سفارش — {state.reason}" if state is not None and state.can_close else
+                f"اتمام سفارش — غیرفعال است، چون: {state.reason if state is not None else 'سند هنوز تایید نشده است.'}")
+            if is_closed:
+                when = numerals.format_jalali_date(state.closed_at.date()) if state.closed_at else ""
+                self.reopen_order_button.setToolTip(
+                    f"بازگشایی سفارش — این سفارش {when} اتمام شده" + (f" (علت: {state.note})" if state.note else "")
+                    + "؛ با بازگشایی، ماندهٔ آن دوباره به فاکتور تبدیل می‌شود.")
         can_correct = is_posted and self._document_id is not None and self._can_correct_posted()
         self.correct_button.setEnabled(can_correct)
         if is_posted and self._document_id is not None and not can_correct:
@@ -4544,12 +4589,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.correct_button.setToolTip(
                 "اصلاح فاکتور ثبت‌شده — فقط برای مدیر و در صورت فعال‌بودن تنظیم «اجازهٔ اصلاح فاکتور ثبت‌شده».\n"
                 "سند فعلی عیناً و با تاریخ امروز برگشت می‌خورد (بدون تغییر تاریخ فاکتورهای قبلی) "
-                "و یک پیش‌نویس تازه برای ویرایش باز می‌شود."
+                "و یک پیش‌نویس جدید برای ویرایش باز می‌شود."
             )
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
         self._warehouse_approved = False
+        self._close_state = None
         self._locked_line_ids = set()
         self._settlement_plan = None
         self._status_code = "DRAFT"
@@ -5267,13 +5313,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         if company_id is None or self._document_id is None:
             return
-        has_receipt = QMessageBox.question(
+        # R336: پرسش مستقیم «نسیه است؟»؛ «بله» نسیه، «خیر» فرم دریافت/پرداخت
+        is_credit = QMessageBox.question(
             self, "نحوهٔ تسویه",
-            "آیا همین الان دریافت/پرداختی (نقد یا بانکی) برای این فاکتور انجام شده؟\n"
-            "«خیر» یعنی این فاکتور به‌طور کامل نسیه است.",
+            "آیا این فاکتور نسیه است؟\n«بله»: کل مبلغ نسیه ثبت می‌شود. «خیر»: فرم دریافت و پرداخت باز می‌شود.",
             QMessageBox.Yes | QMessageBox.No,
         )
-        if has_receipt == QMessageBox.Yes:
+        if is_credit != QMessageBox.Yes:
             self._open_settlement_plan()
             return
         try:
@@ -5455,12 +5501,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     )
             elif posted_settlement_plan is None:
                 noun = "دریافت وجه" if is_sales else "پرداخت وجه"
-                confirm_payment = QMessageBox.question(
+                is_credit = QMessageBox.question(
                     self, noun,
-                    f"آیا برای این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
+                    f"آیا این فاکتور نسیه است؟\n«بله»: نسیه می‌ماند. «خیر»: فرم {noun} باز می‌شود.",
                     QMessageBox.Yes | QMessageBox.No,
                 )
-                if confirm_payment == QMessageBox.Yes:
+                if is_credit != QMessageBox.Yes:
                     self._main_window.open_screen(
                         nav_code,
                         then=lambda screen: screen.prefill_for_invoice(posted_counterparty_id, posted_total, description),
@@ -5507,6 +5553,44 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         dialog = LineDeliveryDatesDialog(self, self._document_id, company_id, labels)
         dialog.open()
         return dialog
+
+    def _close_order(self, note: str | None = None) -> bool:
+        """R336: اتمام سفارش نیمه‌تمام؛ note=None یعنی علت از کاربر پرسیده شود."""
+        if self._document_id is None:
+            return False
+        if note is None:
+            note, ok = QInputDialog.getText(
+                self, "اتمام سفارش",
+                "ماندهٔ تحویل‌نشدهٔ این سفارش بسته می‌شود و دیگر به فاکتور تبدیل نمی‌شود.\nعلت اتمام (اختیاری):")
+            if not ok:
+                return False
+        try:
+            documents_service.close_order(self._document_id, self._company_id(),
+                                          app_session.current_user.user_id if app_session.current_user else None, note)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "اتمام سفارش", str(exc))
+            return False
+        self._load_document()
+        theme.set_status_label(self.status_label, "سفارش اتمام شد؛ ماندهٔ آن دیگر به فاکتور تبدیل نمی‌شود.", ok=True)
+        return True
+
+    def _reopen_order(self) -> bool:
+        if self._document_id is None:
+            return False
+        if QMessageBox.question(self, "بازگشایی سفارش", "این سفارش بازگشایی شود تا ماندهٔ آن دوباره به فاکتور تبدیل شود؟",
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return False
+        try:
+            documents_service.reopen_order(self._document_id, self._company_id(),
+                                           app_session.current_user.user_id if app_session.current_user else None)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "بازگشایی سفارش", str(exc))
+            return False
+        self._load_document()
+        theme.set_status_label(self.status_label, "سفارش بازگشایی شد.", ok=True)
+        return True
 
     def _revert_to_draft(self) -> None:
         if self._document_id is None:
@@ -5562,7 +5646,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self, "اصلاح فاکتور",
             "این فاکتور اصلاح شود؟\n"
             "سند انبار و حسابداری فعلی عیناً و با تاریخ امروز برگشت می‌خورد (بدون تغییر تاریخ فاکتورهای ثبت‌شدهٔ "
-            "دیگر) و یک پیش‌نویس تازه با اطلاعات همین فاکتور برای ویرایش باز می‌شود.",
+            "دیگر) و یک پیش‌نویس جدید با اطلاعات همین فاکتور برای ویرایش باز می‌شود.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:

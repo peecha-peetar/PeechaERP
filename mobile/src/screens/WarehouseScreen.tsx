@@ -592,7 +592,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
           />
         ))}
         {warehouses.map((wh) => (
-          <Button key={`new-${wh.warehouse_id}`} label={`جمع‌آوری گروهی تازه: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
+          <Button key={`new-${wh.warehouse_id}`} label={`جمع‌آوری گروهی جدید: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
         ))}
       </View>
     </View>
@@ -722,7 +722,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       </View>
       {activeTask ? renderTaskPanel(activeTask) : null}
       {renderWaves()}
-      <Button label="ساخت کار چیدن در قفسه از رسید تازه" size="md" variant="secondary" onPress={loadPutawaySources} />
+      <Button label="ساخت کار چیدن در قفسه از رسید جدید" size="md" variant="secondary" onPress={loadPutawaySources} />
       {putawaySources !== null && putawaySources.length === 0 ? <EmptyState title="رسید بی‌وظیفه‌ای نیست" /> : null}
       {(putawaySources ?? []).map((src) => (
         <Card key={src.document_id} onPress={() => createPutaway(src.document_id)}>

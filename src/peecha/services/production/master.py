@@ -619,7 +619,7 @@ def _get_bom(session, company_id: int, bom_id: int, for_edit: bool = False) -> B
     if for_edit:
         refresh_bom_lock(session, bom_id)
     if for_edit and bom.is_locked:
-        raise ValueError(f"نسخهٔ {bom.version_no} این فهرست مواد در دستور تولید استفاده شده و قفل است — برای تغییر، نسخهٔ تازه بسازید.")
+        raise ValueError(f"نسخهٔ {bom.version_no} این فهرست مواد در دستور تولید استفاده شده و قفل است — برای تغییر، نسخهٔ جدید بسازید.")
     return bom
 
 
@@ -681,7 +681,7 @@ def update_bom(company_id: int, bom_id: int, fields: BomFields, user_id: int | N
         refresh_bom_lock(session, bom_id)
         changed = {k: [str(getattr(bom, k)), str(v)] for k, v in fields.__dict__.items() if _differs(getattr(bom, k), v)}
         if bom.is_locked and set(changed) - {"valid_to", "status_code", "name", "notes"}:
-            raise ValueError("این نسخه قفل است؛ فقط پایان اعتبار، وضعیت و توضیحات قابل تغییر است — نسخهٔ تازه بسازید.")
+            raise ValueError("این نسخه قفل است؛ فقط پایان اعتبار، وضعیت و توضیحات قابل تغییر است — نسخهٔ جدید بسازید.")
         for k, v in fields.__dict__.items():
             setattr(bom, k, v)
         bom.is_active = fields.status_code == "ACTIVE"

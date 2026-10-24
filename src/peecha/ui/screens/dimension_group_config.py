@@ -152,7 +152,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.new_type_code_field,
-                "کد گروه تفصیلی تازه‌ای که می‌خواهید بسازید، مثلاً «مرکز فروش». بعد کلیک «افزودن گروه» ساخته می‌شود.",
+                "کد گروه تفصیلی جدیدی که می‌خواهید بسازید، مثلاً «مرکز فروش». بعد کلیک «افزودن گروه» ساخته می‌شود.",
             ),
             (
                 self.types_list,
@@ -191,7 +191,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         header_row.addWidget(title)
         header_row.addStretch(1)
-        header_row.addWidget(QLabel("کد گروه تازه"))
+        header_row.addWidget(QLabel("کد گروه جدید"))
         self.new_type_code_field = QLineEdit()
         self.new_type_code_field.setFixedWidth(160)
         header_row.addWidget(self.new_type_code_field)
@@ -451,7 +451,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         except ValueError as exc:
             self._show_type_status(str(exc), ok=False)
             return
-        self._show_type_status("گروه تازه ایجاد شد.", ok=True)
+        self._show_type_status("گروه جدید ایجاد شد.", ok=True)
         self.new_type_code_field.clear()
         self.refresh()
         label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(new_type.code, new_type.code)

@@ -714,7 +714,7 @@ class WorkOrderDialog(QDialog):
         return self._call("واگذاری", wos.assign, company_id(), user_id(), self.wo_id, ids, dlg.values().get("lead"))
 
     def refer(self) -> bool:
-        values = _ask(self, "ارجاع دستور کار", [("to", "مسئول تازه", combo(self.lk.users)), ("note", "علت ارجاع", _text())])
+        values = _ask(self, "ارجاع دستور کار", [("to", "مسئول جدید", combo(self.lk.users)), ("note", "علت ارجاع", _text())])
         if values is None:
             return False
         return self._call("ارجاع", wos.refer, company_id(), user_id(), self.wo_id, values["to"], values.get("note") or "")
@@ -805,7 +805,7 @@ class WorkOrderDialog(QDialog):
         return self._call("آماده‌به‌کاری", wos.release_machine, company_id(), user_id(), self.wo_id, values["at"], values.get("note"))
 
     def close_wo(self) -> bool:
-        if not _confirm(self, "بستن دستور کار", "پس از بستن، قطعه و هزینهٔ تازه پذیرفته نمی‌شود. بسته شود؟"):
+        if not _confirm(self, "بستن دستور کار", "پس از بستن، قطعه و هزینهٔ جدید پذیرفته نمی‌شود. بسته شود؟"):
             return False
         return self._call("بستن", wos.close, company_id(), user_id(), self.wo_id)
 
@@ -1350,7 +1350,7 @@ class PmScreen(QWidget):
         pid = self._plan()
         if pid is None:
             return False
-        values = _ask(self, "درخواست تعویق", [("date", "سررسید تازه", date_field(datetime.date.today() + datetime.timedelta(days=7))),
+        values = _ask(self, "درخواست تعویق", [("date", "سررسید جدید", date_field(datetime.date.today() + datetime.timedelta(days=7))),
                                               ("reason", "علت تعویق", _text())],
                       "تعویق پس از تأیید شخص دیگری اثر می‌گذارد و سررسید دستور کار باز هم جابه‌جا می‌شود.")
         if values is None:

@@ -184,14 +184,14 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         if self._with_requests:
             button = QPushButton(f"{_NEW_GLYPHS[_PR_TYPE]} {_PR_TITLE}")
             button.setObjectName("primaryButton")
-            button.setToolTip("ساخت درخواست خرید تازه")
+            button.setToolTip("ساخت درخواست خرید جدید")
             button.clicked.connect(lambda _checked=False: self._open_request(None))
             new_buttons.addWidget(button)
         if channel_type_code not in _SYNC_ONLY_CHANNEL_TYPES:
             for code in visible_types:
                 button = QPushButton(f"{_NEW_GLYPHS.get(code, '➕')} {DOC_TYPE_TITLES[code]}")
                 button.setObjectName("primaryButton")
-                button.setToolTip(f"ساخت {DOC_TYPE_TITLES[code]} تازه")
+                button.setToolTip(f"ساخت {DOC_TYPE_TITLES[code]} جدید")
                 button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
                 new_buttons.addWidget(button)
         layout.addLayout(new_buttons)
@@ -288,7 +288,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
                 numerals.format_company_amount(d.total_amount),
                 STATUS_LABELS.get(d.status_code, d.status_code),
                 d.reference_no or "—",
-                pre_sales_status or self._fulfillment_text(fulfillment),
+                pre_sales_status or self._fulfillment_text(fulfillment, d.closed_at is not None),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -354,10 +354,12 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             return None
         return documents_service.get_order_fulfillment_summary(d.document_id, company_id)
 
-    def _fulfillment_text(self, fulfillment) -> str:
+    def _fulfillment_text(self, fulfillment, closed: bool = False) -> str:
         if fulfillment is None:
             return "—"
         ordered, invoiced = fulfillment
+        if closed:  # R336
+            return f"اتمام‌شده ({decimals.format_qty(invoiced)} از {decimals.format_qty(ordered)})"
         if invoiced <= 0:
             return "تبدیل‌نشده"
         if invoiced >= ordered:
@@ -440,6 +442,9 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             elif fulfillment[1] >= fulfillment[0]:
                 convert_button.setEnabled(False)
                 convert_button.setToolTip("کل این سند قبلاً به فاکتور تبدیل شده است.")
+            elif d.closed_at is not None:
+                convert_button.setEnabled(False)
+                convert_button.setToolTip("این سفارش اتمام شده است؛ برای ادامه، آن را در فرم سند بازگشایی کنید.")
             elif pre_sales_status is not None and pre_sales_status != "آمادهٔ تبدیل به فاکتور":
                 # طبقِ درخواستِ صریح («وقتی انبار تایید کرد، در لیستِ
                 # سفارش‌ها معلوم کند که آمادهٔ تبدیل است و عملیاتِ تبدیل
@@ -485,7 +490,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             # اینکه کاربر متوجه علتش بشود.
             QMessageBox.warning(
                 self, "کانال تعریف نشده است",
-                "برای این تب هنوز هیچ «کانال فروش»یی از همین نوع تعریف نشده — سند تازه بدون کانال ساخته می‌شود "
+                "برای این تب هنوز هیچ «کانال فروش»یی از همین نوع تعریف نشده — سند جدید بدون کانال ساخته می‌شود "
                 "و در این فهرست نمایش داده نخواهد شد. ابتدا از «تنظیمات سیستم ‹ مدیریت بازرگانی ‹ کانال‌های فروش» "
                 "یک کانال از همین نوع تعریف کنید.",
             )
@@ -607,7 +612,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
                 return ("ثبت نهایی", "مرحلهٔ بعد: ثبت نهایی امانی (جابه‌جایی کالا)",
                         lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
         if doc_type in _CONVERTIBLE_TO_INVOICE_TYPES:
-            ready = fulfillment is not None and fulfillment[1] < fulfillment[0] and (
+            ready = fulfillment is not None and fulfillment[1] < fulfillment[0] and d.closed_at is None and (
                 pre_sales_status is None or pre_sales_status == "آمادهٔ تبدیل به فاکتور"
             )
             if ready:

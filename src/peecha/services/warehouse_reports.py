@@ -396,7 +396,7 @@ def _open_sales_commitments(company_id: int, m, f) -> list[tuple]:
     for doc, ln in pairs:
         remaining = ln.quantity_base - billed.get(ln.line_id, _ZERO)
         wid = ln.warehouse_id or doc.warehouse_id
-        if remaining > 0 and _item_ok(m, f, ln.item_id) and _wh_ok(m, f, wid):
+        if remaining > 0 and doc.closed_at is None and _item_ok(m, f, ln.item_id) and _wh_ok(m, f, wid):
             out.append((doc, ln, remaining, wid))
     return out
 

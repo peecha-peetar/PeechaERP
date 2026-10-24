@@ -297,7 +297,7 @@ class _LineDialog(QDialog):
         item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items]
         self.item_combo = _make_searchable_combo(item_options)
         item_row.addWidget(self.item_combo, stretch=1)
-        add_quick_add_button(item_row, self.item_combo, main_window, "GL_DIM", "تعریف کالای تازه")
+        add_quick_add_button(item_row, self.item_combo, main_window, "GL_DIM", "تعریف کالای جدید")
         layout.addLayout(item_row)
         self._items_by_id = {it.item_id: it for it in items}
 
@@ -666,7 +666,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.source_wh_combo = _EnterComboBox()
         self.source_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         source_wh_row.addWidget(self.source_wh_combo, stretch=1)
-        add_quick_add_button(source_wh_row, self.source_wh_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
+        add_quick_add_button(source_wh_row, self.source_wh_combo, main_window, "INV_WAREHOUSES", "تعریف انبار جدید")
         source_wh_layout.addLayout(source_wh_row)
         header_row.addWidget(self.source_wh_box, 1)
 
@@ -681,7 +681,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.destination_wh_combo = _EnterComboBox()
         self.destination_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         dest_wh_row.addWidget(self.destination_wh_combo, stretch=1)
-        add_quick_add_button(dest_wh_row, self.destination_wh_combo, main_window, "INV_WAREHOUSES", "تعریف انبار تازه")
+        add_quick_add_button(dest_wh_row, self.destination_wh_combo, main_window, "INV_WAREHOUSES", "تعریف انبار جدید")
         dest_wh_layout.addLayout(dest_wh_row)
         header_row.addWidget(self.destination_wh_box, 1)
 
@@ -708,7 +708,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         counterparty_row.setSpacing(3)
         self.counterparty_combo = _make_searchable_combo([])
         counterparty_row.addWidget(self.counterparty_combo, stretch=1)
-        add_quick_add_button(counterparty_row, self.counterparty_combo, main_window, "GL_DIM", "تعریف طرف‌حساب تازه")
+        add_quick_add_button(counterparty_row, self.counterparty_combo, main_window, "GL_DIM", "تعریف طرف‌حساب جدید")
         counterparty_layout.addLayout(counterparty_row)
         header_row.addWidget(self.counterparty_box, 1)
 
@@ -743,7 +743,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         cost_center_row.setSpacing(3)
         self.cost_center_combo = _EnterComboBox()
         cost_center_row.addWidget(self.cost_center_combo, stretch=1)
-        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریف مرکز هزینهٔ تازه")
+        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریف مرکز هزینهٔ جدید")
         cost_center_layout.addLayout(cost_center_row)
         header_row2.addWidget(self.cost_center_box, 1)
 
@@ -758,7 +758,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         project_row.setSpacing(3)
         self.project_combo = _EnterComboBox()
         project_row.addWidget(self.project_combo, stretch=1)
-        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریف پروژهٔ تازه")
+        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریف پروژهٔ جدید")
         project_layout.addLayout(project_row)
         header_row2.addWidget(self.project_box, 1)
         header_row2.addStretch(1)

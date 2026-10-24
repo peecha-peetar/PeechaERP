@@ -102,13 +102,13 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.tabs, stretch=1)
 
         self.set_field_help([
-            (self.pl_code_field, "کد یکتای فهرست قیمت تازه."),
-            (self.pl_name_field, "نام نمایشی فهرست قیمت تازه."),
+            (self.pl_code_field, "کد یکتای فهرست قیمت جدید."),
+            (self.pl_name_field, "نام نمایشی فهرست قیمت جدید."),
             (self.pl_type_combo, "این فهرست برای فروش استفاده می‌شود یا خرید."),
             (self.pl_item_combo, "کالایی که می‌خواهید قیمتش را در فهرست انتخاب‌شده ثبت کنید."),
             (self.pl_min_qty_field, "حداقل مقداری که این قیمت از آن به بعد اعمال می‌شود — برای قیمت‌گذاری پلکانی برحسب مقدار."),
             (self.pl_unit_price_field, "بهای واحد این کالا در همین فهرست قیمت، از همین مقدار حداقل به بعد."),
-            (self.rule_code_field, "کد یکتای قاعدهٔ تخفیف تازه."),
+            (self.rule_code_field, "کد یکتای قاعدهٔ تخفیف جدید."),
             (self.rule_name_field, "نام نمایشی قاعدهٔ تخفیف."),
             (self.rule_type_combo, "نحوهٔ محاسبهٔ تخفیف — درصدی، مبلغ ثابت، یا پلکانی (بر اساس مقدار)."),
             (self.rule_value_field, "مقدار تخفیف — فقط برای نوع درصدی/مبلغ ثابت (پلکانی از پله‌های زیر می‌خواند)."),
@@ -122,7 +122,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
             (self.spi_ocr_lang_combo, "زبان متن فایل برای دقت بهتر OCR."),
             (self.spi_header_row_spin, "چند سطر اول فایل، سربرگ هستند و باید از دادهٔ واقعی رد شوند."),
             (self.spi_save_template_checkbox, "این ستون‌بندی برای همین تامین‌کننده ذخیره شود تا دفعات بعد دوباره پرسیده نشود."),
-            (self.spi_step_kind_combo, "نوع ستون افزایشی تازه — درصدی یا مبلغ ثابت."),
+            (self.spi_step_kind_combo, "نوع ستون افزایشی جدید — درصدی یا مبلغ ثابت."),
             (self.spi_step_value_field, "مقدار این ستون افزایشی — عدد منفی یعنی کاهش."),
             (self.spi_step_label_field, "عنوان این ستون افزایشی در پیش‌نمایش — اختیاری."),
             (self.spi_filter_category_combo, "فقط کالاهای همین دسته در نتیجهٔ پایین نمایش داده شوند."),
@@ -159,7 +159,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         add_pl_button = QPushButton("➕")
         add_pl_button.setObjectName("primaryIconButton")
         add_pl_button.setFixedWidth(44)
-        add_pl_button.setToolTip("فهرست قیمت تازه")
+        add_pl_button.setToolTip("فهرست قیمت جدید")
         add_pl_button.clicked.connect(self._add_price_list)
         # R276: ویرایش و حذفِ فهرستِ انتخاب‌شده
         save_pl_button = QPushButton("💾")
@@ -414,7 +414,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         layout.addLayout(filter_row)
 
         table = QTableWidget(0, 6)
-        table.setHorizontalHeaderLabels(["تاریخ", "کالا", "قیمت قبلی", "قیمت تازه", "منبع", ""])
+        table.setHorizontalHeaderLabels(["تاریخ", "کالا", "قیمت قبلی", "قیمت جدید", "منبع", ""])
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -493,7 +493,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         add_rule_button = QPushButton("📐")
         add_rule_button.setObjectName("primaryIconButton")
         add_rule_button.setFixedWidth(44)
-        add_rule_button.setToolTip("قاعدهٔ تازه")
+        add_rule_button.setToolTip("قاعدهٔ جدید")
         add_rule_button.clicked.connect(self._add_discount_rule)
         # R276: ویرایش/حذفِ قاعدهٔ انتخاب‌شده
         self.rule_active_checkbox = QCheckBox("فعال")
@@ -757,7 +757,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         outer.addLayout(mapping_row)
 
         steps_row = QHBoxLayout()
-        steps_row.addWidget(QLabel("ستون افزایشی تازه:"))
+        steps_row.addWidget(QLabel("ستون افزایشی جدید:"))
         self.spi_step_kind_combo = QComboBox()
         self.spi_step_kind_combo.addItem("درصدی", "PERCENT")
         self.spi_step_kind_combo.addItem("مبلغ ثابت", "AMOUNT")

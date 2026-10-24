@@ -111,7 +111,7 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
 ms.ICONS.update({
     "تایید درخواست": ("✅", "primary"), "رد درخواست": ("❌", "danger"), "برگشت برای اصلاح": ("↩️", ""),
     "واگذاری به همکار": ("👥", ""), "یادداشت": ("💬", ""), "بازکردن سند": ("📂", ""), "تایید گروهی": ("☑️", ""),
-    "تازه‌سازی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
+    "به‌روزرسانی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
     "انجام کار": ("✔️", "primary"), "بازکردن پروندهٔ مشتری": ("👤", ""), "فرم کامل مرحله": ("📋", ""),
     "ارجاع به فرد مناسب": ("↗️", "primary"), "اجرای دوباره": ("🔁", "primary"),
 })
@@ -423,7 +423,7 @@ class MyTasksScreen(QWidget):
             ("approve", "تایید درخواست"), ("reject", "رد درخواست"), ("changes", "برگشت برای اصلاح"),
             ("form", "فرم کامل مرحله"),
             ("delegate", "واگذاری به همکار"), ("note", "یادداشت"), ("open", "بازکردن سند"), ("bulk", "تایید گروهی"),
-            ("remind", "یادآوری به گیرنده"), ("withdraw", "پس‌گرفتن درخواست"), ("refresh", "تازه‌سازی"))}
+            ("remind", "یادآوری به گیرنده"), ("withdraw", "پس‌گرفتن درخواست"), ("refresh", "به‌روزرسانی"))}
         self.buttons["approve"].clicked.connect(lambda: self.approve_selected())
         self.buttons["reject"].clicked.connect(lambda: self.reject_selected())
         self.buttons["changes"].clicked.connect(lambda: self.decide("CHANGES"))

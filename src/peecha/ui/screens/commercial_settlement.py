@@ -194,7 +194,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
         self.voucher_combo = _EnterComboBox()
         self.voucher_combo.setMinimumWidth(260)
         self.voucher_combo.setToolTip(
-            "برای صدور سند تازه (پیشنهادی)، همین گزینه را نگه دارید — با کلیک «تسویه»، فرم دریافت/پرداخت با "
+            "برای صدور سند جدید (پیشنهادی)، همین گزینه را نگه دارید — با کلیک «تسویه»، فرم دریافت/پرداخت با "
             "طرف‌حساب و مجموع مبلغ‌های واردشده باز می‌شود و بعد ثبت آن، خودکار به همان فاکتورها وصل می‌شود. اگر "
             "سندی از قبل ثبت شده، آن را از این فهرست انتخاب کنید تا فقط رفرنس داده شود."
         )
@@ -248,7 +248,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
             (self.due_status_filter_combo, "فقط فاکتورهای معوقه یا نزدیک‌به‌سررسید نشان داده شوند."),
             (
                 self.voucher_combo,
-                "برای صدور سند تازه (پیشنهادی)، همین گزینه را نگه دارید؛ اگر سندی از قبل ثبت شده، آن را انتخاب کنید تا فقط رفرنس داده شود.",
+                "برای صدور سند جدید (پیشنهادی)، همین گزینه را نگه دارید؛ اگر سندی از قبل ثبت شده، آن را انتخاب کنید تا فقط رفرنس داده شود.",
             ),
             (self.settlement_date_field, "تاریخ ثبت این تسویه."),
             (self.reference_field, "شماره/مرجع دلخواه برای این تسویه — اختیاری."),
@@ -301,7 +301,7 @@ class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
             company_id, entry_type_codes=_VOUCHER_ENTRY_TYPE_BY_INVOICE_TYPE[self._invoice_type],
         )
         self.voucher_combo.clear()
-        self.voucher_combo.addItem("🔗 صدور سند دریافت/پرداخت تازه (پیشنهادی)", None)
+        self.voucher_combo.addItem("🔗 صدور سند دریافت/پرداخت جدید (پیشنهادی)", None)
         for entry in self._voucher_entries:
             label = f"#{numerals.to_persian_digits(str(entry.temporary_no))} — {numerals.format_jalali_date(entry.document_date)} — {entry.description or ''}"
             self.voucher_combo.addItem(label, entry.journal_entry_id)

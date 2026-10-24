@@ -427,7 +427,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (
                 self.group_combo,
                 "نوع حساب تفصیلی‌ای که می‌خواهید بسازید یا ویرایش کنید — مشتری/تامین‌کننده/پرسنل، "
-                "کالا/بانک/صندوق/... یا یک گروه سفارشی. ساختن گروه تازه و تنظیم سطح/فیلدهایش در "
+                "کالا/بانک/صندوق/... یا یک گروه سفارشی. ساختن گروه جدید و تنظیم سطح/فیلدهایش در "
                 "«پیکربندی گروه‌های تفصیلی» انجام می‌شود، نه این‌جا.",
             ),
             (
@@ -697,7 +697,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         group_row.setSpacing(8)
         page_title = QLabel("تعریف حساب‌های تفصیلی")
         page_title.setObjectName("pageTitle")
-        page_title.setToolTip("ساخت گروه تازه و تنظیم تعداد رقم/بازه/فیلد اختصاصی در «پیکربندی گروه‌های تفصیلی» انجام می‌شود.")
+        page_title.setToolTip("ساخت گروه جدید و تنظیم تعداد رقم/بازه/فیلد اختصاصی در «پیکربندی گروه‌های تفصیلی» انجام می‌شود.")
         group_row.addWidget(page_title)
         group_row.addSpacing(12)
         group_row.addWidget(QLabel("گروه"))
@@ -1362,7 +1362,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.guarantee_status_label)
 
         button_row = QHBoxLayout()
-        add_guarantee_button = QPushButton("➕ ثبت ضمانت تازه")
+        add_guarantee_button = QPushButton("➕ ثبت ضمانت جدید")
         add_guarantee_button.clicked.connect(self._save_guarantee)
         button_row.addWidget(add_guarantee_button)
         self.guarantee_release_status_combo = QComboBox()
@@ -1536,7 +1536,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.contract_status_label)
 
         button_row = QHBoxLayout()
-        add_contract_button = QPushButton("➕ ثبت قرارداد تازه")
+        add_contract_button = QPushButton("➕ ثبت قرارداد جدید")
         add_contract_button.clicked.connect(self._save_contract)
         button_row.addWidget(add_contract_button)
         self.cancel_contract_button = QPushButton("لغو قرارداد انتخاب‌شده")

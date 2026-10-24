@@ -80,7 +80,7 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         hint = QLabel(
             "فهرست زیر مستقیماً از ساختار زندهٔ همین دیتابیس خوانده می‌شود — هر جدول یا فیلد سفارشی که "
             "بعداً اضافه شود، خودکار همین‌جا هم دیده می‌شود، بدون نیاز به به‌روزرسانی برنامه. برای بازیابی، "
-            "دیتابیس مقصد باید خالی (تازه‌ساخته و تازه‌مهاجرت‌شده) باشد."
+            "دیتابیس مقصد باید خالی باشد (جدید و ارتقایافته تا آخرین نسخه)."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -152,8 +152,8 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
             ),
             (
                 self.import_button,
-                "بازیابی باید روی یک دیتابیس خالی تازه‌مهاجرت‌شده انجام شود. ردیف‌هایی که ازپیش وجود دارند "
-                "(مثلاً دیتای پیش‌فرض خود نصب) بی‌خطر رد می‌شوند؛ خطاهای واقعی (مثلاً ستون الزامی تازه) در گزارش نشان داده می‌شوند.",
+                "بازیابی باید روی یک دیتابیس خالی جدید انجام شود. ردیف‌هایی که ازپیش وجود دارند "
+                "(مثلاً دیتای پیش‌فرض خود نصب) بی‌خطر رد می‌شوند؛ خطاهای واقعی (مثلاً ستون الزامی جدید) در گزارش نشان داده می‌شوند.",
             ),
             (self.status_text, "پیام/گزارش آخرین عملیات بک‌آپ/بازیابی این‌جا نشان داده می‌شود."),
         ])
@@ -187,7 +187,7 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
                       _UPGRADE_SOURCES.get(u.source or "", u.source or ""), numerals.to_persian_digits(str(len(u.files))),
                       _UPGRADE_STATUS.get(u.status, u.status),
                       u.backup_path.replace("\\", "/").rsplit("/", 1)[-1] if u.backup_path else
-                      ("نصب تازه؛ پشتیبان لازم نبود" if first_file and first_file.name in u.files else "بدون پشتیبان")]
+                      ("نصب جدید؛ پشتیبان لازم نبود" if first_file and first_file.name in u.files else "بدون پشتیبان")]
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if c == 3:
@@ -274,7 +274,7 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         confirm = QMessageBox.question(
             self,
             "بازیابی بک‌آپ",
-            "بازیابی فقط روی یک دیتابیس خالی تازه‌مهاجرت‌شده مطمئن است. آیا این دیتابیس خالی است و می‌خواهید ادامه دهید؟",
+            "بازیابی فقط روی یک دیتابیس خالی جدید مطمئن است. آیا این دیتابیس خالی است و می‌خواهید ادامه دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:

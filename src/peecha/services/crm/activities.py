@@ -139,7 +139,7 @@ def create_activity(company_id: int, user_id: int, f: ActivityFields, session=No
         if own:
             session.close()
     if f.assigned_to_user_id and f.assigned_to_user_id != user_id:
-        c.notify(company_id, f.assigned_to_user_id, "CRM_TASK_ASSIGNED", "فعالیت تازه به شما واگذار شد",
+        c.notify(company_id, f.assigned_to_user_id, "CRM_TASK_ASSIGNED", "فعالیت جدید به شما واگذار شد",
                  f"{c.ACTIVITY_TYPES[f.activity_type_code]}: {f.subject}", "CrmActivity", activity_id)
     return activity_id
 

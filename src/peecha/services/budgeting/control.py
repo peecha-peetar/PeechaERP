@@ -202,7 +202,7 @@ def _record_blocked(company_id: int, user_id: int | None, event: str, primary: t
                                               BudgetException.key_id.is_(None) if ch.key_id is None else BudgetException.key_id == ch.key_id)
             exc = session.scalar(q.with_for_update())
             if exc is not None and exc.status_code == "APPROVED":
-                exc.status_code, exc.decision_note = "CANCELLED", "مبلغ تجاوز سند بیشتر از مجوز شد؛ درخواست تازه ثبت شد."
+                exc.status_code, exc.decision_note = "CANCELLED", "مبلغ تجاوز سند بیشتر از مجوز شد؛ درخواست جدید ثبت شد."
                 session.flush()
                 exc = None
             if exc is None:

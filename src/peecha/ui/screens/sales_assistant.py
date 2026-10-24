@@ -182,7 +182,7 @@ class SalesAssistantScreen(QWidget):
         profile = partners_service.get_customer_profile(item.customer_id)
         current_limit = float(profile.credit_limit_amount) if profile is not None and profile.credit_limit_amount else 0.0
         new_limit, accepted = QInputDialog.getDouble(
-            self, "افزایش سقف اعتبار", f"سقف اعتبار تازه برای «{item.customer_name}»:",
+            self, "افزایش سقف اعتبار", f"سقف اعتبار جدید برای «{item.customer_name}»:",
             value=current_limit, minValue=0, maxValue=1_000_000_000_000, decimals=0,
         )
         if not accepted:

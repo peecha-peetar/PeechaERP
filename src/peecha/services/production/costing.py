@@ -83,7 +83,8 @@ def _conversion_txn(session, order: ProductionOrder, txn_type: str, role: str, a
     amount = c.money(amount)
     dims = (order.cost_center_detail_account_id, order.project_detail_account_id)
     je = c.post_journal(session, order.company_id, user_id, date, f"{order.order_code} -- {po.TXN_LABELS[txn_type]}",
-                        [(c.WIP, amount, ZERO, dims), (role, ZERO, amount, credit_dims or dims)]) if amount else None
+                        [(c.WIP, amount, ZERO, dims), (role, ZERO, amount, credit_dims or dims)],
+                        item_id=order.item_id) if amount else None
     return po.record(session, order, txn_type, date, user_id, quantity=quantity, amount=amount, wip_delta=amount,
                      order_operation_id=op_id, journal_entry_id=je, key=key, details=details)
 

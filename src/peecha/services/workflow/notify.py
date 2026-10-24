@@ -20,13 +20,13 @@ from peecha.db.base import new_session
 from peecha.db.models.security import Notification, NotificationPreference, User
 
 TYPES = {
-    "WF_APPROVAL_REQUIRED": "نیاز به تایید", "WF_TASK_ASSIGNED": "کار تازه", "WF_TASK_DUE": "نزدیک شدن موعد",
+    "WF_APPROVAL_REQUIRED": "نیاز به تایید", "WF_TASK_ASSIGNED": "کار جدید", "WF_TASK_DUE": "نزدیک شدن موعد",
     "WF_SLA_WARNING": "هشدار مهلت", "WF_SLA_BREACHED": "گذشتن از مهلت", "WF_COMPLETED": "پایان فرایند",
     "WF_FAILED": "شکست فرایند", "WF_EXCEPTION": "مورد نیازمند بررسی", "WF_ESCALATION": "ارجاع به سطح بالاتر",
     "WF_MESSAGE": "پیام فرایند", "WF_DELEGATION": "تفویض اختیار",
 }
 OTHER_TYPES = {
-    "CRM_TASK_ASSIGNED": "کار تازهٔ ارتباط با مشتری", "CRM_LEAD_ASSIGNED": "سرنخ واگذارشده",
+    "CRM_TASK_ASSIGNED": "کار جدید ارتباط با مشتری", "CRM_LEAD_ASSIGNED": "سرنخ واگذارشده",
     "CRM_OPPORTUNITY_ASSIGNED": "فرصت فروش واگذارشده", "CRM_TICKET_ASSIGNED": "تیکت واگذارشده",
     "CRM_TICKET_SLA": "مهلت تیکت", "CRM_MESSAGE": "پیام ارتباط با مشتری", "CRM_AUTOMATION": "اقدام خودکار ارتباط با مشتری",
 }

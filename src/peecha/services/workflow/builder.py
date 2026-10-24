@@ -457,7 +457,7 @@ def chain_lines(graph: dict, entity_type: str | None, company_id: int | None) ->
         if spec is not None and spec.creates and not started & set(spec.creates):
             adapter = next((a for a in registry.adapters() if spec.creates[0] in a.events), None)
             if adapter is not None:
-                out.append(f"«{node.get('label') or spec.label}» سند تازه می‌سازد؛ برای ادامهٔ خودکار، فرایندی برای "
+                out.append(f"«{node.get('label') or spec.label}» سند جدید می‌سازد؛ برای ادامهٔ خودکار، فرایندی برای "
                            f"«{adapter.label}» با رویداد «{adapter.events[spec.creates[0]]}» بسازید.")
     return out
 
@@ -468,7 +468,7 @@ def diff_graphs(old: dict, new: dict) -> list[str]:
     b = definitions.nodes_by_id(new or {})
     out = []
     for nid in b.keys() - a.keys():
-        out.append(f"مرحلهٔ تازه: «{b[nid].get('label') or NODE_TYPES.get(b[nid].get('type'), nid)}»")
+        out.append(f"مرحلهٔ جدید: «{b[nid].get('label') or NODE_TYPES.get(b[nid].get('type'), nid)}»")
     for nid in a.keys() - b.keys():
         out.append(f"مرحلهٔ حذف‌شده: «{a[nid].get('label') or NODE_TYPES.get(a[nid].get('type'), nid)}»")
     for nid in a.keys() & b.keys():
@@ -479,7 +479,7 @@ def diff_graphs(old: dict, new: dict) -> list[str]:
     ea = {(e["from"], e["to"], e.get("when")) for e in (old or {}).get("edges", [])}
     eb = {(e["from"], e["to"], e.get("when")) for e in (new or {}).get("edges", [])}
     if ea != eb:
-        out.append(f"مسیرها تغییر کرده‌اند ({len(eb - ea)} مسیر تازه، {len(ea - eb)} مسیر حذف‌شده)")
+        out.append(f"مسیرها تغییر کرده‌اند ({len(eb - ea)} مسیر جدید، {len(ea - eb)} مسیر حذف‌شده)")
     if (old or {}).get("trigger") != (new or {}).get("trigger"):
         out.append("شرایط شروع تغییر کرده است")
     return out or ["تفاوتی نیست"]
@@ -487,9 +487,9 @@ def diff_graphs(old: dict, new: dict) -> list[str]:
 
 # --- ویرایش گراف (برای طراح گرافیکی) ----------------------------------------------------------------------
 NEW_NODE_DEFAULTS = {
-    "CONDITION": {"label": "شرط تازه", "rule": {}},
-    "APPROVAL": {"label": "تایید تازه", "approvers": [], "mode": "ANY"},
-    "TASK": {"label": "کار تازه", "assignees": [], "fields": []},
+    "CONDITION": {"label": "شرط جدید", "rule": {}},
+    "APPROVAL": {"label": "تایید جدید", "approvers": [], "mode": "ANY"},
+    "TASK": {"label": "کار جدید", "assignees": [], "fields": []},
     "ACTION": {"label": "اقدام خودکار", "action": ""},
     "NOTIFY": {"label": "اعلان", "to": [{"kind": "STARTER"}], "title": "{عنوان}"},
     "WAIT": {"label": "انتظار", "hours": 24},

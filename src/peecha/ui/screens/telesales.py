@@ -260,7 +260,7 @@ class _CustomerNoteDialog(QDialog):
         self.history_list = QListWidget()
         layout.addWidget(self.history_list, stretch=1)
 
-        layout.addWidget(QLabel("یادداشت تازه:"))
+        layout.addWidget(QLabel("یادداشت جدید:"))
         self.text_edit = QTextEdit()
         self.text_edit.setFixedHeight(80)
         layout.addWidget(self.text_edit)

@@ -107,7 +107,7 @@ r1 = msg.save_rule(company_id, uid, name="خوش‌آمد پیامکی", event_t
 r2 = msg.save_rule(company_id, uid, name="خبر مشتری تازه در گروه بله", event_type="CUSTOMER_CREATED", channel="BALE",
                    body="مشتری تازه: {عنوان}", recipient="FIXED", target="-100999")
 rules = msg.list_rules(company_id)
-check(len(rules) == 2 and all(r.is_active for r in rules) and rules[0].event_label.startswith("مشتری تازه"), "two active rules")
+check(len(rules) == 2 and all(r.is_active for r in rules) and rules[0].event_label.startswith("مشتری جدید"), "two active rules")
 check(raises(lambda: msg.save_rule(company_id, uid, name="x", event_type="CUSTOMER_CREATED", channel="BALE", body="b",
                                    recipient="FIXED", target=""), "ثابت"), "fixed recipient needs a target")
 

@@ -504,6 +504,7 @@ class LineFulfillment:
     delivered_quantity: decimal.Decimal | None
     invoiced_quantity: decimal.Decimal
     remaining_quantity: decimal.Decimal
+    closed: bool = False  # R336: سفارش اتمام شده؛ مانده دیگر فاکتور نمی‌شود
 
 
 def _invoiced_quantity(session, source_line_id: int) -> decimal.Decimal:
@@ -529,15 +530,88 @@ def get_line_fulfillment(document_id: int, company_id: int) -> list[LineFulfillm
             select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
         ).all()
         result = []
+        closed = doc.closed_at is not None
         for ln in lines:
             invoiced = _invoiced_quantity(session, ln.line_id)
             base_quantity = ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity
             result.append(LineFulfillment(
                 line_id=ln.line_id, item_id=ln.item_id, uom_id=ln.uom_id, quantity=ln.quantity,
                 delivered_quantity=ln.warehouse_delivered_quantity,
-                invoiced_quantity=invoiced, remaining_quantity=base_quantity - invoiced,
+                invoiced_quantity=invoiced, remaining_quantity=_ZERO if closed else base_quantity - invoiced, closed=closed,
             ))
         return result
+
+
+@dataclass
+class OrderCloseState:
+    closed: bool
+    can_close: bool
+    reason: str  # چرا دکمه غیرفعال است، یا علت اتمام
+    closed_at: datetime.datetime | None = None
+    note: str | None = None
+
+
+def order_close_state(document_id: int, company_id: int) -> OrderCloseState:
+    """R336: آیا این سفارش نیمه‌تمام است و می‌توان آن را «اتمام» کرد؟"""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.closed_at is not None:
+            return OrderCloseState(True, False, "این سفارش اتمام شده است.", doc.closed_at, doc.close_note)
+        return OrderCloseState(False, *_close_blocker(session, doc))
+
+
+def _close_blocker(session, doc: CommercialDocument) -> tuple[bool, str]:
+    if doc.document_type_code not in _CONVERT_TO_INVOICE_TARGET:
+        return False, "این نوع سند اتمام ندارد."
+    if doc.status_code not in ("CONFIRMED", "APPROVED", "POSTED"):
+        return False, "فقط سفارش تاییدشده یا تصویب‌شده اتمام می‌شود."
+    lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == doc.document_id)).all()
+    invoiced = {ln.line_id: _invoiced_quantity(session, ln.line_id) for ln in lines}
+    remaining = sum(((ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity)
+                     - invoiced[ln.line_id] for ln in lines), _ZERO)
+    if remaining <= 0:
+        return False, "همهٔ این سفارش فاکتور شده است؛ اتمام لازم نیست."
+    started = any(invoiced.values()) or doc.warehouse_approved_at is not None
+    if not started:
+        return False, "هنوز هیچ بخشی از این سفارش تحویل یا فاکتور نشده؛ اگر دیگر لازم نیست، آن را لغو کنید."
+    return True, "ماندهٔ تحویل‌نشده بسته می‌شود و سفارش دیگر به فاکتور تبدیل نمی‌شود."
+
+
+def close_order(document_id: int, company_id: int, user_id: int | None, note: str | None = None) -> None:
+    """R336: اتمام سفارش نیمه‌تمام؛ وضعیت سند همان می‌ماند و فقط ماندهٔ آن بسته می‌شود."""
+    with new_session() as session:
+        doc = session.scalar(select(CommercialDocument).where(CommercialDocument.document_id == document_id).with_for_update())
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.closed_at is not None:
+            raise ValueError("این سفارش قبلاً اتمام شده است.")
+        ok, reason = _close_blocker(session, doc)
+        if not ok:
+            raise ValueError(reason)
+        doc.closed_at, doc.closed_by_user_id, doc.close_note = datetime.datetime.now(), user_id, (note or "").strip() or None
+        _log_change(session, doc, "CLOSE", user_id=user_id, new=doc.close_note or "اتمام سفارش")
+        session.commit()
+    from peecha.services import stock_reservations
+
+    stock_reservations.release_sales_order(company_id, document_id, _actor(user_id))  # رزرو ماندهٔ بسته‌شده آزاد می‌شود
+
+
+def reopen_order(document_id: int, company_id: int, user_id: int | None) -> None:
+    """R336: بازگشایی سفارش اتمام‌شده؛ ماندهٔ آن دوباره قابل‌تبدیل به فاکتور می‌شود."""
+    with new_session() as session:
+        doc = session.scalar(select(CommercialDocument).where(CommercialDocument.document_id == document_id).with_for_update())
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.closed_at is None:
+            raise ValueError("این سفارش اتمام نشده است.")
+        if doc.status_code == "CANCELLED":
+            raise ValueError("سفارش لغوشده بازگشایی نمی‌شود.")
+        old_note = doc.close_note
+        doc.closed_at, doc.closed_by_user_id, doc.close_note = None, None, None
+        _log_change(session, doc, "REOPEN", user_id=user_id, old=old_note or "اتمام سفارش")
+        session.commit()
 
 
 def get_order_fulfillment_summary(document_id: int, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal]:
@@ -616,6 +690,8 @@ def convert_to_invoice(
             raise ValueError("این نوع سند قابل‌تبدیل به فاکتور نیست.")
         if source.status_code in ("DRAFT", "CANCELLED"):
             raise ValueError("فقط سند تاییدشده/تصویب‌شده/ثبت‌شده قابل‌تبدیل به فاکتور است.")
+        if source.closed_at is not None:
+            raise ValueError("این سفارش اتمام شده و دیگر به فاکتور تبدیل نمی‌شود؛ برای ادامه، اول آن را بازگشایی کنید.")
         # طبقِ درخواستِ صریح («روالِ پخشِ سرد: سفارشِ تصویب‌شده باید اول
         # انبار و توزین را طی کند، بعد تبدیل به فاکتور شود»): این گیت
         # فقط برایِ سفارش‌هایِ کانالِ PRE_SALES بررسی می‌شود.
@@ -1928,7 +2004,7 @@ def delete_document(document_id: int, company_id: int) -> None:
         # journal_entry_id پر نمی‌کنند (فقط POSTED این دو را پر می‌کند) —
         # پس حذفِ مستقیمِ هرکدام از این چهار وضعیت همیشه بی‌خطر است.
         if doc.status_code == "POSTED":
-            raise ValueError("سند ثبت‌شده هرگز حذف نمی‌شود — برای اصلاح، سند تازه‌ای ثبت کنید.")
+            raise ValueError("سند ثبت‌شده هرگز حذف نمی‌شود — برای اصلاح، سند جدیدی ثبت کنید.")
         # طبقِ همان منطق: CORRECTED هم (برخلافِ DRAFT/CONFIRMED/APPROVED/
         # CANCELLED) واقعاً stock_document_id/journal_entry_id دارد --
         # چون خودش قبلاً POSTED بوده -- و corrected_by_document_id به
@@ -2694,7 +2770,7 @@ def cancel_document(
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code not in ("DRAFT", "CONFIRMED", "APPROVED"):
-            raise ValueError("سند ثبت‌شده هرگز لغو نمی‌شود — برای اصلاح، سند تازه‌ای ثبت کنید.")
+            raise ValueError("سند ثبت‌شده هرگز لغو نمی‌شود — برای اصلاح، سند جدیدی ثبت کنید.")
         _old_status = doc.status_code
         doc.status_code = "CANCELLED"
         doc.cancellation_reason_id = reason_id

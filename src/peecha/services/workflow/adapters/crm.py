@@ -65,7 +65,7 @@ registry.register_adapter(EntityAdapter(
             FieldSpec("city", "شهر", "text"), FieldSpec("province", "استان", "text"), FieldSpec("industry", "صنعت", "text"),
             FieldSpec("owner_user_id", "مسئول", "user"), FieldSpec("created_by", "ثبت‌کننده", "user"),
             FieldSpec("status", "وضعیت", "choice", LEAD_STATUS)),
-    events={"LEAD_CREATED": "ثبت سرنخ تازه", "LEAD_QUALIFIED": "واجد شرایط شدن سرنخ", "LEAD_CONVERTED": "تبدیل سرنخ",
+    events={"LEAD_CREATED": "ثبت سرنخ جدید", "LEAD_QUALIFIED": "واجد شرایط شدن سرنخ", "LEAD_CONVERTED": "تبدیل سرنخ",
             "LEAD_LOST": "از دست رفتن سرنخ"},
     actions={"assign": ActionSpec(
         "assign", "واگذاری سرنخ (نوبتی بین کارشناسان)", _assign,
@@ -150,19 +150,19 @@ def _cust_status(*statuses: str):
 
 
 registry.register_adapter(EntityAdapter(
-    "CUSTOMER", "مشتری تازه", "CRM", customer_context,
+    "CUSTOMER", "مشتری جدید", "CRM", customer_context,
     fields=(FieldSpec("credit_limit", "سقف اعتبار", "money"), FieldSpec("payment_term_days", "مهلت پرداخت (روز)", "number"),
             FieldSpec("customer_group_id", "گروه مشتری", "number"), FieldSpec("channel_code", "کانال فروش", "text"),
             FieldSpec("onboarding_source", "منشأ ثبت", "choice", {"MOBILE": "موبایل", "DESKTOP": "دسکتاپ"}),
             FieldSpec("submitted_by", "ثبت‌کننده", "user")),
-    events={"CUSTOMER_CREATED": "ثبت مشتری تازه", "CUSTOMER_PENDING_APPROVAL": "ارسال مشتری برای تایید",
+    events={"CUSTOMER_CREATED": "ثبت مشتری جدید", "CUSTOMER_PENDING_APPROVAL": "ارسال مشتری برای تایید",
             "CUSTOMER_ACTIVE": "فعال شدن مشتری"},
     actions={"approve": ActionSpec("approve", "تایید و فعال‌سازی مشتری", _cust_approve, risk="HIGH", is_done=_cust_status("ACTIVE"),
                                    requires_status=("PENDING_APPROVAL",), sets_status="ACTIVE"),
              "reject": ActionSpec("reject", "رد مشتری", _cust_reject, is_done=_cust_status("INACTIVE"),
                                   requires_status=("PENDING_APPROVAL",), sets_status="INACTIVE",
                                   params=(ParamSpec("reason", "دلیل رد"),))},
-    title=lambda c: f"مشتری تازه: {c.get('customer_name')}", owner=lambda cid, eid: customer_context(cid, eid)["submitted_by"],
+    title=lambda c: f"مشتری جدید: {c.get('customer_name')}", owner=lambda cid, eid: customer_context(cid, eid)["submitted_by"],
     approval_context=lambda cid, eid: (lambda c: [
         ("مشتری", c["customer_name"]), ("سقف اعتبار", money(c["credit_limit"])), ("مهلت پرداخت", f"{c['payment_term_days']} روز"),
         ("ثبت‌کننده", c["submitted_by_name"] or "—")])(customer_context(cid, eid)),

@@ -427,7 +427,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
     def _on_custodian_changed(self) -> None:
         custodian_id = self.custodian_combo.currentData()
         self.fund_combo.clear()
-        self.fund_combo.addItem("+ تنخواه تازه", _NEW_FUND_SENTINEL)
+        self.fund_combo.addItem("+ تنخواه جدید", _NEW_FUND_SENTINEL)
         if custodian_id is not None and self.company_id is not None:
             for fund in petty_cash_service.list_funds(self.company_id, custodian_id):
                 status_word = "باز" if fund.status == "OPEN" else "بسته"
@@ -759,7 +759,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             return
         confirm = QMessageBox.question(
             self, "بستن تنخواه",
-            "با بستن تنخواه، سند موقت پیش‌نویس تسویه ساخته می‌شود و دیگر امکان افزودن ردیف تازه نیست. ادامه می‌دهید؟",
+            "با بستن تنخواه، سند موقت پیش‌نویس تسویه ساخته می‌شود و دیگر امکان افزودن ردیف جدید نیست. ادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:

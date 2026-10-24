@@ -84,7 +84,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        title = QLabel("درخواست وام/مساعدهٔ تازه")
+        title = QLabel("درخواست وام/مساعدهٔ جدید")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 

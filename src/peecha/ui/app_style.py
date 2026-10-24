@@ -49,4 +49,5 @@ def install(app, base_style: str = "Fusion") -> None:
     if translator.load(QLocale(QLocale.Persian, QLocale.Iran), "qtbase", "_",
                        QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
         app.installTranslator(translator)
+    app.installEventFilter(icon_buttons.WATCHER)  # R336: متن دوباره‌نوشته روی دکمهٔ آیکونی
     _KEEP[:] = [style, translator]

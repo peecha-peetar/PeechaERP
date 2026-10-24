@@ -184,7 +184,7 @@ inv2 = documents_service.create_document(
 )
 documents_service.add_line(inv2, company_id, item_id, pcs, decimal.Decimal(3), decimal.Decimal(3), unit_price=decimal.Decimal(2000))
 inv_screen.edit_document(inv2)
-QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)  # «پرداختی انجام شده؟» خیر = نسیه
+QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)  # R336: «آیا فاکتور نسیه است؟» بله = نسیه
 inv_screen._confirm_button_clicked()
 doc2, _ = documents_service.get_document(inv2, company_id)
 check(doc2.status_code == "POSTED", f"ثبت یک‌مرحله‌ای: فاکتور با دکمهٔ تایید ثبت نهایی شد (got {doc2.status_code})")

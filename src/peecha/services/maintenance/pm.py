@@ -263,7 +263,7 @@ def request_postponement(company_id: int, user_id: int, plan_id: int, new_due_da
         if open_wo is not None and open_wo.pm_due_date:
             old = open_wo.pm_due_date
         if new_due_date <= old:
-            raise ValueError("تاریخ تازه باید بعد از سررسید فعلی باشد.")
+            raise ValueError("تاریخ جدید باید بعد از سررسید فعلی باشد.")
         if session.scalar(select(PmPostponement.postponement_id).where(PmPostponement.plan_id == plan_id,
                                                                        PmPostponement.status_code == "PENDING")):
             raise ValueError("برای این برنامه یک درخواست تعویق منتظر تأیید است.")

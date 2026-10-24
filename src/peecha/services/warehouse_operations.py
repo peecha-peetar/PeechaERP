@@ -270,7 +270,7 @@ def generate_tasks(company_id: int, task_type: str, source: tuple[str, int], use
             session.commit()
         except IntegrityError as exc:  # R303: ایندکس یکتای وظیفه (ساخت هم‌زمان)
             session.rollback()
-            raise ValueError("برای این ردیف همین حالا وظیفه ساخته شده است؛ فهرست وظایف را تازه کنید.") from exc
+            raise ValueError("برای این ردیف همین حالا وظیفه ساخته شده است؛ فهرست وظایف را به‌روز کنید.") from exc
     return created
 
 

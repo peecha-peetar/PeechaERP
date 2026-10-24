@@ -1246,7 +1246,7 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.information(
                 self,
                 "تغییر ارز سند",
-                "ارز سند عوض شد؛ مبالغ ردیف‌های موجود تبدیل نمی‌شوند — همان عدد حالا در واحد ارز تازه در نظر گرفته می‌شود.",
+                "ارز سند عوض شد؛ مبالغ ردیف‌های موجود تبدیل نمی‌شوند — همان عدد حالا در واحد ارز جدید در نظر گرفته می‌شود.",
             )
 
     def _on_header_rate_changed(self) -> None:

@@ -1848,7 +1848,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ گزارشِ صریح: این دکمه‌یِ آیکونی با flatButtonِ همیشه‌شفاف
         # به‌سختی دیده می‌شد — iconButton همیشه یک زمینه/لبه‌یِ ملایم دارد.
         self.quick_add_button.setObjectName("iconButton")
-        self.quick_add_button.setToolTip("بازکردن فرم تعریف تفصیلی (برای ساختن طرف‌حساب تازه)")
+        self.quick_add_button.setToolTip("بازکردن فرم تعریف تفصیلی (برای ساختن طرف‌حساب جدید)")
         self.quick_add_button.setMaximumWidth(28)
         self.quick_add_button.clicked.connect(self._quick_add_counterparty)
         account_row.addWidget(self.quick_add_button)
@@ -1974,7 +1974,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         add_row_button = QPushButton("➕")
         add_row_button.setObjectName("iconButton")
         add_row_button.setFixedWidth(36)
-        add_row_button.setToolTip("افزودن ردیف روش تازه")
+        add_row_button.setToolTip("افزودن ردیف روش جدید")
         add_row_button.clicked.connect(self._add_row)
         rows_header.addWidget(add_row_button)
         table_card_layout.addLayout(rows_header)

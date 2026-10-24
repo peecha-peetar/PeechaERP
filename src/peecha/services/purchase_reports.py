@@ -281,7 +281,7 @@ def open_purchase_orders(company_id: int, f: PurchaseFilters) -> ReportResult:
         received = _received_base(doc, ln)
         billed = invoiced.get(ln.line_id, _ZERO)
         remaining = ln.quantity_base - billed
-        if remaining <= 0:
+        if remaining <= 0 or doc.closed_at is not None:  # R336: سفارش اتمام‌شده باز نیست
             continue
         price = _base_price(ln)
         result.add([

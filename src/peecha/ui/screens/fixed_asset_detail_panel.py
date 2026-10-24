@@ -185,7 +185,7 @@ class AssetDetailPanel(QWidget):
             w[key].setToolTip("بعد از پیش‌نویس فقط از «انتقال» یا «تغییر طبقه» در دارایی‌ها عوض می‌شود." if locked else "")
         self.open_button.setVisible(asset is not None)
         if asset is None:
-            self.status_label.setText("دارایی تازه: با ذخیره، حساب تفصیلی و شناسنامهٔ دارایی با هم ساخته می‌شوند.")
+            self.status_label.setText("دارایی جدید: با ذخیره، حساب تفصیلی و شناسنامهٔ دارایی با هم ساخته می‌شوند.")
         else:
             cost = (f" — بهای تمام‌شده {money(asset.gross_cost)} — ارزش دفتری {money(asset.book_value)}"
                     if can("fa_cost_view", "VIEW") else "")

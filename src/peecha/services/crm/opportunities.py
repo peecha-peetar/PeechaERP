@@ -198,7 +198,7 @@ def create_opportunity(company_id: int, user_id: int, f: OpportunityFields, line
         session.commit()
         opp_id, owner, title = opp.opportunity_id, opp.owner_user_id, opp.title
     if owner != user_id:
-        c.notify(company_id, owner, "CRM_OPPORTUNITY_ASSIGNED", "فرصت فروش تازه به شما واگذار شد", title, "CrmOpportunity", opp_id)
+        c.notify(company_id, owner, "CRM_OPPORTUNITY_ASSIGNED", "فرصت فروش جدید به شما واگذار شد", title, "CrmOpportunity", opp_id)
     return opp_id
 
 

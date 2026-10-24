@@ -204,7 +204,7 @@ class LocationDialog(QDialog):
     def __init__(self, parent, level: str, fields: wl.LocationFields | None = None, creating: bool = True,
                  suggested_code: str = "") -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"{'محل تازه' if creating else 'ویرایش محل'} -- {wl.LEVEL_LABELS[level] if level in wl.LEVEL_LABELS else 'محل'}")
+        self.setWindowTitle(f"{'محل جدید' if creating else 'ویرایش محل'} -- {wl.LEVEL_LABELS[level] if level in wl.LEVEL_LABELS else 'محل'}")
         f = fields or wl.LocationFields()
         grid = QGridLayout(self)
         self.segment = QLineEdit(suggested_code)

@@ -66,7 +66,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         form_panel = self._build_detail_panel()
         outer.addWidget(form_panel, stretch=3)
         # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
-        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.runs_table.clicked], on_new=self._reset_form, new_tooltip="تیم پخش تازه")
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.runs_table.clicked], on_new=self._reset_form, new_tooltip="تیم پخش جدید")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -95,7 +95,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("تیم پخش تازه")
+        self.form_title = QLabel("تیم پخش جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -119,7 +119,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         # می‌کنید.
         vehicle_hint_row = QHBoxLayout()
         vehicle_hint = QLabel(
-            "برای تعریف خودروی تازه یا تغییر پلاک/راننده‌اش، به «انبارها» بروید و یک انبار با نوع «خودرو» بسازید/ویرایش کنید."
+            "برای تعریف خودروی جدید یا تغییر پلاک/راننده‌اش، به «انبارها» بروید و یک انبار با نوع «خودرو» بسازید/ویرایش کنید."
         )
         vehicle_hint.setObjectName("sectionHint")
         vehicle_hint.setWordWrap(True)
@@ -435,7 +435,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
     def _reset_form(self) -> None:
         self._current_run = None
         self._eligible = []
-        self.form_title.setText("تیم پخش تازه")
+        self.form_title.setText("تیم پخش جدید")
         self.status_label.setText("")
         self.info_label.setText("")
         self.vehicle_combo.setEnabled(True)

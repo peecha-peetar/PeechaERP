@@ -298,7 +298,7 @@ def _maintenance_tasks(company_id: int, user_id: int, is_manager: bool) -> list[
         if may(mc.FORM_PLAN):
             n = session.scalar(select(func.count()).where(WorkRequest.company_id == company_id, WorkRequest.status_code == "NEW"))
             if n:
-                out.append(OperationalTask("MNT_NEW_REQUEST", KIND_LABELS["MNT_NEW_REQUEST"], 0, "", f"{n} درخواست تعمیر تازه منتظر "
+                out.append(OperationalTask("MNT_NEW_REQUEST", KIND_LABELS["MNT_NEW_REQUEST"], 0, "", f"{n} درخواست تعمیر جدید منتظر "
                                            "بررسی است", "", None, ""))
         for req in session.scalars(select(WorkRequest).where(WorkRequest.company_id == company_id,
                                                              WorkRequest.assigned_to_user_id == user_id,

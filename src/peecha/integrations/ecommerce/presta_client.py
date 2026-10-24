@@ -283,7 +283,7 @@ def fetch_new_orders(papi: PrestaAPI, *, state_id: int = 2, limit: int = 50) -> 
         papi.get, "orders", params={"filter[current_state]": str(state_id), "display": "full", "limit": str(limit)},
     )
     if resp.status_code >= 400:
-        _raise_for_status(resp, "دریافت سفارش‌های تازه")
+        _raise_for_status(resp, "دریافت سفارش‌های جدید")
     data = resp.json()
     rows = (data or {}).get("orders") or []
     if not isinstance(rows, list):

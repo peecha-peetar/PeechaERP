@@ -272,7 +272,7 @@ def add_line(
         if not is_allowed_line_method(fund.company_id, method):
             raise ValueError("روش ردیف نامعتبر است.")
         if fund.status != "OPEN":
-            raise ValueError("این تنخواه بسته شده و دیگر قابل ثبت ردیف تازه نیست.")
+            raise ValueError("این تنخواه بسته شده و دیگر قابل ثبت ردیف جدید نیست.")
         line = PettyCashFundLine(
             fund_id=fund_id, method=method, amount=amount, description=(description or None),
             detail_account_id=detail_account_id, check_no=check_no, check_due_date=check_due_date,

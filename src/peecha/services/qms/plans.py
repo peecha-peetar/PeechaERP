@@ -135,7 +135,7 @@ def create_plan(company_id: int, user_id: int, fields: PlanFields, parameters: l
         c.require(company_id, user_id, c.FORM_MANAGE, session=session)
         if session.scalar(select(InspectionPlan.plan_id).where(InspectionPlan.company_id == company_id,
                                                                InspectionPlan.code == fields.code.strip())):
-            raise ValueError("این کد طرح قبلاً تعریف شده است؛ برای تغییر، نسخهٔ تازه بسازید.")
+            raise ValueError("این کد طرح قبلاً تعریف شده است؛ برای تغییر، نسخهٔ جدید بسازید.")
         plan = InspectionPlan(company_id=company_id, version_no=1, status_code="DRAFT", created_by_user_id=user_id)
         _apply(plan, fields)
         session.add(plan)
@@ -161,7 +161,7 @@ def update_plan(company_id: int, user_id: int, plan_id: int, fields: PlanFields,
         c.require(company_id, user_id, c.FORM_MANAGE, session=session)
         plan = _own_plan(session, company_id, plan_id, lock=True)
         if plan.status_code != "DRAFT":
-            raise ValueError("فقط طرح پیش‌نویس ویرایش می‌شود؛ برای تغییر طرح فعال، نسخهٔ تازه بسازید.")
+            raise ValueError("فقط طرح پیش‌نویس ویرایش می‌شود؛ برای تغییر طرح فعال، نسخهٔ جدید بسازید.")
         if fields.code.strip() != plan.code:
             raise ValueError("کد طرح در نسخه‌های بعدی ثابت می‌ماند.")
         _apply(plan, fields)

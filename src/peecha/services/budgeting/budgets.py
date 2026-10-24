@@ -157,7 +157,7 @@ def create_budget(company_id: int, user_id: int, fiscal_year_id: int, code: str,
         if fy is None or fy.company_id != company_id:
             raise ValueError("سال مالی نامعتبر است.")
         if fy.is_closed:
-            raise ValueError("سال مالی بسته است؛ برای آن بودجهٔ تازه تعریف نمی‌شود.")
+            raise ValueError("سال مالی بسته است؛ برای آن بودجهٔ جدید تعریف نمی‌شود.")
         if session.scalar(select(Budget.budget_id).where(Budget.company_id == company_id, Budget.code == code)):
             raise ValueError("این کد بودجه قبلاً تعریف شده است.")
         budget = Budget(company_id=company_id, fiscal_year_id=fiscal_year_id, code=code, name=name, period_type=period_type,
@@ -354,7 +354,7 @@ def add_line(company_id: int, user_id: int, version_id: int, dims: Dims, propose
     with new_session() as session:
         version, budget = _version(session, company_id, version_id, lock=True)
         if version.status_code != "DRAFT":
-            raise ValueError("ردیف تازه فقط در نسخهٔ پیش‌نویس اضافه می‌شود.")
+            raise ValueError("ردیف جدید فقط در نسخهٔ پیش‌نویس اضافه می‌شود.")
         c.require(company_id, user_id, c.FORM_PREPARE)
         _validate_dims(session, company_id, dims)
         key = key_for(session, budget.budget_id, dims)

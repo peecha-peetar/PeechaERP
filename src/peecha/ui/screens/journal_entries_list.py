@@ -210,7 +210,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             clean_label = button_label.lstrip("+ ").strip() or button_label
             new_button = QPushButton(f"➕ {clean_label}")
             new_button.setObjectName("primaryButton")
-            new_button.setToolTip(f"{clean_label}ی تازه")
+            new_button.setToolTip(f"{clean_label}ی جدید")
             new_button.clicked.connect(lambda _checked=False, code=screen_code: self._open_new_entry(code))
             header.addWidget(new_button)
         layout.addLayout(header)
@@ -463,7 +463,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         confirm = QMessageBox.question(
             self,
             "برگشت‌زدن سند",
-            "یک سند تازه با بدهکار/بستانکار معکوس این سند ساخته می‌شود تا اثرش را خنثی کند. ادامه می‌دهید؟",
+            "یک سند جدید با بدهکار/بستانکار معکوس این سند ساخته می‌شود تا اثرش را خنثی کند. ادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -492,7 +492,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         confirm = QMessageBox.question(
             self,
             "ادغام اسناد",
-            f"{len(journal_entry_ids)} سند انتخاب‌شده در یک سند تازه ادغام شوند؟ "
+            f"{len(journal_entry_ids)} سند انتخاب‌شده در یک سند جدید ادغام شوند؟ "
             "اسناد اصلی حذف نمی‌شوند، فقط به وضعیت «ابطال‌شده» تغییر می‌کنند.",
             QMessageBox.Yes | QMessageBox.No,
         )
@@ -504,7 +504,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             QMessageBox.warning(self, "خطا", str(exc))
             return
         QMessageBox.information(
-            self, "ادغام شد", f"سند تازه با شمارهٔ موقت {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد."
+            self, "ادغام شد", f"سند جدید با شمارهٔ موقت {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد."
         )
         self.refresh()
 

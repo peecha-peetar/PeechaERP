@@ -68,7 +68,7 @@ def add_part(company_id: int, user_id: int, work_order_id: int, item_id: int, wa
         c.require(company_id, user_id, c.FORM_PLAN, session=session)
         wo = wos.lock(session, company_id, work_order_id)
         if wo.status_code not in _ACTIVE_WO:
-            raise ValueError("دستور کار بسته یا لغوشده قطعهٔ تازه نمی‌پذیرد.")
+            raise ValueError("دستور کار بسته یا لغوشده قطعهٔ جدید نمی‌پذیرد.")
         _item(session, company_id, item_id)
         _warehouse(session, company_id, warehouse_id)
         row = session.scalar(select(WorkOrderPart).where(WorkOrderPart.work_order_id == work_order_id,

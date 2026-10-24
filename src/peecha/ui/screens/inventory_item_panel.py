@@ -210,7 +210,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.item_code_value_field, "خود کد یا نام این کالا نزد همان تامین‌کننده — برای تطبیق سریع‌تر هنگام ثبت فاکتور خرید."),
             # ویژگی‌ها و متغیرها
             (self.variant_attribute_combo, "ویژگی‌ای که برای این کالا متغیر تعریف می‌شود (مثلاً «سایز» یا «رنگ»)."),
-            (self.variant_value_field, "مقدار تازه‌ای که به فهرست مقادیر همین ویژگی اضافه می‌شود (مثلاً M یا قرمز)."),
+            (self.variant_value_field, "مقدار جدیدی که به فهرست مقادیر همین ویژگی اضافه می‌شود (مثلاً M یا قرمز)."),
             (self.variant_notes_field, "توضیحات اختصاصی همین متغیر — جدا از یادداشت کالای اصلی."),
             (self.variant_price_list_combo, "فهرست قیمتی که قیمت زیر رویش تنظیم می‌شود."),
             (self.variant_price_field, "قیمت فروش این متغیر مشخص در همان فهرست قیمت انتخاب‌شده."),
@@ -624,14 +624,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_attribute_button = QPushButton("+")
         add_attribute_button.setObjectName("iconButton")
         add_attribute_button.setFixedWidth(28)
-        add_attribute_button.setToolTip("ویژگی تازه")
+        add_attribute_button.setToolTip("ویژگی جدید")
         add_attribute_button.clicked.connect(self._add_item_attribute)
         attribute_row.addWidget(add_attribute_button)
         layout.addLayout(attribute_row)
 
         value_row = QHBoxLayout()
         self.variant_value_field = QLineEdit()
-        self.variant_value_field.setPlaceholderText("مقدار تازه (مثلاً M یا قرمز)")
+        self.variant_value_field.setPlaceholderText("مقدار جدید (مثلاً M یا قرمز)")
         value_row.addWidget(self.variant_value_field, stretch=1)
         add_value_button = QPushButton("+")
         add_value_button.setObjectName("iconButton")
@@ -755,7 +755,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("ویژگی تازه")
+        dialog.setWindowTitle("ویژگی جدید")
         form = QVBoxLayout(dialog)
         code_field = QLineEdit()
         code_field.setPlaceholderText("کد (مثلاً SIZE)")
@@ -858,7 +858,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.variants_status_label.setText(str(exc))
             return
         self.variants_status_label.setText(
-            f"{len(created_ids)} متغیر تازه ساخته شد." if created_ids else "همهٔ ترکیب‌ها از قبل موجود بودند."
+            f"{len(created_ids)} متغیر جدید ساخته شد." if created_ids else "همهٔ ترکیب‌ها از قبل موجود بودند."
         )
         self._refresh_variants_table()
         self._sync_transactability_checkboxes()
@@ -1070,7 +1070,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         create_bom_button = QPushButton("➕")
         create_bom_button.setObjectName("primaryIconButton")
         create_bom_button.setFixedWidth(48)
-        create_bom_button.setToolTip("نسخهٔ تازهٔ فهرست مواد اولیه")
+        create_bom_button.setToolTip("نسخهٔ جدید فهرست مواد اولیه")
         create_bom_button.clicked.connect(self._create_bom)
         layout.addWidget(create_bom_button, alignment=Qt.AlignLeft)
 
@@ -1352,7 +1352,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_button = QPushButton("+")
         add_button.setObjectName("iconButton")
         add_button.setFixedWidth(28)
-        add_button.setToolTip(f"{label_text} تازه")
+        add_button.setToolTip(f"{label_text} جدید")
         add_button.clicked.connect(quick_add)
         combo_row.addWidget(add_button)
         row_layout.addLayout(combo_row)
@@ -1362,7 +1362,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("واحد تازه")
+        dialog.setWindowTitle("واحد جدید")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("کد"))
         code_field = QLineEdit()
@@ -1395,7 +1395,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "برند تازه", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
+            "برند جدید", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
         )
         if new_id is None:
             return
@@ -1406,7 +1406,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "تولیدکنندهٔ تازه", lambda code, name: catalog_service.create_manufacturer(self._company_id, code, name)
+            "تولیدکنندهٔ جدید", lambda code, name: catalog_service.create_manufacturer(self._company_id, code, name)
         )
         if new_id is None:
             return
@@ -1417,7 +1417,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "دسته‌بندی تازه", lambda code, name: catalog_service.create_category(self._company_id, code, name)
+            "دسته‌بندی جدید", lambda code, name: catalog_service.create_category(self._company_id, code, name)
         )
         if new_id is None:
             return
@@ -1448,7 +1448,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._company_id is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("گروه POS تازه")
+        dialog.setWindowTitle("گروه POS جدید")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("نام"))
         name_field = QLineEdit()
@@ -2222,7 +2222,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("volume", "حجم هر واحد (m³)", volume_field, span=1),
             FieldSpec("active", "", active_cb, span=1),
         ]))
-        hint = QLabel("تغییر ضریب فقط روی اسناد تازه اثر دارد؛ اسناد ثبت‌شده ضریب لحظهٔ ثبت خودشان را نگه می‌دارند.")
+        hint = QLabel("تغییر ضریب فقط روی اسناد جدید اثر دارد؛ اسناد ثبت‌شده ضریب لحظهٔ ثبت خودشان را نگه می‌دارند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         dlayout.addWidget(hint)

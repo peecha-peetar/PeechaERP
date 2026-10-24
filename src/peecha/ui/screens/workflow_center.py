@@ -29,13 +29,13 @@ _PATH_COLOR = {"done": "#10B981", "current": "#3B82F6", "pending": "#94A3B8", "f
 ms.ICONS.update({
     "تایید درخواست": ("✅", "primary"), "رد درخواست": ("❌", "danger"), "برگشت برای اصلاح": ("↩️", ""),
     "واگذاری به همکار": ("👥", ""), "یادداشت": ("💬", ""), "بازکردن سند": ("📂", ""), "تایید گروهی": ("☑️", ""),
-    "تازه‌سازی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
+    "به‌روزرسانی": ("🔄", ""), "یادآوری به گیرنده": ("🔔", ""), "پس‌گرفتن درخواست": ("🚫", "danger"),
     "انجام و تایید سریع": ("✅", "primary"), "علامت خوانده‌شده": ("✔️", ""), "همه خوانده شد": ("📭", ""),
     "تنظیم کانال‌های اعلان": ("⚙️", ""), "تفویض جدید": ("🆕", "primary"), "پایان تفویض": ("🛑", "danger"),
     "ذخیرهٔ قواعد": ("💾", "primary"), "ذخیرهٔ ساعت کاری": ("💾", "primary"), "تعطیلی جدید": ("🆕", ""),
     "حذف تعطیلی": ("🗑️", "danger"), "ذخیرهٔ پیش‌فرض اعلان‌ها": ("💾", "primary"), "ذخیرهٔ کاربران کارکنان": ("💾", "primary"),
     "ذخیرهٔ مدیران واحدها": ("💾", "primary"), "مرکز تایید": ("🖊️", ""),
-    "انتقال به فرایند تازه": ("📥", "primary"), "روشن یا خاموش کردن کارتابل قبلی": ("⏯️", ""),
+    "انتقال به فرایند جدید": ("📥", "primary"), "روشن یا خاموش کردن کارتابل قبلی": ("⏯️", ""),
     "ویرایش مراحل کارتابل قبلی": ("✏️", ""),
 })
 
@@ -227,7 +227,7 @@ class NotificationCenterScreen(QWidget):
         outer.addWidget(self.table, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (("read", "علامت خوانده‌شده"), ("all", "همه خوانده شد"),
                                                       ("open", "بازکردن سند"), ("prefs", "تنظیم کانال‌های اعلان"),
-                                                      ("refresh", "تازه‌سازی"))}
+                                                      ("refresh", "به‌روزرسانی"))}
         self.buttons["read"].clicked.connect(lambda: self.mark_selected())
         self.buttons["all"].clicked.connect(lambda: self.mark_all())
         self.buttons["open"].clicked.connect(lambda: self.open_selected())
@@ -328,7 +328,7 @@ class DelegationsScreen(QWidget):
         outer.addWidget(cards)
         self.table = table(["از", "به", "از تاریخ", "تا تاریخ", "دامنه", "علت", "وضعیت"])
         outer.addWidget(self.table, stretch=1)
-        self.buttons = {"new": QPushButton("تفویض جدید"), "end": QPushButton("پایان تفویض"), "refresh": QPushButton("تازه‌سازی")}
+        self.buttons = {"new": QPushButton("تفویض جدید"), "end": QPushButton("پایان تفویض"), "refresh": QPushButton("به‌روزرسانی")}
         self.buttons["new"].clicked.connect(lambda: self.create())
         self.buttons["end"].clicked.connect(lambda: self.end_selected())
         self.buttons["refresh"].clicked.connect(lambda: self.reload())
@@ -786,13 +786,13 @@ class LegacyCartablePanel(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
-        hint = QLabel("زنجیره‌های تایید کارتابل قبلی. هر کدام را به فرایند تازه منتقل کنید تا تایید سند از «طراحی فرایند» "
-                      "اداره شود. با منتشرشدن فرایند تازه، کارتابل قبلی همان سند خاموش می‌شود و سندهایی که الان در آن "
+        hint = QLabel("زنجیره‌های تایید کارتابل قبلی. هر کدام را به فرایند جدید منتقل کنید تا تایید سند از «طراحی فرایند» "
+                      "اداره شود. با منتشرشدن فرایند جدید، کارتابل قبلی همان سند خاموش می‌شود و سندهایی که الان در آن "
                       "در جریان‌اند، همان‌جا تا پایان تایید می‌شوند.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        self.table = table(["سند", "مراحل تایید (به ترتیب)", "وضعیت", "فرایند تازه"])
+        self.table = table(["سند", "مراحل تایید (به ترتیب)", "وضعیت", "فرایند جدید"])
         self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setColumnWidth(0, 220)
         self.table.setColumnWidth(1, 320)
@@ -802,10 +802,10 @@ class LegacyCartablePanel(QWidget):
         self.status_label.setObjectName("sectionHint")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
-        self.move_btn = QPushButton("انتقال به فرایند تازه")
+        self.move_btn = QPushButton("انتقال به فرایند جدید")
         self.toggle_btn = QPushButton("روشن یا خاموش کردن کارتابل قبلی")
         self.edit_btn = QPushButton("ویرایش مراحل کارتابل قبلی")
-        self.refresh_btn = QPushButton("تازه‌سازی")
+        self.refresh_btn = QPushButton("به‌روزرسانی")
         self.move_btn.clicked.connect(lambda: self.move_selected())
         self.toggle_btn.clicked.connect(lambda: self.toggle_selected())
         self.edit_btn.clicked.connect(lambda: self.edit_steps())
@@ -821,7 +821,7 @@ class LegacyCartablePanel(QWidget):
         registry.ensure_loaded()
         self.rows = wf_templates.legacy_chains(company_id())
         fill(self.table, [[r["label"], " ← ".join(r["roles"]), "روشن" if r["active"] else "خاموش",
-                           r["process"] or ("—" if r["movable"] else "در گردش کار تازه پشتیبانی نمی‌شود")]
+                           r["process"] or ("—" if r["movable"] else "در گردش کار جدید پشتیبانی نمی‌شود")]
                           for r in self.rows], [r["form"] for r in self.rows])
 
     def _selected(self) -> dict | None:
@@ -844,9 +844,9 @@ class LegacyCartablePanel(QWidget):
         if row is None:
             return None
         if not row["movable"]:
-            _warn(self, "انتقال به فرایند تازه", "این سند هنوز در گردش کار تازه نوع سند ندارد؛ کارتابل قبلی آن مثل قبل کار می‌کند.")
+            _warn(self, "انتقال به فرایند جدید", "این سند هنوز در گردش کار جدید نوع سند ندارد؛ کارتابل قبلی آن مثل قبل کار می‌کند.")
             return None
-        did, ok = _run(self, "انتقال به فرایند تازه", wf_templates.import_legacy, company_id(), user_id(), row["form"])
+        did, ok = _run(self, "انتقال به فرایند جدید", wf_templates.import_legacy, company_id(), user_id(), row["form"])
         if ok:
             self.refresh()
             self.status_label.setText(f"پیش‌نویس فرایند «تایید {row['label']}» ساخته شد. آن را در «طراحی فرایند» بررسی و "

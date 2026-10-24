@@ -361,7 +361,7 @@ def build_action_footer(buttons: list[QWidget]) -> QWidget:
 
 
 def add_quick_add_button(
-    row_layout: QHBoxLayout, combo: QWidget, main_window, screen_code: str, tooltip: str = "افزودن مقدار تازه"
+    row_layout: QHBoxLayout, combo: QWidget, main_window, screen_code: str, tooltip: str = "افزودن مقدار جدید"
 ) -> QPushButton:
     """طبق سند راهنمای UI/UX (بخش ۶.۳ — دکمهٔ + استاندارد): هر
     فیلدی که مقدارش از یک جدول/فرم دیگر می‌آید باید کنارش یک دکمهٔ +

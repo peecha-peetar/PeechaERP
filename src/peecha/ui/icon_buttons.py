@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QObject, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import QDialogButtonBox, QMessageBox, QPushButton
 
 from peecha.ui.screens import module_style as ms
@@ -132,7 +132,11 @@ def iconize(button: QPushButton) -> bool:
     found = boxed or icon_for(button.text(), role)
     if found is None:
         return False
-    glyph, kind, label = found
+    _apply(button, *found)
+    return True
+
+
+def _apply(button: QPushButton, glyph: str, kind: str, label: str) -> None:
     # کلید F2 اولین دکمهٔ «اصلی» را می‌زند؛ پس مجموعهٔ دکمه‌های اصلی همان قبلی می‌ماند (دکمهٔ حذف هرگز اصلی نیست)
     was_primary = button.objectName() in ("primaryButton", "primaryIconButton")
     if kind != "danger":
@@ -147,7 +151,38 @@ def iconize(button: QPushButton) -> bool:
     button.setCursor(Qt.PointingHandCursor)
     # نام شیء عوض شد؛ استایل‌شیت باید دوباره خوانده شود (بیرون از polish جاری؛ با حذف دکمه لغو می‌شود)
     _Repolisher(button)
+
+
+def retext(button: QPushButton) -> bool:
+    """R336: متن دکمه پس از آیکونی‌شدن دوباره نوشته شده (مثل «ذخیره» یا «تبدیل» روی دکمهٔ تایید پنجره):
+    همان متن تول‌تیپ می‌شود و دکمه آیکونی می‌ماند."""
+    text = (button.text() or "").replace("&", "").strip()
+    if len(text) <= 2 or button.property("keep_text") or type(button).__name__ in _NAV_CLASSES or text[:1].isdigit() \
+            or (button.isCheckable() and button.autoExclusive()):
+        return False
+    box = button.parentWidget()
+    role = box.buttonRole(button) if isinstance(box, QDialogButtonBox) else None
+    found = icon_for(text, role)
+    if found is None and role in _BOX_ROLES:
+        found = (*_BOX_ROLES[role], text)
+    if found is None:
+        return False
+    button.setToolTip("")
+    _apply(button, *found)
     return True
+
+
+class _TextWatcher(QObject):
+    """هنگام نمایش، دکمهٔ آیکونی‌شده‌ای که متنش دوباره نوشته شده را دوباره آیکونی می‌کند."""
+
+    def eventFilter(self, obj, event):  # noqa: N802 — نام متد Qt
+        if event.type() == QEvent.Show and isinstance(obj, QPushButton) and obj.property("label") \
+                and len((obj.text() or "").strip()) > 2:
+            retext(obj)
+        return False
+
+
+WATCHER = _TextWatcher()
 
 
 class _Repolisher(QObject):

@@ -141,7 +141,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_conn_button = QPushButton("🔗")
         add_conn_button.setObjectName("primaryIconButton")
         add_conn_button.setFixedWidth(48)
-        add_conn_button.setToolTip("اتصال تازه")
+        add_conn_button.setToolTip("اتصال جدید")
         add_conn_button.clicked.connect(self._add_connection)
         conn_form.addWidget(add_conn_button)
         disconnect_button = QPushButton("🔌")
@@ -231,9 +231,9 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         presta_creds_group_layout.addLayout(presta_creds_form)
         left.addWidget(self.presta_creds_group)
 
-        sync_now_button = QPushButton("🔄  همگام‌سازی الان (کاتالوگ + مشتریان + سفارش‌های تازه)")
+        sync_now_button = QPushButton("🔄  همگام‌سازی الان (کاتالوگ + مشتریان + سفارش‌های جدید)")
         sync_now_button.setObjectName("primaryIconButton")
-        sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌های تازه را می‌خواند")
+        sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌های جدید را می‌خواند")
         sync_now_button.clicked.connect(self._sync_now)
         left.addWidget(sync_now_button)
 
@@ -516,7 +516,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         parts = [
             f"کاتالوگ: {result.catalog.pushed} ارسال‌شد، {result.catalog.skipped} ردشد، {result.catalog.failed} ناموفق",
-            f"مشتریان: {result.customers.created} تازه، {result.customers.already_mapped} از قبل، {result.customers.failed} ناموفق",
+            f"مشتریان: {result.customers.created} جدید، {result.customers.already_mapped} از قبل، {result.customers.failed} ناموفق",
             f"سفارش‌ها: {result.orders.imported} وارد شد، {result.orders.duplicate} تکراری، {result.orders.failed} ناموفق",
         ]
         all_errors = result.catalog.errors + result.customers.errors + result.orders.errors
@@ -583,7 +583,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_rule_button = QPushButton("📐")
         add_rule_button.setObjectName("primaryIconButton")
         add_rule_button.setFixedWidth(48)
-        add_rule_button.setToolTip("قاعدهٔ تازه")
+        add_rule_button.setToolTip("قاعدهٔ جدید")
         add_rule_button.clicked.connect(self._add_routing_rule)
         form.addWidget(add_rule_button)
         # R276: حذفِ قاعدهٔ انتخاب‌شده
@@ -677,7 +677,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_pricing_rule_button = QPushButton("💲")
         add_pricing_rule_button.setObjectName("primaryIconButton")
         add_pricing_rule_button.setFixedWidth(48)
-        add_pricing_rule_button.setToolTip("قاعدهٔ تازه")
+        add_pricing_rule_button.setToolTip("قاعدهٔ جدید")
         add_pricing_rule_button.clicked.connect(self._add_pricing_rule)
         form.addWidget(add_pricing_rule_button)
         outer.addLayout(form)

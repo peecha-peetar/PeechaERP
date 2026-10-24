@@ -578,7 +578,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 f"{len(errors)} ردیف با خطا مواجه شد و وارد نشدند:\n\n{preview}\n\n"
                 f"{created_count} حساب دیگر با موفقیت ساخته شد.",
             )
-        message = f"{created_count} حساب تازه ساخته شد."
+        message = f"{created_count} حساب جدید ساخته شد."
         if skipped_existing:
             message += f" ({skipped_existing} ردیف چون از قبل وجود داشت، رد شد.)"
         QMessageBox.information(self, "ورود اطلاعات انجام شد", message)

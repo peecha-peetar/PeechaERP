@@ -2012,7 +2012,7 @@ class ProcessListScreen(QWidget):
         cards, self.cards = ms.summary([("all", "همهٔ فرایندها", "info", "🔀"), ("active", "فعال", "success", "▶️"),
                                         ("draft", "در دست طراحی", "warning", "✏️"), ("running", "اجراهای باز", "neutral", "⏳")])
         outer.addWidget(cards)
-        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس تازه", "اجراهای باز", "ایراد",
+        self.table = table(["نام", "کد", "نوع سند", "شروع", "وضعیت", "نسخهٔ فعال", "پیش‌نویس جدید", "اجراهای باز", "ایراد",
                             "پس از آن (خودکار)"])
         self.table.cellDoubleClicked.connect(lambda _r, _c: self.open_designer())
         outer.addWidget(self.table, stretch=1)
@@ -2020,7 +2020,7 @@ class ProcessListScreen(QWidget):
             ("wizard", "ساخت با ویزارد"), ("blank", "فرایند خالی"), ("design", "ویرایش در طراح"), ("test", "آزمون و اجرای آزمایشی"),
             ("publish", "انتشار"), ("activate", "فعال‌سازی"), ("pause", "توقف"), ("archive", "بایگانی"),
             ("unarchive", "بازگردانی از بایگانی"), ("copy", "کپی فرایند"), ("versions", "نسخه‌ها"), ("delete", "حذف فرایند"),
-            ("refresh", "تازه‌سازی"), ("template", "ساخت از قالب"), ("legacy", "انتقال از کارتابل قبلی"),
+            ("refresh", "به‌روزرسانی"), ("template", "ساخت از قالب"), ("legacy", "انتقال از کارتابل قبلی"),
             ("ai", "ساخت با توصیف متنی"), ("flow", "ساخت روند کلی"))}
         B = self.buttons
         B["template"].clicked.connect(lambda: self.new_from_template())
@@ -2157,7 +2157,7 @@ class ProcessListScreen(QWidget):
                 return None
             values = _ask(self, "انتقال از کارتابل قبلی", [("form", "گردش کار", combo(
                 [(f"{label} — {P(steps)} مرحله" + ("" if active else " (غیرفعال)"), form) for form, label, steps, active in flows]))],
-                "مراحل همان کارتابل به یک پیش‌نویس فرایند تبدیل می‌شود؛ کارتابل قبلی تا انتشار فرایند تازه مثل قبل کار می‌کند.")
+                "مراحل همان کارتابل به یک پیش‌نویس فرایند تبدیل می‌شود؛ کارتابل قبلی تا انتشار فرایند جدید مثل قبل کار می‌کند.")
             if values is None:
                 return None
             form_code = values["form"]
@@ -2174,7 +2174,7 @@ class ProcessListScreen(QWidget):
                                                                                  "بدون سند (فرایند عمومی)"))])
             if values is None:
                 return None
-        did, ok = _run(self, "فرایند تازه", defs.create_definition, company_id(), user_id(), code=values.get("code") or "",
+        did, ok = _run(self, "فرایند جدید", defs.create_definition, company_id(), user_id(), code=values.get("code") or "",
                        name=values.get("name") or "", entity_type=values.get("entity_type"))
         if ok:
             self.reload()
@@ -2224,8 +2224,8 @@ class ProcessListScreen(QWidget):
             return None
         src = defs.get_definition(company_id(), did)
         if code is None:
-            values = _ask(self, "کپی فرایند", [("code", "کد تازه", QLineEdit(f"{src.code}_2")),
-                                               ("name", "نام تازه", QLineEdit(f"{src.name} (کپی)"))])
+            values = _ask(self, "کپی فرایند", [("code", "کد جدید", QLineEdit(f"{src.code}_2")),
+                                               ("name", "نام جدید", QLineEdit(f"{src.name} (کپی)"))])
             if values is None:
                 return None
             code, name = values.get("code") or "", values.get("name") or ""

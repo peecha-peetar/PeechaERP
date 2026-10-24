@@ -193,7 +193,7 @@ class UiTextEditor(QWidget):
         self.reset_btn = _icon_button("↩️", "بازگشت ردیف‌های انتخاب‌شده به متن اصلی")
         self.export_btn = _icon_button("📤", "خروجی متن‌های این فرم (CSV) برای ترجمه بیرون از برنامه")
         self.import_btn = _icon_button("📥", "ورود متن‌ها از فایل CSV")
-        self.refresh_btn = _icon_button("🔄", "تازه‌سازی")
+        self.refresh_btn = _icon_button("🔄", "به‌روزرسانی")
         self.save_btn.clicked.connect(lambda: self.save())
         self.reset_btn.clicked.connect(lambda: self.reset_selected())
         self.export_btn.clicked.connect(lambda: self.export_csv())
@@ -383,7 +383,7 @@ class UiTextEditor(QWidget):
         for row_key, value in changes:
             self._saved[row_key] = value
         self.status_label.setText(numerals.to_persian_digits(
-            f"{len(changes)} متن ذخیره شد؛ فرم‌ها از بار بعدی که باز شوند با متن تازه نمایش داده می‌شوند."))
+            f"{len(changes)} متن ذخیره شد؛ فرم‌ها از بار بعدی که باز شوند با متن جدید نمایش داده می‌شوند."))
         self._update_progress()
         return len(changes)
 

@@ -104,7 +104,7 @@ def _notify_seats(session, task: WfTask, user_ids) -> None:
         notify.later(session, task.company_id, user_ids, "WF_APPROVAL_REQUIRED", f"نیاز به تایید شما: {task.title}",
                      task.instructions or "", "WfTask", task.task_id)
     else:
-        notify.later(session, task.company_id, user_ids, "WF_TASK_ASSIGNED", f"کار تازه: {task.title}",
+        notify.later(session, task.company_id, user_ids, "WF_TASK_ASSIGNED", f"کار جدید: {task.title}",
                      task.instructions or "", "WfTask", task.task_id)
 
 
@@ -231,7 +231,7 @@ def _require_open(task: WfTask, row_version: int | None = None) -> None:
     if task.status_code != "OPEN":
         raise WorkflowError(f"این کار قبلاً بسته شده است (وضعیت: {TASK_STATUS.get(task.status_code, task.status_code)}).")
     if row_version is not None and int(row_version) != task.row_version:
-        raise WorkflowError("این کار هم‌زمان توسط کاربر دیگری تغییر کرده است؛ فهرست را تازه کنید و دوباره تصمیم بگیرید.")
+        raise WorkflowError("این کار هم‌زمان توسط کاربر دیگری تغییر کرده است؛ فهرست را به‌روز کنید و دوباره تصمیم بگیرید.")
 
 
 def _seat(session, task: WfTask, user_id: int) -> WfTaskAssignee:
@@ -602,7 +602,7 @@ def add_comment(company_id: int, task_id: int, user_id: int, text: str) -> None:
         audit(session, company_id, user_id, "Task", task_id, "COMMENT", {"comment": text[:500]})
         others = {u for u, st in seats.items() if st in _LIVE} | {task.requested_by_user_id}
         notify.later(session, company_id, [u for u in others if u and u != user_id], "WF_MESSAGE",
-                     f"یادداشت تازه روی «{task.title}»", text[:500], "WfTask", task_id)
+                     f"یادداشت جدید روی «{task.title}»", text[:500], "WfTask", task_id)
         session.commit()
 
 

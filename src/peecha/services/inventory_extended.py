@@ -212,7 +212,7 @@ def add_bom_line(
 
         prd_master.refresh_bom_lock(session, bom_id)  # R280: قفل فقط با دستورِ دارای گردش
         if bom.is_locked:  # R266: نسخهٔ استفاده‌شده در دستورِ تولید
-            raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ تازه بسازید.")
+            raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ جدید بسازید.")
         if bom.finished_item_id == component_item_id:
             raise ValueError("یک کالا نمی‌تواند جزو مواد اولیهٔ خودش باشد.")
         next_no = (
@@ -238,7 +238,7 @@ def remove_bom_line(bom_line_id: int, bom_id: int) -> None:
 
         prd_master.refresh_bom_lock(session, bom_id)
         if session.get(BomHeader, bom_id).is_locked:  # R266
-            raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ تازه بسازید.")
+            raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ جدید بسازید.")
         for m in session.scalars(select(OrderMaterial).where(OrderMaterial.bom_line_id == bom_line_id)):
             m.bom_line_id = None
         session.delete(row)

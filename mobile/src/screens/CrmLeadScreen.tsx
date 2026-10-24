@@ -73,7 +73,7 @@ export function CrmLeadScreen({ apiClient, offlineQueue, onDone }: Props) {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg }}>
-      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.md }]}>ثبت سرنخ تازه</Text>
+      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.md }]}>ثبت سرنخ جدید</Text>
       <Input label="نام و نام خانوادگی *" value={fullName} onChangeText={setFullName} />
       <Input label="نام فروشگاه/شرکت" value={companyName} onChangeText={setCompanyName} />
       <Input label="موبایل *" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />

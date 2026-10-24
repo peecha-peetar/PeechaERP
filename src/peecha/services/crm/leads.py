@@ -246,7 +246,7 @@ def create_lead(company_id: int, user_id: int, f: LeadFields, allow_duplicate: b
         session.commit()
         lead_id, owner = lead.lead_id, lead.owner_user_id
     if owner != user_id:
-        c.notify(company_id, owner, "CRM_LEAD_ASSIGNED", "سرنخ تازه به شما واگذار شد", f.full_name, "CrmLead", lead_id)
+        c.notify(company_id, owner, "CRM_LEAD_ASSIGNED", "سرنخ جدید به شما واگذار شد", f.full_name, "CrmLead", lead_id)
     return lead_id
 
 

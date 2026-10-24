@@ -76,7 +76,7 @@ class _PaymentCurrencyDialog(QDialog):
         add_title_button = QPushButton("+")
         add_title_button.setObjectName("iconButton")
         add_title_button.setFixedWidth(28)
-        add_title_button.setToolTip("افزودن عنوان پرداخت تازه")
+        add_title_button.setToolTip("افزودن عنوان پرداخت جدید")
         add_title_button.clicked.connect(self._add_title)
         title_row.addWidget(add_title_button)
         # طبقِ گزارشِ صریح («عنوانِ پرداخت وقتی وارد می‌شود نمی‌شود حذف یا
@@ -164,7 +164,7 @@ class _PaymentCurrencyDialog(QDialog):
                 self.title_combo.setCurrentIndex(index)
 
     def _add_title(self) -> None:
-        label, ok = QInputDialog.getText(self, "افزودن عنوان پرداخت", "عنوان تازه (مثلاً «هزینهٔ ترخیص»):")
+        label, ok = QInputDialog.getText(self, "افزودن عنوان پرداخت", "عنوان جدید (مثلاً «هزینهٔ ترخیص»):")
         if not ok or not label.strip():
             return
         try:
@@ -179,7 +179,7 @@ class _PaymentCurrencyDialog(QDialog):
         if title_id is None:
             QMessageBox.information(self, "ویرایش عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
             return
-        new_label, ok = QInputDialog.getText(self, "ویرایش عنوان پرداخت", "عنوان تازه:", text=self.title_combo.currentText())
+        new_label, ok = QInputDialog.getText(self, "ویرایش عنوان پرداخت", "عنوان جدید:", text=self.title_combo.currentText())
         if not ok or not new_label.strip():
             return
         try:
@@ -266,7 +266,7 @@ class _AttachmentManagerDialog(QDialog):
         scroll.setWidget(self._list_widget)
         layout.addWidget(scroll, stretch=1)
 
-        add_button = QPushButton("➕ افزودن فایل تازه (عکس، PDF، ...)")
+        add_button = QPushButton("➕ افزودن فایل جدید (عکس، PDF، ...)")
         add_button.clicked.connect(self._add_file)
         layout.addWidget(add_button)
 
@@ -430,7 +430,7 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.new_detail_combo.setEditable(True)
         self.new_detail_combo.setInsertPolicy(QComboBox.NoInsert)
         new_order_row.addWidget(self.new_detail_combo, stretch=1)
-        add_quick_add_button(new_order_row, self.new_detail_combo, main_window, "GL_DIM", "تعریف تفصیلی تازه برای سفارش")
+        add_quick_add_button(new_order_row, self.new_detail_combo, main_window, "GL_DIM", "تعریف تفصیلی جدید برای سفارش")
         self.new_description_field = QLineEdit()
         self.new_description_field.setPlaceholderText("شرح سفارش (اختیاری)")
         new_order_row.addWidget(self.new_description_field, stretch=1)
@@ -488,8 +488,8 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
                 "مسیر یک پوشهٔ اشتراکی شبکه برای ضمیمه‌ها — خالی یعنی هر کاربر فقط ضمیمه‌های ذخیره‌شده روی کامپیوتر خودش را می‌بیند.",
             ),
             (self.order_combo, "سفارشی که می‌خواهید پرداخت‌ها/ضمیمه‌هایش را ببینید یا مدیریت کنید."),
-            (self.new_detail_combo, "تفصیلی سطح آخر گروه سفارش که پیگیری‌اش تازه شروع می‌شود."),
-            (self.new_description_field, "شرح اختیاری این سفارش تازه."),
+            (self.new_detail_combo, "تفصیلی سطح آخر گروه سفارش که پیگیری‌اش از حالا شروع می‌شود."),
+            (self.new_description_field, "شرح اختیاری این سفارش جدید."),
         ])
 
     def _company_id(self) -> int | None:

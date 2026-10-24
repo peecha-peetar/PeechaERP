@@ -677,7 +677,7 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             self._method_mapping_containers[direction] = container
             help_fields.append((method_card, method_hint))
             help_fields.append(
-                (custom_form, "روش سفارشی تازه (مثل نقد/تخفیف/بن: فقط مبلغ + تفصیلی اختیاری) اضافه می‌کند.")
+                (custom_form, "روش سفارشی جدید (مثل نقد/تخفیف/بن: فقط مبلغ + تفصیلی اختیاری) اضافه می‌کند.")
             )
 
         # --- مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی ----------------------------
@@ -707,7 +707,7 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         stage_card_layout.addLayout(self._stage_mapping_container)
 
         stage_template_hint = QLabel(
-            "این دو مرحله («برگشت به طرف‌حساب» و «برگشت چک خرجی به صندوق») حساب کل تازه لازم ندارند "
+            "این دو مرحله («برگشت به طرف‌حساب» و «برگشت چک خرجی به صندوق») حساب کل جدید لازم ندارند "
             "— فقط متن شرح سندشان قابل‌ویرایش است."
         )
         stage_template_hint.setWordWrap(True)

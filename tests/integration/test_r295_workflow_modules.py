@@ -341,7 +341,7 @@ check(inst_of("LEAD", lead2) is None and registry.get_adapter("LEAD").load(compa
       "explicitly assigned lead is left alone")
 with new_session() as s:
     check(s.scalar(select(Notification).where(Notification.user_id == lc["owner_user_id"],
-                                             Notification.title.like("سرنخ تازه به شما%"))) is not None, "assignee notified")
+                                             Notification.title.like("سرنخ جدید به شما%"))) is not None, "assignee notified")
 
 # ===== امنیت: فروش موبایل هرگز با قفل تایید رد نمی‌شود =====
 graph = {"trigger": {"type": "EVENT", "events": ["SALES_INVOICE_CONFIRMED"], "gate": True},

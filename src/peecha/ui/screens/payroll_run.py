@@ -120,7 +120,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         create_period_button = QPushButton("➕")
         create_period_button.setObjectName("primaryIconButton")
         create_period_button.setFixedWidth(48)
-        create_period_button.setToolTip("دورهٔ تازه")
+        create_period_button.setToolTip("دورهٔ جدید")
         create_period_button.clicked.connect(self._create_period)
 
         # R276: حذفِ دورهٔ بی‌محاسبه (دورهٔ دارایِ اجرایِ حقوق قابلِ حذف نیست)

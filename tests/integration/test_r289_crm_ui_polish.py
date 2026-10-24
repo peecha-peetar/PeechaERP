@@ -180,7 +180,7 @@ for w in forms + dialogs + [crm_tab]:
 check(all(isinstance(d.findChild(QDialogButtonBox), QDialogButtonBox) for d in dialogs), "dialogs use standard OK/Cancel like other forms")
 c360 = forms[0]
 c360.load_customer(cust_a)
-check(c360.quick["call"].objectName() == "iconButton" and c360.quick["call"].property("label") == "تماس تازه", "360 quick bar is iconized")
+check(c360.quick["call"].objectName() == "iconButton" and c360.quick["call"].property("label") == "تماس جدید", "360 quick bar is iconized")
 auto_scr = forms[8]
 everyone = seg.save_segment(company_id, uid, code="ALL", name="همهٔ مشتریان",
                             rule={"all": [{"field": "invoice_count_total", "op": ">=", "value": 0}]})

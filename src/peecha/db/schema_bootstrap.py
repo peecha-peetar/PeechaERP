@@ -130,7 +130,7 @@ def _guard_newer(conn, applied, files: list[Path]) -> None:
         version = _last_upgrade_version(conn)
         version = version if version and version != _app_version() else None
         raise SchemaNewerThanApp(
-            f"دیتابیس با نسخهٔ تازه‌تری از برنامه{f' ({version})' if version else ''} ارتقا یافته و برنامهٔ این سیستم "
+            f"دیتابیس با نسخهٔ جدیدتری از برنامه{f' ({version})' if version else ''} ارتقا یافته و برنامهٔ این سیستم "
             f"({_app_version()}) قدیمی‌تر است. برای این‌که اطلاعات ناقص ثبت نشود، ورود بسته شد؛ برنامهٔ این سیستم را "
             "به‌روز کنید.")
 

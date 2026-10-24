@@ -81,7 +81,7 @@ check(builder.edge_choices(g2, c) == [("yes", "بله"), ("no", "خیر")], "edg
 builder.remove_node(g2, c)
 check(c not in defs.nodes_by_id(g2), "node removed")
 diff = builder.diff_graphs(g, g2)
-check(any("مرحلهٔ تازه" in x for x in diff) and any("حذف‌شده" in x for x in diff), "version diff in Persian")
+check(any("مرحلهٔ جدید" in x for x in diff) and any("حذف‌شده" in x for x in diff), "version diff in Persian")
 
 # ===== ۲) ویزارد در رابط کاربری =====
 w = st.WizardDialog()
@@ -203,7 +203,7 @@ ds.select_node(bad_task)
 check(ds.delete_selected() and bad_task not in defs.nodes_by_id(ds.graph), "delete node")
 ds.auto_layout()
 check(ds.publish() and defs.get_definition(company_id, blank).status_code == "PUBLISHED" and not ds.dirty, "save and publish from designer")
-check(raises(lambda: defs.publish(company_id, uid, blank), "تغییر تازه‌ای"), "nothing new to publish")
+check(raises(lambda: defs.publish(company_id, uid, blank), "تغییر جدیدی"), "nothing new to publish")
 ds.select_node(ap)
 ds.w["label"].setText("تایید سرپرست واحد")
 ds.apply_properties()

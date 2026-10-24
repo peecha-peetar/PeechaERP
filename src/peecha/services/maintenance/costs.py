@@ -51,7 +51,7 @@ def add_cost(company_id: int, user_id: int, work_order_id: int, cost_type_code: 
         c.require(company_id, user_id, c.FORM_EXECUTE, session=session)
         wo = wos.lock(session, company_id, work_order_id)
         if wo.status_code not in _ACTIVE_WO:
-            raise ValueError("دستور کار بسته یا لغوشده هزینهٔ تازه نمی‌پذیرد.")
+            raise ValueError("دستور کار بسته یا لغوشده هزینهٔ جدید نمی‌پذیرد.")
         row = WorkOrderCost(work_order_id=work_order_id, cost_type_code=cost_type_code, description=description.strip()[:300],
                             supplier_detail_account_id=supplier_detail_account_id, amount=amount, accounting_code="PENDING",
                             status_code="DRAFT", created_by_user_id=user_id)

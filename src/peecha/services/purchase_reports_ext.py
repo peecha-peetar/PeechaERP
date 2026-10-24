@@ -946,13 +946,15 @@ def _stock_snapshot(company_id: int):
     full = PurchaseFilters(datetime.date(1900, 1, 1), datetime.date.today())
     incoming: dict[int, decimal.Decimal] = defaultdict(lambda: _ZERO)
     for r in _three_way(company_id, full):
-        incoming[r["line"].item_id] += max(r["ordered"] - max(r["received"], r["invoiced"]), _ZERO)
+        if r["doc"].closed_at is None:  # R336: از سفارش اتمام‌شده چیزی در راه نیست
+            incoming[r["line"].item_id] += max(r["ordered"] - max(r["received"], r["invoiced"]), _ZERO)
     ctx = base._ctx(company_id)
     demand: dict[int, decimal.Decimal] = defaultdict(lambda: _ZERO)
     so_pairs = base._lines(company_id, ("SALES_ORDER",), _OPEN_ORDER_STATUSES, None, ctx, dated=False)
     billed = base._invoiced_base_by_source_line(company_id, "SALES_INVOICE", [ln.line_id for _d, ln in so_pairs])
-    for _doc, ln in so_pairs:
-        demand[ln.item_id] += max(ln.quantity_base - billed.get(ln.line_id, _ZERO), _ZERO)
+    for so, ln in so_pairs:
+        if so.closed_at is None:
+            demand[ln.item_id] += max(ln.quantity_base - billed.get(ln.line_id, _ZERO), _ZERO)
     return by_wh, by_item, incoming, demand
 
 
@@ -1299,7 +1301,7 @@ _FIELD_LABELS = {
     "warehouse_id": "انبار", "requested_delivery_date": "تاریخ تحویل", "purchase_type_id": "نوع خرید", "status_code": "وضعیت",
 }
 _ACTION_LABELS = {"ADD_LINE": "افزودن ردیف", "UPDATE_LINE": "ویرایش ردیف", "DELETE_LINE": "حذف ردیف",
-                  "UPDATE_HEADER": "ویرایش سر سند", "STATUS": "تغییر وضعیت"}
+                  "UPDATE_HEADER": "ویرایش سر سند", "STATUS": "تغییر وضعیت", "CLOSE": "اتمام سفارش", "REOPEN": "بازگشایی سفارش"}
 
 
 def _change_logs(company_id: int, f: PurchaseFilters, actions: tuple[str, ...]):
@@ -1491,6 +1493,8 @@ def line_delivery(company_id: int, f: PurchaseFilters) -> ReportResult:
         if expected is None:
             continue
         on = received.get(ln.line_id)
+        if on is None and doc.closed_at is not None:  # R336: ماندهٔ سفارش اتمام‌شده دیگر نمی‌رسد
+            continue
         delay = ((on or today) - expected).days
         state = ("به‌موقع" if delay <= 0 else "با تاخیر") if on else ("دیرکرد — نرسیده" if delay > 0 else "در انتظار")
         if (view == "LATE" and delay <= 0) or (view == "OPEN" and on is not None):

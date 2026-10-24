@@ -14,7 +14,7 @@ from peecha.services.workflow import registry, tasks
 from peecha.services.workflow.common import PRIORITIES, WorkflowError, now
 
 SOURCES = {"WF": "گردش کار", "CARTABLE": "کارتابل اسناد", "DOC": "اسناد خرید، فروش و انبار", "CRM": "پیگیری مشتری",
-           "CUSTOMER": "مشتری تازه", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده",
+           "CUSTOMER": "مشتری جدید", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده",
            "FAILED": "اقدام خودکار ناموفق"}
 KINDS = {"APPROVAL": "تایید", "TASK": "کار", "STEP": "مرحلهٔ سند", "FOLLOWUP": "پیگیری", "REQUEST": "درخواست من"}
 _REQUEST_TYPES = {"CREATE": "ثبت و تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
@@ -209,10 +209,10 @@ def _customer_items(company_id: int, user_id: int) -> list[WorkItem]:
         code, name = names.get(cid, ("", f"#{cid}"))
         created = p.submitted_at.astimezone() if p.submitted_at and p.submitted_at.tzinfo is None else p.submitted_at
         out.append(WorkItem(f"CUSTOMER:{cid}", "CUSTOMER", SOURCES["CUSTOMER"], "APPROVAL", KINDS["APPROVAL"], cid,
-                            f"مشتری تازه: {name}", people.get(p.submitted_by_user_id, ""), None, False, "NORMAL",
+                            f"مشتری جدید: {name}", people.get(p.submitted_by_user_id, ""), None, False, "NORMAL",
                             PRIORITIES["NORMAL"], created, True, f"کد {code}" if code else "",
                             {"customer_id": cid, "code": code, "name": name},
-                            "مشتری تازه را تایید یا رد کنید", "customer"))
+                            "مشتری جدید را تایید یا رد کنید", "customer"))
     return out
 
 
@@ -513,7 +513,7 @@ def quick_decide(company_id: int, user_id: int, key: str, decision: str, comment
                 raise WorkflowError("لطفاً علت رد را بنویسید.")
             commercial_partners.reject_customer(int(rest), user_id, comment)
             return "مشتری رد شد."
-        raise WorkflowError("برای مشتری تازه فقط تایید یا رد ممکن است.")
+        raise WorkflowError("برای مشتری جدید فقط تایید یا رد ممکن است.")
     raise WorkflowError("برای این مورد تصمیم سریع وجود ندارد؛ سند را باز کنید.")
 
 

@@ -58,7 +58,7 @@ lst.show()
 app.processEvents()
 app.processEvents()
 new = {b.toolTip(): b.text() for b in lst.findChildren(QPushButton) if b.toolTip().startswith("درخواست خرید")
-       or "تازه" in b.toolTip()}
+       or "جدید" in b.toolTip()}
 glyphs = list(new.values())
 check(len(glyphs) >= 5 and len(set(glyphs)) == len(glyphs) and "➕" not in glyphs, f"each new-document button has its own icon ({new})")
 

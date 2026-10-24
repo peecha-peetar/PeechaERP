@@ -280,7 +280,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.set_field_help([
             (self.from_date_field, "شروع اعتبار این نرخ حداقل‌دستمزد."),
             (self.to_date_field, "پایان اعتبار — خالی یعنی تا اطلاع ثانوی."),
-            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این نرخ تا وضع نرخ تازه‌تر معتبر می‌ماند."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این نرخ تا وضع نرخ جدیدتر معتبر می‌ماند."),
             (self.monthly_field, "حداقل دستمزد ماهانهٔ مصوب."),
         ])
 
@@ -310,7 +310,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("دورهٔ تازه")
+        self.form_title = QLabel("دورهٔ جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -407,7 +407,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("دورهٔ تازه")
+        self.form_title.setText("دورهٔ جدید")
         self.status_label.setText("")
         self.from_date_field.setDate(datetime.date.today())
         self.to_date_unbounded_checkbox.setChecked(True)
@@ -465,12 +465,12 @@ class _SetPolicyDialog(QDialog):
         self.setWindowTitle(f"ویرایش قانون — {label}")
         layout = QVBoxLayout(self)
 
-        layout.addWidget(QLabel("تاریخ اجرا (نسخهٔ تازه از این تاریخ به بعد)"))
+        layout.addWidget(QLabel("تاریخ اجرا (نسخهٔ جدید از این تاریخ به بعد)"))
         self.effective_from_field = JalaliDateEdit()
         self.effective_from_field.setDate(datetime.date.today())
         layout.addWidget(self.effective_from_field)
 
-        layout.addWidget(QLabel("مقدار تازه"))
+        layout.addWidget(QLabel("مقدار جدید"))
         self.value_field = _AmountField()
         self.value_field.setValue(float(current_value or 0))
         layout.addWidget(self.value_field)
@@ -627,7 +627,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.is_continuous_checkbox, "این آیتم مستمر است — در محاسبهٔ سنوات/اضافه‌کاری هم به‌عنوان مبنا لحاظ می‌شود."),
             (self.is_cash_checkbox, "این آیتم در جمع نهایی قابل‌پرداخت نقدی فیش لحاظ می‌شود."),
             (self.is_court_order_checkbox, "این آیتم یک کسر الزامی ناشی از حکم دادگاه است — اولویت کسر روی آن اثر دارد."),
-            (self.is_active_checkbox, "آیتم‌های غیرفعال دیگر در محاسبهٔ حقوق دوره‌های تازه اعمال نمی‌شوند."),
+            (self.is_active_checkbox, "آیتم‌های غیرفعال دیگر در محاسبهٔ حقوق دوره‌های جدید اعمال نمی‌شوند."),
         ])
         self.register_field_grids("payroll_settings_pay_items", [self.form_grid])
 
@@ -657,7 +657,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("آیتم تازه")
+        self.form_title = QLabel("آیتم جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -855,7 +855,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("آیتم تازه")
+        self.form_title.setText("آیتم جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -975,7 +975,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.employer_expense_account_combo, "حساب هزینه‌ای که سهم کارفرمای بیمه در سند خودکار به‌عنوان بدهکار به آن می‌رود."),
             (self.employer_expense_detail_combo, "تفصیلی اختیاری برای همان ردیف."),
             (self.insurance_description_template_field, "شرح ردیف سهم کارفرما — جای‌گذارهای مجاز: {دوره} {اجرا}."),
-            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این تنظیم تا وضع نرخ تازه‌تر معتبر می‌ماند."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این تنظیم تا وضع نرخ جدیدتر معتبر می‌ماند."),
         ])
         self.register_field_grids("payroll_settings_insurance", [self.form_grid])
 
@@ -1009,7 +1009,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("دورهٔ تازه")
+        self.form_title = QLabel("دورهٔ جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -1141,7 +1141,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("دورهٔ تازه")
+        self.form_title.setText("دورهٔ جدید")
         self.status_label.setText("")
         self.from_date_field.setDate(datetime.date.today())
         self.to_date_unbounded_checkbox.setChecked(True)
@@ -1423,7 +1423,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.multiplier_field, "ضریب این نوع اضافه‌کاری — مثلاً ۱٫۴ برای ۴۰٪ اضافه."),
             (self.stacking_mode_combo, "وقتی چند نوع اضافه‌کاری هم‌زمان رخ می‌دهد، ضرایب چگونه ترکیب شوند."),
             (self.max_hours_policy_field, "کد سیاست سقف ساعت اضافه‌کاری ماهانه — اختیاری، برای محدودکردن سقف محاسبه."),
-            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این قانون تا وضع قانون تازه‌تر معتبر می‌ماند."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلد پایان اعتبار غیرفعال می‌شود — این قانون تا وضع قانون جدیدتر معتبر می‌ماند."),
         ])
         self.register_field_grids("payroll_settings_overtime_rules", [self.form_grid])
 
@@ -1453,7 +1453,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("قانون تازه")
+        self.form_title = QLabel("قانون جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -1561,7 +1561,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("قانون تازه")
+        self.form_title.setText("قانون جدید")
         self.status_label.setText("")
         self.code_combo.setCurrentIndex(0)
         self.code_combo.setEnabled(True)
@@ -1698,7 +1698,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self.form_title = QLabel("الگوی تازه")
+        self.form_title = QLabel("الگوی جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -1798,7 +1798,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _reset_form(self) -> None:
         self._editing_id = None
         self._pending_mapping = None
-        self.form_title.setText("الگوی تازه")
+        self.form_title.setText("الگوی جدید")
         self.status_label.setText("")
         self.name_field.clear()
         self.header_row_checkbox.setChecked(True)

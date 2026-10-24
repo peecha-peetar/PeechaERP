@@ -75,7 +75,7 @@ class WorkflowMonitorScreen(QWidget):
         outer.addWidget(self.tabs, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (
             ("log", "ریز اجرا"), ("open", "بازکردن سند"), ("retry", "تلاش دوباره"), ("cancel", "لغو اجرا"),
-            ("refresh", "تازه‌سازی"))}
+            ("refresh", "به‌روزرسانی"))}
         self.buttons["log"].clicked.connect(lambda: self.show_log())
         self.buttons["open"].clicked.connect(lambda: self.open_document())
         self.buttons["retry"].clicked.connect(lambda: self.retry())

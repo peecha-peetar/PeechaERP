@@ -153,7 +153,10 @@ def _to_invoice(ctx: ActionContext) -> dict:
 def _fully_invoiced(company_id: int, document_id: int) -> bool:
     from peecha.services import commercial_documents as docs
 
-    ordered, invoiced = docs.get_order_fulfillment_summary(document_id, company_id)
+    lines = docs.get_line_fulfillment(document_id, company_id)
+    if lines and lines[0].closed:  # R336: سفارش اتمام‌شده دیگر فاکتور نمی‌شود
+        return True
+    ordered, invoiced = sum((f.quantity for f in lines), docs._ZERO), sum((f.invoiced_quantity for f in lines), docs._ZERO)
     return ordered > 0 and invoiced >= ordered
 
 

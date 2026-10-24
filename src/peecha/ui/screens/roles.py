@@ -47,7 +47,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
 
         self.set_field_help([
             (self.role_list, "فهرست نقش‌های این شرکت. برای دیدن و تغییر دسترسی‌های هر نقش، روی آن کلیک کنید."),
-            (self.new_role_code_field, "کد نقش تازه، مثلاً «حسابدار» یا «انباردار»."),
+            (self.new_role_code_field, "کد نقش جدید، مثلاً «حسابدار» یا «انباردار»."),
             (
                 self.parent_role_combo,
                 "نقش والد فقط برای سازمان‌دهی و نمایش سلسله‌مراتب است. "
@@ -57,7 +57,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
             (self.edit_parent_combo, "والد همین نقش — قابل‌تغییر است."),
             (
                 self.is_active_checkbox,
-                "نقش غیرفعال دیگر قابل‌تخصیص به کاربران تازه نیست. کاربرانی که از قبل این نقش را دارند تحت‌تأثیر قرار نمی‌گیرند.",
+                "نقش غیرفعال دیگر قابل‌تخصیص به کاربران جدید نیست. کاربرانی که از قبل این نقش را دارند تحت‌تأثیر قرار نمی‌گیرند.",
             ),
             (
                 self.permission_table,
@@ -96,7 +96,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.role_list.itemClicked.connect(self._on_role_selected)
         layout.addWidget(self.role_list, stretch=1)
 
-        new_box = QGroupBox("نقش تازه")
+        new_box = QGroupBox("نقش جدید")
         new_form = QFormLayout(new_box)
         new_form.setContentsMargins(10, 8, 10, 8)
         self.new_role_code_field = QLineEdit()

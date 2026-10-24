@@ -92,7 +92,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         add_terminal_button = QPushButton("➕")
         add_terminal_button.setObjectName("primaryIconButton")
         add_terminal_button.setFixedWidth(48)
-        add_terminal_button.setToolTip("ترمینال تازه")
+        add_terminal_button.setToolTip("ترمینال جدید")
         add_terminal_button.clicked.connect(self._add_terminal)
         new_terminal_box.addWidget(add_terminal_button)
         # R276: ویرایش/حذفِ ترمینالِ انتخاب‌شده
@@ -495,8 +495,8 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         root.addWidget(wrap_scrollable(page))
 
         self.set_field_help([
-            (self.terminal_code_field, "کد یکتای ترمینال صندوق تازه."),
-            (self.terminal_name_field, "نام نمایشی ترمینال صندوق تازه."),
+            (self.terminal_code_field, "کد یکتای ترمینال صندوق جدید."),
+            (self.terminal_name_field, "نام نمایشی ترمینال صندوق جدید."),
             (self.terminal_warehouse_combo, "انباری که موجودی فروش‌های این ترمینال از آن کم می‌شود."),
             (self.guest_customer_combo, "مشتری‌ای که برای فروش نقدی بدون مشخصات خریدار پیش‌فرض انتخاب می‌شود."),
             (self.threshold_field, "بیشترین مغایرت صندوق (بین نقد شمارش‌شده و محاسبه‌شده) که بدون نیاز به دلیل صریح پذیرفته می‌شود."),

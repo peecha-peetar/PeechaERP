@@ -112,7 +112,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         add_agreement_button = QPushButton("➕")
         add_agreement_button.setObjectName("primaryIconButton")
         add_agreement_button.setFixedWidth(48)
-        add_agreement_button.setToolTip("قرارداد تازه")
+        add_agreement_button.setToolTip("قرارداد جدید")
         add_agreement_button.clicked.connect(self._add_agreement)
         # R276: ویرایش/حذفِ قراردادِ انتخاب‌شده
         agreement_buttons = QHBoxLayout()

@@ -82,7 +82,7 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
             (self.ticket_item_combo, "کالای مرتبط با این تیکت — اختیاری."),
             (self.ticket_warranty_combo, "گارانتی مرتبط با این تیکت، اگر موجود باشد."),
             (self.ticket_description_field, "شرح کامل مشکل/درخواست مشتری."),
-            (self.ticket_status_combo, "وضعیت تازه‌ای که برای تیکت انتخاب‌شده اعمال می‌شود."),
+            (self.ticket_status_combo, "وضعیت جدیدی که برای تیکت انتخاب‌شده اعمال می‌شود."),
             (self.ticket_invoice_combo, "فاکتور فروشی که هزینهٔ خدمات این تیکت هزینه‌بردار در آن تسویه می‌شود."),
             (self.ticket_part_item_combo, "قطعه/کالایی که در رفع این تیکت مصرف شده."),
             (self.ticket_part_qty_field, "مقدار مصرف‌شده از این قطعه."),
@@ -238,7 +238,7 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
         add_ticket_button = QPushButton("🎫")
         add_ticket_button.setObjectName("primaryIconButton")
         add_ticket_button.setFixedWidth(48)
-        add_ticket_button.setToolTip("تیکت تازه")
+        add_ticket_button.setToolTip("تیکت جدید")
         add_ticket_button.clicked.connect(self._add_ticket)
         ticket_form.addWidget(add_ticket_button)
         left.addLayout(ticket_form)

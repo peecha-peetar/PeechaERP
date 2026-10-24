@@ -125,7 +125,7 @@ class MediaCenterScreen(LayoutEditMixin, QWidget):
             row.addWidget(open_button)
         else:
             process_button = QPushButton("✨ پردازش هوشمند")
-            process_button.setToolTip("اعمال واترمارک/حک متن/WebP طبق تنظیمات انتشار هوشمند — یک نسخهٔ تازه می‌سازد")
+            process_button.setToolTip("اعمال واترمارک/حک متن/WebP طبق تنظیمات انتشار هوشمند — یک نسخهٔ جدید می‌سازد")
             process_button.clicked.connect(lambda _checked=False, a=attachment: self._process_smart_publish(a))
             row.addWidget(process_button)
 

@@ -128,7 +128,7 @@ def downtime_log(company_id: int, f) -> ReportResult:
 def pm_compliance(company_id: int, f) -> ReportResult:
     res = ReportResult([("برنامه", TEXT), ("تجهیز", TEXT), ("نوع کار", TEXT), ("سررسید", DATE), ("دستور کار", INT),
                         ("انجام‌شده در", DATE), ("تأخیر (روز)", INT), ("وضعیت", TEXT), ("به‌موقع", TEXT)],
-                       note="به‌موقع = پایان واقعی کار تا روز سررسید (پس از تعویق تأییدشده، سررسید تازه ملاک است).")
+                       note="به‌موقع = پایان واقعی کار تا روز سررسید (پس از تعویق تأییدشده، سررسید جدید ملاک است).")
     today = datetime.date.today()
     with new_session() as session:
         scope = _scope(session, company_id, f)

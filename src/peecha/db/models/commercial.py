@@ -520,6 +520,10 @@ class CommercialDocument(Base):
     warehouse_approved_at: Mapped[datetime.datetime | None]
     weighing_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     weighing_approved_at: Mapped[datetime.datetime | None]
+    # R336 (migration 228): اتمام سفارش نیمه‌تمام؛ مانده دیگر به فاکتور تبدیل نمی‌شود
+    closed_at: Mapped[datetime.datetime | None]
+    closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    close_note: Mapped[str | None] = mapped_column(Text)
     # طبقِ درخواستِ صریح («نوعِ تسویه در سفارش/فاکتورِ پخشِ سرد مشخص
     # بشه»): برچسبِ سبکِ نمایشی -- کدهایِ ثابتِ CASH/BANK/CHECK/... یا
     # CUSTOM_<id> (هم‌الگو با commercial_settlements.SETTLEMENT_PLAN_

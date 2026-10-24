@@ -1139,7 +1139,8 @@ def _abnormal_scrap(session, order: ProductionOrder, date: datetime.date, user_i
         return
     amount = min(max(ZERO, wip_balance(session, order.order_id)), c.money(new_units * decimal.Decimal(order.planned_unit_cost or 0)))
     je = c.post_journal(session, order.company_id, user_id, date, f"{order.order_code} -- ضایعات غیرعادی",
-                        [(c.SCRAP_LOSS, amount, ZERO, _dims(order)), (c.WIP, ZERO, amount, _dims(order))]) if amount else None
+                        [(c.SCRAP_LOSS, amount, ZERO, _dims(order)), (c.WIP, ZERO, amount, _dims(order))],
+                        item_id=order.item_id) if amount else None
     record(session, order, "VARIANCE", date, user_id, item_id=order.item_id, quantity=new_units, amount=amount, wip_delta=-amount,
            journal_entry_id=je, reason="ABNORMAL_SCRAP", key=f"{key}:abn" if key else None,
            details={"kind": "ABNORMAL_SCRAP", "allowed_units": str(allowed)})
@@ -1259,7 +1260,8 @@ def close_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
         if residual:
             lines = [(c.VARIANCE, residual, ZERO, _dims(order)), (c.WIP, ZERO, residual, _dims(order))] if residual > 0 else [
                 (c.WIP, -residual, ZERO, _dims(order)), (c.VARIANCE, ZERO, -residual, _dims(order))]
-            je = c.post_journal(session, company_id, user_id, date, f"{order.order_code} -- انحراف بستن دستور تولید", lines)
+            je = c.post_journal(session, company_id, user_id, date, f"{order.order_code} -- انحراف بستن دستور تولید", lines,
+                                item_id=order.item_id)
             record(session, order, "VARIANCE", date, user_id, item_id=order.item_id, amount=residual, wip_delta=-residual,
                    journal_entry_id=je, reason="CLOSE_RESIDUAL", details={"kind": "CLOSE_RESIDUAL"})
         from peecha.services.production import costing as pcost

@@ -55,6 +55,7 @@ def compute_customer_exposure(company_id: int, customer_detail_account_id: int) 
                 CommercialDocument.counterparty_detail_account_id == customer_detail_account_id,
                 CommercialDocument.document_type_code == "SALES_ORDER",
                 CommercialDocument.status_code.in_(("CONFIRMED", "APPROVED")),
+                CommercialDocument.closed_at.is_(None),  # R336: سفارش اتمام‌شده تعهد باز نیست
             )
         )
     return ar_balance + decimal.Decimal(open_orders_total or 0)

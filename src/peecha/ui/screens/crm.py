@@ -229,15 +229,15 @@ class Customer360Screen(QWidget):
         outer.addWidget(cards)
         # اقدامات سریع
         self.quick = {
-            "call": _quick("تماس تازه", lambda: self.quick_activity("CALL")),
-            "task": _quick("وظیفهٔ تازه", lambda: self.quick_activity("TASK")),
-            "visit": _quick("ویزیت تازه", lambda: self.quick_activity("VISIT")),
-            "note": _quick("یادداشت تازه", lambda: self.quick_activity("NOTE")),
-            "opportunity": _quick("فرصت فروش تازه", self.new_opportunity),
-            "order": _quick("سفارش فروش تازه", lambda: self.new_order()),
+            "call": _quick("تماس جدید", lambda: self.quick_activity("CALL")),
+            "task": _quick("وظیفهٔ جدید", lambda: self.quick_activity("TASK")),
+            "visit": _quick("ویزیت جدید", lambda: self.quick_activity("VISIT")),
+            "note": _quick("یادداشت جدید", lambda: self.quick_activity("NOTE")),
+            "opportunity": _quick("فرصت فروش جدید", self.new_opportunity),
+            "order": _quick("سفارش فروش جدید", lambda: self.new_order()),
             "payment": _quick("دریافت وجه از مشتری", lambda: self.open_erp("TREASURY_RECEIPT")),
             "ticket": _quick("ثبت شکایت", lambda: self.quick_activity("COMPLAINT")),
-            "service": _quick("تیکت تازه", lambda: self.new_ticket()),
+            "service": _quick("تیکت جدید", lambda: self.new_ticket()),
             "message": _quick("ارسال پیام", lambda: self.send_message()),
         }
         bar = QHBoxLayout()
@@ -514,7 +514,7 @@ class Customer360Screen(QWidget):
             fields = activity_form(self.lk, kind=kind)
             if subject:
                 fields[1][2].setText(subject)
-            values = _ask(self, "فعالیت تازه", fields)
+            values = _ask(self, "فعالیت جدید", fields)
             if values is None:
                 return None
         aid, ok = _run(self, "فعالیت", act_service.create_activity, company_id(), user_id(),
@@ -528,7 +528,7 @@ class Customer360Screen(QWidget):
         if not self.customer_id:
             return None
         if values is None:
-            values = _ask(self, "تیکت تازه", [
+            values = _ask(self, "تیکت جدید", [
                 ("subject", "موضوع", QLineEdit()),
                 ("ticket_type", "نوع", combo([(v, k) for k, v in ticket_service.TYPES.items()])),
                 ("priority_code", "اولویت", _with(combo(self.lk.priorities), "NORMAL")),
@@ -608,7 +608,7 @@ class Customer360Screen(QWidget):
     def new_opportunity(self, values: dict | None = None) -> int | None:
         if not self.customer_id:
             return None
-        values = values or _ask(self, "فرصت فروش تازه", opportunity_form(self.lk, None))
+        values = values or _ask(self, "فرصت فروش جدید", opportunity_form(self.lk, None))
         if values is None:
             return None
         oid, ok = _run(self, "فرصت فروش", opp_service.create_opportunity, company_id(), user_id(),
@@ -762,7 +762,7 @@ class TaskCenterScreen(QWidget):
         return aid
 
     def new_activity(self, values: dict | None = None) -> int | None:
-        values = values or _ask(self, "فعالیت تازه", activity_form(self.lk, with_party=True))
+        values = values or _ask(self, "فعالیت جدید", activity_form(self.lk, with_party=True))
         if values is None:
             return None
         aid, ok = _run(self, "فعالیت", act_service.create_activity, company_id(), user_id(),
@@ -785,7 +785,7 @@ class TaskCenterScreen(QWidget):
         if aid is None:
             return False
         if new_date is None:
-            values = _ask(self, "تعویق", [("due_date", "تاریخ تازه", date_field(datetime.date.today() + datetime.timedelta(days=1)))])
+            values = _ask(self, "تعویق", [("due_date", "تاریخ جدید", date_field(datetime.date.today() + datetime.timedelta(days=1)))])
             if values is None:
                 return False
             new_date = values["due_date"]
@@ -956,7 +956,7 @@ class LeadsScreen(QWidget):
         return lead_service.LeadFields(**{k: values.get(k) for k in lead_service.LeadFields.__dataclass_fields__})
 
     def new_lead(self, values: dict | None = None) -> int | None:
-        values = values or _ask(self, "سرنخ تازه", self._form(None))
+        values = values or _ask(self, "سرنخ جدید", self._form(None))
         if values is None:
             return None
         fields = self._fields(values)
@@ -1006,7 +1006,7 @@ class LeadsScreen(QWidget):
         if row is None:
             return False
         if owner_id is None:
-            values = _ask(self, "واگذاری سرنخ", [("owner", "مسئول تازه", _with(combo(self.lk.users), row.owner_user_id))])
+            values = _ask(self, "واگذاری سرنخ", [("owner", "مسئول جدید", _with(combo(self.lk.users), row.owner_user_id))])
             if values is None:
                 return False
             owner_id = values["owner"]
@@ -1035,11 +1035,11 @@ class LeadsScreen(QWidget):
         if row is None:
             return None
         values = values or _ask(self, "تبدیل سرنخ", [
-            ("existing", "اتصال به مشتری موجود", _with(combo(self.lk.customers, "— ساخت مشتری تازه —"), None)),
+            ("existing", "اتصال به مشتری موجود", _with(combo(self.lk.customers, "— ساخت مشتری جدید —"), None)),
             ("opportunity", "ساخت فرصت فروش", _checked(True)),
             ("title", "عنوان فرصت", QLineEdit(f"فرصت فروش — {row.company_name or row.full_name}")),
             ("amount", "مبلغ فرصت", num_field(row.estimated_value or ZERO))],
-            "مشتری تازه با همان فرم و قواعد تعریف مشتری ERP ساخته می‌شود.")
+            "مشتری جدید با همان فرم و قواعد تعریف مشتری ERP ساخته می‌شود.")
         if values is None:
             return None
         res, ok = _run(self, "تبدیل سرنخ", lead_service.convert_lead, company_id(), user_id(), row.lead_id,
@@ -1239,7 +1239,7 @@ class PipelineScreen(QWidget):
         return ok
 
     def new_opportunity(self, values: dict | None = None) -> int | None:
-        values = values or _ask(self, "فرصت فروش تازه", opportunity_form(self.lk, None, with_customer=True))
+        values = values or _ask(self, "فرصت فروش جدید", opportunity_form(self.lk, None, with_customer=True))
         if values is None:
             return None
         f = opportunity_fields(values)
@@ -1278,7 +1278,7 @@ class PipelineScreen(QWidget):
             box = QTextEdit()
             box.setPlainText(text)
             values = _ask(self, "اقلام پیشنهادی", [("item", "افزودن کالا", combo(self.lk.items, "—")), ("lines", "ردیف‌ها", box)],
-                          "هر خط: شناسهٔ کالا؛ مقدار؛ قیمت؛ تخفیف؛ شرح — با انتخاب کالا یک خط تازه با مقدار ۱ اضافه می‌شود.")
+                          "هر خط: شناسهٔ کالا؛ مقدار؛ قیمت؛ تخفیف؛ شرح — با انتخاب کالا یک خط جدید با مقدار ۱ اضافه می‌شود.")
             if values is None:
                 return False
             raw = (values.get("lines") or "").splitlines()
@@ -1516,7 +1516,7 @@ class CrmSettingsScreen(QWidget):
         return ok
 
     def new_pipeline(self, values: dict | None = None) -> int | None:
-        values = values or _ask(self, "قیف تازه", [("code", "کد", QLineEdit()), ("name", "نام", QLineEdit())],
+        values = values or _ask(self, "قیف جدید", [("code", "کد", QLineEdit()), ("name", "نام", QLineEdit())],
                                 "مراحل از قیف انتخاب‌شده کپی می‌شوند.")
         if values is None:
             return None
@@ -2817,7 +2817,7 @@ class CrmDashboardScreen(QWidget):
         self.search.returnPressed.connect(lambda: self.run_search())
         outer.addWidget(ms.header_card(title, QLabel("از:"), self.date_from, QLabel("تا:"), self.date_to, self.mine, apply, self.search))
         cards, self.cards = ms.summary([
-            ("leads", "سرنخ تازه / تبدیل", "info", "🧲"), ("conversion", "نرخ تبدیل سرنخ", "success", "🔄"),
+            ("leads", "سرنخ جدید / تبدیل", "info", "🧲"), ("conversion", "نرخ تبدیل سرنخ", "success", "🔄"),
             ("pipeline", "ارزش قیف باز", "info", "🎯"), ("weighted", "ارزش وزنی قیف", "info", "⚖️"),
             ("won", "برنده / مبلغ", "success", "🏆"), ("win_rate", "نرخ موفقیت", "success", "📈"),
             ("cycle", "میانگین چرخهٔ فروش (روز)", "neutral", "⏱"), ("sales", "فروش خالص دوره", "success", "💰"),
