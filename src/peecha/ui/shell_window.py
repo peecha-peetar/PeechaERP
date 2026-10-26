@@ -57,6 +57,7 @@ from peecha.nav_catalog import DEFAULT_QUICK_ACCESS_BY_MODULE, NAV_ITEMS
 from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 from peecha.nav_catalog import flatten_nav_items_with_breadcrumb
 from peecha.services import companies as companies_service
+from peecha.services import roles as roles_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha.services import translations as translations_service
@@ -89,6 +90,8 @@ _NAV_ICONS = {
 
 # R300: منوهای قدیمی که در یک صفحه یکی شدند ← همان صفحه (یک کار، یک جا)
 _NAV_ALIASES = {"WF_MY_WORK": "MY_TASKS", "WF_APPROVALS": "MY_TASKS"}
+# R342: کارتابل شخصی هر کاربر است و همیشه باز می‌شود؛ بقیهٔ صفحه‌ها فقط با اجازهٔ «مشاهده»ی نقش‌های کاربر
+_ALWAYS_ALLOWED_SCREENS = {"my_tasks"}
 # R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11, "CRM": 12,
                                "WF": 13, "QC": 14, "MNT": 15, "BUD": 16, "OPN": 17}
@@ -379,8 +382,10 @@ class _SidebarGroup(QWidget):
         self._update_header_text(icon, item["label"], expanded=False)
         header_row.addWidget(self.header, stretch=1)
 
+        self._gear_button = None
         if gear_click is not None:
             gear_button = HoverButton("⚙", hover_color=theme.HOVER, radius=8, margin=4)
+            self._gear_button = gear_button
             gear_button.setObjectName("sidebarGearButton")
             gear_button.setFixedSize(30, 30)
             gear_button.setToolTip(f"تنظیمات «{item['label']}»")
@@ -461,6 +466,23 @@ class _SidebarGroup(QWidget):
                 self._entries[code] = button
                 self._widgets_by_code[code] = button
                 self._source_by_code[code] = child["label"]
+
+    def apply_permissions(self, allowed, settings_allowed: bool = True) -> bool:
+        """R342: آیتم‌هایی که کاربر اجازهٔ دیدنشان را ندارد و زیرگروه/گروهی که آیتم دیدنی ندارد پنهان می‌شوند."""
+        visible_subgroups: set = set()
+        any_visible = False
+        for code, button in self._entries.items():
+            shown = bool(allowed(code))
+            button.setVisible(shown)
+            any_visible = any_visible or shown
+            if shown:
+                visible_subgroups.update(getattr(self, "_subgroups_of", {}).get(code, ()))
+        for sub in getattr(self, "_subgroups", []):
+            sub.setVisible(sub in visible_subgroups)
+        if self._gear_button is not None:
+            self._gear_button.setVisible(settings_allowed)
+        self.setVisible(any_visible)
+        return any_visible
 
     def _on_subgroup_toggled(self) -> None:
         if self.body is not None and self._expanded:
@@ -1039,7 +1061,9 @@ class MainWindow(QMainWindow):
         self._body_layout = body
 
         self._register_screens()
-        self.open_screen("dashboard")
+        self._load_permissions()
+        if self.can_open("dashboard"):
+            self.open_screen("dashboard")
 
         # طبقِ درخواستِ صریح: F2 در همه‌جایِ برنامه کلیدِ ذخیره/تایید باشد —
         # به‌جایِ افزودنِ یک QShortcutِ جدا به تک‌تکِ فرم‌ها، یک فیلترِ
@@ -1630,7 +1654,7 @@ class MainWindow(QMainWindow):
         codes = self._quick_access_codes_for_module(module_code)
         for code in codes:
             item = flat_items_by_code.get(code)
-            if item is None:
+            if item is None or not self.can_open(code):
                 continue
             icon = icon_by_code.get(code, "📄")
             tile = _QuickAccessTile(icon, item["label"], lambda c=code: self.open_screen(c))
@@ -1638,7 +1662,7 @@ class MainWindow(QMainWindow):
 
         self._quick_access_layout.addStretch(1)
 
-        if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and any(leaves for _title, leaves in _ribbon_choices(module_code)):
+        if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and any(leaves for _title, leaves in self._allowed_ribbon_choices(module_code)):
             config_button = HoverButton("⚙", hover_color=theme.HOVER, radius=8, margin=4)
             config_button.setObjectName("quickAccessConfigButton")
             config_button.setFixedSize(30, 30)
@@ -1650,7 +1674,7 @@ class MainWindow(QMainWindow):
         """طبق درخواست صریح («قابلیت کم‌وزیادکردن دکمه‌های ریبون»):
         همهٔ آیتم‌های برگ همین ماژول را با تیک نشان می‌دهد — کاربر
         هرکدام را می‌تواند اضافه/کم کند."""
-        groups = _ribbon_choices(module_code)
+        groups = self._allowed_ribbon_choices(module_code)
         if not any(leaves for _title, leaves in groups):
             return
         current_codes = set(self._quick_access_codes_for_module(module_code))
@@ -2233,11 +2257,69 @@ class MainWindow(QMainWindow):
         return self._screens.get(name)
 
     # --- ناوبری -------------------------------------------------------------
+    # --- R342: دسترسی نقش‌ها ------------------------------------------------------
+    def _load_permissions(self) -> None:
+        """فرم‌هایی که نقش‌های کاربر در شرکت جاری اجازهٔ «مشاهده» داده‌اند؛ None یعنی همه (مدیر کل سیستم)."""
+        self._screen_by_code = {i["code"]: i.get("screen") for i in _flatten_nav_items()}
+        user, company = session.current_user, session.current_company
+        if user is None or getattr(user, "is_super_admin", False):
+            self._allowed_screens = None
+        elif company is None:
+            self._allowed_screens = set()
+        else:
+            self._allowed_screens = roles_service.user_allowed_forms(user.user_id, company.company_id, "VIEW")
+        self._apply_permissions()
+        key = (getattr(user, "user_id", None), getattr(company, "company_id", None))
+        if self._allowed_screens == set() and company is not None and getattr(self, "_no_access_warned", None) != key:
+            self._no_access_warned = key
+            # بدون انتظار برای کلیک، تا ورود به برنامه متوقف نشود
+            box = QMessageBox(QMessageBox.Information, "دسترسی", "برای شما در این شرکت هنوز هیچ فرمی مجاز نشده است. مدیر سیستم "
+                              "باید در «نقش‌ها» به شما نقشی بدهد و برای آن نقش اجازهٔ «مشاهده»ی فرم‌های لازم را تیک بزند.",
+                              QMessageBox.Ok, self)
+            box.setModal(False)
+            box.show()
+            self._no_access_box = box
+
+    def can_open(self, code: str) -> bool:
+        """آیا کاربر جاری اجازهٔ «مشاهده»ی صفحهٔ این آیتم منو را دارد."""
+        allowed = getattr(self, "_allowed_screens", None)
+        if allowed is None:
+            return True
+        screen = self._screen_by_code.get(_NAV_ALIASES.get(code, code))
+        return screen in allowed or screen in _ALWAYS_ALLOWED_SCREENS
+
+    def _allowed_ribbon_choices(self, module_code: str) -> list[tuple[str, list[dict]]]:
+        groups = [(title, [leaf for leaf in leaves if self.can_open(leaf["code"])]) for title, leaves in _ribbon_choices(module_code)]
+        return [(title, leaves) for title, leaves in groups if leaves]
+
+    def _apply_permissions(self) -> None:
+        """منو، ریبون و جستجوی سراسری فقط صفحه‌های مجاز را نشان می‌دهند؛ فرم باز غیرمجاز (پس از تعویض شرکت) بسته می‌شود."""
+        settings_allowed = self.can_open("SETTINGS")
+        for group in self._sidebar_groups.values():
+            group.apply_permissions(self.can_open, settings_allowed)
+        if getattr(self, "_quick_access_layout", None) is not None:
+            module_code = self._quick_access_module_code or "dashboard"
+            self._quick_access_module_code = None
+            self._refresh_quick_access_bar(module_code)
+        completer = self.search_field.completer() if getattr(self, "search_field", None) is not None else None
+        if completer is not None and hasattr(completer.model(), "setStringList"):
+            completer.model().setStringList(
+                [breadcrumb for code, _label, breadcrumb in getattr(self, "_search_entries", []) if self.can_open(code)])
+        allowed = self._allowed_screens
+        if allowed is not None:
+            for name, sub_window in self._mdi_subwindows.items():
+                if sub_window.isVisible() and name not in allowed and name not in _ALWAYS_ALLOWED_SCREENS:
+                    sub_window.close()
+
     def open_screen(self, code: str, *, then=None) -> None:
         code = _NAV_ALIASES.get(code, code)
         flat_items = _flatten_nav_items()
         item = next((i for i in flat_items if i["code"] == code), None)
         if item is None:
+            return
+        if not self.can_open(code):
+            QMessageBox.information(self, "دسترسی", f"شما به «{item['label']}» دسترسی ندارید. اگر لازم است، مدیر سیستم در "
+                                    "«نقش‌ها» برای نقش شما اجازهٔ «مشاهده»ی این فرم را بدهد.")
             return
 
         self._current_screen_code = code
@@ -2426,6 +2508,7 @@ class MainWindow(QMainWindow):
                 self.fiscal_year_combo.addItem(numerals.to_persian_digits(fy.code), fy.fiscal_year_id)
 
         self._retranslate_sidebar()
+        self._load_permissions()
 
     def _on_company_changed(self, index: int) -> None:
         if index < 0:
@@ -2436,6 +2519,7 @@ class MainWindow(QMainWindow):
         if session.current_company is not None and session.current_company.company_id == company_id:
             return
         session.current_company = companies_service.get_company_model(company_id)
+        self._load_permissions()
         active_sub = self.mdi_area.activeSubWindow()
         if active_sub is not None and hasattr(active_sub.widget(), "refresh"):
             active_sub.widget().refresh()
@@ -2483,7 +2567,7 @@ class MainWindow(QMainWindow):
         code = next(
             (
                 item_code for item_code, _label, breadcrumb in self._search_entries
-                if all(word in breadcrumb.casefold() for word in words)
+                if all(word in breadcrumb.casefold() for word in words) and self.can_open(item_code)
             ),
             None,
         )

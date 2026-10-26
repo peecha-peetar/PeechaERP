@@ -351,3 +351,24 @@ def user_has_permission(user_id: int, company_id: int, form_code: str, action_co
             )
         )
         return allowed is not None
+
+
+def user_allowed_forms(user_id: int, company_id: int, action_code: str = "VIEW") -> set[str] | None:
+    """R342: همهٔ کد فرم‌هایی که user_has_permission برایشان True می‌دهد، با یک پرس‌وجو (برای ساخت منو و ریبون)؛
+    None یعنی همهٔ فرم‌ها (مدیر کل سیستم)."""
+    with new_session() as session:
+        user = session.get(User, user_id)
+        if user is not None and user.is_super_admin:
+            return None
+        return set(session.scalars(
+            select(Form.code)
+            .join(RoleFormPermission, RoleFormPermission.form_id == Form.form_id)
+            .join(PermissionAction, PermissionAction.action_id == RoleFormPermission.action_id)
+            .join(UserRole, UserRole.role_id == RoleFormPermission.role_id)
+            .where(
+                UserRole.user_id == user_id,
+                UserRole.company_id == company_id,
+                RoleFormPermission.is_allowed.is_(True),
+                PermissionAction.code == action_code,
+            )
+        ).all())
