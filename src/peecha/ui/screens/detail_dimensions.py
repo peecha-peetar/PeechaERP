@@ -24,7 +24,7 @@ import datetime
 import decimal
 import traceback
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -2290,6 +2290,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         detail_account_id = item.data(0, Qt.UserRole)
         if detail_account_id is None:
             return
+        # R341: بارگذاری بعد از پایان همین کلیک؛ وگرنه بازسازی درخت، ردیفی را که Qt هنوز با آن کار دارد پاک می‌کند و
+        # برنامه بی‌پیام بسته می‌شود
+        QTimer.singleShot(0, lambda: self._load_picked_account(detail_account_id))
+
+    def _load_picked_account(self, detail_account_id: int) -> None:
         try:
             self.edit_detail_account(detail_account_id)
         except Exception:
