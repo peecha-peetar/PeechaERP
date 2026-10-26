@@ -1,5 +1,5 @@
-"""R339: حساب تولیدی که گروه تفصیلی ساخت کاربر را الزامی کرده و آن گروه هنوز تفصیلی ندارد (مثل 7-72-7203 با گروه
-«هزینه ها»): از همان ابتدا با نام حساب، نقش و هر دو راه‌حل گفته می‌شود؛ تفصیلی ثابت همان نقش در «تنظیم حساب‌ها» الزام را
+"""R339: حساب تولیدی که گروه تفصیلی ساخت کاربر را الزامی کرده و آن گروه هنوز تفصیلی ندارد (از R340 فقط برای حساب‌هایی
+مثل کالای در جریان ساخت که سند انبار هم رویشان می‌نشیند): از همان ابتدا با نام حساب، نقش و هر دو راه‌حل گفته می‌شود؛ تفصیلی ثابت همان نقش در «تنظیم حساب‌ها» الزام را
 پر می‌کند و «اتمام تولید» انجام می‌شود؛ پشتیبان کامل (ستون محاسبه‌شده، چرخهٔ انبار ↔ محل پیش‌فرض) بی‌کم‌وکاست بازیابی می‌شود."""
 import os, subprocess, sys, tempfile
 os.environ["PEECHA_DB_NAME"] = "peecha_test_r339"
@@ -28,7 +28,7 @@ rt = pm.create_routing(company_id, px, "مسیر", [pm.RoutingOpFields(10, "بر
 bom = pm.create_bom_version(company_id, px, pm.BomFields(batch_size_qty=D(1), routing_id=rt))
 pm.add_bom_component(company_id, bom, pm.BomLineFields(r1, D(1)))
 receive(r1, 1000, 10000)
-MACHINE_ROLE = pc.ROLE_LABELS[pc.MACHINE_APPLIED]
+WIP_ROLE = pc.ROLE_LABELS[pc.WIP]
 
 # دستوری که پیش از الزام صادر شده (مثل PO-1 کاربر)
 old = po.create_order(company_id, uid, po.OrderFields(item_id=px, planned_qty=D(10)))
@@ -36,16 +36,16 @@ po.release_order(company_id, uid, old)
 po.start_order(company_id, uid, old)
 po.issue_all_remaining(company_id, uid, old)
 
-# --- حساب ماشین جذب‌شده گروه «هزینه ها»ی کاربر را می‌خواهد که هنوز تفصیلی ندارد --------------------------------------------
+# --- حساب کالای در جریان ساخت گروه «هزینه ها»ی کاربر را می‌خواهد که هنوز تفصیلی ندارد --------------------------------------------
 costs_type = dims.create_dimension_type(company_id, "هزینه ها").dimension_type_id
-dims.set_account_dimension_types(machine_gl.account_id, company_id, [costs_type])
+dims.set_account_dimension_types(wip_gl.account_id, company_id, [costs_type])
 with new_session() as s:
-    m_code = s.get(ChartOfAccount, machine_gl.account_id).full_code
+    m_code = s.get(ChartOfAccount, wip_gl.account_id).full_code
 rules = po.dimension_rules(company_id)
-check(rules.other == [(m_code, "هزینه ها", MACHINE_ROLE, True)] and not rules.cost_center and not rules.project,
+check(rules.other == [(m_code, "هزینه ها", WIP_ROLE, True)] and not rules.cost_center and not rules.project,
       f"the empty required group is found with its account and role ({rules.other})")
 advice = po.dimension_problem(company_id)
-check(advice and all(t in advice for t in (f"«{m_code}»", "«هزینه ها»", MACHINE_ROLE, "هیچ تفصیلی‌ای", "تنظیم حساب‌ها",
+check(advice and all(t in advice for t in (f"«{m_code}»", "«هزینه ها»", WIP_ROLE, "هیچ تفصیلی‌ای", "تنظیم حساب‌ها",
                                            "کدینگ حساب‌ها")), f"the advice names the account, group, role and both remedies ({advice})")
 check(raises(lambda: po.create_order(company_id, uid, po.OrderFields(item_id=px, planned_qty=D(5))), "تنظیم حساب‌ها"),
       "a new order is refused at creation with the remedies")
@@ -82,14 +82,14 @@ check(rules.other and rules.other[0][3] is False and "هیچ تفصیلی‌ای
 other_type = dims.create_dimension_type(company_id, "سربار کارگاه").dimension_type_id
 dims.set_account_dimension_types(overhead_gl.account_id, company_id, [other_type])
 engine_service.set_account_mapping(company_id, "PRODUCTION_OVERHEAD_APPLIED", overhead_gl.account_id, fixed)
-check(any(o[1] == "سربار کارگاه" for o in po.dimension_rules(company_id).other),
+check(any(g.label == "سربار کارگاه" for g in po.dimension_rules(company_id).extra),
       "a fixed detail from another group does not satisfy the requirement")
 engine_service.set_account_mapping(company_id, "PRODUCTION_OVERHEAD_APPLIED", overhead_gl.account_id)
 # --- راه دوم: برداشتن الزام از حساب ---------------------------------------------------------------------------------------------
 dims.set_account_dimension_types(overhead_gl.account_id, company_id, [])
-check(not any(o[1] == "سربار کارگاه" for o in po.dimension_rules(company_id).other), "removing the requirement clears it")
+check(not any(g.label == "سربار کارگاه" for g in po.dimension_rules(company_id).extra), "removing the requirement clears it")
 
-engine_service.set_account_mapping(company_id, "PRODUCTION_MACHINE_APPLIED", machine_gl.account_id, fixed)
+engine_service.set_account_mapping(company_id, "PRODUCTION_WIP", wip_gl.account_id, fixed)
 check(not po.dimension_rules(company_id).other and po.dimension_problem(company_id) is None,
       "the role's fixed detail fills the required group")
 warned.clear()
@@ -98,8 +98,8 @@ check(ok and po.get_order(company_id, old).status_code == "COMPLETED", f"«ات�
 with new_session() as s:
     posted = s.scalar(select(func.count()).select_from(JournalEntryLine).join(
         JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id).where(
-        JournalEntryLine.account_id == machine_gl.account_id, JournalEntryLineDetail.detail_account_id == fixed))
-check(posted > 0, "the machine cost is posted with the fixed detail")
+        JournalEntryLine.account_id == wip_gl.account_id, JournalEntryLineDetail.detail_account_id == fixed))
+check(posted > 0, "the work in progress is posted with the fixed detail")
 new = po.create_order(company_id, uid, po.OrderFields(item_id=px, planned_qty=D(5)))
 check(po.get_order(company_id, new) is not None, "new orders can be created again")
 

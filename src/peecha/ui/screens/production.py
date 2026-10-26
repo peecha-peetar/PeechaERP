@@ -62,6 +62,8 @@ class PrdLookups:
         # R338: فهرست از همان گروهی که حساب‌های تولید الزامی کرده‌اند (گروه سیستمی یا گروه هم‌نام کاربر)
         self.cost_centers = _group_options(cid, rules.cost_center_types)
         self.projects = _group_options(cid, rules.project_types)
+        # R340: گروه‌های الزامی دیگر حساب‌های تولید (مثل «هزینه ها») که در خود دستور انتخاب می‌شوند
+        self.extra_groups = [(g, _group_options(cid, [g.type_id])) for g in rules.extra]
         self.branches = [(b.name, b.branch_id) for b in masters.list_branches(cid)]
         self.employees = [(f"{e.employee_code} — {e.full_name}", e.employee_id) for e in hr_service.list_employees(cid)]
         self.work_centers = [(f"{w.code} — {w.name}", w.work_center_id) for w in pm.list_work_centers(cid, active_only=True)]
@@ -103,9 +105,15 @@ def _group_options(cid: int, type_ids) -> LeafOptions:
     return LeafOptions(items, legacy)
 
 
-def _missing_dimension(message: str) -> bool:
-    """R337: خطای «مرکز هزینه/پروژهٔ الزامی» سند حسابداری یا دستور تولید."""
-    return "«پروژه»" in message or "«مرکز هزینه»" in message or "دستور تولید را انتخاب کنید" in message
+def _missing_dimension(message: str, groups=()) -> bool:
+    """R337: خطای «مرکز هزینه/پروژهٔ الزامی» سند حسابداری یا دستور تولید؛ groups (R340): گروه‌های الزامی دیگر دستور."""
+    return "«پروژه»" in message or "«مرکز هزینه»" in message or "دستور تولید را انتخاب کنید" in message \
+        or any(f"«{g}»" in message for g in groups)
+
+
+def _take_details(values: dict) -> dict[int, int | None]:
+    """R340: فیلدهای گروه‌های الزامی دیگر فرم (detail_<گروه>) را از values برمی‌دارد ← {گروه: تفصیلی}."""
+    return {int(k[7:]): values.pop(k) for k in [k for k in values if k.startswith("detail_")]}
 
 
 def _run(parent, title: str, fn, *args, **kwargs):
@@ -235,11 +243,13 @@ class ProductionWizard(QDialog):
         rules = lookups.dimension_rules
         self.cost_center_box = combo(lookups.cost_centers, "—")
         self.project_box = combo(lookups.projects, "—")
+        self.detail_boxes = {g.type_id: combo(options, "—") for g, options in lookups.extra_groups}  # R340
         self._page("مقدار، تاریخ تحویل و مرکز هزینه/پروژه (اگر حساب‌های تولید آن را الزامی کرده‌اند، همین‌جا انتخاب کنید؛ "
                    "بعد از شروع تولید عوض نمی‌شود).",
                    [("مقدار تولید", self.qty_edit), ("تاریخ پایان", self.due_edit),
                     ("مرکز هزینه" + (" (الزامی)" if rules.cost_center else ""), self.cost_center_box),
-                    ("پروژه" + (" (الزامی)" if rules.project else ""), self.project_box)])
+                    ("پروژه" + (" (الزامی)" if rules.project else ""), self.project_box),
+                    *[(f"{g.label} (الزامی)", self.detail_boxes[g.type_id]) for g, _o in lookups.extra_groups]])
         self.avail_table = table(["ماده", "نیاز", "موجود", "کمبود", "وضعیت"])
         self._page_widget("موجودی مواد (🟢 موجود، 🟡 بخشی، 🔴 کمبود). در این مرحله دستور ساخته و صادر می‌شود.", self.avail_table)
         self.reserve_label = QLabel("")
@@ -337,7 +347,8 @@ class ProductionWizard(QDialog):
                         item_id=self.item_box.currentData(), planned_qty=dec(self.qty_edit.text()), bom_id=self.bom_box.currentData(),
                         due_date=max(self.due_edit.date(), datetime.date.today()),
                         cost_center_detail_account_id=self.cost_center_box.currentData(),
-                        project_detail_account_id=self.project_box.currentData()))
+                        project_detail_account_id=self.project_box.currentData(),
+                        other_details={t: b.currentData() for t, b in self.detail_boxes.items() if b.currentData()}))
                     po.release_order(cid, uid, self.order_id, reserve=False)
                 self.reserve_label.setText(P("دستور " + po.get_order(cid, self.order_id).order_code + " صادر شد."))
             if i == 4:
@@ -622,12 +633,13 @@ class OrdersScreen(QWidget):
         if not values:
             return None
         values["priority"] = int(values["priority"] or 3)
+        values["other_details"] = {t: d for t, d in _take_details(values).items() if d}
         oid, ok = _run(self, "دستور تولید", po.create_order, company_id(), user_id(), po.OrderFields(**values))
         if ok:
             self.open_order(oid)
         return oid
 
-    def _order_form(self, order=None) -> list:
+    def _order_form(self, order=None, details: dict | None = None) -> list:
         lk = self.lk
         item_box = _combo_at(combo(lk.made), order.item_id if order else None)
         g = (lambda name: getattr(order, name)) if order is not None else (lambda name: None)
@@ -639,22 +651,28 @@ class OrdersScreen(QWidget):
             ("material_warehouse_id", "انبار مواد", _combo_at(combo(lk.warehouses, "— پیش‌فرض —"), g("material_warehouse_id"))),
             ("fg_warehouse_id", "انبار محصول", _combo_at(combo(lk.warehouses, "— پیش‌فرض —"), g("fg_warehouse_id"))),
             ("branch_id", "شعبه", _combo_at(combo(lk.branches, "—"), g("branch_id"))),
-            *self._dims_fields(g),
+            *self._dims_fields(g, details),
             ("notes", "توضیحات", QLineEdit(g("notes") or ""))]
 
-    def _dims_fields(self, g) -> list:
-        """R337: مرکز هزینه و پروژه؛ اگر حساب‌های تولید آن‌ها را الزامی کرده‌اند «(الزامی)» دارند."""
+    def _dims_fields(self, g, details: dict | None = None) -> list:
+        """R337: مرکز هزینه و پروژه؛ اگر حساب‌های تولید آن‌ها را الزامی کرده‌اند «(الزامی)» دارند.
+        R340: و گروه‌های الزامی دیگر همان حساب‌ها (مثل «هزینه ها») که فقط از خود دستور پر می‌شوند."""
         rules = self.lk.dimension_rules
         return [("cost_center_detail_account_id", "مرکز هزینه" + (" (الزامی)" if rules.cost_center else ""),
                  _combo_at(combo(self.lk.cost_centers, "—"), g("cost_center_detail_account_id"))),
                 ("project_detail_account_id", "پروژه" + (" (الزامی)" if rules.project else ""),
-                 _combo_at(combo(self.lk.projects, "—"), g("project_detail_account_id")))]
+                 _combo_at(combo(self.lk.projects, "—"), g("project_detail_account_id"))),
+                *[(f"detail_{grp.type_id}", f"{grp.label} (الزامی)",
+                   _combo_at(combo(options, "—"), (details or {}).get(grp.type_id))) for grp, options in self.lk.extra_groups]]
 
     def _dims_text(self, o) -> str:
         other = "از گروهی که حساب‌ها نمی‌خواهند"  # R338
         cc = (self.lk.cost_centers.legacy.get(o.cost_center_detail_account_id) or other) if o.cost_center_detail_account_id else "—"
         pj = (self.lk.projects.legacy.get(o.project_detail_account_id) or other) if o.project_detail_account_id else "—"
-        return f"مرکز هزینه: {cc}   ·   پروژه: {pj}"
+        details = getattr(o, "other_details", None) or {}
+        extra = "".join(f"   ·   {grp.label}: {options.legacy.get(details.get(grp.type_id)) or '—'}"
+                        for grp, options in self.lk.extra_groups)
+        return f"مرکز هزینه: {cc}   ·   پروژه: {pj}{extra}"
 
     def set_dimensions(self, values: dict | None = None) -> bool:
         """R337: تعیین مرکز هزینه/پروژهٔ دستوری که صادر شده (مقدار خالی پر می‌شود)."""
@@ -662,12 +680,15 @@ class OrdersScreen(QWidget):
             return False
         o = self.view.order
         if values is None:
-            values = _ask(self, f"مرکز هزینه و پروژهٔ {o.order_code}", self._dims_fields(lambda name: getattr(o, name)),
+            title = "مرکز هزینه، پروژه و تفصیلی‌های الزامی" if self.lk.extra_groups else "مرکز هزینه و پروژهٔ"
+            values = _ask(self, f"{title} {o.order_code}",
+                          self._dims_fields(lambda name: getattr(o, name), getattr(o, "other_details", None)),
                           "پس از صدور دستور، فقط مقدار خالی تعیین می‌شود؛ مقدار ثبت‌شده عوض نمی‌شود چون اسناد قبلی با همان ثبت شده‌اند.")
             if values is None:
                 return False
+        details = {t: d for t, d in _take_details(dict(values)).items() if d}
         _r, ok = _run(self, "مرکز هزینه و پروژه", po.set_order_dimensions, company_id(), user_id(), o.order_id,
-                      values.get("cost_center_detail_account_id"), values.get("project_detail_account_id"))
+                      values.get("cost_center_detail_account_id"), values.get("project_detail_account_id"), details or None)
         if ok:
             self.load_order(o.order_id)
         return ok
@@ -688,10 +709,12 @@ class OrdersScreen(QWidget):
             self.reload_list()
             self.load_order(oid)
         if values is None:
-            values = _ask(self, f"ویرایش دستور {order.order_code}", self._order_form(order))
+            values = _ask(self, f"ویرایش دستور {order.order_code}", self._order_form(order, po.order_details(cid, oid)))
             if values is None:
                 return False
         values["priority"] = int(values.get("priority") or 3)
+        details = _take_details(values)
+        values["other_details"] = {t: d for t, d in details.items() if d} if details else None
         values.setdefault("project_detail_account_id", order.project_detail_account_id)
         same_item = values["item_id"] == order.item_id
         fields = po.OrderFields(**values, bom_id=order.bom_id if same_item else None, routing_id=order.routing_id if same_item else None,
@@ -815,8 +838,10 @@ class OrdersScreen(QWidget):
             result, ok = None, False
             # R337: مرکز هزینه/پروژهٔ الزامی جاافتاده: همین‌جا تعیین و عملیات یک بار دیگر انجام می‌شود
             retried = getattr(self, "_dims_retry", False)
-            if _missing_dimension(str(exc)) and not retried:
-                if self.confirm(f"{exc}\n\nمرکز هزینه و پروژهٔ این دستور را الان تعیین می‌کنید؟ سپس همین عملیات دوباره انجام می‌شود.") \
+            fillable = [g.label for g, _options in self.lk.extra_groups if not g.empty]
+            if _missing_dimension(str(exc), fillable) and not retried:
+                what = "مرکز هزینه، پروژه و تفصیلی‌های الزامی" if self.lk.extra_groups else "مرکز هزینه و پروژهٔ"
+                if self.confirm(f"{exc}\n\n{what} این دستور را الان تعیین می‌کنید؟ سپس همین عملیات دوباره انجام می‌شود.") \
                         and self.set_dimensions():
                     skip, self._skip_confirm, self._dims_retry = getattr(self, "_skip_confirm", False), True, True
                     try:

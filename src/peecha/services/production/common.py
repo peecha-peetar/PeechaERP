@@ -136,9 +136,10 @@ def require_roles(session, company_id: int, roles: tuple[str, ...]) -> None:
 
 def post_journal(session, company_id: int, user_id: int, date: datetime.date, description: str,
                  lines: list[tuple[str, decimal.Decimal, decimal.Decimal, tuple[int | None, ...]]],
-                 item_id: int | None = None) -> int | None:
+                 item_id: int | None = None, order_details: dict[int, int] | None = None) -> int | None:
     """سند حسابداری تولید در همان تراکنش. هر ردیف: (نقش، بدهکار، بستانکار، تفصیلی‌ها)؛ ردیف‌های هم‌حساب تجمیع می‌شوند.
-    item_id: کالای دستور تولید؛ حسابی که تفصیلی «کالا» می‌خواهد (مثل کالای در جریان ساخت) تفصیلی همین کالا را می‌گیرد."""
+    item_id: کالای دستور تولید؛ حسابی که تفصیلی «کالا» می‌خواهد (مثل کالای در جریان ساخت) تفصیلی همین کالا را می‌گیرد.
+    order_details (R340): گروه ← تفصیلی دستور؛ فقط روی حسابی که آن گروه را دارد، اگر تفصیلی ثابت نقش همان گروه را پر نکرده باشد."""
     from peecha.services import detail_dimensions as dimensions_service
     from peecha.services import journal_entries as je_service
 
@@ -155,6 +156,16 @@ def post_journal(session, company_id: int, user_id: int, date: datetime.date, de
         if mapping is not None and mapping.detail_account_id:
             ids.add(mapping.detail_account_id)
         rows.append((account_id, ids, debit, credit))
+    if order_details:
+        have = dict(session.execute(select(DetailAccount.detail_account_id, DetailAccount.dimension_type_id).where(
+            DetailAccount.detail_account_id.in_({d for r in rows for d in r[1]}))).all())
+        groups: dict[int, set[int]] = {}
+        for account_id, type_id in session.execute(select(AccountDetailDimension.account_id, AccountDetailDimension.dimension_type_id)
+                                                   .where(AccountDetailDimension.account_id.in_({r[0] for r in rows}))).all():
+            groups.setdefault(account_id, set()).add(type_id)
+        for account_id, ids, _debit, _credit in rows:
+            taken = {have.get(d) for d in ids}
+            ids.update(d for t, d in order_details.items() if d and t in groups.get(account_id, ()) and t not in taken)
     needs_item = set(session.scalars(select(AccountDetailDimension.account_id).where(
         AccountDetailDimension.account_id.in_({r[0] for r in rows}), AccountDetailDimension.dimension_type_id == item_dim,
         AccountDetailDimension.is_required.is_(True)))) if item_dim else set()

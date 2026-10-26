@@ -293,6 +293,17 @@ class OrderOutput(Base):
     cost_share_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(7, 4))
 
 
+class OrderDetailAccount(Base):
+    """R340: تفصیلی گروه‌های الزامی دیگر حساب‌های تولید (غیر از مرکز هزینه و پروژه) برای هر دستور."""
+    __tablename__ = "order_detail_accounts"
+    __table_args__ = _PRD
+
+    order_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("prd.production_orders.order_id"), primary_key=True)
+    dimension_type_id: Mapped[int] = mapped_column(
+        SmallInteger, ForeignKey("acc.detail_dimension_types.dimension_type_id"), primary_key=True)
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
 class OrderOperation(Base):
     __tablename__ = "order_operations"
     __table_args__ = _PRD

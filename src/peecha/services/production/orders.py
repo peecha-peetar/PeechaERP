@@ -26,8 +26,8 @@ from peecha.db.models.inventory import (
     BomHeader, BomLine, Item, StockBalance, StockLedger, StockReservation, Warehouse,
 )
 from peecha.db.models.production import (
-    BomOutput, ItemProductionProfile, OrderMaterial, OrderOperation, OrderOutput, OrderTransaction, ProductionOrder,
-    Routing, RoutingOperation, WorkCenter,
+    BomOutput, ItemProductionProfile, OrderDetailAccount, OrderMaterial, OrderOperation, OrderOutput, OrderTransaction,
+    ProductionOrder, Routing, RoutingOperation, WorkCenter,
 )
 from peecha.services import inventory_documents as inv_docs
 from peecha.services import inventory_engine as engine
@@ -181,6 +181,8 @@ class OrderFields:
     sales_order_line_id: int | None = None
     parent_order_id: int | None = None
     joint_cost_method: str | None = None
+    # R340: گروه الزامی دیگر حساب‌های تولید ← تفصیلی انتخاب‌شده (مثل گروه «هزینه ها»)؛ None یعنی دست نخورد
+    other_details: dict[int, int] | None = None
 
 
 def _apply_defaults(session, company_id: int, f: OrderFields) -> None:
@@ -216,13 +218,15 @@ def _apply_defaults(session, company_id: int, f: OrderFields) -> None:
 
 # R337: حساب‌هایی که دستور تولید رویشان سند می‌زند (همراه حساب موجودی)
 _POSTING_ROLES = (c.WIP, c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.VARIANCE, c.SCRAP_LOSS)
+# R340: نقش‌هایی که فقط سند خود تولید رویشان می‌نشیند (نه سند انبار)؛ گروه الزامی دیگرشان در خود دستور انتخاب می‌شود
+_ORDER_ONLY_ROLES = (c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.SCRAP_LOSS)
 
 
 def _dimension_rules(session, company_id: int) -> SimpleNamespace:
     """R337–R339: تفصیلی‌های الزامی حساب‌های تولید. cost_center/project: None یا علت الزام؛ *_types: گروه‌هایی که
     انتخاب دستور باید از آن‌ها باشد (گروه سیستمی، یا گروه هم‌نامی که کاربر خودش ساخته و روی حساب الزامی کرده)؛
     other: [(حساب، گروه، نقش، گروه بی‌تفصیلی است؟)] که دستور تولید جایی برای انتخابش ندارد و تفصیلی ثابت نقش هم
-    (تنظیمات انبار ← تنظیم حساب‌ها) آن را پر نمی‌کند."""
+    (تنظیمات انبار ← تنظیم حساب‌ها) آن را پر نمی‌کند؛ extra (R340): گروه‌های دیگری که در خود دستور انتخاب می‌شوند."""
     from peecha.db.models.accounting import (
         AccountDetailDimension, ChartOfAccount as Account, DetailAccount, DetailDimensionType,
     )
@@ -249,7 +253,7 @@ def _dimension_rules(session, company_id: int) -> SimpleNamespace:
     automatic = {types[dims.INVENTORY_ITEM_CODE], types[dims.PROFIT_CENTER_CODE], dims.ensure_person_dimension(session, company_id)}
     kinds = {"cost_center": dims.COST_CENTER_CODE, "project": dims.PROJECT_CODE}
     found = {k: {} for k in kinds}
-    other = []
+    other, extra = [], {}
     for role, account_id in roles.items():
         for _acc, full_code, type_id, code in sorted(r for r in rows if r[0] == account_id):
             if type_id in automatic or fixed.get(role) == type_id:
@@ -259,15 +263,24 @@ def _dimension_rules(session, company_id: int) -> SimpleNamespace:
                          if code == sys_code or code.strip() == dims.SPECIALIZED_DIMENSION_LABELS[sys_code]), None)
             if kind is not None:
                 found[kind].setdefault(type_id, []).append(full_code)
+                continue
+            empty = not session.scalar(select(func.count()).select_from(DetailAccount).where(
+                DetailAccount.dimension_type_id == type_id, DetailAccount.is_active.is_(True)))
+            role_label = c.ROLE_LABELS.get(role) or engine.MAPPING_LABELS.get(role, role)
+            if role in _ORDER_ONLY_ROLES:
+                group = extra.setdefault(type_id, SimpleNamespace(type_id=type_id, label=label, accounts=[], roles=[],
+                                                                  empty=empty, with_order_dims=False))
+                group.accounts += [full_code] if full_code not in group.accounts else []
+                group.roles += [role_label] if role_label not in group.roles else []
             elif not any(o[0] == full_code and o[1] == label for o in other):
-                empty = not session.scalar(select(func.count()).select_from(DetailAccount).where(
-                    DetailAccount.dimension_type_id == type_id, DetailAccount.is_active.is_(True)))
-                other.append((full_code, label, c.ROLE_LABELS.get(role) or engine.MAPPING_LABELS.get(role, role), empty))
-    out = {"other": other}
+                other.append((full_code, label, role_label, empty))
+    out = {"other": other, "extra": sorted(extra.values(), key=lambda g: g.label)}
     for kind, sys_code in kinds.items():
         codes = sorted({code for codes in found[kind].values() for code in codes})
         out[kind] = f"حساب «{'، '.join(codes)}» بدون آن ثبت نمی‌شود" if codes else None
         out[f"{kind}_types"] = list(found[kind]) or [types[sys_code]]
+        for group in out["extra"]:
+            group.with_order_dims = group.with_order_dims or bool(set(group.accounts) & set(codes))
     if out["cost_center"] is None and c.settings(session, company_id).require_cost_center:
         out["cost_center"] = "در تنظیمات تولید الزامی شده است"
     return SimpleNamespace(**out)
@@ -282,10 +295,47 @@ def _other_advice(item) -> str:
             + f"، یا در «کدینگ حساب‌ها» الزام گروه «{group}» را از این حساب بردارید.")
 
 
+def _extra_advice(group) -> str:
+    """R340: گروه الزامی دیگری که در خود دستور انتخاب می‌شود."""
+    accounts, roles = "، ".join(group.accounts), "، ".join(group.roles)
+    if not group.empty:
+        return f"«{group.label}» دستور تولید را انتخاب کنید؛ حساب «{accounts}» («{roles}») آن را الزامی کرده است."
+    head = (f"مرکز هزینه و پروژهٔ دستور روی حساب «{accounts}» («{roles}») ثبت می‌شوند، ولی این حساب تفصیلی گروه "
+            f"«{group.label}» را هم الزامی کرده که گروه جداگانه‌ای است") if group.with_order_dims else \
+        f"حساب «{accounts}» («{roles}») تفصیلی گروه «{group.label}» را الزامی کرده"
+    return (f"{head} و این گروه هنوز هیچ تفصیلی‌ای ندارد. اول در «تعریف تفصیلی‌ها» برای گروه «{group.label}» تفصیلی تعریف کنید؛ "
+            f"بعد آن را در فرم دستور تولید انتخاب کنید، یا اگر همیشه همان است در «تنظیمات انبار › تنظیم حساب‌ها» برای "
+            f"«{group.roles[0]}» تفصیلی ثابت بگذارید. اگر این گروه برای این حساب لازم نیست، در «کدینگ حساب‌ها» الزامش را بردارید.")
+
+
 def dimension_problem(company_id: int) -> str | None:
     """R339: توضیح کامل گروه الزامی‌ای که دستور تولید نمی‌تواند پر کند (برای پیام خطای ثبت)."""
     rules = dimension_rules(company_id)
-    return _other_advice(rules.other[0]) if rules.other else None
+    if rules.other:
+        return _other_advice(rules.other[0])
+    return next((_extra_advice(g) for g in rules.extra if g.empty), None)
+
+
+def order_detail_map(session, order_id: int) -> dict[int, int]:
+    """R340: گروه ← تفصیلی گروه‌های الزامی دیگر همین دستور."""
+    return dict(session.execute(select(OrderDetailAccount.dimension_type_id, OrderDetailAccount.detail_account_id).where(
+        OrderDetailAccount.order_id == order_id)).all())
+
+
+def order_details(company_id: int, order_id: int) -> dict[int, int]:
+    with new_session() as session:
+        order = session.get(ProductionOrder, order_id)
+        if order is None or order.company_id != company_id:
+            raise ValueError("دستور تولید نامعتبر است.")
+        return order_detail_map(session, order_id)
+
+
+def _save_order_details(session, order_id: int, details: dict) -> None:
+    session.query(OrderDetailAccount).filter(OrderDetailAccount.order_id == order_id).delete()
+    for type_id, detail_id in details.items():
+        if detail_id:
+            session.add(OrderDetailAccount(order_id=order_id, dimension_type_id=int(type_id), detail_account_id=detail_id))
+    session.flush()
 
 
 def dimension_rules(company_id: int) -> SimpleNamespace:
@@ -302,7 +352,8 @@ def _dimension_type_of(session, detail_account_id: int | None) -> int | None:
         if detail_account_id else None
 
 
-def _check_dimensions(session, company_id: int, cost_center_id: int | None, project_id: int | None) -> None:
+def _check_dimensions(session, company_id: int, cost_center_id: int | None, project_id: int | None,
+                      details: dict | None = None) -> None:
     rules = _dimension_rules(session, company_id)
     if rules.other:
         raise ValueError(_other_advice(rules.other[0]))
@@ -313,6 +364,12 @@ def _check_dimensions(session, company_id: int, cost_center_id: int | None, proj
         if reason and _dimension_type_of(session, value) not in getattr(rules, f"{kind}_types"):
             raise ValueError(f"{label} انتخاب‌شده از گروه تفصیلی‌ای نیست که حساب‌های تولید می‌خواهند ({reason})؛ "
                              "از فهرست همین فرم دوباره انتخاب کنید.")
+    for group in rules.extra:
+        if not (details or {}).get(group.type_id):
+            raise ValueError(_extra_advice(group))
+    for type_id, value in (details or {}).items():
+        if value and _dimension_type_of(session, value) != int(type_id):
+            raise ValueError("تفصیلی انتخاب‌شده از همان گروهی نیست که حساب‌های تولید می‌خواهند؛ از فهرست همین فرم دوباره انتخاب کنید.")
 
 
 def _validate(session, company_id: int, f: OrderFields) -> None:
@@ -338,7 +395,7 @@ def _validate(session, company_id: int, f: OrderFields) -> None:
     if f.joint_cost_method not in c.JOINT_METHODS:
         raise ValueError("روش تخصیص تولید مشترک نامعتبر است.")
     pm.check_lot_size(session, f.item_id, f.planned_qty)
-    _check_dimensions(session, company_id, f.cost_center_detail_account_id, f.project_detail_account_id)
+    _check_dimensions(session, company_id, f.cost_center_detail_account_id, f.project_detail_account_id, f.other_details)
 
 
 def create_order(company_id: int, user_id: int, fields: OrderFields, idempotency_key: str | None = None) -> int:
@@ -362,9 +419,10 @@ def _insert_order(session, company_id: int, user_id: int, f: OrderFields, key: s
     order = ProductionOrder(company_id=company_id, order_no=no, order_code=f"{st.order_prefix}-{no}", item_id=f.item_id,
                             uom_id=item.base_uom_id, status_code="DRAFT", produced_qty=ZERO, scrapped_qty=ZERO,
                             created_by_user_id=user_id, idempotency_key=key,
-                            **{k: v for k, v in f.__dict__.items() if k != "item_id"})
+                            **{k: v for k, v in f.__dict__.items() if k not in ("item_id", "other_details")})
     session.add(order)
     session.flush()
+    _save_order_details(session, order.order_id, f.other_details or {})
     c.audit(session, company_id, user_id, "ProductionOrder", order.order_id, "CREATE",
             {"code": order.order_code, "item_id": f.item_id, "qty": str(f.planned_qty)})
     return order
@@ -375,11 +433,17 @@ def update_order(company_id: int, user_id: int, order_id: int, fields: OrderFiel
         order = lock_order(session, company_id, order_id)
         if order.status_code not in EDITABLE_STATUSES:
             raise ValueError("فقط دستور پیش‌نویس/برنامه‌ریزی‌شده قابل ویرایش است.")
+        if fields.other_details is None:
+            fields.other_details = order_detail_map(session, order_id)
         _apply_defaults(session, company_id, fields)
         _validate(session, company_id, fields)
         changes = {}
         for k, v in fields.__dict__.items():
-            if getattr(order, k) != v:
+            if k == "other_details":
+                if order_detail_map(session, order_id) != v:
+                    changes[k] = [str(order_detail_map(session, order_id)), str(v)]
+                    _save_order_details(session, order_id, v)
+            elif getattr(order, k) != v:
                 changes[k] = [str(getattr(order, k)), str(v)]
                 setattr(order, k, v)
         if changes:
@@ -388,9 +452,9 @@ def update_order(company_id: int, user_id: int, order_id: int, fields: OrderFiel
 
 
 def set_order_dimensions(company_id: int, user_id: int, order_id: int, cost_center_id: int | None,
-                         project_id: int | None) -> None:
+                         project_id: int | None, details: dict[int, int] | None = None) -> None:
     """R337: مرکز هزینه/پروژهٔ دستور در جریان. مقدار خالی پر می‌شود؛ مقدار ثبت‌شده پس از صدور عوض نمی‌شود،
-    چون اسناد قبلی دستور با همان ثبت شده‌اند."""
+    چون اسناد قبلی دستور با همان ثبت شده‌اند. details (R340): گروه‌های الزامی دیگر با همین قاعده."""
     labels = {"cost_center_detail_account_id": "مرکز هزینه", "project_detail_account_id": "پروژه"}
     with new_session() as session:
         order = lock_order(session, company_id, order_id)
@@ -409,7 +473,21 @@ def set_order_dimensions(company_id: int, user_id: int, order_id: int, cost_cent
                 raise ValueError(f"{labels[attr]} این دستور پس از صدور عوض نمی‌شود، چون اسناد قبلی با همان ثبت شده‌اند.")
             setattr(order, attr, value)
             changes[attr] = [str(current), str(value)]
-        _check_dimensions(session, company_id, order.cost_center_detail_account_id, order.project_detail_account_id)
+        saved = order_detail_map(session, order_id)
+        merged = {**saved, **(details or {})}
+        group_labels = {g.type_id: g.label for g in rules.extra}
+        for type_id, value in (details or {}).items():
+            current = saved.get(type_id)
+            if value == current:
+                continue
+            if current is not None and order.status_code not in EDITABLE_STATUSES:
+                raise ValueError(f"«{group_labels.get(type_id, 'تفصیلی')}» این دستور پس از صدور عوض نمی‌شود، "
+                                 "چون اسناد قبلی با همان ثبت شده‌اند.")
+            changes[f"detail_{type_id}"] = [str(current), str(value)]
+        if merged != saved:
+            _save_order_details(session, order_id, merged)
+        _check_dimensions(session, company_id, order.cost_center_detail_account_id, order.project_detail_account_id,
+                          order_detail_map(session, order_id))
         if changes:
             c.audit(session, company_id, user_id, "ProductionOrder", order_id, "DIMENSIONS", changes)
         session.commit()
@@ -607,7 +685,8 @@ def _preflight(session, company_id: int, order: ProductionOrder, st) -> None:
         raise ValueError("انبار مواد مشخص نشده است.")
     if order.fg_warehouse_id is None:
         raise ValueError("انبار محصول مشخص نشده است.")
-    _check_dimensions(session, company_id, order.cost_center_detail_account_id, order.project_detail_account_id)
+    _check_dimensions(session, company_id, order.cost_center_detail_account_id, order.project_detail_account_id,
+                      order_detail_map(session, order.order_id))
     c.require_roles(session, company_id, (c.WIP,))
     if engine._resolve_role_account(session, company_id, "INVENTORY_ASSET") is None:
         raise ValueError("حساب موجودی تعیین نشده است.")
@@ -1269,6 +1348,7 @@ def _abnormal_scrap(session, order: ProductionOrder, date: datetime.date, user_i
     amount = min(max(ZERO, wip_balance(session, order.order_id)), c.money(new_units * decimal.Decimal(order.planned_unit_cost or 0)))
     je = c.post_journal(session, order.company_id, user_id, date, f"{order.order_code} -- ضایعات غیرعادی",
                         [(c.SCRAP_LOSS, amount, ZERO, _dims(order)), (c.WIP, ZERO, amount, _dims(order))],
+                        order_details=order_detail_map(session, order.order_id),
                         item_id=order.item_id) if amount else None
     record(session, order, "VARIANCE", date, user_id, item_id=order.item_id, quantity=new_units, amount=amount, wip_delta=-amount,
            journal_entry_id=je, reason="ABNORMAL_SCRAP", key=f"{key}:abn" if key else None,
@@ -1390,7 +1470,7 @@ def close_order(company_id: int, user_id: int, order_id: int, date: datetime.dat
             lines = [(c.VARIANCE, residual, ZERO, _dims(order)), (c.WIP, ZERO, residual, _dims(order))] if residual > 0 else [
                 (c.WIP, -residual, ZERO, _dims(order)), (c.VARIANCE, ZERO, -residual, _dims(order))]
             je = c.post_journal(session, company_id, user_id, date, f"{order.order_code} -- انحراف بستن دستور تولید", lines,
-                                item_id=order.item_id)
+                                item_id=order.item_id, order_details=order_detail_map(session, order.order_id))
             record(session, order, "VARIANCE", date, user_id, item_id=order.item_id, amount=residual, wip_delta=-residual,
                    journal_entry_id=je, reason="CLOSE_RESIDUAL", details={"kind": "CLOSE_RESIDUAL"})
         from peecha.services.production import costing as pcost
@@ -1536,7 +1616,8 @@ def create_child_orders(company_id: int, user_id: int, order_id: int, shortage_o
             f = OrderFields(item_id=comp, planned_qty=qty_needed, start_date=due - datetime.timedelta(days=lead), due_date=due,
                             fg_warehouse_id=r.line.warehouse_id or parent.material_warehouse_id, parent_order_id=order_id,
                             branch_id=parent.branch_id, cost_center_detail_account_id=parent.cost_center_detail_account_id,
-                            project_detail_account_id=parent.project_detail_account_id, priority=parent.priority)
+                            project_detail_account_id=parent.project_detail_account_id, priority=parent.priority,
+                            other_details=order_detail_map(session, parent.order_id))
             _apply_defaults(session, company_id, f)
             f.planned_qty = c.qty(f.planned_qty)
             _validate(session, company_id, f)
@@ -1631,6 +1712,7 @@ def order_view(company_id: int, order_id: int) -> SimpleNamespace:
             "parent_order_id",
             "planned_unit_cost", "standard_unit_cost", "joint_cost_method", "work_center_id")},
             item_label=labels.get(order.item_id, ""), status_label=STATUS_LABELS[order.status_code],
+            other_details=order_detail_map(session, order_id),
             progress=order.progress_percent, remaining_qty=order.remaining_qty),
             materials=materials, operations=operations, outputs=outputs, transactions=transactions, costs=costs,
             wip=wip_balance(session, order_id))
