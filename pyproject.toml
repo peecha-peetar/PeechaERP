@@ -38,3 +38,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# R343: صفحهٔ وب عکس‌برداری موبایل کنار کد API نصب شود
+[tool.setuptools.package-data]
+peecha_api = ["static/*.html"]

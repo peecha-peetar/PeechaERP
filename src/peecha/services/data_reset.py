@@ -488,6 +488,15 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM hr.lookup_values WHERE company_id = :company_id",
     "DELETE FROM core.exchange_rates WHERE company_id = :company_id",
     "DELETE FROM doc.attachments WHERE company_id = :company_id",
+    # R343: بایگانی مدیریت اسناد شرکت؛ با پاک‌کردن اسناد مالی و انبار (گزینهٔ ۱) دست نمی‌خورد
+    "DELETE FROM doc.capture_requests WHERE company_id = :company_id",
+    "DELETE FROM doc.document_events WHERE company_id = :company_id",
+    "DELETE FROM doc.document_links WHERE company_id = :company_id",
+    "UPDATE doc.documents SET current_version_id = NULL, approved_version_id = NULL WHERE company_id = :company_id",
+    "DELETE FROM doc.documents WHERE company_id = :company_id",
+    "DELETE FROM doc.files WHERE company_id = :company_id",
+    "DELETE FROM doc.tags WHERE company_id = :company_id",
+    "DELETE FROM doc.categories WHERE company_id = :company_id",
     # اشخاص (تفصیلیِ مشتری/تامین‌کننده/پرسنل + گروه‌ها).
     "DELETE FROM comm.party_contacts WHERE party_detail_account_id IN "
     "(SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
@@ -703,6 +712,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM sec.notification_preferences WHERE company_id = :company_id",
     "DELETE FROM wf.definitions WHERE company_id = :company_id",
     "DELETE FROM wf.settings WHERE company_id = :company_id",
+    "DELETE FROM doc.dms_settings WHERE company_id = :company_id",  # R343
     "DELETE FROM payroll.company_settings WHERE company_id = :company_id",
     "DELETE FROM payroll.description_templates WHERE company_id = :company_id",
     "DELETE FROM payroll.insurance_configs WHERE company_id = :company_id",

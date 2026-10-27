@@ -913,3 +913,20 @@ export interface PutawaySource {
   warehouse_id: number | null;
   open_lines: number | null;
 }
+
+/** R343: درخواست عکس‌برداری که از کامپیوتر برای همین کاربر ساخته شده (peecha_api.routers.dms). */
+export interface CaptureRequestRow {
+  request_id: number;
+  status: "PENDING" | "OPENED" | "CAPTURING" | "UPLOADING" | "COMPLETED" | "CANCELLED" | "EXPIRED" | "FAILED";
+  status_label: string;
+  target_kind: string;
+  target_label: string;
+  expires_at: string | null;
+  max_photos: number;
+  result_document_id: number | null;
+}
+
+export interface CapturePhoto {
+  name: string;
+  data_base64: string;
+}

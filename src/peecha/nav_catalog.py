@@ -671,6 +671,17 @@ NAV_ITEMS = [
             {"code": "OPN_SETTINGS", "label": "تنظیمات افتتاحیه", "screen": "opn_config", "hidden_from_sidebar": True},
         ],
     },
+    # R343: مدیریت اسناد (DMS)؛ اسناد مرتبط هر رکورد از داخل فرم همان رکورد هم باز می‌شود
+    {
+        "code": "DMS",
+        "label": "مدیریت اسناد",
+        "children": [
+            {"code": "DMS_DOCUMENTS", "label": "اسناد", "screen": "dms_documents"},
+            {"code": "DMS_DASHBOARD", "label": "داشبورد اسناد", "screen": "dms_dashboard"},
+            {"code": "DMS_CATEGORIES", "label": "دسته‌بندی و برچسب اسناد", "screen": "dms_categories"},
+            {"code": "DMS_SETTINGS", "label": "تنظیمات اسناد", "screen": "dms_settings"},
+        ],
+    },
     {
         "code": "PURCH",
         "label": "خرید و تدارکات",
@@ -968,6 +979,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("BUD_RPT_BUD_VS_ACTUAL", "📈"),
         ("BUD_RPT_BUD_DETAIL", "🔎"),
     ],
+    "DMS": [("DMS_DOCUMENTS", "🗂️"), ("DMS_DASHBOARD", "📊")],
     "OPN": [
         ("OPN_SHEET", "🧾"),
         ("OPN_CENTER", "🧭"),
@@ -1010,6 +1022,8 @@ SETTINGS_SUB_FORMS = [
 # به‌صورتِ دستی به فهرستِ فرم‌ها اضافه می‌شود.
 _EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
     ("media_center", "SALES", "مرکز رسانه"),
+    # R343: تصمیم گردش کار سند (ویرایش = تایید/رد/نیازمند اصلاح) و دیدن اسناد محرمانه/سری دیگران (مشاهده)
+    ("dms_approve", "DMS", "اسناد: تصمیم گردش کار"), ("dms_confidential", "DMS", "اسناد: اسناد محرمانه و سری"),
     # R265: دسترسی‌هایِ جداگانهٔ عملیاتِ دارایی (و فرمِ گردشِ کارِ تأییدِ هرکدام) -- صفحهٔ «دارایی‌ها» این‌ها را چک می‌کند
     ("fa_capitalize", "FA", "دارایی: سرمایه‌ای‌کردن"), ("fa_transfer", "FA", "دارایی: انتقال"),
     ("fa_reclassify", "FA", "دارایی: تغییر طبقه"), ("fa_improve", "FA", "دارایی: افزایش سرمایه‌ای/تعمیر"),

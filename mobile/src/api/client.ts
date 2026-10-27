@@ -4,6 +4,8 @@ import {
   ApprovalsResponse,
   ChannelRow,
   CustomerActivityRequest,
+  CapturePhoto,
+  CaptureRequestRow,
   CustomerActivityRow,
   CustomerApprovalResponse,
   CustomerSegmentInfo,
@@ -328,6 +330,66 @@ export class ApiClient {
 
   async markNotificationRead(notificationId: number): Promise<void> {
     await this.request<void>(`/notifications/${notificationId}/read`, { method: "POST" });
+  }
+
+  /** R343: درخواست‌های بازِ عکس‌برداری همین کاربر (ساخته‌شده از کامپیوتر). */
+  async listCaptureRequests(): Promise<CaptureRequestRow[]> {
+    return this.request<CaptureRequestRow[]>("/dms/capture/requests");
+  }
+
+  async openCaptureRequest(requestId: number): Promise<CaptureRequestRow> {
+    return this.request<CaptureRequestRow>(`/dms/capture/requests/${requestId}/open`, { method: "POST" });
+  }
+
+  async markCaptureCapturing(requestId: number): Promise<CaptureRequestRow> {
+    return this.request<CaptureRequestRow>(`/dms/capture/requests/${requestId}/capturing`, { method: "POST" });
+  }
+
+  async cancelCaptureRequest(requestId: number): Promise<CaptureRequestRow> {
+    return this.request<CaptureRequestRow>(`/dms/capture/requests/${requestId}/cancel`, { method: "POST" });
+  }
+
+  /** ارسال مستقیم (نه صف آفلاین): کامپیوتر منتظر همین درخواست است و درخواست منقضی‌شده بعداً پذیرفته نمی‌شود.
+   * کلید تکرارنشدن تا موفقیت ثابت می‌ماند تا تلاش دوباره پس از قطع ارتباط پیوست تکراری نسازد. */
+  async uploadCapturePhotos(
+    requestId: number,
+    photos: CapturePhoto[],
+    idempotencyKey: string,
+    onProgress?: (percent: number) => void,
+  ): Promise<CaptureRequestRow> {
+    const send = (token: string | null) =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${this.baseUrl}/dms/capture/requests/${requestId}/upload`);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.setRequestHeader("Idempotency-Key", idempotencyKey);
+        if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        xhr.timeout = 120_000;
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) onProgress(Math.round((event.loaded * 100) / event.total));
+          };
+        }
+        xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
+        xhr.onerror = () => reject(new Error("ارتباط با سرور قطع شد."));
+        xhr.ontimeout = () => reject(new Error("ارسال بیش از حد طول کشید."));
+        xhr.send(JSON.stringify({ photos }));
+      });
+    let result = await send(await this.tokenStore.getAccessToken());
+    if (result.status === 401 && (await this.tryRefresh())) {
+      result = await send(await this.tokenStore.getAccessToken());
+    }
+    const payload = (() => {
+      try {
+        return JSON.parse(result.body || "{}");
+      } catch {
+        return {};
+      }
+    })();
+    if (result.status < 200 || result.status >= 300) {
+      throw new ApiError(result.status, payload.detail ?? "ارسال عکس انجام نشد.");
+    }
+    return payload as CaptureRequestRow;
   }
 
   async getManagerDashboard(params?: {

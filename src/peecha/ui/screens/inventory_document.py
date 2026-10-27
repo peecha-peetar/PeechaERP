@@ -844,6 +844,10 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرسند و ردیف‌ها بعداً قابل‌ویرایش/حذف‌اند")
         self.save_button.clicked.connect(lambda: self._save_header(notify=True))
         self.footer_layout.addWidget(self.save_button)
+        # R343: اسناد و عکس‌های همین سند انبار (بارنامه، عکس کالا و...)
+        from peecha.ui.screens.dms_related import related_documents_button
+
+        self.footer_layout.addWidget(related_documents_button(self, "stock_document", lambda: self._document_id))
 
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")

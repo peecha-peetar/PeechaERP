@@ -9,9 +9,11 @@ import { useTheme } from "../theme/ThemeProvider";
 interface Props {
   apiClient: ApiClient;
   onBack: () => void;
+  /** R343: اعلان درخواست عکس‌برداری، همان درخواست را باز می‌کند */
+  onOpenCaptureRequest?: (requestId: number) => void;
 }
 
-export function NotificationsScreen({ apiClient, onBack }: Props) {
+export function NotificationsScreen({ apiClient, onBack, onOpenCaptureRequest }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +67,15 @@ export function NotificationsScreen({ apiClient, onBack }: Props) {
           contentContainerStyle={{ gap: spacing.sm }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
           renderItem={({ item }) => (
-            <Card onPress={() => !item.is_read && markRead(item.notification_id)} style={{ opacity: item.is_read ? 0.6 : 1 }}>
+            <Card
+              onPress={() => {
+                if (!item.is_read) markRead(item.notification_id);
+                if (item.entity_type === "DmsCaptureRequest" && item.entity_id && onOpenCaptureRequest) {
+                  onOpenCaptureRequest(item.entity_id);
+                }
+              }}
+              style={{ opacity: item.is_read ? 0.6 : 1 }}
+            >
               <View style={{ flexDirection: "row", gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
                   <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>{item.title}</Text>

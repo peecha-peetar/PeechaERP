@@ -81,6 +81,7 @@ _NAV_ICONS = {
     "MNT": "🔧",
     "BUD": "💹",
     "OPN": "🧭",
+    "DMS": "🗂️",
     "PURCH": "🧺",
     "HR": "👥",
     "INVOICES": "🧾",
@@ -1172,8 +1173,10 @@ class MainWindow(QMainWindow):
     def _tick_workflow(self) -> None:
         if session.current_company is None:
             return
+        from peecha.services.dms import reminders as dms_reminders
         from peecha.services.workflow import scheduler as wf_scheduler
 
+        dms_reminders.register()  # R343: یادآوری انقضا، منقضی‌کردن درخواست عکس، استخراج متن، فایل یتیم
         wf_scheduler.tick(session.current_company.company_id)
         self.update_notification_badge()
         self._show_new_notifications()
@@ -2169,6 +2172,13 @@ class MainWindow(QMainWindow):
         self.register_screen("opn_data", lambda: opn_screens.OpeningDataScreen(self))
         self.register_screen("opn_reconcile", lambda: opn_screens.OpeningReconcileScreen(self))
         self.register_screen("opn_config", lambda: opn_screens.OpeningSettingsScreen(self))
+        # R343: مدیریت اسناد
+        from peecha.ui.screens import dms as dms_screens
+
+        self.register_screen("dms_documents", lambda: dms_screens.DmsDocumentsScreen())
+        self.register_screen("dms_dashboard", lambda: dms_screens.DmsDashboardScreen())
+        self.register_screen("dms_categories", lambda: dms_screens.DmsCategoriesScreen())
+        self.register_screen("dms_settings", lambda: dms_screens.DmsSettingsScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())

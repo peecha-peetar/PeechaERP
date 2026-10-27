@@ -17,6 +17,7 @@ from peecha_api.routers import (
     customers,
     dashboard,
     delivery,
+    dms,
     fixed_assets,
     inventory,
     locations,
@@ -75,6 +76,7 @@ app.include_router(locations.router)  # R248: محلِ انبار (اسکن/مح
 app.include_router(fixed_assets.router)  # R265: اسکنِ دارایی و شمارشِ فیزیکی
 app.include_router(crm.router)  # R281: CRM
 app.include_router(maintenance.router)  # R312: نگهداری و تعمیرات (تکنسین)
+app.include_router(dms.router)  # R343: مدیریت اسناد و عکس‌برداری با موبایل
 
 
 @app.get("/health")

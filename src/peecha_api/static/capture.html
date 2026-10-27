@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>افزودن تصویر به سند — پیچا</title>
+<style nonce="{{NONCE}}">
+  :root { --accent: #15a672; --danger: #d64545; --ink: #1d2433; --muted: #6b7280; --card: #fff; --bg: #f3f5f8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Vazirmatn, Tahoma, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 16px; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text], input[type=password] { width: 100%; padding: 12px; border: 1px solid #d5dae1; border-radius: 10px; font-size: 16px; }
+  button { width: 100%; padding: 14px; margin-top: 10px; border: 0; border-radius: 12px; font-size: 17px; font-family: inherit;
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button.secondary { background: #e6e9ee; color: var(--ink); }
+  button.danger { background: #fde8e8; color: var(--danger); }
+  button:disabled { opacity: .5; }
+  .row { display: flex; gap: 8px; }
+  .row button { flex: 1; }
+  .target { font-size: 16px; line-height: 1.8; }
+  .target b { display: block; font-size: 18px; }
+  .status { font-size: 14px; color: var(--muted); }
+  .msg { padding: 12px; border-radius: 10px; margin-bottom: 12px; display: none; }
+  .msg.ok { background: #e6f6ef; color: #0e7a52; display: block; }
+  .msg.err { background: #fde8e8; color: var(--danger); display: block; }
+  .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .thumb { position: relative; }
+  .thumb img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; background: #ddd; }
+  .thumb button { position: absolute; top: 4px; left: 4px; width: 32px; height: 32px; padding: 0; margin: 0; font-size: 16px;
+                  border-radius: 16px; background: rgba(0,0,0,.6); }
+  progress { width: 100%; height: 14px; margin-top: 10px; display: none; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>افزودن تصویر به سند</h1>
+  <div id="msg" class="msg"></div>
+
+  <section id="login" class="card hidden">
+    <div class="status">برای امنیت، با همان نام کاربری و رمز برنامهٔ پیچا وارد شوید.</div>
+    <label for="username">نام کاربری</label>
+    <input id="username" type="text" autocomplete="username" autocapitalize="off">
+    <label for="password">رمز عبور</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <button id="loginBtn">ورود</button>
+  </section>
+
+  <section id="capture" class="card hidden">
+    <div class="target">
+      <span id="targetKind"></span>
+      <b id="targetLabel"></b>
+    </div>
+    <div class="status">وضعیت: <span id="statusLabel"></span> · مهلت تا <span id="expires"></span></div>
+    <div class="status">عکس‌ها فقط به همین رکورد پیوست می‌شوند. پیش از ارسال آن‌ها را ببینید.</div>
+    <input id="camera" class="hidden" type="file" accept="image/*" capture="environment">
+    <button id="cameraBtn">بازکردن دوربین</button>
+    <div id="thumbs" class="thumbs"></div>
+    <div class="row">
+      <button id="retakeBtn" class="secondary" disabled>گرفتن مجدد</button>
+      <button id="sendBtn" disabled>ارسال تصویر</button>
+    </div>
+    <progress id="progress" max="100" value="0"></progress>
+    <button id="cancelBtn" class="danger">لغو درخواست</button>
+  </section>
+</main>
+<script nonce="{{NONCE}}">
+(function () {
+  "use strict";
+  var store = window.sessionStorage;
+  // توکن بعد از # می‌آید تا به سرور و لاگ‌ها نرسد؛ از نوار نشانی و تاریخچه هم برداشته می‌شود
+  var token = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+  if (token) { store.setItem("peecha.capture.token", token); history.replaceState(null, "", location.pathname); }
+  else { token = store.getItem("peecha.capture.token") || ""; }
+  // لینک QR جدید در همین زبانه فقط # را عوض می‌کند و صفحه دوباره بار نمی‌شود
+  window.addEventListener("hashchange", function () {
+    var next = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+    if (next) { store.setItem("peecha.capture.token", next); }
+    location.replace(location.pathname);
+  });
+  var accessKey = "peecha.capture.access";
+  var uploadKeyName = "peecha.capture.key." + token.slice(0, 12);
+  var photos = [];
+  var info = null;
+  var sending = false;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function show(id, visible) { $(id).classList.toggle("hidden", !visible); }
+  function message(text, ok) {
+    var box = $("msg");
+    box.textContent = text || "";
+    box.className = "msg" + (text ? (ok ? " ok" : " err") : "");
+  }
+  function toPersian(text) { return String(text).replace(/\d/g, function (d) { return "۰۱۲۳۴۵۶۷۸۹"[d]; }); }
+
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: Object.assign({"Content-Type": "application/json", "X-Capture-Token": token},
+                             store.getItem(accessKey) ? {"Authorization": "Bearer " + store.getItem(accessKey)} : {}),
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: "omit",
+      cache: "no-store"
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok) { var error = new Error(data.detail || "خطا در ارتباط با سرور"); error.status = response.status; throw error; }
+        return data;
+      });
+    });
+  }
+
+  function render(data) {
+    info = data;
+    $("targetKind").textContent = data.target_kind;
+    $("targetLabel").textContent = toPersian(data.target_label);
+    $("statusLabel").textContent = data.status_label;
+    var expires = data.expires_at ? new Date(data.expires_at) : null;
+    $("expires").textContent = expires ? toPersian(expires.toLocaleTimeString("fa-IR", {hour: "2-digit", minute: "2-digit"})) : "—";
+    var done = ["COMPLETED", "CANCELLED", "EXPIRED"].indexOf(data.status) >= 0;
+    ["cameraBtn", "cancelBtn"].forEach(function (id) { $(id).disabled = done || sending; });
+    $("retakeBtn").disabled = done || sending || !photos.length;
+    $("sendBtn").disabled = done || sending || !photos.length;
+  }
+
+  function fail(error) {
+    if (error.status === 401) {
+      var hadSession = !!store.getItem(accessKey);
+      store.removeItem(accessKey);
+      show("capture", false); show("login", true);
+      message(hadSession ? "لطفاً دوباره وارد شوید." : error.message, false);
+      return;
+    }
+    message(error.message, false);
+    if (error.status === 404 || error.status === 410) { show("capture", false); }
+  }
+
+  function openRequest() {
+    message("");
+    api("POST", "/dms/capture/token/open").then(function (data) {
+      show("login", false); show("capture", true); render(data);
+    }).catch(fail);
+  }
+
+  function drawThumbs() {
+    var holder = $("thumbs");
+    while (holder.firstChild) { holder.removeChild(holder.firstChild); }
+    photos.forEach(function (photo, index) {
+      var cell = document.createElement("div");
+      cell.className = "thumb";
+      var img = document.createElement("img");
+      img.src = photo.url;
+      img.alt = "پیش‌نمایش عکس " + toPersian(index + 1);
+      var remove = document.createElement("button");
+      remove.textContent = "✕";
+      remove.setAttribute("aria-label", "حذف این عکس");
+      remove.addEventListener("click", function () {
+        URL.revokeObjectURL(photo.url);
+        photos.splice(index, 1);
+        drawThumbs();
+      });
+      cell.appendChild(img);
+      cell.appendChild(remove);
+      holder.appendChild(cell);
+    });
+    if (info) { render(info); }
+  }
+
+  function readBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result).split(",")[1] || ""); };
+      reader.onerror = function () { reject(new Error("خواندن عکس ممکن نشد.")); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  $("loginBtn").addEventListener("click", function () {
+    var username = $("username").value.trim(), password = $("password").value;
+    if (!username || !password) { message("نام کاربری و رمز را وارد کنید.", false); return; }
+    $("loginBtn").disabled = true;
+    api("POST", "/auth/login", {username: username, password: password, device_name: "مرورگر موبایل — عکس‌برداری"})
+      .then(function (data) { store.setItem(accessKey, data.access_token); $("password").value = ""; openRequest(); })
+      .catch(fail)
+      .then(function () { $("loginBtn").disabled = false; });
+  });
+
+  $("cameraBtn").addEventListener("click", function () {
+    if (info && info.max_photos && photos.length >= info.max_photos) { message("حداکثر " + toPersian(info.max_photos) + " عکس.", false); return; }
+    if (info && info.status === "OPENED") {
+      api("POST", "/dms/capture/token/capturing").then(render).catch(function () {});
+    }
+    $("camera").click();
+  });
+
+  $("camera").addEventListener("change", function (event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) { return; }
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { message("فقط عکس JPEG، PNG یا WEBP پذیرفته می‌شود.", false); return; }
+    message("");
+    photos.push({file: file, url: URL.createObjectURL(file)});
+    drawThumbs();
+  });
+
+  $("retakeBtn").addEventListener("click", function () {
+    var last = photos.pop();
+    if (last) { URL.revokeObjectURL(last.url); }
+    drawThumbs();
+    $("camera").click();
+  });
+
+  $("sendBtn").addEventListener("click", function () {
+    if (sending || !photos.length) { return; }
+    sending = true;
+    render(info);
+    message("");
+    var key = store.getItem(uploadKeyName);
+    if (!key) {
+      key = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+      store.setItem(uploadKeyName, key);
+    }
+    Promise.all(photos.map(function (p, i) {
+      return readBase64(p.file).then(function (data) {
+        var ext = p.file.type === "image/png" ? "png" : (p.file.type === "image/webp" ? "webp" : "jpg");
+        return {name: "photo-" + (i + 1) + "." + ext, data_base64: data};
+      });
+    })).then(function (list) {
+      var xhr = new XMLHttpRequest();
+      var bar = $("progress");
+      bar.style.display = "block";
+      bar.value = 0;
+      xhr.open("POST", "/dms/capture/token/upload");
+      xhr.setRequestHeader("X-Capture-Token", token);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.setRequestHeader("Authorization", "Bearer " + store.getItem(accessKey));
+      xhr.setRequestHeader("Idempotency-Key", key);
+      xhr.upload.onprogress = function (e) { if (e.lengthComputable) { bar.value = Math.round(e.loaded * 100 / e.total); } };
+      xhr.onload = function () {
+        sending = false;
+        var data = {};
+        try { data = JSON.parse(xhr.responseText || "{}"); } catch (e) { data = {}; }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          store.removeItem(uploadKeyName);
+          photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
+          photos = [];
+          drawThumbs();
+          render(data);
+          message("تصویر ثبت و به همان رکورد پیوست شد. می‌توانید این صفحه را ببندید.", true);
+        } else {
+          var error = new Error(data.detail || "ارسال انجام نشد؛ دوباره «ارسال تصویر» را بزنید.");
+          error.status = xhr.status;
+          fail(error);
+          render(info);
+        }
+      };
+      xhr.onerror = function () {
+        sending = false;
+        render(info);
+        message("ارتباط قطع شد؛ دوباره «ارسال تصویر» را بزنید (تصویر تکراری ثبت نمی‌شود).", false);
+      };
+      xhr.send(JSON.stringify({photos: list}));
+    }).catch(function (error) { sending = false; render(info); message(error.message, false); });
+  });
+
+  $("cancelBtn").addEventListener("click", function () {
+    if (!window.confirm("درخواست عکس‌برداری لغو شود؟")) { return; }
+    api("POST", "/dms/capture/token/cancel").then(function (data) {
+      render(data); message("درخواست لغو شد.", true);
+    }).catch(fail);
+  });
+
+  if (!token) { message("لینک ناقص است؛ کد QR را دوباره از روی کامپیوتر اسکن کنید.", false); }
+  else if (store.getItem(accessKey)) { openRequest(); } else { show("login", true); }
+})();
+</script>
+</body>
+</html>

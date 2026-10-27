@@ -1035,6 +1035,10 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self.print_voucher_button.setToolTip("چاپ سند")
         self.print_voucher_button.clicked.connect(self._on_print_voucher_clicked)
         footer.addWidget(self.print_voucher_button)
+        # R343: اسناد پشتیبان همین سند حسابداری (رسید، قرارداد، تصویر چک و...)
+        from peecha.ui.screens.dms_related import related_documents_button
+
+        footer.addWidget(related_documents_button(self, "journal_entry", lambda: self._editing_journal_entry_id))
 
         self.cancel_edit_button = QPushButton("↩️")
         self.cancel_edit_button.setObjectName("iconButton")

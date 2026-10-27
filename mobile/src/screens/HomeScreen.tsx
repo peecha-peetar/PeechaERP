@@ -22,6 +22,8 @@ interface Props {
   onOpenCrmTasks?: () => void;
   /** R300: کارتابل یکپارچه (همهٔ تاییدها و کارها در یک جا) */
   onOpenWorkInbox?: () => void;
+  /** R343: درخواست‌های عکس‌برداری اسناد که از کامپیوتر ساخته شده */
+  onOpenCaptureRequests?: () => void;
 }
 
 /** صفحه‌یِ خانه -- طبقِ اصلِ صریحِ کاربر («در ۳ ثانیه اطلاعاتِ مهم را
@@ -31,6 +33,7 @@ interface Props {
  * نه یک درخواستِ شبکه‌یِ دیگر. */
 export function HomeScreen({
   apiClient, localCache, userFullName, onOpenVisit, hideVisitPlan, salesMode, onOpenCrmTasks, onOpenWorkInbox,
+  onOpenCaptureRequests,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [summary, setSummary] = useState<TodaySummaryResponse | null>(null);
@@ -83,6 +86,12 @@ export function HomeScreen({
         {onOpenWorkInbox ? (
           <Card onPress={onOpenWorkInbox}>
             <Text style={[typography.bodyBold, { color: colors.primary }]}>کارتابل: تاییدها، کارها و درخواست‌های من</Text>
+          </Card>
+        ) : null}
+
+        {onOpenCaptureRequests ? (
+          <Card onPress={onOpenCaptureRequests}>
+            <Text style={[typography.bodyBold, { color: colors.primary }]}>عکس‌برداری برای اسناد</Text>
           </Card>
         ) : null}
 

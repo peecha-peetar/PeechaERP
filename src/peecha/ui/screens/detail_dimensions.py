@@ -677,9 +677,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.detail_ops_button.setToolTip("انتقال مانده یا ادغام با تفصیلی دیگر")
         self.detail_ops_button.clicked.connect(self._open_detail_operations)
         self.detail_ops_button.setVisible(False)
+        # R343: اسناد و مدارک همین تفصیلی (مدارک مشتری، قرارداد تامین‌کننده، پروندهٔ پرسنلی) و عکس‌برداری با موبایل
+        from peecha.ui.screens.dms_related import related_documents_button
+
+        self.related_documents_button = related_documents_button(self, "detail_account", lambda: self._editing_account_id)
         footer = build_action_footer([
             self.save_button, cancel_button, self.delete_button,
-            self.terminate_employee_button, self.approve_partner_button, self.detail_ops_button,
+            self.terminate_employee_button, self.approve_partner_button, self.detail_ops_button, self.related_documents_button,
         ])
         wrapper_layout.addWidget(footer)
 

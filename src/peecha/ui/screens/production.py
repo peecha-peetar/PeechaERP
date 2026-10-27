@@ -518,7 +518,13 @@ class OrdersScreen(QWidget):
             [A["issue"], A["issue_all"], A["return"], A["scrap"]],
             [A["labor"], A["machine"]],
             [A["receipt"], A["reverse"], A["complete"], A["close"], A["reopen"]],
-            [A["children"], A["dims"]]]))
+            [A["children"], A["dims"], self._related_documents_button()]]))
+
+    def _related_documents_button(self):
+        """R343: اسناد و عکس‌های دستور تولید (دستورالعمل، گزارش کیفیت، عکس محصول) خارج از دکمه‌های عملیات دستور."""
+        from peecha.ui.screens.dms_related import related_documents_button
+
+        return related_documents_button(self, "production_order", lambda: self.view.order.order_id if self.view else None)
 
     # --- بارگذاری ----------------------------------------------------------------------------
     def refresh(self) -> None:

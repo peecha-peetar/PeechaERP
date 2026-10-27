@@ -27,6 +27,7 @@ import { ManagerDashboardScreen } from "./screens/ManagerDashboardScreen";
 import { ModeSelectScreen } from "./screens/ModeSelectScreen";
 import { NewCustomerScreen } from "./screens/NewCustomerScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { CaptureRequestsScreen } from "./screens/CaptureRequestsScreen";
 import { PreSalesOrderScreen } from "./screens/PreSalesOrderScreen";
 import { VanSalesOrderScreen } from "./screens/VanSalesOrderScreen";
 import { ReportsScreen } from "./screens/ReportsScreen";
@@ -90,6 +91,7 @@ export type RootStackParamList = {
   WorkTask: { taskId: number };
   CrmLead: undefined;
   CrmTicket: { detailAccountId: number; customerName?: string };
+  CaptureRequests: { requestId?: number } | undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -622,6 +624,19 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
               <NotificationsScreen
                 apiClient={services.apiClient}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+                onOpenCaptureRequest={(requestId) => navigation.navigate("CaptureRequests", { requestId })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="CaptureRequests">
+          {({ navigation, route }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CaptureRequestsScreen
+                apiClient={services.apiClient}
+                initialRequestId={route.params?.requestId}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
               />
             </SafeAreaView>
           )}
@@ -767,6 +782,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
               salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
               onOpenCrmTasks={() => navigation.navigate("CrmTasks")}
               onOpenWorkInbox={() => navigation.navigate("WorkInbox")}
+              onOpenCaptureRequests={() => navigation.navigate("CaptureRequests")}
             />
           )}
         </MainTab.Screen>

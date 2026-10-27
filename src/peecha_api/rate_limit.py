@@ -57,3 +57,22 @@ def enforce_login_rate_limit(request: Request, username: str) -> None:
         )
     attempts.append(now)
     _attempts[key] = attempts
+
+
+_buckets: dict[str, list[float]] = {}
+
+
+def enforce_rate_limit(request: Request, bucket: str, key: str, max_calls: int, window_seconds: float = 60.0) -> None:
+    """R343: همان شمارندهٔ پنجرهٔ ثابت برای مسیرهای دیگر (مثل درخواست عکس‌برداری)، کلیدشده با IP و کلید مسیر."""
+    now = time.monotonic()
+    full_key = f"{bucket}:{_client_ip(request)}:{key}"
+    calls = [t for t in _buckets.get(full_key, []) if t >= now - window_seconds]
+    if len(calls) >= max_calls:
+        _buckets[full_key] = calls
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail="تعداد درخواست‌ها بیش‌ازحد است — کمی صبر کنید و دوباره تلاش کنید.")
+    calls.append(now)
+    _buckets[full_key] = calls
+    if len(_buckets) > 10_000:
+        for stale in [k for k, v in _buckets.items() if not v or v[-1] < now - window_seconds]:
+            del _buckets[stale]
