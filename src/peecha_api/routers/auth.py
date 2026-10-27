@@ -46,7 +46,10 @@ def _resolve_company_for_user(user_id: int) -> tuple[int, str]:
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request) -> TokenResponse:
     enforce_login_rate_limit(request, payload.username)
-    user = auth_service.authenticate(payload.username, payload.password)
+    try:
+        user = auth_service.authenticate(payload.username, payload.password)
+    except auth_service.AccountLockedError as exc:
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(exc)) from exc
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="نام‌کاربری یا رمز عبور نادرست است.")
     company_id, company_name = _resolve_company_for_user(user.user_id)

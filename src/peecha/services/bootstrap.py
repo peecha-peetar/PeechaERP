@@ -13,10 +13,11 @@ from peecha.db.base import new_session
 from peecha.db.models.core import Company, Currency, Language
 from peecha.db.models.security import User, UserCompany
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.services.auth import hash_password
+from peecha.services.auth import check_password_strength, hash_password
 
 
 def bootstrap_system(username: str, full_name: str, password: str, company_name: str) -> User:
+    check_password_strength(password)
     password_hash, password_salt = hash_password(password)
     with new_session() as db_session:
         language = db_session.scalar(select(Language).where(Language.code == "fa-IR"))

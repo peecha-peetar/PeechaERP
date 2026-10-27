@@ -40,7 +40,7 @@ from peecha.db.base import get_engine, new_session, reset_engine
 from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
 from peecha.db.schema_bootstrap import SchemaUpgradeError, apply_pending_schema_files, pending_schema_files
-from peecha.services.auth import authenticate, has_any_user
+from peecha.services.auth import AccountLockedError, authenticate, has_any_user
 from peecha.services.bootstrap import bootstrap_system
 from peecha.ui import theme
 
@@ -218,6 +218,11 @@ class LoginWindow(QStackedWidget):
 
         try:
             user = authenticate(username, password)
+        except AccountLockedError as exc:
+            self.status_label.setObjectName("statusError")
+            self.status_label.setStyleSheet("")
+            self.status_label.setText(str(exc))
+            return
         except SQLAlchemyError as exc:
             detail = str(exc.__cause__ or exc)
             self.status_label.setObjectName("statusError")
@@ -229,6 +234,15 @@ class LoginWindow(QStackedWidget):
             self.status_label.setStyleSheet("")
             self.status_label.setText("نام کاربری یا رمز عبور نادرست است.")
             return
+        if user.must_change_password:  # R344: رمز موقت مدیر باید پیش از ورود عوض شود
+            from peecha.ui.password_dialog import ChangePasswordDialog
+
+            if ChangePasswordDialog(self, user.user_id, forced=True).exec() != ChangePasswordDialog.Accepted:
+                self.status_label.setObjectName("statusError")
+                self.status_label.setStyleSheet("")
+                self.status_label.setText("برای ورود، رمز جدیدی انتخاب کنید.")
+                return
+            user.must_change_password = False
 
         session.current_user = user
         self._load_default_company(user.user_id)

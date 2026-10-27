@@ -29,7 +29,8 @@ _COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "
 _ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف", "APPROVE": "تایید", "REVERSE": "برگشت",
                   "MERGE": "ادغام", "SUBMIT": "ارسال", "REJECT": "رد", "DELEGATE": "واگذاری", "ESCALATE": "ارجاع به مافوق",
                   "EXECUTE": "ثبت نهایی", "PUBLISH": "انتشار", "CANCEL": "لغو", "RETRY": "تلاش دوباره", "RESOLVE": "حل",
-                  "COMMENT": "یادداشت", "START": "شروع", "COMPLETE": "انجام"}
+                  "COMMENT": "یادداشت", "START": "شروع", "COMPLETE": "انجام", "LOGIN": "ورود", "LOGIN_FAIL": "ورود ناموفق",
+                  "LOCK": "قفل حساب"}
 _ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سند حسابداری", "StockDocument": "سند انبار",
                        "WarehouseTask": "وظیفهٔ انبار", "CycleCountSession": "شمارش انبار", "CommercialDocument": "سند فروش/خرید",
                        "BinLocation": "محل انبار", "ItemStorageProfile": "شرایط نگهداری کالا", "ProductionOrder": "دستور تولید",

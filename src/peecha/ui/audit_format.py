@@ -39,6 +39,13 @@ _TOKENS = {
     "budget": "بودجه", "project": "پروژه", "center": "مرکز", "equipment": "تجهیز", "task": "کار", "ticket": "تیکت",
     "lead": "سرنخ", "opportunity": "فرصت", "campaign": "کمپین", "is": "", "active": "فعال", "new": "جدید", "old": "قبلی",
 }
+for _key, _label in {  # R344: تغییر کاربر، نقش، مجوز و تنظیمات
+        "password": "رمز عبور", "company_ids": "شرکت‌های مجاز", "username": "نام کاربری", "full_name": "نام",
+        "is_super_admin": "مدیر کل", "is_active": "فعال", "must_change_password": "الزام تغییر رمز", "is_closed": "بسته",
+        "is_enabled": "فعال", "prefix": "پیشوند", "account_id": "حساب", "detail_account_id": "تفصیلی", "attempt": "تلاش",
+        "minutes": "دقیقه", "role_id": "نقش", "form_id": "فرم", "action_id": "نوع دسترسی", "mapping_key": "کلید تنظیم",
+        "feature_code": "قابلیت"}.items():
+    KEY_LABELS.setdefault(_key, _label)
 VALUE_LABELS = {
     "DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "INACTIVE": "غیرفعال", "APPROVED": "تاییدشده", "REJECTED": "ردشده",
     "CANCELLED": "لغوشده", "CLOSED": "بسته", "OPEN": "باز", "POSTED": "ثبت‌شده", "PERMANENT": "دائم", "REVERSED": "برگشت‌خورده",
@@ -48,6 +55,7 @@ VALUE_LABELS = {
     "BLOCKED": "مسدود", "RESERVED": "رزرو", "QUARANTINE": "قرنطینه", "RELEASED": "آزادشده", "EXPIRED": "منقضی",
     "CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف", "APPROVE": "تایید", "REJECT": "رد", "REVERSE": "برگشت",
     "POST": "ثبت قطعی", "CANCEL": "لغو", "MERGE": "ادغام", "SUBMIT": "ارسال", "CLOSE": "بستن", "REOPEN": "بازگشایی",
+    "LOGIN": "ورود", "LOGIN_FAIL": "ورود ناموفق", "LOCK": "قفل حساب",
     "QC_RECORD": "ثبت نتیجهٔ بازرسی کیفیت", "QC_CANCEL": "لغو بازرسی کیفیت", "QC_RELEASE": "آزادسازی از قرنطینه",
     "QC_RETURN_TO_SUPPLIER": "برگشت به تامین‌کننده پس از بازرسی", "CROSS_DOCK": "ارسال مستقیم", "STOCK_RESERVE": "رزرو موجودی",
     "STOCK_RELEASE": "آزادسازی رزرو", "REVERSE_CANCEL": "برگشت و لغو", "RETURN_TO_SUPPLIER": "برگشت به تامین‌کننده",
@@ -71,6 +79,15 @@ ENTITY_LABELS = {
     "MntDowntime": "توقف", "MntPlannedDowntime": "توقف برنامه‌ریزی‌شده", "MntFailureCode": "کد خرابی",
     "MntCapacityRestriction": "محدودیت ظرفیت", "Definition": "تعریف فرایند", "Instance": "اجرای فرایند",
     "Delegation": "تفویض", "Holiday": "تعطیلی", "SlaPolicy": "سیاست تعهد زمانی", "Task": "کار", "Exception": "استثنا",
+    # R344
+    "User": "کاربر", "UserCompanyAccess": "دسترسی کاربر به شرکت‌ها", "Role": "نقش", "RoleFormPermission": "مجوز نقش",
+    "UserRole": "نقش کاربر", "UserModuleRole": "نقش ماژولی کاربر", "Company": "شرکت", "CompanyCurrency": "ارز شرکت",
+    "FiscalYear": "سال مالی", "FiscalPeriod": "دورهٔ مالی", "AccountingSettings": "تنظیمات حسابداری",
+    "AccountLevelConfig": "سطح‌بندی کدینگ", "AccountMapping": "تنظیم حساب", "CompanyFeature": "قابلیت فعال",
+    "NumberingSequence": "شماره‌گذاری اسناد", "PayrollSettings": "تنظیمات حقوق", "PayrollPolicy": "سیاست حقوق",
+    "PayItem": "قلم حقوق", "InsuranceConfig": "تنظیمات بیمه", "TaxBracket": "پلهٔ مالیات", "TaxExemption": "معافیت مالیاتی",
+    "OvertimeRule": "قاعدهٔ اضافه‌کاری", "MinimumWageRate": "حداقل دستمزد", "EmployeePayComponent": "قلم حقوق کارمند",
+    "PayrollDescriptionTemplate": "الگوی شرح حقوق",
 }
 # کلید جمع (فهرست) — «status» جمع نیست
 _PLURAL = re.compile(r".*([^us]s|_ids|_list)$")

@@ -45,6 +45,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    failed_login_count: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+    locked_until: Mapped[datetime.datetime | None]
+    password_changed_at: Mapped[datetime.datetime | None]
 
 
 class UserCompany(Base):

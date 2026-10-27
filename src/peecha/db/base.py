@@ -59,3 +59,6 @@ def get_session_factory() -> sessionmaker[Session]:
 
 def new_session() -> Session:
     return get_session_factory()()
+
+
+from peecha.db import audit_trail  # noqa: E402,F401  R344: ثبت شنونده‌های ردپای حسابرسی

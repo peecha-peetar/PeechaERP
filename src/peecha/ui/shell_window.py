@@ -1570,6 +1570,15 @@ class MainWindow(QMainWindow):
         self.open_windows_button.setMenu(self.open_windows_menu)
         layout.addWidget(self.open_windows_button)
 
+        password_button = QToolButton()
+        password_button.setObjectName("fieldHelpToggle")
+        password_button.setText("🔑")
+        password_button.setToolTip("تغییر رمز عبور")
+        password_button.setAccessibleName("تغییر رمز عبور")
+        password_button.setCursor(Qt.PointingHandCursor)
+        password_button.clicked.connect(self._change_password)
+        layout.addWidget(password_button)
+
         logout_button = QPushButton("خروج")
         logout_button.setObjectName("flatButton")
         logout_button.clicked.connect(self._logout)
@@ -1870,6 +1879,12 @@ class MainWindow(QMainWindow):
         screen = self._screens.get(screen_name) if screen_name else None
         if screen is not None and hasattr(screen, "refresh"):
             screen.refresh()
+
+    def _change_password(self) -> None:
+        from peecha.ui.password_dialog import ChangePasswordDialog
+
+        if session.current_user is not None and ChangePasswordDialog(self, session.current_user.user_id).exec():
+            QMessageBox.information(self, "تغییر رمز عبور", "رمز عبور عوض شد.")
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow

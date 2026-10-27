@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -11,7 +12,7 @@ from sqlalchemy import select
 from peecha.db.base import new_session
 from peecha.db.models.core import Company, Language
 from peecha.db.models.security import User, UserCompany
-from peecha.services.auth import hash_password
+from peecha.services.auth import check_password_strength, hash_password
 
 
 @dataclass
@@ -70,7 +71,20 @@ def grant_company_access(user_id: int, company_id: int) -> None:
             return
         make_default = not existing_links
         session.add(UserCompany(user_id=user_id, company_id=company_id, is_default=make_default))
+        _log_access(session, user_id, [link.company_id for link in existing_links],
+                    [link.company_id for link in existing_links] + [company_id])
         session.commit()
+
+
+def _log_access(session, user_id: int, before, after) -> None:
+    """R344: ردیف‌های دسترسی شرکت در ویرایش کاربر پاک و دوباره ساخته می‌شوند؛ فقط تفاوت واقعی ثبت شود."""
+    from peecha.db.audit_trail import actor_id
+    from peecha.services.audit import log_activity
+
+    before, after = sorted(set(before)), sorted(set(after))
+    if before != after:
+        log_activity(session, company_id=None, user_id=actor_id(), entity_type="UserCompanyAccess", entity_id=user_id,
+                     action="UPDATE", changes={"company_ids": [before, after]})
 
 
 def create_user(
@@ -86,6 +100,7 @@ def create_user(
     with new_session() as session:
         if session.scalar(select(User).where(User.username == username)):
             raise ValueError("این نام‌کاربری قبلاً استفاده شده است.")
+        check_password_strength(password)
         password_hash, password_salt = hash_password(password)
         user = User(
             username=username,
@@ -109,6 +124,7 @@ def create_user(
                     is_default=(company_id == default_company_id),
                 )
             )
+        _log_access(session, user.user_id, [], company_ids)
         session.commit()
         session.refresh(user)
         session.expunge(user)
@@ -130,6 +146,8 @@ def update_user(
         user = session.get(User, user_id)
         if user is None:
             raise ValueError("کاربر نامعتبر است.")
+        if new_password:
+            check_password_strength(new_password)
         user.full_name = full_name
         user.email = email or None
         user.default_language_id = default_language_id
@@ -140,6 +158,9 @@ def update_user(
             user.password_hash = password_hash
             user.password_salt = password_salt
             user.must_change_password = True
+            user.password_changed_at = datetime.datetime.now(datetime.timezone.utc)
+        # ذخیرهٔ کاربر از سوی مدیر قفل ورود ناموفق را هم باز می‌کند
+        user.failed_login_count, user.locked_until = 0, None
 
         # طبقِ رفعِ حفره‌یِ کشف‌شده: این حلقه همه‌یِ ردیف‌هایِ UserCompany را
         # حذف و دوباره می‌سازد -- بدونِ این نگه‌داری، هر ویرایشِ ساده‌یِ
@@ -154,6 +175,7 @@ def update_user(
             uc.company_id: uc.mobile_channel_type_code
             for uc in session.scalars(select(UserCompany).where(UserCompany.user_id == user_id)).all()
         }
+        _log_access(session, user_id, list(existing_extensions), company_ids)
         session.execute(UserCompany.__table__.delete().where(UserCompany.user_id == user_id))
         for company_id in company_ids:
             session.add(
