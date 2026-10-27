@@ -105,12 +105,16 @@ def create_commission_rule(company_id: int, code: str, name: str, basis_code: st
 
 
 def create_commission_entry_for_line(
-    document_line_id: int, rep_detail_account_id: int, rule_id: int, base_amount: decimal.Decimal
+    document_line_id: int, rep_detail_account_id: int, rule_id: int, base_amount: decimal.Decimal,
+    margin_amount: decimal.Decimal | None = None,
 ) -> int:
+    """margin_amount (R345): فروش خالص منهای بهای کالای همان ردیف؛ قاعدهٔ «درصد سود» روی آن حساب می‌شود، نه کل فروش."""
     with new_session() as session:
         rule = session.get(CommissionRule, rule_id)
         if rule is None:
             raise ValueError("قاعدهٔ کمیسیون نامعتبر است.")
+        if rule.basis_code == "PERCENT_OF_MARGIN" and margin_amount is not None:
+            base_amount = max(_ZERO, margin_amount)
         commission_amount = _ZERO
         if rule.basis_code in ("PERCENT_OF_TOTAL", "PERCENT_OF_MARGIN") and rule.rate_value is not None:
             commission_amount = base_amount * (rule.rate_value / 100)

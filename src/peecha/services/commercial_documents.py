@@ -2904,7 +2904,9 @@ def _build_sales_invoice_commercial_je(
         if rule_id is not None:
             for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in line_snapshots:
                 base_amount = _money(quantity * unit_price)
-                contracts_service.create_commission_entry_for_line(line_id, sales_rep_id, rule_id, base_amount)
+                unit_cost = inv_engine_service.get_current_unit_cost(item_id, _wh_id)
+                margin = None if unit_cost is None else _money(base_amount - (_discount_amt or _ZERO) - quantity_base * unit_cost)
+                contracts_service.create_commission_entry_for_line(line_id, sales_rep_id, rule_id, base_amount, margin)
 
     return journal_entry_id
 

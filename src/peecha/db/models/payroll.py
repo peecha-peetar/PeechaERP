@@ -224,6 +224,7 @@ class Payslip(Base):
     net_pay: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")
     correction_of_payslip_id: Mapped[int | None] = mapped_column(ForeignKey("payroll.payslips.payslip_id"))
+    taxable_income: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
 
 
 class PayslipLine(Base):

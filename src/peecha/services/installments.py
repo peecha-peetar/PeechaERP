@@ -191,6 +191,9 @@ def list_overdue_installments(company_id: int, as_of_date: datetime.date | None 
         for line in lines:
             line.status_code = "OVERDUE"
         session.commit()
+        for line in lines:  # R345: ردیف‌های برگشتی پس از بستن نشست هم خواندنی بمانند
+            session.refresh(line)
+            session.expunge(line)
         return list(lines)
 
 

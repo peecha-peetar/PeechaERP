@@ -8,7 +8,7 @@ import datetime
 import decimal
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
@@ -229,7 +229,8 @@ def import_order(
                 MarketplaceOrderSyncLog.connection_id == connection_id, MarketplaceOrderSyncLog.external_order_id == external_order_id
             )
         )
-        if existing is not None:
+        # R345: سفارش ناموفق (مثلاً مشتری هنوز تطبیق نشده) در دریافت بعدی دوباره امتحان می‌شود، نه «تکراری» برای همیشه
+        if existing is not None and existing.sync_status != "FAILED":
             return ImportResult(sync_status="DUPLICATE", document_id=existing.document_id, error_message=None)
         connection = session.get(MarketplaceConnection, connection_id)
 
@@ -269,12 +270,18 @@ def import_order(
 
 def _log_sync(connection_id: int, external_order_id: str, document_id: int | None, sync_status: str, error_message: str | None) -> None:
     with new_session() as session:
-        session.add(
-            MarketplaceOrderSyncLog(
-                connection_id=connection_id, external_order_id=external_order_id, document_id=document_id,
-                sync_status=sync_status, error_message=error_message,
+        row = session.scalar(select(MarketplaceOrderSyncLog).where(
+            MarketplaceOrderSyncLog.connection_id == connection_id, MarketplaceOrderSyncLog.external_order_id == external_order_id))
+        if row is None:  # هر سفارش یک ردیف دارد (uq_comm_marketplace_order_sync_external)؛ تلاش دوباره همان را به‌روز می‌کند
+            session.add(
+                MarketplaceOrderSyncLog(
+                    connection_id=connection_id, external_order_id=external_order_id, document_id=document_id,
+                    sync_status=sync_status, error_message=error_message,
+                )
             )
-        )
+        else:
+            row.document_id, row.sync_status, row.error_message = document_id, sync_status, error_message
+            row.synced_at = func.now()
         session.commit()
 
 

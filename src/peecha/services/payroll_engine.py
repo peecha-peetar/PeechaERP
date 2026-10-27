@@ -15,11 +15,11 @@ import datetime
 import decimal
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.hr import Employee, EmploymentContract
-from peecha.db.models.payroll import PayItemDefinition, Payslip, PayslipLine, PayrollPeriod, PayrollRun
+from peecha.db.models.payroll import EmployeeAnnualTaxLedger, PayItemDefinition, Payslip, PayslipLine, PayrollPeriod, PayrollRun
 from peecha.services import hr_attendance
 from peecha.services import payroll as payroll_service
 from peecha.services import payroll_formula
@@ -30,6 +30,7 @@ _SYSTEM_INSURANCE_ITEM_CODE = "SOCIAL_INSURANCE_EMPLOYEE"
 _SYSTEM_TAX_ITEM_CODE = "INCOME_TAX"
 _SYSTEM_OVERTIME_ITEM_CODE = "OVERTIME_PAY"
 _SYSTEM_LOAN_ITEM_CODE = "LOAN_INSTALLMENT_DEDUCTION"
+_CENT = decimal.Decimal("0.01")
 
 
 @dataclass
@@ -114,9 +115,9 @@ def _calculate_employee(
     formula_asts: dict[str, object],
     execution_order: list[str],
     settings: payroll_service.CompanySettingsRow,
-) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal, list[tuple[int, str, str, decimal.Decimal, str]]]:
+) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal, list[tuple[int, str, str, decimal.Decimal, str]], decimal.Decimal]:
     """یک کارمند را محاسبه می‌کند؛ (gross, total_deductions, net,
-    lines) را برمی‌گرداند. lines: (pay_item_id, code, name, amount, phase)."""
+    lines, taxable_income) را برمی‌گرداند. lines: (pay_item_id, code, name, amount, phase)."""
     calendar_days = settings.standard_month_days
     worked_days = _resolve_worked_days(company_id, employee.employee_id, period, calendar_days)
     variables = {
@@ -200,7 +201,7 @@ def _calculate_employee(
     lines.append((insurance_item_id, _SYSTEM_INSURANCE_ITEM_CODE, "بیمهٔ سهم کارمند", insurance_result.employee_share, "INSURANCE_PHASE"))
 
     # فازِ ۳: TAX (طبقِ فصلِ ۱۰: کسرِ سهمِ بیمهٔ کارمند از درآمدِ مشمولِ مالیات)
-    taxable_income_this_month = max(decimal.Decimal(0), taxable_total - insurance_result.employee_share)
+    taxable_income_this_month = max(decimal.Decimal(0), taxable_total - insurance_result.employee_share).quantize(_CENT)
     tax_year = period.jalali_year
     months_elapsed = period.jalali_month
     tax_amount = payroll_service.compute_monthly_tax(
@@ -218,7 +219,23 @@ def _calculate_employee(
     lines.extend(dedn_lines)
 
     net_pay = gross - insurance_result.employee_share - tax_amount - total_deductions
-    return gross, total_deductions, net_pay, lines
+    return gross, total_deductions, net_pay, lines, taxable_income_this_month
+
+
+def _reverse_tax_ledger(session, tax_year: int, payslips) -> None:
+    """R345: بازمحاسبهٔ همان اجرا، سهم قبلی فیش‌هایش را از دفتر مالیات سالانه برمی‌دارد تا مالیات دوبار حساب نشود.
+    فیش‌های پیش از R345 درآمد مشمول ذخیره‌شده ندارند و دست نمی‌خورند."""
+    for payslip in payslips:
+        if payslip.taxable_income is None:
+            continue
+        tax = session.scalar(select(func.coalesce(func.sum(PayslipLine.amount), 0)).where(
+            PayslipLine.payslip_id == payslip.payslip_id, PayslipLine.phase == "TAX_PHASE"))
+        ledger = session.scalar(select(EmployeeAnnualTaxLedger).where(
+            EmployeeAnnualTaxLedger.employee_id == payslip.employee_id, EmployeeAnnualTaxLedger.tax_year == tax_year)
+            .with_for_update())
+        if ledger is not None:
+            ledger.cumulative_taxable_income -= payslip.taxable_income
+            ledger.cumulative_tax_paid -= tax
 
 
 def resolve_deductions(
@@ -331,8 +348,10 @@ def run_payroll(run_id: int) -> RunResult:
         session.commit()
 
         # idempotency: بازنویسیِ کاملِ نتایجِ قبلیِ همین run
-        old_payslip_ids = [pid for (pid,) in session.execute(select(Payslip.payslip_id).where(Payslip.run_id == run_id))]
+        old_payslips = session.scalars(select(Payslip).where(Payslip.run_id == run_id)).all()
+        old_payslip_ids = [p.payslip_id for p in old_payslips]
         if old_payslip_ids:
+            _reverse_tax_ledger(session, period.jalali_year, old_payslips)
             session.execute(PayslipLine.__table__.delete().where(PayslipLine.payslip_id.in_(old_payslip_ids)))
             session.execute(Payslip.__table__.delete().where(Payslip.run_id == run_id))
             session.commit()
@@ -357,7 +376,7 @@ def run_payroll(run_id: int) -> RunResult:
 
     for employee, contract in targets:
         try:
-            gross, total_deductions, net_pay, lines = _calculate_employee(
+            gross, total_deductions, net_pay, lines, taxable_income = _calculate_employee(
                 company_id, employee, contract, period, pay_items, formula_asts, execution_order, settings
             )
         except ValueError as exc:
@@ -367,7 +386,7 @@ def run_payroll(run_id: int) -> RunResult:
             payslip = Payslip(
                 run_id=run_id, employee_id=employee.employee_id, contract_id=contract.contract_id,
                 period_id=period.period_id, gross_amount=gross, total_deductions=total_deductions,
-                net_pay=net_pay, status="DRAFT",
+                net_pay=net_pay, status="DRAFT", taxable_income=taxable_income,
             )
             session.add(payslip)
             session.flush()

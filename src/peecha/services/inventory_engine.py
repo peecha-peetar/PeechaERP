@@ -582,6 +582,13 @@ def get_last_known_unit_cost(item_id: int) -> decimal.Decimal | None:
         return _last_known_unit_cost(session, item_id)
 
 
+def get_current_unit_cost(item_id: int, warehouse_id: int | None) -> decimal.Decimal | None:
+    """R345: بهای واحد فعلی (میانگین انبار، وگرنه آخرین بهای ثبت‌شده) برای محاسبه‌های مدیریتی مثل پورسانت بر مبنای سود."""
+    with new_session() as session:
+        cost = _current_average_cost(session, item_id, warehouse_id) if warehouse_id else None
+        return cost if cost is not None else _last_known_unit_cost(session, item_id)
+
+
 def _current_average_cost(session, item_id: int, warehouse_id: int) -> decimal.Decimal | None:
     """میانگین بهای فعلی کالا در انبار (یا همهٔ انبارها) — None اگر موجودی نیست."""
     for condition in ((StockBalance.warehouse_id == warehouse_id,), ()):
