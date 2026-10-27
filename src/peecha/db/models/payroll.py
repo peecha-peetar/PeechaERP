@@ -40,6 +40,11 @@ class CompanyPayrollSettings(Base):
     payslip_currency_id: Mapped[int | None] = mapped_column(ForeignKey("core.currencies.currency_id"))
     salary_payable_gl_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
     salary_payable_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    sso_workshop_code: Mapped[str | None] = mapped_column(String(20))
+    sso_workshop_name: Mapped[str | None] = mapped_column(String(200))
+    sso_employer_name: Mapped[str | None] = mapped_column(String(200))
+    sso_workshop_address: Mapped[str | None] = mapped_column(String(400))
+    sso_contract_row: Mapped[str | None] = mapped_column(String(10))
 
 
 class PayrollPolicy(Base):
@@ -225,6 +230,8 @@ class Payslip(Base):
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")
     correction_of_payslip_id: Mapped[int | None] = mapped_column(ForeignKey("payroll.payslips.payslip_id"))
     taxable_income: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    insurable_wage: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    worked_days: Mapped[int | None] = mapped_column(SmallInteger)
 
 
 class PayslipLine(Base):

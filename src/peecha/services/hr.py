@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.hr import (
     Employee,
@@ -454,6 +455,12 @@ class EmployeeDetail:
     base_salary: decimal.Decimal | None
     employment_type_lookup_id: int | None
     personnel_detail_account_id: int | None
+    gender_lookup_id: int | None = None
+    father_name: str | None = None
+    id_card_no: str | None = None
+    id_issue_place: str | None = None
+    nationality_code: str | None = None
+    insurance_job_code: str | None = None
 
 
 def get_employee(employee_id: int) -> EmployeeDetail | None:
@@ -486,6 +493,8 @@ def get_employee(employee_id: int) -> EmployeeDetail | None:
             base_salary=contract.base_salary if contract else None,
             employment_type_lookup_id=contract.employment_type_lookup_id if contract else None,
             personnel_detail_account_id=e.personnel_detail_account_id,
+            gender_lookup_id=e.gender_lookup_id, father_name=e.father_name, id_card_no=e.id_card_no,
+            id_issue_place=e.id_issue_place, nationality_code=e.nationality_code, insurance_job_code=e.insurance_job_code,
         )
 
 
@@ -510,6 +519,7 @@ def create_employee(
     address: str | None = None,
     notes: str | None = None,
     existing_personnel_detail_account_id: int | None = None,
+    **identity_fields,
 ) -> int:
     """اگر existing_personnel_detail_account_id داده شود (طبق خواستهٔ
     صریح: «تفصیلی کارکنانی که قبلاً دستی تعریف کرده بودم باید به همین
@@ -589,6 +599,7 @@ def create_employee(
             mobile=mobile,
             address=address,
             notes=notes,
+            **_identity_values(identity_fields),
         )
         session.add(employee)
         session.flush()
@@ -622,7 +633,9 @@ def update_employee(
     mobile: str | None = None,
     address: str | None = None,
     notes: str | None = None,
+    **identity_fields,
 ) -> None:
+    """identity_fields (R347: جنسیت، نام پدر، شناسنامه، ملیت، کد شغل بیمه) فقط اگر فرستاده شوند تغییر می‌کنند."""
     first_name = first_name.strip()
     last_name = last_name.strip()
     if not first_name:
@@ -645,6 +658,8 @@ def update_employee(
         employee.mobile = mobile
         employee.address = address
         employee.notes = notes
+        for key, value in _identity_values(identity_fields).items():
+            setattr(employee, key, value)
         session.commit()
 
 
@@ -722,6 +737,9 @@ def terminate_employee(
 
 
 _PERSONNEL_HR_FIELD_KEYS = ("org_unit_id", "position_id", "employment_type_lookup_id", "base_salary")
+# R347: مشخصات لازم در لیست بیمه، روی hr.employees
+_PERSONNEL_EMPLOYEE_FIELD_KEYS = ("social_security_no", "date_of_birth", "gender_lookup_id", "father_name", "id_card_no",
+                                  "id_issue_place", "nationality_code", "insurance_job_code")
 
 
 def _split_personnel_fields(person_fields: dict) -> tuple[dict, dict]:
@@ -729,8 +747,31 @@ def _split_personnel_fields(person_fields: dict) -> tuple[dict, dict]:
     PersonnelDetail که فرم واحد تفصیلی (detail_dimensions.py) با هم
     می‌فرستد، چون این دو دسته به دو تابع سرویس متفاوت می‌روند."""
     hr_fields = {k: person_fields.get(k) for k in _PERSONNEL_HR_FIELD_KEYS}
-    detail_fields = {k: v for k, v in person_fields.items() if k not in _PERSONNEL_HR_FIELD_KEYS}
+    detail_fields = {k: v for k, v in person_fields.items()
+                     if k not in _PERSONNEL_HR_FIELD_KEYS and k not in _PERSONNEL_EMPLOYEE_FIELD_KEYS}
     return detail_fields, hr_fields
+
+
+def _employee_fields(person_fields: dict) -> dict:
+    return {k: person_fields[k] for k in _PERSONNEL_EMPLOYEE_FIELD_KEYS if k in person_fields}
+
+
+_IDENTITY_KEYS = ("gender_lookup_id", "father_name", "id_card_no", "id_issue_place", "nationality_code", "insurance_job_code")
+_DIGIT_KEYS = ("social_security_no", "id_card_no", "insurance_job_code")
+
+
+def _identity_values(fields: dict) -> dict:
+    unknown = set(fields) - set(_IDENTITY_KEYS)
+    if unknown:
+        raise TypeError(f"unexpected employee fields: {sorted(unknown)}")
+    out = {}
+    for key, value in fields.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+            if value and key in _DIGIT_KEYS:
+                value = numerals.to_ascii_digits(value)
+        out[key] = value
+    return out
 
 
 def _personnel_group_max_level_no(company_id: int) -> int:
@@ -787,11 +828,13 @@ def list_personnel_detail_accounts(company_id: int, all_levels: bool = False) ->
                 "position_name": positions.get(contract.position_id) if contract else None,
                 "employment_type_lookup_id": contract.employment_type_lookup_id if contract else None,
                 "base_salary": contract.base_salary if contract else None,
+                **{k: getattr(e, k) for k in _PERSONNEL_EMPLOYEE_FIELD_KEYS},
             }
 
     _blank = {
         "employee_id": None, "employee_status": None, "org_unit_id": None, "org_unit_name": None,
         "position_id": None, "position_name": None, "employment_type_lookup_id": None, "base_salary": None,
+        **{k: None for k in _PERSONNEL_EMPLOYEE_FIELD_KEYS},
     }
     result = []
     for p in dimensions_service.list_personnel(company_id, all_levels):
@@ -827,6 +870,7 @@ def create_personnel_detail_account(
         parent_detail_account_id=parent_detail_account_id, personnel_no=code, **detail_fields,
     )
     if is_leaf_level:
+        identity = _employee_fields(person_fields)
         create_employee(
             company_id, code, name.strip() or code, "", detail_fields.get("national_id"),
             detail_fields.get("hire_date") or datetime.date.today(),
@@ -835,8 +879,16 @@ def create_personnel_detail_account(
             bank_account_no=detail_fields.get("bank_account_no"), phone=detail_fields.get("phone"),
             mobile=detail_fields.get("mobile"), notes=detail_fields.get("notes"),
             existing_personnel_detail_account_id=detail_account_id,
+            date_of_birth=identity.pop("date_of_birth", None),
+            social_security_no=_digits(identity.pop("social_security_no", None)), **identity,
         )
     return detail_account_id
+
+
+def _digits(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return value
+    return numerals.to_ascii_digits(value.strip()) or None
 
 
 def update_personnel_detail_account(
@@ -867,6 +919,7 @@ def update_personnel_detail_account(
         return
 
     employee = get_employee_by_personnel_detail_account_id(detail_account_id)
+    identity = _employee_fields(person_fields)
     if employee is None:
         # خودترمیمی: تفصیلیِ پرسنلِ یتیمِ ازپیش‌موجود (پیش از این یکپارچه‌سازی)
         create_employee(
@@ -877,15 +930,18 @@ def update_personnel_detail_account(
             bank_account_no=detail_fields.get("bank_account_no"), phone=detail_fields.get("phone"),
             mobile=detail_fields.get("mobile"), notes=detail_fields.get("notes"),
             existing_personnel_detail_account_id=detail_account_id,
+            date_of_birth=identity.pop("date_of_birth", None),
+            social_security_no=_digits(identity.pop("social_security_no", None)), **identity,
         )
         return
 
     update_employee(
         employee.employee_id, name.strip() or code, "", detail_fields.get("national_id"), employee.status,
-        date_of_birth=employee.date_of_birth, social_security_no=employee.social_security_no,
+        date_of_birth=identity.pop("date_of_birth", employee.date_of_birth),
+        social_security_no=_digits(identity.pop("social_security_no", employee.social_security_no)),
         bank_account_no=detail_fields.get("bank_account_no"), bank_iban=employee.bank_iban,
         phone=detail_fields.get("phone"), mobile=detail_fields.get("mobile"),
-        address=employee.address, notes=detail_fields.get("notes"),
+        address=employee.address, notes=detail_fields.get("notes"), **identity,
     )
     if employee.active_contract_id is not None:
         update_active_contract(

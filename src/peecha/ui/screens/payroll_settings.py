@@ -157,7 +157,25 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
             FieldSpec("payable_description_template", "قالب شرح ردیف حقوق پرداختنی (اختیاری)", self.payable_description_template_field, span=3),
         ])
         layout.addWidget(self.general_grid)
-        self.register_field_grids("payroll_settings_general", [self.general_grid])
+
+        # R347: مشخصات کارگاه برای لیست بیمه
+        workshop_title = QLabel("مشخصات کارگاه (لیست بیمه)")
+        workshop_title.setObjectName("sectionTitle")
+        layout.addWidget(workshop_title)
+        self.workshop_code_field = QLineEdit()
+        self.workshop_name_field = QLineEdit()
+        self.employer_name_field = QLineEdit()
+        self.workshop_address_field = QLineEdit()
+        self.contract_row_field = QLineEdit()
+        self.workshop_grid = FieldGrid([
+            FieldSpec("sso_workshop_code", "کد کارگاه", self.workshop_code_field, span=1),
+            FieldSpec("sso_contract_row", "ردیف پیمان", self.contract_row_field, span=1),
+            FieldSpec("sso_workshop_name", "نام کارگاه", self.workshop_name_field, span=2),
+            FieldSpec("sso_employer_name", "نام کارفرما", self.employer_name_field, span=2),
+            FieldSpec("sso_workshop_address", "نشانی کارگاه", self.workshop_address_field, span=4),
+        ])
+        layout.addWidget(self.workshop_grid)
+        self.register_field_grids("payroll_settings_general", [self.general_grid, self.workshop_grid])
 
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
@@ -181,6 +199,11 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
             (self.salary_payable_account_combo, "حساب کلی که خالص پرداختنی حقوق در سند خودکار به آن بستانکار می‌شود — بدون این، صدور سند ممکن نیست."),
             (self.salary_payable_detail_combo, "تفصیلی اختیاری برای همان ردیف (مثلاً بانک مشخص)."),
             (self.payable_description_template_field, "شرح ردیف حقوق پرداختنی — جای‌گذارهای مجاز: {دوره} {اجرا}."),
+            (self.workshop_code_field, "کد کارگاه در تأمین اجتماعی؛ در سربرگ لیست بیمه می‌آید."),
+            (self.contract_row_field, "فقط برای کارگاه‌های پیمانی؛ در غیر این صورت خالی بماند."),
+            (self.workshop_name_field, "نام کارگاه همان‌طور که در تأمین اجتماعی ثبت شده است."),
+            (self.employer_name_field, "نام کارفرما همان‌طور که در تأمین اجتماعی ثبت شده است."),
+            (self.workshop_address_field, "نشانی کارگاه در سربرگ لیست بیمه."),
         ])
 
     def refresh(self) -> None:
@@ -227,6 +250,11 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
         self.payable_description_template_field.setText(
             payroll_service.get_payroll_description_template(company_id, "PAYROLL_PAYABLE")
         )
+        self.workshop_code_field.setText(settings.sso_workshop_code or "")
+        self.contract_row_field.setText(settings.sso_contract_row or "")
+        self.workshop_name_field.setText(settings.sso_workshop_name or "")
+        self.employer_name_field.setText(settings.sso_employer_name or "")
+        self.workshop_address_field.setText(settings.sso_workshop_address or "")
 
     def _save(self) -> None:
         company_id = _company_id()
@@ -245,6 +273,10 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
             )
             template_text = self.payable_description_template_field.text().strip() or payroll_service.DEFAULT_PAYROLL_DESCRIPTION
             payroll_service.set_payroll_description_template(company_id, "PAYROLL_PAYABLE", template_text)
+            payroll_service.save_workshop_info(
+                company_id, self.workshop_code_field.text(), self.workshop_name_field.text(),
+                self.employer_name_field.text(), self.workshop_address_field.text(), self.contract_row_field.text(),
+            )
         except ValueError as exc:
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return

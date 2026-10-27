@@ -162,6 +162,14 @@ _PERSON_FIELD_LABELS = {
     "position_id": "پست",
     "employment_type_lookup_id": "نوع استخدام",
     "base_salary": "حقوق پایه (ریال)",
+    "social_security_no": "شمارهٔ بیمه",
+    "date_of_birth": "تاریخ تولد",
+    "gender_lookup_id": "جنسیت",
+    "father_name": "نام پدر",
+    "id_card_no": "شمارهٔ شناسنامه",
+    "id_issue_place": "محل صدور شناسنامه",
+    "nationality_code": "ملیت",
+    "insurance_job_code": "کد شغل (بیمه)",
     "customer_group_id": "گروه مشتری",
     "supplier_group_id": "گروه تامین‌کننده",
     "default_price_list_id": "فهرست قیمت پیش‌فرض",
@@ -197,6 +205,10 @@ _PERSON_COMBO_LOADERS = {
     "employment_type_lookup_id": lambda company_id: [
         (t.lookup_value_id, t.name) for t in hr_service.list_lookup_values(company_id, "EMPLOYMENT_TYPE")
     ],
+    "gender_lookup_id": lambda company_id: [
+        (t.lookup_value_id, t.name) for t in hr_service.list_lookup_values(company_id, "GENDER")
+    ],
+    "nationality_code": lambda company_id: [("IR", "ایرانی"), ("OTHER", "غیرایرانی")],
     (dimensions_service.CUSTOMER_GROUP_CODE, "customer_group_id"): lambda company_id: [
         (g.group_id, g.name) for g in partners_service.list_customer_groups(company_id)
     ],
@@ -233,7 +245,9 @@ _PERSON_COMBO_LOADERS = {
 # شغل/سازمان/رده‌یِ شغلی/حقوقِ پایه بپرسد — سطوحِ بالاتر صرفاً گره‌هایِ
 # گروه‌بندی‌اند»): این فیلدها فقط در سطحِ آخرِ گروه نمایش داده می‌شوند؛
 # باید با _PERSONNEL_HR_FIELD_KEYSِ hr.py هم‌گام بماند.
-_LEAF_ONLY_FIELD_KEYS = {"org_unit_id", "position_id", "employment_type_lookup_id", "base_salary"}
+_LEAF_ONLY_FIELD_KEYS = {"org_unit_id", "position_id", "employment_type_lookup_id", "base_salary",
+                         "social_security_no", "date_of_birth", "gender_lookup_id", "father_name", "id_card_no",
+                         "id_issue_place", "nationality_code", "insurance_job_code"}
 
 # طبقِ همان الگویِ قبلی در person_group_screens.py — این سه گروه علاوه بر
 # فیلدهایِ اختصاصیِ عمومی/قابلِ‌پیکربندی، یک دسته فیلدِ هاردکدِ ثابت هم
@@ -290,6 +304,9 @@ _PERSON_GROUP_META = {
             ("national_id", "text"), ("hire_date", "date"),
             ("org_unit_id", "combo"), ("position_id", "combo"),
             ("employment_type_lookup_id", "combo"), ("base_salary", "decimal"),
+            ("social_security_no", "text"), ("date_of_birth", "date"), ("gender_lookup_id", "combo"),
+            ("father_name", "text"), ("id_card_no", "text"), ("id_issue_place", "text"),
+            ("nationality_code", "combo"), ("insurance_job_code", "text"),
             ("phone", "text"), ("mobile", "text"),
             ("bank_account_no", "text"), ("notes", "text"),
         ),

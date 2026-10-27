@@ -29,6 +29,7 @@ from peecha.services import payroll_bank_file as bank_service
 from peecha.services import payroll_engine as engine
 from peecha.services import payroll_journal as journal_service
 from peecha.services import payroll_payslip as payslip_service
+from peecha.services import payroll_statutory as statutory_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import report_export
 from peecha.db.models.payroll import PayrollPeriod
@@ -214,7 +215,24 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         print_button.setFixedWidth(44)
         print_button.setToolTip("چاپ فیش انتخاب‌شده")
         print_button.clicked.connect(self._print_selected_payslip)
-        layout.addWidget(print_button)
+        # R347: لیست بیمه و لیست مالیات حقوق دورهٔ انتخاب‌شده
+        insurance_button = QPushButton("🛡️")
+        insurance_button.setObjectName("iconButton")
+        insurance_button.setFixedWidth(44)
+        insurance_button.setToolTip("لیست بیمهٔ تأمین اجتماعی دوره (اکسل)")
+        insurance_button.setAccessibleName("لیست بیمه")
+        insurance_button.clicked.connect(self._export_insurance_list)
+        tax_button = QPushButton("🧾")
+        tax_button.setObjectName("iconButton")
+        tax_button.setFixedWidth(44)
+        tax_button.setToolTip("لیست مالیات حقوق دوره (اکسل)")
+        tax_button.setAccessibleName("لیست مالیات حقوق")
+        tax_button.clicked.connect(self._export_tax_list)
+        actions_row = QHBoxLayout()
+        for button in (print_button, insurance_button, tax_button):
+            actions_row.addWidget(button)
+        actions_row.addStretch(1)
+        layout.addLayout(actions_row)
 
         bank_row = QHBoxLayout()
         self.bank_combo = QComboBox()
@@ -430,6 +448,42 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         title = f"فیش حقوقی — {printable.employee_full_name} — {numerals.to_persian_digits(f'{printable.jalali_year}/{printable.jalali_month:02d}')}"
         company_name = app_session.current_company.display_name if app_session.current_company else ""
         report_export.print_report(self, title, headers, rows, footer, company_name=company_name)
+
+    def _export_insurance_list(self) -> None:
+        if self._selected_period_id is None:
+            QMessageBox.information(self, "لیست بیمه", "یک دوره را از فهرست انتخاب کنید.")
+            return
+        company_id = _company_id()
+        data = statutory_service.insurance_list(company_id, self._selected_period_id)
+        filters = [(label, value) for label, value in (
+            ("کد کارگاه", data.workshop_code), ("نام کارگاه", data.workshop_name), ("کارفرما", data.employer_name),
+            ("ردیف پیمان", data.contract_row), ("نشانی", data.workshop_address)) if value]
+        self._export_statutory("لیست بیمه", data, statutory_service.insurance_table(data), filters)
+
+    def _export_tax_list(self) -> None:
+        if self._selected_period_id is None:
+            QMessageBox.information(self, "لیست مالیات حقوق", "یک دوره را از فهرست انتخاب کنید.")
+            return
+        data = statutory_service.tax_list(_company_id(), self._selected_period_id)
+        company = app_session.current_company
+        filters = [(label, value) for label, value in (
+            ("کد اقتصادی", company.economic_code if company else ""), ("شناسهٔ ملی", company.national_id if company else ""))
+            if value]
+        self._export_statutory("لیست مالیات حقوق", data, statutory_service.tax_table(data), filters)
+
+    def _export_statutory(self, title: str, data, table, filters: list[tuple[str, str]]) -> None:
+        headers, rows, footer = table
+        if not rows:
+            QMessageBox.information(self, title, "\n".join(data.problems) or "ردیفی برای این دوره نیست.")
+            return
+        if data.problems:
+            text = "این موارد کامل نیست:\n" + "\n".join(f"• {p}" for p in data.problems) + "\n\nبا این حال فایل ساخته شود؟"
+            if QMessageBox.question(self, title, text, QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+                return
+        period = numerals.to_persian_digits(f"{data.jalali_year}/{data.jalali_month:02d}")
+        company_name = app_session.current_company.display_name if app_session.current_company else ""
+        report_export.export_report_excel(self, f"{title} {period}", headers, rows, footer, company_name=company_name,
+                                          filters=[("دوره", period)] + filters)
 
     def _create_bank_batch(self) -> None:
         if self._selected_run_id is None:

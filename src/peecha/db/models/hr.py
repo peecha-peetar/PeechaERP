@@ -109,6 +109,11 @@ class Employee(Base):
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     notes: Mapped[str | None] = mapped_column(String(1000))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    father_name: Mapped[str | None] = mapped_column(String(100))
+    id_card_no: Mapped[str | None] = mapped_column(String(20))
+    id_issue_place: Mapped[str | None] = mapped_column(String(100))
+    nationality_code: Mapped[str | None] = mapped_column(String(10))
+    insurance_job_code: Mapped[str | None] = mapped_column(String(20))
 
 
 class EmploymentContract(Base):

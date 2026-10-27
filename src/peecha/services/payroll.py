@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.payroll import (
     CompanyPayrollSettings,
@@ -207,6 +208,11 @@ class CompanySettingsRow:
     payslip_currency_id: int | None
     salary_payable_gl_account_id: int | None = None
     salary_payable_detail_account_id: int | None = None
+    sso_workshop_code: str | None = None
+    sso_workshop_name: str | None = None
+    sso_employer_name: str | None = None
+    sso_workshop_address: str | None = None
+    sso_contract_row: str | None = None
 
 
 def get_company_settings(company_id: int) -> CompanySettingsRow:
@@ -217,7 +223,35 @@ def get_company_settings(company_id: int) -> CompanySettingsRow:
         return CompanySettingsRow(
             row.standard_month_days, row.calculation_basis, row.rounding_rule, row.default_pay_day,
             row.payslip_currency_id, row.salary_payable_gl_account_id, row.salary_payable_detail_account_id,
+            row.sso_workshop_code, row.sso_workshop_name, row.sso_employer_name, row.sso_workshop_address,
+            row.sso_contract_row,
         )
+
+
+def save_workshop_info(
+    company_id: int,
+    workshop_code: str | None,
+    workshop_name: str | None,
+    employer_name: str | None,
+    workshop_address: str | None,
+    contract_row: str | None,
+) -> None:
+    """R347: مشخصات کارگاه در لیست بیمهٔ تأمین اجتماعی."""
+    values = [numerals.to_ascii_digits((v or "").strip()) if i in (0, 4) else (v or "").strip()
+              for i, v in enumerate((workshop_code, workshop_name, employer_name, workshop_address, contract_row))]
+    if values[0] and not values[0].isdigit():
+        raise ValueError("کد کارگاه فقط باید رقم باشد.")
+    if values[4] and not values[4].isdigit():
+        raise ValueError("ردیف پیمان فقط باید رقم باشد.")
+    with new_session() as session:
+        row = session.get(CompanyPayrollSettings, company_id)
+        if row is None:
+            row = CompanyPayrollSettings(company_id=company_id, standard_month_days=30, calculation_basis="DAILY",
+                                         rounding_rule="NONE")
+            session.add(row)
+        (row.sso_workshop_code, row.sso_workshop_name, row.sso_employer_name, row.sso_workshop_address,
+         row.sso_contract_row) = (v or None for v in values)
+        session.commit()
 
 
 _UNSET = object()

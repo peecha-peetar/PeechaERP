@@ -115,9 +115,10 @@ def _calculate_employee(
     formula_asts: dict[str, object],
     execution_order: list[str],
     settings: payroll_service.CompanySettingsRow,
-) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal, list[tuple[int, str, str, decimal.Decimal, str]], decimal.Decimal]:
-    """یک کارمند را محاسبه می‌کند؛ (gross, total_deductions, net,
-    lines, taxable_income) را برمی‌گرداند. lines: (pay_item_id, code, name, amount, phase)."""
+) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal, list[tuple[int, str, str, decimal.Decimal, str]], decimal.Decimal,
+           decimal.Decimal, int]:
+    """یک کارمند را محاسبه می‌کند؛ (gross, total_deductions, net, lines, taxable_income, insurable_wage, worked_days)
+    را برمی‌گرداند. lines: (pay_item_id, code, name, amount, phase)."""
     calendar_days = settings.standard_month_days
     worked_days = _resolve_worked_days(company_id, employee.employee_id, period, calendar_days)
     variables = {
@@ -219,7 +220,8 @@ def _calculate_employee(
     lines.extend(dedn_lines)
 
     net_pay = gross - insurance_result.employee_share - tax_amount - total_deductions
-    return gross, total_deductions, net_pay, lines, taxable_income_this_month
+    return (gross, total_deductions, net_pay, lines, taxable_income_this_month,
+            decimal.Decimal(insurance_result.insurable_wage).quantize(_CENT), worked_days)
 
 
 def _reverse_tax_ledger(session, tax_year: int, payslips) -> None:
@@ -376,7 +378,7 @@ def run_payroll(run_id: int) -> RunResult:
 
     for employee, contract in targets:
         try:
-            gross, total_deductions, net_pay, lines, taxable_income = _calculate_employee(
+            gross, total_deductions, net_pay, lines, taxable_income, insurable_wage, worked_days = _calculate_employee(
                 company_id, employee, contract, period, pay_items, formula_asts, execution_order, settings
             )
         except ValueError as exc:
@@ -387,6 +389,7 @@ def run_payroll(run_id: int) -> RunResult:
                 run_id=run_id, employee_id=employee.employee_id, contract_id=contract.contract_id,
                 period_id=period.period_id, gross_amount=gross, total_deductions=total_deductions,
                 net_pay=net_pay, status="DRAFT", taxable_income=taxable_income,
+                insurable_wage=insurable_wage, worked_days=worked_days,
             )
             session.add(payslip)
             session.flush()

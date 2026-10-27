@@ -44,7 +44,10 @@ for _key, _label in {  # R344: تغییر کاربر، نقش، مجوز و تن
         "is_super_admin": "مدیر کل", "is_active": "فعال", "must_change_password": "الزام تغییر رمز", "is_closed": "بسته",
         "is_enabled": "فعال", "prefix": "پیشوند", "account_id": "حساب", "detail_account_id": "تفصیلی", "attempt": "تلاش",
         "minutes": "دقیقه", "role_id": "نقش", "form_id": "فرم", "action_id": "نوع دسترسی", "mapping_key": "کلید تنظیم",
-        "feature_code": "قابلیت"}.items():
+        "feature_code": "قابلیت",
+        # R347: مشخصات کارگاه در تنظیمات حقوق
+        "sso_workshop_code": "کد کارگاه", "sso_workshop_name": "نام کارگاه", "sso_employer_name": "نام کارفرما",
+        "sso_workshop_address": "نشانی کارگاه", "sso_contract_row": "ردیف پیمان"}.items():
     KEY_LABELS.setdefault(_key, _label)
 VALUE_LABELS = {
     "DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "INACTIVE": "غیرفعال", "APPROVED": "تاییدشده", "REJECTED": "ردشده",
