@@ -291,6 +291,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id) "
     "OR distribution_run_id IN (SELECT distribution_run_id FROM comm.distribution_runs WHERE company_id = :company_id)",
     "DELETE FROM comm.distribution_runs WHERE company_id = :company_id",
+    "DELETE FROM comm.moadian_invoices WHERE company_id = :company_id",  # R348
     "DELETE FROM comm.commercial_document_lines WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commercial_documents WHERE company_id = :company_id",
@@ -713,6 +714,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM wf.definitions WHERE company_id = :company_id",
     "DELETE FROM wf.settings WHERE company_id = :company_id",
     "DELETE FROM doc.dms_settings WHERE company_id = :company_id",  # R343
+    "DELETE FROM comm.moadian_settings WHERE company_id = :company_id",  # R348
     "DELETE FROM payroll.company_settings WHERE company_id = :company_id",
     "DELETE FROM payroll.description_templates WHERE company_id = :company_id",
     "DELETE FROM payroll.insurance_configs WHERE company_id = :company_id",

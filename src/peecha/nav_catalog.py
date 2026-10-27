@@ -544,6 +544,8 @@ NAV_ITEMS = [
             # R232: همان فرمِ تاییدِ انبار (رسید/حواله) -- حوالهٔ سفارش‌هایِ فروش برایِ انباردار
             {"code": "SALES_WAREHOUSE_ISSUE", "label": "تایید حوالهٔ انبار", "screen": "purchase_goods_receipt"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسناد فروش", "screen": "commercial_documents_list_sales"},
+            # R348: صورتحساب الکترونیکی فاکتورهای فروش
+            {"code": "SALES_MOADIAN", "label": "سامانهٔ مودیان", "screen": "moadian"},
             {"code": "SALES_PRICING", "label": "فهرست قیمت و تخفیف", "screen": "commercial_pricing"},
             {"code": "SALES_POS_SALE", "label": "فروش حضوری (POS)", "screen": "commercial_pos_sale"},
             {"code": "SALES_POS_APPROVAL", "label": "تایید سرپرست — فروش حضوری", "screen": "commercial_pos_approval"},
@@ -881,6 +883,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("SALES_RETURN", "↩️"),
         ("SALES_CONSIGNMENT_OUT", "🤝"),
         ("SALES_DOCUMENTS_LIST", "📚"),
+        ("SALES_MOADIAN", "🏛️"),
         ("SALES_PRICING", "🏷️"),
         ("SALES_POS_SALE", "🛒"),
         ("SALES_POS_APPROVAL", "🧾"),

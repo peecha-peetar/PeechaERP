@@ -2194,6 +2194,9 @@ class MainWindow(QMainWindow):
         self.register_screen("dms_dashboard", lambda: dms_screens.DmsDashboardScreen())
         self.register_screen("dms_categories", lambda: dms_screens.DmsCategoriesScreen())
         self.register_screen("dms_settings", lambda: dms_screens.DmsSettingsScreen())
+        from peecha.ui.screens.moadian import MoadianScreen  # R348
+
+        self.register_screen("moadian", lambda: MoadianScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())

@@ -162,6 +162,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.sales_commission_field, "درصد کمیسیون فروش این کالا برای نماینده/فروشنده."),
             (self.warranty_months_field, "مدت گارانتی استاندارد این کالا از تاریخ فروش، به ماه."),
             (self.default_tax_percent_field, "درصد مالیات این کالا — طبق سیاست اولویتی، فقط وقتی تنظیمات شرکت و انبار هردو خالی باشند اثر می‌کند."),
+            (self.moadian_stuff_id_field, "شناسهٔ ۱۳ رقمی کالا یا خدمت از سامانهٔ مودیان؛ برای ارسال صورتحساب الکترونیکی لازم است."),
             # فروشگاهِ اینترنتی
             (self.seo_title_field, "عنوان صفحهٔ این کالا در نتایج موتور جست‌وجو — خالی یعنی از نام کالا استفاده می‌شود."),
             (self.seo_slug_field, "بخش آخر آدرس صفحهٔ این کالا در فروشگاه اینترنتی (باید یکتا و بدون فاصله باشد)."),
@@ -1047,12 +1048,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ درخواستِ صریح: درصدِ مالیاتِ این کالا (بعدِ تخفیف) — اگر
         # خالی بماند، هنگامِ صدورِ سند از تنظیماتِ کلیِ شرکت خوانده می‌شود.
         self.default_tax_percent_field = NumberEdit()
+        self.moadian_stuff_id_field = QLineEdit()  # R348
 
         self.sales_extra_grid = FieldGrid([
             FieldSpec("max_discount", "حداکثر درصد تخفیف", self.max_discount_field, span=1),
             FieldSpec("sales_commission", "درصد کمیسیون فروش", self.sales_commission_field, span=1),
             FieldSpec("warranty_months", "مدت گارانتی (ماه)", self.warranty_months_field, span=1),
             FieldSpec("default_tax_percent", "درصد مالیات (خالی = تنظیمات کلی شرکت)", self.default_tax_percent_field, span=1),
+            FieldSpec("moadian_stuff_id", "شناسهٔ کالا/خدمت (سامانهٔ مودیان)", self.moadian_stuff_id_field, span=2),
         ])
         layout.addWidget(self.sales_extra_grid)
 
@@ -1690,6 +1693,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.sales_commission_field.setText(str(it.sales_commission_percent) if it.sales_commission_percent is not None else "")
         self.warranty_months_field.setText(str(it.warranty_months) if it.warranty_months is not None else "")
         self.default_tax_percent_field.setText(str(it.default_tax_percent) if it.default_tax_percent is not None else "")
+        self.moadian_stuff_id_field.setText(it.moadian_stuff_id or "")
 
         self.seo_title_field.setText(it.seo_title or "")
         self.seo_slug_field.setText(it.seo_url_slug or "")
@@ -1982,6 +1986,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.sales_commission_field.clear()
         self.warranty_months_field.clear()
         self.default_tax_percent_field.clear()
+        self.moadian_stuff_id_field.clear()
 
         self.seo_title_field.clear()
         self.seo_slug_field.clear()
@@ -2066,6 +2071,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             max_discount_percent=_decimal_or_none(self.max_discount_field.text()),
             sales_commission_percent=_decimal_or_none(self.sales_commission_field.text()),
             default_tax_percent=_decimal_or_none(self.default_tax_percent_field.text()),
+            moadian_stuff_id=self.moadian_stuff_id_field.text().strip() or None,
             warranty_months=_int_or_none(self.warranty_months_field.text()),
             seo_title=self.seo_title_field.text().strip() or None,
             seo_url_slug=self.seo_slug_field.text().strip() or None,

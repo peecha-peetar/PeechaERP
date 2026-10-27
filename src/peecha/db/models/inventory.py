@@ -50,6 +50,7 @@ class Uom(Base):
     symbol: Mapped[str | None] = mapped_column(String(20))
     base_uom_id: Mapped[int | None] = mapped_column(ForeignKey("inv.uom.uom_id"))
     conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
+    moadian_unit_code: Mapped[str | None] = mapped_column(String(10))  # R348: کد واحد سنجش سامانهٔ مودیان
     allow_decimal: Mapped[bool] = mapped_column(default=True)
     is_system: Mapped[bool] = mapped_column(default=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -172,6 +173,7 @@ class Item(Base):
     # باشد، از تنظیماتِ کلیِ شرکت (Company.default_tax_percent) استفاده
     # می‌شود؛ اولویتِ خواندن با همین فیلدِ کالاست، نه تنظیماتِ کلی.
     default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    moadian_stuff_id: Mapped[str | None] = mapped_column(String(13))  # R348: شناسهٔ کالا/خدمت سامانهٔ مودیان
     warranty_months: Mapped[int | None]
     seo_title: Mapped[str | None] = mapped_column(String(200))
     seo_url_slug: Mapped[str | None] = mapped_column(String(200))

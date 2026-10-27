@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy import delete, func, select
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.commercial import PriceListItem
 from peecha.db.models.core import Company
@@ -47,7 +48,7 @@ _EXTENDED_ITEM_FIELD_KEYS = (
     "default_tax_percent",
     "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
     "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
-    "pos_requires_serial", "pos_menu_group_id", "ecommerce_stock_mode",
+    "pos_requires_serial", "pos_menu_group_id", "ecommerce_stock_mode", "moadian_stuff_id",
 )
 
 
@@ -73,6 +74,7 @@ class UomRow:
     allow_decimal: bool = True
     is_system: bool = False
     description: str | None = None
+    moadian_unit_code: str | None = None
 
 
 # طبقِ گزارشِ صریح: واحدِ شمارشی (COUNT) و بسته‌بندی پیش‌فرض عددِ صحیح است،
@@ -91,9 +93,23 @@ def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
             UomRow(
                 r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None, r.decimal_places,
                 r.symbol, r.base_uom_id, r.conversion_factor, r.allow_decimal, r.is_system, r.description,
+                r.moadian_unit_code,
             )
             for r in rows
         ]
+
+
+def set_uom_moadian_code(uom_id: int, company_id: int, code: str | None) -> None:
+    """R348: کد واحد سنجش سامانهٔ مودیان؛ کد ملی است، پس روی واحدهای عمومی هم ثبت می‌شود."""
+    code = numerals.to_ascii_digits((code or "").strip()) or None
+    if code and (not code.isdigit() or len(code) > 10):
+        raise ValueError("کد واحد سنجش مودیان باید عدد باشد.")
+    with new_session() as session:
+        uom = session.get(Uom, uom_id)
+        if uom is None or uom.company_id not in (None, company_id):
+            raise ValueError("واحد اندازه‌گیری نامعتبر است.")
+        uom.moadian_unit_code = code
+        session.commit()
 
 
 def _validate_uom_master(
@@ -384,6 +400,7 @@ class ItemRow:
     pos_requires_serial: bool = False
     pos_menu_group_id: int | None = None
     ecommerce_stock_mode: str = "DATABASE"
+    moadian_stuff_id: str | None = None
 
 
 def _item_dimension_type_id(company_id: int) -> int:
@@ -554,6 +571,7 @@ class ItemFields:
     pos_requires_serial: bool = False
     pos_menu_group_id: int | None = None
     ecommerce_stock_mode: str = "DATABASE"
+    moadian_stuff_id: str | None = None
 
 
 def _validate_item_fields(fields: ItemFields) -> None:
@@ -565,6 +583,9 @@ def _validate_item_fields(fields: ItemFields) -> None:
         raise ValueError("ردیابی انقضا نیازمند فعال‌بودن ردیابی بچ است.")
     if fields.ecommerce_stock_mode not in ("DATABASE", "ALWAYS_IN_STOCK", "OUT_OF_STOCK"):
         raise ValueError("حالت موجودی فروش اینترنتی نامعتبر است.")
+    fields.moadian_stuff_id = numerals.to_ascii_digits((fields.moadian_stuff_id or "").strip()) or None
+    if fields.moadian_stuff_id and (len(fields.moadian_stuff_id) != 13 or not fields.moadian_stuff_id.isdigit()):
+        raise ValueError("شناسهٔ کالا/خدمت مودیان باید ۱۳ رقم باشد.")
 
 
 def create_item(

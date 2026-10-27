@@ -28,6 +28,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from peecha.db.base import Base
@@ -2148,3 +2149,42 @@ class ReportView(Base):
     is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
     payload: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class MoadianSettings(Base):
+    """R348: تنظیمات سامانهٔ مودیان هر شرکت."""
+
+    __tablename__ = "moadian_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    memory_id: Mapped[str | None] = mapped_column(String(6))
+    seller_tin: Mapped[str | None] = mapped_column(String(14))
+    branch_code: Mapped[str | None] = mapped_column(String(10))
+    api_url: Mapped[str | None] = mapped_column(String(200))
+    credentials_encrypted: Mapped[bytes | None]
+    last_serial: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class MoadianInvoice(Base):
+    """R348: صورتحساب الکترونیکی ساخته‌شده از یک سند فروش و وضعیت آن در سامانه."""
+
+    __tablename__ = "moadian_invoices"
+    __table_args__ = ({"schema": "comm"},)
+
+    moadian_invoice_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    subject_code: Mapped[int] = mapped_column(SmallInteger)
+    serial: Mapped[int] = mapped_column(BigInteger)
+    tax_id: Mapped[str] = mapped_column(String(22), unique=True)
+    related_tax_id: Mapped[str | None] = mapped_column(String(22))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(15), default="PREPARED")
+    uid: Mapped[str | None] = mapped_column(String(40))
+    reference_number: Mapped[str | None] = mapped_column(String(60))
+    errors: Mapped[list | None] = mapped_column(JSONB)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    sent_at: Mapped[datetime.datetime | None]
+    checked_at: Mapped[datetime.datetime | None]
