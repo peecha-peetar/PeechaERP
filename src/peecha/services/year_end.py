@@ -1,0 +1,222 @@
+"""R346: پایان سال مالی — بستن حساب‌های موقت، انتقال سود و زیان به سود (زیان) انباشته، سند اختتامیه و سند افتتاحیهٔ
+سال بعد؛ هر چهار سند در یک تراکنش و با حفظ ماندهٔ هر تفصیلی (مشتری، تأمین‌کننده، ...).
+
+اسناد «موقت» ساخته می‌شوند و سال قفل نمی‌شود: کاربر بررسی و قطعی می‌کند و بعد سال را می‌بندد؛ تا پیش از قطعی‌شدن،
+undo_year_end همه را برمی‌گرداند. مانده‌ها بر پایهٔ همهٔ اسناد غیرپیش‌نویس (همان قاعدهٔ تراز آزمایشی) و به ارز پایه‌اند."""
+
+from __future__ import annotations
+
+import datetime
+import decimal
+from collections import defaultdict
+from dataclasses import dataclass, field
+
+from sqlalchemy import func, select
+
+from peecha import numerals
+from peecha.db.base import new_session
+from peecha.db.models.accounting import (
+    AccountType, ChartOfAccount, CompanyAccountingSettings, FiscalYear, JournalEntry, JournalEntryLine,
+    JournalEntryLineDetail, JournalEntryStatus,
+)
+from peecha.services import journal_entries as je_service
+
+_ZERO = decimal.Decimal(0)
+
+
+def _tag(fiscal_year: FiscalYear) -> str:
+    return f"پایان سال {fiscal_year.code}"
+
+
+@dataclass
+class YearEndPreview:
+    fiscal_year_code: str
+    start_date: datetime.date
+    end_date: datetime.date
+    next_start: datetime.date
+    net_income: decimal.Decimal  # مثبت = سود
+    temporary_rows: int
+    permanent_rows: int
+    problems: list[str] = field(default_factory=list)
+    already_done: bool = False
+
+
+@dataclass
+class YearEndResult:
+    closing_temporary_id: int | None
+    transfer_id: int | None
+    closing_id: int | None
+    opening_id: int | None
+    net_income: decimal.Decimal
+
+
+def _balances(session, company_id: int, fiscal_year_id: int, exclude_tag: str | None = None) -> dict[tuple[int, tuple], decimal.Decimal]:
+    """(حساب، تفصیلی‌ها) ← بدهکار منهای بستانکار، از همهٔ اسناد غیرپیش‌نویس سال (بدون اسناد پایان سال، اگر exclude_tag)."""
+    draft = select(JournalEntryStatus.status_id).where(JournalEntryStatus.code == "DRAFT").scalar_subquery()
+    query = (select(JournalEntryLine.line_id, JournalEntryLine.account_id,
+                    func.coalesce(JournalEntryLine.debit_amount_base, 0) - func.coalesce(JournalEntryLine.credit_amount_base, 0))
+             .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+             .where(JournalEntry.company_id == company_id, JournalEntry.fiscal_year_id == fiscal_year_id,
+                    JournalEntry.status_id != draft))
+    if exclude_tag is not None:
+        query = query.where(JournalEntry.alternative_number.is_distinct_from(exclude_tag))
+    rows = session.execute(query).all()
+    details: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    line_ids = [r[0] for r in rows]
+    for start in range(0, len(line_ids), 5000):
+        for line_id, dim, detail in session.execute(
+                select(JournalEntryLineDetail.line_id, JournalEntryLineDetail.dimension_type_id,
+                       JournalEntryLineDetail.detail_account_id)
+                .where(JournalEntryLineDetail.line_id.in_(line_ids[start:start + 5000]))):
+            details[line_id].append((dim, detail))
+    out: dict[tuple[int, tuple], decimal.Decimal] = defaultdict(lambda: _ZERO)
+    for line_id, account_id, amount in rows:
+        out[(account_id, tuple(sorted(details.get(line_id, ()))))] += decimal.Decimal(amount)
+    return {key: value for key, value in out.items() if value != 0}
+
+
+def _account_kinds(session, company_id: int) -> dict[int, str]:
+    return dict(session.execute(
+        select(ChartOfAccount.account_id, AccountType.code)
+        .join(AccountType, AccountType.account_type_id == ChartOfAccount.account_type_id)
+        .where(ChartOfAccount.company_id == company_id)).all())
+
+
+def _year(session, company_id: int, fiscal_year_id: int) -> FiscalYear:
+    year = session.get(FiscalYear, fiscal_year_id)
+    if year is None or year.company_id != company_id:
+        raise ValueError("سال مالی نامعتبر است.")
+    return year
+
+
+def _existing(session, company_id: int, fiscal_year: FiscalYear) -> list[JournalEntry]:
+    return list(session.scalars(select(JournalEntry).where(
+        JournalEntry.company_id == company_id, JournalEntry.alternative_number == _tag(fiscal_year))))
+
+
+def _problems(session, company_id: int, fiscal_year: FiscalYear, settings) -> list[str]:
+    problems = []
+    if fiscal_year.is_closed:
+        problems.append(f"سال مالی «{fiscal_year.code}» بسته است؛ برای اجرای پایان سال، ابتدا آن را باز کنید.")
+    if settings is None or settings.retained_earnings_account_id is None:
+        problems.append("حساب «سود (زیان) انباشته» در تنظیمات حسابداری مشخص نشده است.")
+    drafts = session.scalar(select(func.count()).select_from(JournalEntry).join(
+        JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id).where(
+        JournalEntry.company_id == company_id, JournalEntry.fiscal_year_id == fiscal_year.fiscal_year_id,
+        JournalEntryStatus.code == "DRAFT"))
+    if drafts:
+        problems.append(f"{numerals.to_persian_digits(str(drafts))} سند پیش‌نویس در این سال مانده است؛ "
+                        "ابتدا ثبت یا حذفشان کنید.")
+    return problems
+
+
+def preview(company_id: int, fiscal_year_id: int) -> YearEndPreview:
+    with new_session() as session:
+        year = _year(session, company_id, fiscal_year_id)
+        settings = session.get(CompanyAccountingSettings, company_id)
+        kinds = _account_kinds(session, company_id)
+        balances = _balances(session, company_id, fiscal_year_id, _tag(year))
+        temporary = {k: v for k, v in balances.items() if kinds.get(k[0]) == "TEMPORARY"}
+        return YearEndPreview(
+            fiscal_year_code=year.code, start_date=year.start_date, end_date=year.end_date,
+            next_start=year.end_date + datetime.timedelta(days=1), net_income=-sum(temporary.values(), _ZERO),
+            temporary_rows=len(temporary), permanent_rows=len(balances) - len(temporary),
+            problems=_problems(session, company_id, year, settings), already_done=bool(_existing(session, company_id, year)))
+
+
+def _lines_reversing(balances: dict, description: str) -> list[je_service.LineInput]:
+    return [je_service.LineInput(account_id, description, -amount if amount < 0 else _ZERO, amount if amount > 0 else _ZERO,
+                                 details=dict(details))
+            for (account_id, details), amount in sorted(balances.items(), key=lambda kv: (kv[0][0], kv[0][1]))]
+
+
+def _line(account_id: int, description: str, amount: decimal.Decimal) -> je_service.LineInput:
+    """amount مثبت = بدهکار."""
+    return je_service.LineInput(account_id, description, amount if amount > 0 else _ZERO, -amount if amount < 0 else _ZERO)
+
+
+def close_year(company_id: int, fiscal_year_id: int, user_id: int) -> YearEndResult:
+    with new_session() as session:
+        year = _year(session, company_id, fiscal_year_id)
+        settings = session.get(CompanyAccountingSettings, company_id)
+        problems = _problems(session, company_id, year, settings)
+        if problems:
+            raise ValueError(" ".join(problems))
+        if _existing(session, company_id, year):
+            raise ValueError("پایان این سال قبلاً اجرا شده است؛ برای اجرای دوباره، ابتدا آن را برگردانید.")
+        tag, end, next_start = _tag(year), year.end_date, year.end_date + datetime.timedelta(days=1)
+        retained, summary = settings.retained_earnings_account_id, settings.profit_and_loss_account_id
+        kinds = _account_kinds(session, company_id)
+        balances = _balances(session, company_id, fiscal_year_id)
+        temporary = {k: v for k, v in balances.items() if kinds.get(k[0]) == "TEMPORARY" and k[0] not in (summary, retained)}
+        permanent = {k: v for k, v in balances.items() if k not in temporary}
+        net_debit = sum(temporary.values(), _ZERO)  # مثبت یعنی زیان
+        target = summary or retained
+        ids = {}
+
+        def create(key, date, description, lines, entry_type):
+            if lines:
+                ids[key] = je_service.create_journal_entry(company_id, user_id, date, description, lines, tag,
+                                                           entry_type_code=entry_type, session=session).journal_entry_id
+
+        description = f"بستن حساب‌های موقت سال {year.code}"
+        create("temporary", end, description,
+               _lines_reversing(temporary, description) + ([_line(target, description, net_debit)] if net_debit else []), "CLOSING")
+        if net_debit:
+            permanent[(target, ())] = permanent.get((target, ()), _ZERO) + net_debit
+        if summary and permanent.get((summary, ()), _ZERO):
+            amount = permanent.pop((summary, ()))
+            description = f"انتقال سود و زیان سال {year.code} به سود (زیان) انباشته"
+            create("transfer", end, description, [_line(summary, description, -amount), _line(retained, description, amount)],
+                   "CLOSING")
+            permanent[(retained, ())] = permanent.get((retained, ()), _ZERO) + amount
+        permanent = {k: v for k, v in permanent.items() if v != 0}
+        if sum(permanent.values(), _ZERO) != 0:
+            raise ValueError("مانده‌های پایان سال تراز نیست؛ ابتدا اسناد نامتوازن را اصلاح کنید.")
+        description = f"سند اختتامیهٔ سال {year.code}"
+        create("closing", end, description, _lines_reversing(permanent, description), "CLOSING")
+        description = f"سند افتتاحیه — انتقال مانده‌ها از سال {year.code}"
+        create("opening", next_start, description, _lines_reversing({k: -v for k, v in permanent.items()}, description),
+               "OPENING")
+        session.commit()
+        return YearEndResult(ids.get("temporary"), ids.get("transfer"), ids.get("closing"), ids.get("opening"), -net_debit)
+
+
+def undo_year_end(company_id: int, fiscal_year_id: int) -> int:
+    """اسناد پایان سال را حذف می‌کند؛ فقط تا وقتی هیچ‌کدام قطعی نشده است."""
+    with new_session() as session:
+        year = _year(session, company_id, fiscal_year_id)
+        entries = _existing(session, company_id, year)
+        if not entries:
+            raise ValueError("برای این سال سند پایان سالی وجود ندارد.")
+        temporary = session.scalar(select(JournalEntryStatus.status_id).where(JournalEntryStatus.code == "TEMPORARY"))
+        if any(e.status_id != temporary for e in entries):
+            raise ValueError("بخشی از اسناد پایان سال قطعی شده است؛ برگرداندن فقط با سند برگشتی ممکن است.")
+        ids = [e.journal_entry_id for e in entries]
+    for journal_entry_id in ids:
+        je_service.delete_journal_entry(journal_entry_id, company_id)
+    return len(ids)
+
+
+def get_settings(company_id: int) -> tuple[int | None, int | None]:
+    """(حساب سود (زیان) انباشته، حساب خلاصهٔ سود و زیان)."""
+    with new_session() as session:
+        row = session.get(CompanyAccountingSettings, company_id)
+        return (row.retained_earnings_account_id, row.profit_and_loss_account_id) if row else (None, None)
+
+
+def save_settings(company_id: int, retained_earnings_account_id: int, profit_and_loss_account_id: int | None) -> None:
+    if not retained_earnings_account_id:
+        raise ValueError("حساب «سود (زیان) انباشته» الزامی است.")
+    if retained_earnings_account_id == profit_and_loss_account_id:
+        raise ValueError("حساب خلاصهٔ سود و زیان باید با حساب سود (زیان) انباشته فرق داشته باشد.")
+    with new_session() as session:
+        for account_id in filter(None, (retained_earnings_account_id, profit_and_loss_account_id)):
+            account = session.get(ChartOfAccount, account_id)
+            if account is None or account.company_id != company_id or not account.is_postable:
+                raise ValueError("حساب انتخاب‌شده معتبر یا قابل ثبت سند نیست.")
+        row = session.get(CompanyAccountingSettings, company_id) or CompanyAccountingSettings(company_id=company_id)
+        row.retained_earnings_account_id = retained_earnings_account_id
+        row.profit_and_loss_account_id = profit_and_loss_account_id
+        session.add(row)
+        session.commit()

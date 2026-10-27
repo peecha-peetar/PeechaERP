@@ -97,6 +97,15 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self.delete_year_button.setEnabled(False)
         self.delete_year_button.clicked.connect(self._delete_selected_year)
         toggle_year_row.addWidget(self.delete_year_button)
+        # R346: پایان سال (بستن حساب‌های موقت، اختتامیه و افتتاحیهٔ سال بعد)
+        self.year_end_button = QPushButton("🏁")
+        self.year_end_button.setObjectName("iconButton")
+        self.year_end_button.setFixedWidth(44)
+        self.year_end_button.setToolTip("پایان سال: بستن حساب‌های موقت، سند اختتامیه و افتتاحیهٔ سال بعد")
+        self.year_end_button.setAccessibleName("پایان سال مالی")
+        self.year_end_button.setEnabled(False)
+        self.year_end_button.clicked.connect(self._open_year_end)
+        toggle_year_row.addWidget(self.year_end_button)
         toggle_year_row.addStretch(1)
         layout.addLayout(toggle_year_row)
 
@@ -188,6 +197,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
             self._selected_fiscal_year_id = None
             self.toggle_year_button.setEnabled(False)
             self.delete_year_button.setEnabled(False)
+            self.year_end_button.setEnabled(False)
             self.periods_table.setRowCount(0)
 
     def _selected_year_row(self) -> fiscal_years_service.FiscalYearRow | None:
@@ -198,6 +208,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self._selected_fiscal_year_id = fiscal_year_id
         self.toggle_year_button.setEnabled(True)
         self.delete_year_button.setEnabled(True)
+        self.year_end_button.setEnabled(True)
         self._load_periods(fiscal_year_id)
 
     def _load_periods(self, fiscal_year_id: int) -> None:
@@ -224,6 +235,14 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
             self.periods_title.setText("دوره‌های ماهانه — این سال مالی دوره‌بندی ندارد (خودکار از روی سند ساخته شده).")
         else:
             self.periods_title.setText("دوره‌های ماهانه")
+
+    def _open_year_end(self) -> None:
+        from peecha.ui.screens.year_end_dialog import YearEndDialog
+
+        fy, company_id = self._selected_year_row(), self._company_id()
+        if fy is not None and company_id is not None:
+            YearEndDialog(self, company_id, fy.fiscal_year_id).exec()
+            self.refresh()
 
     def _toggle_selected_year(self) -> None:
         fy = self._selected_year_row()
