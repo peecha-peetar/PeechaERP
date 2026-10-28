@@ -7,6 +7,10 @@
 - مانده = بودجه − واقعی − تعهد ؛ درصد مصرف = (واقعی + تعهد) ÷ بودجه
 ردیف در بودجه حساب می‌شود اگر تاریخ سند در دورهٔ بودجه باشد و هر بُعد پرشدهٔ بودجه
 (مرکز هزینه، پروژه، گروه کالا) با سند/کالا بخواند. کنترل فقط هشدار است و جلوی ثبت را نمی‌گیرد.
+
+R355: وقتی بودجه‌ریزی سازمانی برای خرید به کار افتاده (بودجهٔ فعال با نسخهٔ منتشرشده و ردیف «خرید و تعهد»)، گزارش‌های
+بودجهٔ منوی خرید و هشدار سند خرید از همان دفتر مصرف بودجه‌ریزی خوانده می‌شوند؛ بودجه‌های ساده فقط در فرم خودشان و
+برای انتقال به نسخهٔ پیش‌نویس می‌مانند.
 """
 
 from __future__ import annotations
@@ -15,8 +19,9 @@ import datetime
 import decimal
 from collections import defaultdict
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import PurchaseBudget
@@ -187,8 +192,8 @@ def warnings_for_document(document_id: int, company_id: int) -> list[str]:
     from peecha.services import commercial_documents as documents_service
 
     doc, lines = documents_service.get_document(document_id, company_id)
-    if not doc.document_type_code.startswith("PURCHASE"):
-        return []
+    if not doc.document_type_code.startswith("PURCHASE") or organizational_active(company_id):
+        return []  # R355: پیام کنترل بودجه‌ریزی سازمانی جای این هشدار را می‌گیرد
     ctx = base._ctx(company_id)
     hit = [b for b in list_budgets(company_id, active_only=True)
            if any(_matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id,
@@ -199,4 +204,92 @@ def warnings_for_document(document_id: int, company_id: int) -> list[str]:
         if u.state != "OK":
             out.append(f"بودجهٔ «{u.budget.name}»: {numerals.format_money(u.used_percent, 1, None)}٪ مصرف شده "
                        f"(مانده {numerals.format_money(u.available, 0, None)}) -- {STATE_LABELS[u.state]}")
+    return out
+
+
+# --- R355: یکی‌شدن با بودجه‌ریزی سازمانی -------------------------------------------------------------------
+ORGANIZATIONAL_NOTICE = ("بودجه‌ریزی سازمانی خرید فعال است؛ گزارش‌ها و هشدار بودجهٔ خرید از «بودجه‌ریزی و کنترل بودجه» "
+                         "خوانده می‌شود و بودجه‌های این فهرست در آن‌ها حساب نمی‌شوند. بودجهٔ جدید را همان‌جا تعریف کنید، یا "
+                         "این بودجه‌ها را در نسخهٔ پیش‌نویس با «انتقال بودجهٔ سادهٔ خرید» بیاورید.")
+_KINDS = {"ACTUAL": "ACTUAL", "COMMIT": "COMMITMENT", "PRE": "PIPELINE"}
+
+
+def _organizational_scope(session, company_id: int):
+    from peecha.db.models.budgeting import Budget, BudgetLine, BudgetVersion, ControlKey
+
+    return (select(Budget, BudgetVersion, BudgetLine, ControlKey)
+            .join(BudgetVersion, BudgetVersion.budget_id == Budget.budget_id)
+            .join(BudgetLine, BudgetLine.version_id == BudgetVersion.version_id)
+            .join(ControlKey, ControlKey.key_id == BudgetLine.key_id)
+            .where(Budget.company_id == company_id, Budget.is_active.is_(True), BudgetVersion.status_code == "PUBLISHED",
+                   ControlKey.basis_code == "PURCHASE")
+            .order_by(Budget.date_from, Budget.code, BudgetLine.line_no))
+
+
+def organizational_active(company_id: int) -> bool:
+    with new_session() as session:
+        return session.execute(_organizational_scope(session, company_id).limit(1)).first() is not None
+
+
+def organizational_usages(company_id: int, date_from: datetime.date, date_to: datetime.date, category_id: int | None = None,
+                          with_details: bool = False) -> list[Usage]:
+    """هر ردیف «خرید و تعهد» نسخهٔ منتشرشده یک بودجه در گزارش‌های خرید؛ مصرف از دفتر مصرف بودجه‌ریزی (تعهد شامل فاکتور
+    تاییدشدهٔ ثبت‌نشده هم هست و پیش‌تعهد همان درخواست‌های تصویب‌شده)."""
+    from peecha.db.models.budgeting import BudgetPeriod, ConsumptionEntry, LinePeriodAmount
+    from peecha.db.models.commercial import (
+        CommercialDocument, CommercialDocumentLine, PurchaseRequest, PurchaseRequestLine,
+    )
+    from peecha.services.budgeting import budgets as bud
+    from peecha.services.budgeting import common as c
+    from peecha.services.budgeting import ledger
+
+    lookups = bud.Lookups(company_id)
+    with new_session() as session:
+        rows = [r for r in session.execute(_organizational_scope(session, company_id)).all()
+                if r[0].date_to >= date_from and r[0].date_from <= date_to and (category_id is None or r[3].category_id == category_id)]
+        if not rows:
+            return []
+        warn_default = c.dec(c.settings(company_id, session).warn_percent)
+        periods = defaultdict(list)
+        for p in session.scalars(select(BudgetPeriod).where(BudgetPeriod.budget_id.in_({r[0].budget_id for r in rows}))
+                                 .order_by(BudgetPeriod.period_no)):
+            periods[p.budget_id].append(p)
+        amounts = defaultdict(dict)
+        for a in session.scalars(select(LinePeriodAmount).where(LinePeriodAmount.line_id.in_([r[2].line_id for r in rows]))):
+            amounts[a.line_id][a.period_no] = c.dec(a.amount)
+        totals = ledger.key_totals(session, {r[3].key_id for r in rows})
+        out = []
+        for budget, _version, line, key in rows:
+            label = lookups.key_label(key)
+            out.append(Usage(SimpleNamespace(
+                budget_id=line.line_id, company_id=company_id, code=budget.code, name=f"{budget.name} — {label}",
+                period_from=budget.date_from, period_to=budget.date_to, amount=bud.line_amount(line),
+                cost_center_detail_account_id=key.cost_center_detail_account_id, project_detail_account_id=key.project_detail_account_id,
+                category_id=key.category_id, branch_id=key.branch_id, org_unit_id=key.org_unit_id,
+                warn_percent=c.dec(line.warn_percent or warn_default), is_active=True, note=line.note, key_id=key.key_id,
+                scope_label=label,
+                periods=[(p.date_from, p.date_to, amounts[line.line_id].get(p.period_no, _ZERO)) for p in periods[budget.budget_id]]),
+                actual=totals[key.key_id]["ACTUAL"], commitment=totals[key.key_id]["COMMIT"], pipeline=totals[key.key_id]["PRE"]))
+        if not with_details:
+            return out
+        by_key = {u.budget.key_id: u for u in out}
+        entries = [e for e in session.execute(
+            select(ConsumptionEntry.key_id, ConsumptionEntry.kind_code, ConsumptionEntry.source_type, ConsumptionEntry.source_document_id,
+                   ConsumptionEntry.source_line_id, func.sum(ConsumptionEntry.amount))
+            .where(ConsumptionEntry.key_id.in_(list(by_key)))
+            .group_by(ConsumptionEntry.key_id, ConsumptionEntry.kind_code, ConsumptionEntry.source_type,
+                      ConsumptionEntry.source_document_id, ConsumptionEntry.source_line_id)
+            .order_by(ConsumptionEntry.source_document_id, ConsumptionEntry.source_line_id)).all() if e[5]]
+        doc_ids = {e[3] for e in entries if e[2] != ledger.PR}
+        req_ids = {e[3] for e in entries if e[2] == ledger.PR}
+        docs = {d.document_id: d for d in session.scalars(select(CommercialDocument).where(CommercialDocument.document_id.in_(doc_ids)))}
+        doc_lines = {ln.line_id: ln for ln in session.scalars(select(CommercialDocumentLine).where(
+            CommercialDocumentLine.document_id.in_(doc_ids)))}
+        reqs = {r.request_id: r for r in session.scalars(select(PurchaseRequest).where(PurchaseRequest.request_id.in_(req_ids)))}
+        req_lines = {ln.line_id: ln for ln in session.scalars(select(PurchaseRequestLine).where(PurchaseRequestLine.request_id.in_(req_ids)))}
+        for key_id, kind, source_type, document_id, line_id, amount in entries:
+            doc, ln = ((reqs.get(document_id), req_lines.get(line_id)) if source_type == ledger.PR
+                       else (docs.get(document_id), doc_lines.get(line_id)))
+            if doc is not None and ln is not None:
+                by_key[key_id].details.append((_KINDS[kind], doc, ln, c.dec(amount)))
     return out

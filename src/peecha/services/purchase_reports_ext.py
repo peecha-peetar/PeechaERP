@@ -1886,6 +1886,8 @@ def orders_without_rfq(company_id: int, f: PurchaseFilters) -> ReportResult:
 def _budget_usages(company_id: int, f: PurchaseFilters, details: bool = False):
     from peecha.services import purchase_budgets as budgets_service
 
+    if budgets_service.organizational_active(company_id):  # R355: یک منبع بودجه، نه دو
+        return budgets_service.organizational_usages(company_id, f.date_from, f.date_to, f.category_id, details)
     budgets = [b for b in budgets_service.list_budgets(company_id, active_only=True)
                if b.period_to >= f.date_from and b.period_from <= f.date_to
                and (f.category_id is None or b.category_id == f.category_id)]
@@ -1893,6 +1895,8 @@ def _budget_usages(company_id: int, f: PurchaseFilters, details: bool = False):
 
 
 def _budget_scope(u, ctx) -> str:
+    if getattr(u.budget, "scope_label", None):
+        return u.budget.scope_label
     parts = []
     if u.budget.cost_center_detail_account_id:
         parts.append(ctx.names.get(u.budget.cost_center_detail_account_id, ""))
@@ -1984,10 +1988,17 @@ def budget_monthly(company_id: int, f: PurchaseFilters) -> ReportResult:
     result = ReportResult([
         ("بودجه", TEXT), ("ماه", TEXT), ("بودجهٔ ماه", MONEY), ("واقعی ماه", MONEY), ("انحراف ماه", MONEY), ("بودجهٔ تجمعی", MONEY),
         ("واقعی تجمعی", MONEY), ("انحراف تجمعی", MONEY),
-    ], note="توزیع بودجه در ماه‌ها یکنواخت (به نسبت روز) فرض شده است.")
+    ], note="توزیع بودجه در ماه‌ها یکنواخت (به نسبت روز) فرض شده است؛ برای بودجه‌ریزی سازمانی، مبلغ دوره‌های نسخهٔ منتشرشده.")
     for u in _budget_usages(company_id, f, details=True):
         b = u.budget
         days = (b.period_to - b.period_from).days + 1
+        planned: dict[str, decimal.Decimal] = defaultdict(lambda: _ZERO)
+        for p_from, p_to, p_amount in getattr(b, "periods", None) or ():
+            p_days = (p_to - p_from).days + 1
+            day = p_from
+            while day <= p_to:
+                planned[base._jalali_month(day)] += p_amount / p_days
+                day += datetime.timedelta(days=1)
         actual_by_month: dict[str, decimal.Decimal] = defaultdict(lambda: _ZERO)
         for kind, doc, _ln, amount in u.details:
             if kind == "ACTUAL":
@@ -1999,7 +2010,7 @@ def budget_monthly(company_id: int, f: PurchaseFilters) -> ReportResult:
             day += datetime.timedelta(days=1)
         cum_b = cum_a = _ZERO
         for month, count in month_days.items():
-            mb = _money(b.amount * count / days)
+            mb = _money(planned[month] if planned else b.amount * count / days)
             ma = actual_by_month.get(month, _ZERO)
             cum_b += mb
             cum_a += ma
@@ -2065,6 +2076,12 @@ def unbudgeted_purchases(company_id: int, f: PurchaseFilters) -> ReportResult:
 
     ctx = base._ctx(company_id)
     budgets = budgets_service.list_budgets(company_id, active_only=True)
+    plan = None
+    if budgets_service.organizational_active(company_id):  # R355
+        from peecha.services.budgeting import ledger
+
+        with new_session() as session:
+            plan = ledger.Plan(session, company_id)
     result = ReportResult([
         ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("مرکز هزینه", TEXT), ("پروژه", TEXT),
         ("مبلغ خالص", MONEY),
@@ -2072,8 +2089,12 @@ def unbudgeted_purchases(company_id: int, f: PurchaseFilters) -> ReportResult:
     for doc, ln in base._lines(company_id, ("PURCHASE_INVOICE", "PURCHASE_ORDER"), ("POSTED", "CONFIRMED", "APPROVED"), f, ctx):
         item = ctx.items.get(ln.item_id)
         category = item.category_id if item else None
-        if any(budgets_service._matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id, category,
-                                        doc.branch_id, doc.org_unit_id) for b in budgets):
+        if plan is not None:
+            if plan.match(ledger.Facts(doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id, doc.branch_id,
+                                       doc.org_unit_id, category, doc.purchase_type_id)):
+                continue
+        elif any(budgets_service._matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id,
+                                          category, doc.branch_id, doc.org_unit_id) for b in budgets):
             continue
         result.add([_TITLES[doc.document_type_code], doc.document_no, doc.document_date, ctx.names.get(doc.counterparty_detail_account_id, ""),
                     ctx.item_label(ln.item_id), ctx.names.get(doc.cost_center_detail_account_id, "") if doc.cost_center_detail_account_id else "",

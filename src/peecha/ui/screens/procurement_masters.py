@@ -362,6 +362,11 @@ class _BudgetsTab(QWidget):
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+        self.org_notice = QLabel()  # R355
+        self.org_notice.setObjectName("sectionHint")
+        self.org_notice.setWordWrap(True)
+        self.org_notice.hide()
+        layout.addWidget(self.org_notice)
         self.table = _table(["کد", "نام", "از", "تا", "مرکز هزینه", "پروژه", "گروه کالا", "مبلغ", "مصرف‌شده", "درصد مصرف", "فعال"])
         self.table.itemSelectionChanged.connect(self._load_selected)
         layout.addWidget(self.table, stretch=1)
@@ -395,6 +400,8 @@ class _BudgetsTab(QWidget):
         company_id = _company_id()
         if company_id is None:
             return
+        self.org_notice.setText(budgets_service.ORGANIZATIONAL_NOTICE)
+        self.org_notice.setVisible(budgets_service.organizational_active(company_id))
         cc_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
         pj_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
         details = dimensions_service.list_all_detail_accounts(company_id)
