@@ -312,10 +312,16 @@ def _find_pg_dump() -> str | None:
 def backup_before_upgrade(engine: Engine, first_file: str) -> str:
     """پشتیبان کامل پیش از ارتقا؛ pg_dump اگر هست (قالب custom برای pg_restore)، وگرنه پشتیبان داخلی برنامه."""
     folder = backup_dir()
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = dump_database(engine, folder, f"{engine.url.database}-before-{first_file.rsplit('.', 1)[0]}-{stamp}")
+    _prune_backups(folder, engine.url.database)
+    return path
+
+
+def dump_database(engine: Engine, folder: Path, base: str) -> str:
+    """پشتیبان کامل در folder با نام base؛ pg_dump (‎.dump) اگر هست، وگرنه پشتیبان داخلی (‎.json.gz). R352: مشترک با پشتیبان خودکار."""
     folder.mkdir(parents=True, exist_ok=True)
     url = engine.url
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    base = f"{url.database}-before-{first_file.rsplit('.', 1)[0]}-{stamp}"
     pg_dump = _find_pg_dump()
     if pg_dump:
         path = folder / f"{base}.dump"
@@ -327,14 +333,12 @@ def backup_before_upgrade(engine: Engine, first_file: str) -> str:
         except OSError:
             done = None
         if done is not None and done.returncode == 0 and path.exists() and path.stat().st_size > 0:
-            _prune_backups(folder, url.database)
             return str(path)
         path.unlink(missing_ok=True)  # مثلاً نسخهٔ pg_dump با سرور نمی‌خواند: پشتیبان داخلی
     from peecha.services import backup as backup_service
 
     path = folder / f"{base}.json.gz"
     backup_service.export_backup(engine, str(path))
-    _prune_backups(folder, url.database)
     return str(path)
 
 

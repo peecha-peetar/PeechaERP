@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from sqlalchemy import Boolean, Date, ForeignKey, LargeBinary, Numeric, SmallInteger, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, LargeBinary, Numeric, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from peecha.db.base import Base
@@ -99,3 +99,23 @@ class ExchangeRate(Base):
     currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     rate_date: Mapped[datetime.date] = mapped_column(Date)
     rate_to_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+
+
+class BackupSchedule(Base):
+    """R352: پشتیبان خودکار زمان‌بندی‌شده (یک ردیف)."""
+
+    __tablename__ = "backup_schedule"
+    __table_args__ = {"schema": "core"}
+
+    schedule_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder: Mapped[str | None] = mapped_column(String(500))
+    interval_hours: Mapped[int] = mapped_column(SmallInteger, default=24)
+    keep_count: Mapped[int] = mapped_column(SmallInteger, default=7)
+    last_backup_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_backup_path: Mapped[str | None] = mapped_column(String(600))
+    last_status: Mapped[str | None] = mapped_column(String(10))
+    last_error: Mapped[str | None] = mapped_column(String(1000))
+    last_check_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_check_ok: Mapped[bool | None] = mapped_column(Boolean)
+    last_check_note: Mapped[str | None] = mapped_column(String(2000))

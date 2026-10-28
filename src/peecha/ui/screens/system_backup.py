@@ -15,12 +15,16 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -34,6 +38,7 @@ from peecha import numerals, session
 from peecha.db import schema_bootstrap
 from peecha.db.base import get_engine
 from peecha.services import backup as backup_service
+from peecha.services import scheduled_backup
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 _SCHEMA_LABELS = {
@@ -137,6 +142,40 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         self.upgrades_table.setMinimumHeight(150)
         layout.addWidget(self.upgrades_table)
 
+        # R352: پشتیبان خودکار زمان‌بندی‌شده و آزمون بازیابی
+        auto_title = QLabel("پشتیبان خودکار و آزمون بازیابی")
+        auto_title.setObjectName("sectionTitle")
+        layout.addWidget(auto_title)
+        auto_row = QHBoxLayout()
+        self.auto_enabled = QCheckBox("فعال")
+        self.auto_interval = QComboBox()
+        for hours, label in scheduled_backup.INTERVALS.items():
+            self.auto_interval.addItem(label, hours)
+        self.auto_keep = QSpinBox()
+        self.auto_keep.setRange(1, 100)
+        self.auto_keep.setPrefix("نگه‌داری ")
+        self.auto_folder = QLineEdit()
+        self.auto_folder.setLayoutDirection(Qt.LeftToRight)
+        for widget in (self.auto_enabled, self.auto_interval, self.auto_keep):
+            auto_row.addWidget(widget)
+        auto_row.addWidget(self.auto_folder, 1)
+        for glyph, tip, handler in (("📂", "انتخاب پوشهٔ پشتیبان‌ها", self._pick_auto_folder),
+                                    ("💾", "ذخیرهٔ تنظیم پشتیبان خودکار", self._save_auto),
+                                    ("▶️", "گرفتن پشتیبان کامل همین حالا", self._backup_now),
+                                    ("🧪", "آزمون بازیابی آخرین پشتیبان در دیتابیس موقت", self._check_latest)):
+            button = QPushButton(glyph)
+            button.setObjectName("iconButton")
+            button.setFixedWidth(44)
+            button.setToolTip(tip)
+            button.setAccessibleName(tip)
+            button.clicked.connect(handler)
+            auto_row.addWidget(button)
+        layout.addLayout(auto_row)
+        self.auto_status = QLabel("")
+        self.auto_status.setObjectName("sectionHint")
+        self.auto_status.setWordWrap(True)
+        layout.addWidget(self.auto_status)
+
         self.export_button = QPushButton("📦 گرفتن بک‌آپ از موارد انتخاب‌شده")
         self.export_button.setObjectName("primaryButton")
         self.export_button.clicked.connect(self._on_export)
@@ -164,6 +203,67 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         self._tables = backup_service.list_backup_tables(engine)
         self._rebuild_tree()
         self._fill_upgrades(engine)
+        self._fill_auto()
+
+    def _fill_auto(self) -> None:
+        schedule = scheduled_backup.get_schedule()
+        self.auto_enabled.setChecked(schedule.is_enabled)
+        self.auto_interval.setCurrentIndex(max(0, self.auto_interval.findData(schedule.interval_hours)))
+        self.auto_keep.setValue(schedule.keep_count)
+        self.auto_folder.setText(schedule.folder)
+        lines = []
+        if schedule.last_backup_at:
+            lines.append(f"آخرین پشتیبان: {numerals.format_jalali_datetime(schedule.last_backup_at)} — "
+                         + _ltr(schedule.last_backup_path or ""))
+        else:
+            lines.append("هنوز پشتیبان خودکاری گرفته نشده است.")
+        if schedule.last_status == "FAILED":
+            lines.append(f"آخرین تلاش ناموفق بود ({schedule.last_error})؛ در بررسی بعدی دوباره تلاش می‌شود.")
+        if schedule.last_check_at:
+            lines.append(f"آخرین آزمون بازیابی: {numerals.format_jalali_datetime(schedule.last_check_at)} — "
+                         + ("درست بازیابی شد." if schedule.last_check_ok else f"ناموفق: {schedule.last_check_note}"))
+        self.auto_status.setText("\n".join(lines))
+
+    def _pick_auto_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "پوشهٔ پشتیبان‌ها", self.auto_folder.text())
+        if folder:
+            self.auto_folder.setText(folder)
+
+    def _save_auto(self) -> None:
+        try:
+            scheduled_backup.save_schedule(self.auto_enabled.isChecked(), self.auto_folder.text(),
+                                           self.auto_interval.currentData(), self.auto_keep.value())
+        except ValueError as exc:
+            QMessageBox.warning(self, "پشتیبان خودکار", str(exc))
+            return
+        self._fill_auto()
+
+    def _backup_now(self) -> None:
+        self._save_auto()
+        try:
+            path = scheduled_backup.run_backup(get_engine())
+        except ValueError as exc:
+            QMessageBox.warning(self, "پشتیبان خودکار", str(exc))
+        else:
+            QMessageBox.information(self, "پشتیبان خودکار", f"پشتیبان گرفته شد:\n{_ltr(path)}")
+        self._fill_auto()
+
+    def _check_latest(self) -> None:
+        path = scheduled_backup.get_schedule().last_backup_path
+        if not path:
+            QMessageBox.information(self, "آزمون بازیابی", "هنوز پشتیبان خودکاری گرفته نشده است.")
+            return
+        try:
+            result = scheduled_backup.verify_backup(get_engine(), path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "آزمون بازیابی", str(exc))
+            return
+        self._fill_auto()
+        if result.ok:
+            QMessageBox.information(self, "آزمون بازیابی", numerals.to_persian_digits(
+                f"پشتیبان در دیتابیس موقت درست بازیابی شد ({result.tables_checked} جدول با تعداد ردیف یکسان)."))
+        else:
+            QMessageBox.warning(self, "آزمون بازیابی", result.note or "\n".join(result.mismatches[:20]))
 
     def _fill_upgrades(self, engine) -> None:
         status = schema_bootstrap.schema_status(engine)

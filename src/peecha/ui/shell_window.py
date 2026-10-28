@@ -1016,6 +1016,14 @@ class MainWindow(QMainWindow):
         self._sms_campaign_timer.setInterval(60_000)
         self._sms_campaign_timer.timeout.connect(self._tick_sms_campaigns)
         self._sms_campaign_timer.start()
+
+        # R352: پشتیبان خودکار سررسیده، در رشتهٔ جدا تا برنامه کند نشود
+        self._auto_backup_thread = None
+        self._auto_backup_timer = QTimer(self)
+        self._auto_backup_timer.setInterval(600_000)
+        self._auto_backup_timer.timeout.connect(self._tick_auto_backup)
+        self._auto_backup_timer.start()
+        QTimer.singleShot(30_000, self._tick_auto_backup)
         # R287: قاعده‌های فعال اتوماسیون CRM و بررسی SLA تیکت‌ها (هر ۱۰ دقیقه، بی‌صدا)
         self._crm_automation_timer = QTimer(self)
         self._crm_automation_timer.setInterval(600_000)
@@ -1239,6 +1247,23 @@ class MainWindow(QMainWindow):
         toast.show()
         toast.raise_()
         QTimer.singleShot(8000, toast.hide)
+
+    def _tick_auto_backup(self) -> None:
+        if self._auto_backup_thread is not None and self._auto_backup_thread.is_alive():
+            return
+        import threading
+
+        def work() -> None:
+            try:
+                from peecha.db.base import get_engine
+                from peecha.services import scheduled_backup
+
+                scheduled_backup.run_if_due(get_engine())
+            except Exception:  # noqa: BLE001 -- نتیجه در تنظیمات پشتیبان ثبت می‌شود
+                pass
+
+        self._auto_backup_thread = threading.Thread(target=work, name="peecha-auto-backup", daemon=True)
+        self._auto_backup_thread.start()
 
     def _tick_sms_campaigns(self) -> None:
         """پشتیبان تایمر کمپین پیامک — کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
