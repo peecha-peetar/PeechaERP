@@ -473,6 +473,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM comm.supplier_price_import_templates WHERE company_id = :company_id",
     "DELETE FROM comm.purchase_types WHERE company_id = :company_id",
     "DELETE FROM comm.cancellation_reasons WHERE company_id = :company_id",
+    "DELETE FROM sec.user_branches WHERE company_id = :company_id",  # R350
     "DELETE FROM comm.branches WHERE company_id = :company_id",
     "DELETE FROM inv.cycle_count_plans WHERE company_id = :company_id",
     "DELETE FROM inv.item_storage_profiles WHERE company_id = :company_id",

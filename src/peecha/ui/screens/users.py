@@ -23,7 +23,9 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import session as app_session
+from peecha.services import branch_access
 from peecha.services import commercial_pos as pos_service
+from peecha.services import procurement_masters
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import users as users_service
@@ -210,6 +212,14 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("mobile_channel_type", "نوع کانال موبایل", self.mobile_channel_type_combo, span=1),
         ])
         layout.addWidget(self.mobile_grid)
+        # R350: شعبه‌های مجاز کاربر در شرکت فعلی
+        branches_title = QLabel("شعبه‌های مجاز — برای شرکت فعلی (هیچ‌کدام = همهٔ شعبه‌ها)")
+        branches_title.setObjectName("sectionTitle")
+        layout.addWidget(branches_title)
+        self.branch_list = QListWidget()
+        self.branch_list.setMaximumHeight(120)
+        self.branch_list.setAccessibleName("شعبه‌های مجاز")
+        layout.addWidget(self.branch_list)
         self.register_field_grids("users", [self.basic_grid, self.pos_grid, self.voip_grid, self.mobile_grid])
 
         self.status_label = QLabel("")
@@ -278,6 +288,19 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 item.setData(Qt.UserRole, user.user_id)
                 self.table.setItem(row_index, col_index, item)
 
+    def _fill_branches(self, user_id: int | None) -> None:
+        self.branch_list.clear()
+        company_id = app_session.current_company.company_id if app_session.current_company else None
+        if company_id is None:
+            return
+        selected = set(branch_access.get_user_branches(user_id, company_id)) if user_id else set()
+        for branch in procurement_masters.list_branches(company_id, active_only=True):
+            item = QListWidgetItem(f"{branch.code} — {branch.name}")
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if branch.branch_id in selected else Qt.Unchecked)
+            item.setData(Qt.UserRole, branch.branch_id)
+            self.branch_list.addItem(item)
+
     def _rebuild_company_widgets(self, selected_ids: set[int] | None = None) -> None:
         selected_ids = selected_ids or set()
         self.company_list.clear()
@@ -341,6 +364,7 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         index = self.mobile_channel_type_combo.findData(mobile_channel_type)
         self.mobile_channel_type_combo.setCurrentIndex(index if index >= 0 else 0)
         self.mobile_grid.setEnabled(current_company_id is not None and current_company_id in user.company_ids)
+        self._fill_branches(user.user_id if current_company_id in user.company_ids else None)
 
     def _reset_form(self) -> None:
         self._editing_id = None
@@ -361,6 +385,7 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.voip_grid.setEnabled(False)
         self.mobile_channel_type_combo.setCurrentIndex(0)
         self.mobile_grid.setEnabled(False)
+        self._fill_branches(None)
         self._rebuild_company_widgets(set())
         self.table.clearSelection()
 
@@ -444,5 +469,8 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 users_service.set_mobile_channel_type(
                     saved_user_id, current_company_id, self.mobile_channel_type_combo.currentData()
                 )
+                branch_access.set_user_branches(saved_user_id, current_company_id, [
+                    self.branch_list.item(i).data(Qt.UserRole) for i in range(self.branch_list.count())
+                    if self.branch_list.item(i).checkState() == Qt.Checked])
 
         self.refresh()

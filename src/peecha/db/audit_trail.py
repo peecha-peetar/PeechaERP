@@ -21,6 +21,7 @@ _TRACKED: dict[str, tuple[str, str]] = {
     "sec.role_form_permissions": ("RoleFormPermission", "role_id"),
     "sec.user_roles": ("UserRole", "user_id"),
     "sec.user_module_roles": ("UserModuleRole", "user_id"),
+    "sec.user_branches": ("UserBranch", "user_id"),  # R350
     "core.companies": ("Company", "company_id"),
     "core.company_currencies": ("CompanyCurrency", "company_id"),
     "acc.fiscal_years": ("FiscalYear", "fiscal_year_id"),

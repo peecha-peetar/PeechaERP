@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from peecha import decimals, numerals, session as app_session
 from peecha.reporting import jasper_bridge
+from peecha.services import branch_access
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -1006,7 +1007,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if company_id is None:
             return
         self._items = catalog_service.list_items(company_id, active_only=True, transactable_only=True)
-        self._warehouses = locations_service.list_warehouses(company_id, active_only=True)
+        self._warehouses = branch_access.filter_warehouses(company_id, locations_service.list_warehouses(company_id, active_only=True))
         uoms = catalog_service.list_uoms(company_id)
         self._uom_decimal_places = {u.uom_id: (u.decimal_places if u.allow_decimal else 0) for u in uoms}
         self._uom_names = {u.uom_id: u.name for u in uoms}

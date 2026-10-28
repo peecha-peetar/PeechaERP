@@ -25,6 +25,7 @@ from peecha.db.models.accounting import (
 )
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, InvoiceSettlement
 from peecha.db.models.inventory import Item, Warehouse
+from peecha.services import branch_access
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -216,6 +217,7 @@ def _lines(company_id: int, types: tuple[str, ...], statuses: tuple[str, ...], f
         )
         if dated and f is not None:
             stmt = stmt.where(CommercialDocument.document_date.between(f.date_from, f.date_to))
+        stmt = branch_access.scope(stmt, CommercialDocument.branch_id, company_id)  # R350
         rows = list(session.execute(stmt).all())
     return [(d, ln) for d, ln in rows if f is None or _line_matches(ctx, f, d, ln)]
 

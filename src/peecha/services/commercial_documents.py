@@ -34,6 +34,7 @@ from peecha.db.models.commercial import (
     Channel, CommercialDocument, CommercialDocumentLine, CreditHold, CustomerProfile, DocumentChangeLog, LandedCostAllocation, PosSettings,
 )
 from peecha.db.models.inventory import Item, StockDocument, Warehouse
+from peecha.services import branch_access
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_pricing as pricing_service
@@ -485,6 +486,8 @@ def create_document(
             branch_id=fields.branch_id or _warehouse_branch(session, fields.warehouse_id), org_unit_id=fields.org_unit_id,
             created_by_user_id=created_by_user_id,
         )
+        branch_access.ensure_allowed(company_id, doc.branch_id)
+        branch_access.ensure_allowed(company_id, _warehouse_branch(session, fields.warehouse_id))
         session.add(doc)
         session.commit()
         return doc.document_id
@@ -1222,6 +1225,8 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
             doc.branch_id = fields.branch_id
         elif doc.branch_id is None:
             doc.branch_id = _warehouse_branch(session, fields.warehouse_id)
+        branch_access.ensure_allowed(company_id, doc.branch_id)
+        branch_access.ensure_allowed(company_id, _warehouse_branch(session, fields.warehouse_id))
         if fields.org_unit_id is not None:
             doc.org_unit_id = fields.org_unit_id
         doc.document_date = document_date
@@ -1276,6 +1281,7 @@ def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument,
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
+        branch_access.ensure_allowed(company_id, doc.branch_id)
         lines = session.scalars(
             select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
         ).all()
@@ -1563,6 +1569,7 @@ def list_documents(
             stmt = stmt.join(
                 Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id)
             ).where(Channel.channel_type_code == channel_type_code)
+        stmt = branch_access.scope(stmt, CommercialDocument.branch_id, company_id)
         stmt = stmt.order_by(CommercialDocument.document_id.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
@@ -3107,6 +3114,7 @@ def post_document(
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
+        branch_access.ensure_allowed(company_id, doc.branch_id)
         if doc.status_code == "POSTED":
             raise ValueError("این سند قبلاً ثبت نهایی شده است.")
         if doc.status_code not in ("CONFIRMED", "APPROVED"):

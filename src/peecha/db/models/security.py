@@ -50,6 +50,17 @@ class User(Base):
     password_changed_at: Mapped[datetime.datetime | None]
 
 
+class UserBranch(Base):
+    """R350: شعبه‌های مجاز کاربر در یک شرکت؛ بدون ردیف یعنی همهٔ شعبه‌ها."""
+
+    __tablename__ = "user_branches"
+    __table_args__ = {"schema": "sec"}
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("comm.branches.branch_id"), primary_key=True)
+
+
 class UserCompany(Base):
     __tablename__ = "user_companies"
     __table_args__ = {"schema": "sec"}

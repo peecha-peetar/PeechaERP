@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from peecha import decimals, numerals, session as app_session
 from peecha.reporting import jasper_bridge
+from peecha.services import branch_access
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
@@ -1796,7 +1797,8 @@ def convert_warehouse_context(document_id: int | None, company_id: int | None) -
     if document_id is None or company_id is None:
         return {"options": [], "line_warehouses": {}, "default": None, "editable": False}
     doc, lines = documents_service.get_document(document_id, company_id)
-    options = [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations_service.list_warehouses(company_id, active_only=True)]
+    options = [(f"{w.code} — {w.name}", w.warehouse_id) for w in branch_access.filter_warehouses(
+        company_id, locations_service.list_warehouses(company_id, active_only=True))]
     return {
         "options": options,
         "line_warehouses": {ln.line_id: ln.warehouse_id for ln in lines},
@@ -3249,7 +3251,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._one_step_invoice_post = self._is_invoice and settings_service.is_feature_enabled(company_id, "INVOICE_ONE_STEP_POST")
         # R232: رسیدِ انبارِ سفارشِ خرید / حوالهٔ انبارِ سفارشِ فروش
         self._goods_receipt_enabled = documents_service.order_warehouse_step_enabled(company_id, self.document_type_code)
-        warehouses = locations_service.list_warehouses(company_id, active_only=True)
+        warehouses = branch_access.filter_warehouses(company_id, locations_service.list_warehouses(company_id, active_only=True))
         self._warehouses = warehouses
         self._per_line_warehouse_enabled = documents_service.is_per_line_warehouse_enabled(company_id)
         if self.document_type_code == "CONSIGNMENT_IN":
@@ -3324,7 +3326,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             from peecha.services import procurement_masters as masters_service
 
             for combo, options in (
-                (self.branch_combo, [(b.name, b.branch_id) for b in masters_service.list_branches(company_id, active_only=True)]),
+                (self.branch_combo, [(b.name, b.branch_id) for b in branch_access.filter_branches(
+                    company_id, masters_service.list_branches(company_id, active_only=True))]),
                 (self.department_combo, [(d.name, d.org_unit_id) for d in masters_service.list_departments(company_id)]),
             ):
                 current = combo.currentData()
