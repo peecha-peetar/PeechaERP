@@ -1,9 +1,6 @@
-"""پخش سرد/گرم — R129، بخش موتور پروموشن. طبق طرح تاییدشده، در این
-فاز فقط دیتامدل+محاسبهٔ مستقل ساخته می‌شود (قابل‌فراخوانی/تست بدون
-وابستگی به فرم فاکتور)؛ اتصال آن به محاسبهٔ زندهٔ قیمت فاکتور
-(commercial_documents.py) یک گام جداگانه و حساس است که در فاز بعدی
-به‌طور مستقل بررسی/تست می‌شود — تا منطق تخفیف/مالیات فعلاً
-تست‌شدهٔ فاکتور دوباره در جایی دیگر بازنویسی/دست‌کاری نشود."""
+"""پخش سرد/گرم — R129، بخش موتور پروموشن: دیتامدل و محاسبهٔ مستقل (compute_applicable_promotions).
+R351: apply_to_document همین محاسبه را با سرویس ردیف سند فروش روی سند پیش‌نویس اعمال می‌کند (دکمهٔ 🎁 فرم سند)؛
+منطق تخفیف و مالیات همان منطق ردیف سند است و جای دیگری بازنویسی نشده."""
 
 from __future__ import annotations
 
@@ -14,7 +11,8 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import PromotionRule
+from peecha.db.models.commercial import Channel, CommercialDocument, CommercialDocumentLine, DocumentPromotion, PromotionRule
+from peecha.db.models.inventory import Item
 
 PROMOTION_TYPE_CODES = ("BUY_X_GET_Y", "THRESHOLD_DISCOUNT")
 
@@ -103,6 +101,9 @@ def delete_promotion_rule(promotion_rule_id: int, company_id: int) -> None:
         rule = session.get(PromotionRule, promotion_rule_id)
         if rule is None or rule.company_id != company_id:
             raise ValueError("پروموشن نامعتبر است.")
+        if session.scalar(select(DocumentPromotion.document_promotion_id).where(
+                DocumentPromotion.promotion_rule_id == promotion_rule_id).limit(1)):
+            raise ValueError("این پروموشن روی سند فروش اعمال شده است؛ به‌جای حذف، غیرفعالش کنید.")
         session.delete(rule)
         session.commit()
 
@@ -172,3 +173,88 @@ def compute_applicable_promotions(
                 PromotionEffect(rule.promotion_rule_id, rule.code, rule.name, f.promotion_type_code, discount_amount=discount_amount)
             )
     return effects
+
+
+# ---------------------------------------------------------------------
+# R351: اعمال روی سند فروش پیش‌نویس — با همان سرویس ردیف سند (تخفیف و مالیات همان منطق سند)
+# ---------------------------------------------------------------------
+_SALES_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE")
+_CENT = decimal.Decimal("0.01")
+
+
+def _remove_previous(document_id: int, company_id: int) -> None:
+    from peecha.services import commercial_documents as documents_service
+
+    with new_session() as session:
+        applied = session.execute(select(DocumentPromotion, CommercialDocumentLine).join(
+            CommercialDocumentLine, CommercialDocumentLine.line_id == DocumentPromotion.line_id).where(
+            DocumentPromotion.document_id == document_id)).all()
+        rows = [(a.kind, a.discount_added, ln.line_id, ln.quantity, ln.unit_price, ln.discount_amount, ln.tax_percent)
+                for a, ln in applied]
+    for kind, added, line_id, quantity, unit_price, discount, tax_percent in rows:
+        if kind == "GIFT":
+            documents_service.delete_line(line_id, document_id, company_id)
+        else:
+            documents_service.update_line(line_id, document_id, company_id, quantity, unit_price,
+                                          discount_amount=max(decimal.Decimal(0), discount - added), tax_percent=tax_percent)
+    with new_session() as session:
+        for row in session.scalars(select(DocumentPromotion).where(DocumentPromotion.document_id == document_id)):
+            session.delete(row)
+        session.commit()
+
+
+def apply_to_document(document_id: int, company_id: int) -> list[PromotionEffect]:
+    """پروموشن‌های فعال را روی سند فروش پیش‌نویس اعمال می‌کند: هدیهٔ «بخر و ببر» ردیف رایگان می‌شود و بزرگ‌ترین
+    تخفیف پلکانی به نسبت مبلغ روی ردیف‌ها پخش می‌شود. اثر قبلی اول برداشته می‌شود، پس اعمال دوباره تکراری نیست."""
+    from peecha.services import commercial_documents as documents_service
+
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.document_type_code not in _SALES_TYPES:
+            raise ValueError("پروموشن فقط روی سفارش، پیش‌فاکتور و فاکتور فروش اعمال می‌شود.")
+        if doc.status_code != "DRAFT":
+            raise ValueError("پروموشن فقط روی سند پیش‌نویس اعمال می‌شود.")
+        channel_type = session.scalar(select(Channel.channel_type_code).where(
+            Channel.company_id == company_id, Channel.channel_code == doc.channel_code)) if doc.channel_code else None
+        document_date = doc.document_date
+    _remove_previous(document_id, company_id)
+    with new_session() as session:
+        lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id)
+                                .order_by(CommercialDocumentLine.line_no)).all()
+    quantities: dict[int, decimal.Decimal] = {}
+    nets = {}
+    for ln in lines:
+        quantities[ln.item_id] = quantities.get(ln.item_id, decimal.Decimal(0)) + ln.quantity_base
+        nets[ln.line_id] = ln.quantity * ln.unit_price - (ln.discount_amount or 0)
+    effects = compute_applicable_promotions(company_id, channel_type, document_date, quantities, sum(nets.values(), decimal.Decimal(0)))
+    thresholds = [e for e in effects if e.promotion_type_code == "THRESHOLD_DISCOUNT"]
+    chosen = [e for e in effects if e.promotion_type_code == "BUY_X_GET_Y"]
+    if thresholds:
+        chosen.append(max(thresholds, key=lambda e: e.discount_amount))
+    records = []
+    for effect in chosen:
+        if effect.promotion_type_code == "BUY_X_GET_Y":
+            with new_session() as session:
+                uom_id = session.get(Item, effect.free_item_id).base_uom_id
+            line_id = documents_service.add_line(document_id, company_id, effect.free_item_id, uom_id, effect.free_quantity,
+                                                 effect.free_quantity, unit_price=decimal.Decimal(0),
+                                                 description=f"هدیهٔ پروموشن «{effect.name}»")
+            records.append(DocumentPromotion(document_id=document_id, promotion_rule_id=effect.promotion_rule_id,
+                                             line_id=line_id, kind="GIFT", discount_added=0))
+            continue
+        eligible = [ln for ln in lines if nets[ln.line_id] > 0]
+        total = sum((nets[ln.line_id] for ln in eligible), decimal.Decimal(0))
+        remaining = effect.discount_amount
+        for index, ln in enumerate(eligible):
+            share = remaining if index == len(eligible) - 1 else (effect.discount_amount * nets[ln.line_id] / total).quantize(_CENT)
+            remaining -= share
+            documents_service.update_line(ln.line_id, document_id, company_id, ln.quantity, ln.unit_price,
+                                          discount_amount=(ln.discount_amount or 0) + share, tax_percent=ln.tax_percent)
+            records.append(DocumentPromotion(document_id=document_id, promotion_rule_id=effect.promotion_rule_id,
+                                             line_id=ln.line_id, kind="DISCOUNT", discount_added=share))
+    with new_session() as session:
+        session.add_all(records)
+        session.commit()
+    return chosen

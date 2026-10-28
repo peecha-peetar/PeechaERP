@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from peecha import decimals, numerals, session as app_session
 from peecha.reporting import jasper_bridge
 from peecha.services import branch_access
+from peecha.services import promotions as promotions_service
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
@@ -3070,6 +3071,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         _set_initial_visibility(self.landed_cost_button, document_type_code == "PURCHASE_INVOICE")
         self.footer_layout.addWidget(self.landed_cost_button)
 
+        # R351: پروموشن‌های فعال روی سند فروش پیش‌نویس
+        self.promotion_button = QPushButton("🎁")
+        self.promotion_button.setObjectName("iconButton")
+        self.promotion_button.setFixedWidth(44)
+        self.promotion_button.setToolTip("اعمال پروموشن‌ها — هدیهٔ «بخر و ببر» و تخفیف پلکانی روی همین سند")
+        self.promotion_button.setAccessibleName("اعمال پروموشن‌ها")
+        self.promotion_button.clicked.connect(self._apply_promotions)
+        _set_initial_visibility(self.promotion_button, document_type_code in ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE"))
+        self.footer_layout.addWidget(self.promotion_button)
+
         # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل
         # شود»): فقط برایِ انواعِ سفارش/پیش‌فاکتور نمایش داده می‌شود.
         self.convert_button = QPushButton("→")
@@ -4560,6 +4571,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         self.pick_from_invoice_button.setEnabled(self._lines_are_editable())
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
+        self.promotion_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
         needs_receipt = self._goods_receipt_enabled and not self._warehouse_approved
         self.convert_button.setEnabled((is_confirmed or is_approved or is_posted) and not needs_receipt and not is_closed)
@@ -5630,6 +5642,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         dialog.exec()
         self._load_document()
+
+    def _apply_promotions(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._document_id is None:
+            return
+        try:
+            effects = promotions_service.apply_to_document(self._document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "پروموشن", str(exc))
+            return
+        self._load_document()
+        if not effects:
+            QMessageBox.information(self, "پروموشن", "پروموشن فعالی شامل این سند نمی‌شود.")
+            return
+        lines = [f"• {e.name}: " + (f"هدیه {numerals.format_amount(e.free_quantity)} عدد" if e.free_quantity
+                                    else f"تخفیف {numerals.format_company_amount(e.discount_amount)}") for e in effects]
+        QMessageBox.information(self, "پروموشن", "اعمال شد:\n" + "\n".join(lines))
 
     def _open_landed_costs(self) -> None:
         company_id = self._company_id()

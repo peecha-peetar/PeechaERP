@@ -2188,3 +2188,17 @@ class MoadianInvoice(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
     sent_at: Mapped[datetime.datetime | None]
     checked_at: Mapped[datetime.datetime | None]
+
+
+class DocumentPromotion(Base):
+    """R351: اثر یک قاعدهٔ پروموشن روی سند فروش (ردیف هدیه یا تخفیف افزوده به ردیف)."""
+
+    __tablename__ = "document_promotions"
+    __table_args__ = ({"schema": "comm"},)
+
+    document_promotion_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id", ondelete="CASCADE"))
+    promotion_rule_id: Mapped[int] = mapped_column(ForeignKey("comm.promotion_rules.promotion_rule_id"))
+    line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(10))
+    discount_added: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
