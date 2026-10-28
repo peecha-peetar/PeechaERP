@@ -1094,10 +1094,39 @@ class DmsSettingsScreen(QWidget):
         self.status = QLabel("")
         bar.addWidget(self.status)
         layout.addLayout(bar)
+        # R354: پیوست‌های فرم‌های قدیمی (دارایی، نگهداری، سند حسابداری، ...) به همین سامانه
+        legacy_bar = QHBoxLayout()
+        self.legacy_label = QLabel("")
+        self.legacy_label.setWordWrap(True)
+        self.legacy_button = _btn("انتقال پیوست‌های قدیمی به سامانهٔ اسناد", "📥")
+        self.legacy_button.clicked.connect(self.import_legacy)
+        legacy_bar.addWidget(self.legacy_button)
+        legacy_bar.addWidget(self.legacy_label, 1)
+        layout.addLayout(legacy_bar)
         layout.addStretch(1)
+
+    def import_legacy(self) -> None:
+        from peecha.services.dms import legacy_import
+
+        if QMessageBox.question(self, "پیوست‌های قدیمی", "پیوست‌های قدیمی به سامانهٔ اسناد منتقل شوند؟ اصل آن‌ها دست نمی‌خورد.",
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            report = legacy_import.import_all(company_id(), user_id())
+        except (ValueError, PermissionError) as exc:
+            _warn(self, exc, "پیوست‌های قدیمی")
+            return
+        text = P(f"{report.imported} پیوست منتقل شد ({report.unlinked} بدون رکورد مرتبط).")
+        if report.missing_files:
+            text += P(f"\n{len(report.missing_files)} فایل روی این کامپیوتر پیدا نشد: ") + "، ".join(report.missing_files[:10])
+        if report.rejected:
+            text += P(f"\n{len(report.rejected)} فایل پذیرفته نشد: ") + "؛ ".join(report.rejected[:10])
+        QMessageBox.information(self, "پیوست‌های قدیمی", text)
+        self.refresh()
 
     def refresh(self) -> None:
         from peecha.db.base import new_session
+        from peecha.services.dms import legacy_import
 
         if company_id() is None:
             return
@@ -1115,6 +1144,10 @@ class DmsSettingsScreen(QWidget):
             self.text_extraction.setChecked(cfg.text_extraction)
             self.image_ocr.setChecked(cfg.image_ocr)
         self.save_button.setEnabled(dc.can(user_id(), company_id(), dc.FORM_SETTINGS, "EDIT"))
+        waiting = legacy_import.pending_count(company_id())
+        self.legacy_label.setText(P(f"{waiting} پیوست قدیمی هنوز به سامانهٔ اسناد منتقل نشده است.") if waiting
+                                  else "همهٔ پیوست‌های قدیمی در سامانهٔ اسناد هم هستند.")
+        self.legacy_button.setEnabled(bool(waiting) and dc.can(user_id(), company_id(), dc.FORM_DOCS, "CREATE"))
 
     def save(self) -> None:
         try:

@@ -243,3 +243,17 @@ class DmsCaptureRequest(Base):
     result_version_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("doc.document_versions.version_id"))
     upload_key: Mapped[str | None] = mapped_column(String(80))
     failure_reason: Mapped[str | None] = mapped_column(String(300))
+
+
+class LegacyAttachmentImport(Base):
+    """R354: پیوست قدیمی که در سامانهٔ اسناد هم ثبت شده است."""
+
+    __tablename__ = "legacy_attachment_imports"
+    __table_args__ = {"schema": "doc"}
+
+    attachment_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("doc.attachments.attachment_id", ondelete="CASCADE"),
+                                               primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    dms_document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("doc.documents.document_id", ondelete="CASCADE"))
+    imported_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    imported_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

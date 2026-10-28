@@ -24,6 +24,7 @@ from sqlalchemy import select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import JournalEntry, JournalEntryStatus, JournalEntryType
 from peecha.db.models.documents import Attachment
+from peecha.services.dms import legacy_import
 from peecha.db.models.security import Form
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -337,6 +338,9 @@ def transfer_journal_entries(
                         )
                     )
                 session.commit()
+        # R354: اسناد سامانهٔ اسناد که به این سند حسابداری پیوسته‌اند هم منتقل می‌شوند
+        legacy_import.copy_entity_documents(source_company_id, target_company_id, user_id, "journal_entry", jid,
+                                            result.journal_entry_id)
 
     if void_originals:
         with new_session() as session:

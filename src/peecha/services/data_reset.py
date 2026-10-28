@@ -490,6 +490,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM hr.organizational_units WHERE company_id = :company_id",
     "DELETE FROM hr.lookup_values WHERE company_id = :company_id",
     "DELETE FROM core.exchange_rates WHERE company_id = :company_id",
+    "DELETE FROM doc.legacy_attachment_imports WHERE company_id = :company_id",  # R354
     "DELETE FROM doc.attachments WHERE company_id = :company_id",
     # R343: بایگانی مدیریت اسناد شرکت؛ با پاک‌کردن اسناد مالی و انبار (گزینهٔ ۱) دست نمی‌خورد
     "DELETE FROM doc.capture_requests WHERE company_id = :company_id",
