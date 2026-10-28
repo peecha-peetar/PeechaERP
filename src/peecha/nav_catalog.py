@@ -381,6 +381,8 @@ NAV_ITEMS = [
             {"code": "GL_TAFSILI", "label": "تفصیلی‌ها", "screen": "detail_accounts_list", "in_ribbon": False},
             {"code": "GL_JE_LIST", "label": "اسناد حسابداری", "screen": "journal_entries_list"},
             {"code": "GL_JE", "label": "صدور سند جدید", "screen": "journal_entry"},
+            # R349: سود و زیان تسعیر ماندهٔ ارزی
+            {"code": "GL_FX_REVALUATION", "label": "تسعیر ارز", "screen": "fx_revaluation"},
             {"code": "GL_DIM_CONFIG", "label": "پیکربندی گروه‌های تفصیلی", "screen": "dimension_group_config", "in_ribbon": False},
             {"code": "GL_DIM", "label": "تعریف تفصیلی", "screen": "detail_dimensions", "in_ribbon": False},
         ],

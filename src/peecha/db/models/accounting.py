@@ -161,6 +161,8 @@ class CompanyAccountingSettings(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     profit_and_loss_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
     retained_earnings_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    fx_gain_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    fx_loss_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
 class ChartOfAccountLevelConfig(Base):
@@ -544,3 +546,29 @@ class StatementRowRef(Base):
     row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
     ref_row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
     sign: Mapped[int] = mapped_column(SmallInteger)
+
+
+class FxPositionAdjustment(Base):
+    """R349: ردیف ریالی که به ماندهٔ یک ارز روی همان حساب و تفصیلی تعلق دارد (تسعیر، یا گردکردن در انتقال سال)."""
+
+    __tablename__ = "fx_position_adjustments"
+    __table_args__ = {"schema": "acc"}
+
+    line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("acc.journal_entry_lines.line_id", ondelete="CASCADE"),
+                                         primary_key=True)
+    currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
+
+
+class FxRevaluation(Base):
+    """R349: یک اجرای تسعیر ارز و نرخ‌های آن."""
+
+    __tablename__ = "fx_revaluations"
+    __table_args__ = {"schema": "acc"}
+
+    revaluation_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    revaluation_date: Mapped[datetime.date] = mapped_column(Date)
+    journal_entry_id: Mapped[int] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id", ondelete="CASCADE"))
+    rates: Mapped[dict] = mapped_column(JSONB)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

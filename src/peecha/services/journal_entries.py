@@ -165,7 +165,8 @@ class _ResolvedLine:
 
 
 def _resolve_lines(
-    session, company: Company, real_lines: list[LineInput], *, require_balance: bool = True
+    session, company: Company, real_lines: list[LineInput], *, require_balance: bool = True,
+    allow_base_on_currency_accounts: bool = False,
 ) -> list[_ResolvedLine]:
     """اعتبارسنجی حساب‌ها/ابعاد تفصیلی + تعیین ارز و نرخ هر ردیف — ارز
     مشخص‌نشده یعنی ارز پایه (نرخ ۱)؛ ارز غیرپایه باید هم برای شرکت فعال
@@ -289,7 +290,9 @@ def _resolve_lines(
                 )
 
         currency_id = ln.currency_id or company.base_currency_id
-        if account.currency_id is not None and account.currency_id != currency_id:
+        # R349: تسعیر و انتقال سال، ماندهٔ ریالی حساب ارزی را با ردیف ریالی اصلاح می‌کنند
+        base_adjustment = allow_base_on_currency_accounts and currency_id == company.base_currency_id
+        if account.currency_id is not None and account.currency_id != currency_id and not base_adjustment:
             raise ValueError(f"حساب «{account.full_code}» فقط با ارز مشخص‌شدهٔ خودش قابل ثبت است.")
         if currency_id not in enabled_currency_ids:
             raise ValueError(f"ارز انتخاب‌شده برای ردیف حساب «{account.full_code}» برای این شرکت فعال نیست.")
@@ -432,28 +435,32 @@ def create_journal_entry(
     as_draft: bool = False,
     entry_type_code: str = "NORMAL",
     session=None,
+    allow_base_on_currency_accounts: bool = False,
 ) -> JournalEntryResult:
-    """R262: با session، سند در همان تراکنش فراخوان ساخته می‌شود (بدون commit) — ثبت اتمیک ماژول‌ها مثل دارایی."""
+    """R262: با session، سند در همان تراکنش فراخوان ساخته می‌شود (بدون commit) — ثبت اتمیک ماژول‌ها مثل دارایی.
+    allow_base_on_currency_accounts فقط برای سند تسعیر ارز و پایان سال (R349)."""
     require_balance = not as_draft
     real_lines = _validate_lines(lines, require_balance=require_balance)
     if session is not None:
         return _create_journal_entry_in(session, company_id, created_by_user_id, document_date, description, real_lines,
-                                        alternative_number, as_draft, entry_type_code)
+                                        alternative_number, as_draft, entry_type_code, allow_base_on_currency_accounts)
     with new_session() as own_session:
         result = _create_journal_entry_in(own_session, company_id, created_by_user_id, document_date, description, real_lines,
-                                          alternative_number, as_draft, entry_type_code)
+                                          alternative_number, as_draft, entry_type_code, allow_base_on_currency_accounts)
         own_session.commit()
         return result
 
 
 def _create_journal_entry_in(session, company_id, created_by_user_id, document_date, description, real_lines,
-                             alternative_number, as_draft, entry_type_code) -> JournalEntryResult:
+                             alternative_number, as_draft, entry_type_code,
+                             allow_base_on_currency_accounts=False) -> JournalEntryResult:
     require_balance = not as_draft
     company = session.get(Company, company_id)
     if company is None:
         raise ValueError("شرکت نامعتبر است.")
 
-    resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
+    resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance,
+                                    allow_base_on_currency_accounts=allow_base_on_currency_accounts)
 
     status_code = "DRAFT" if as_draft else "TEMPORARY"
     entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == entry_type_code))

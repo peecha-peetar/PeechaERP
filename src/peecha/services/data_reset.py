@@ -402,6 +402,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM acc.journal_entry_line_details WHERE line_id IN "
     "(SELECT jel.line_id FROM acc.journal_entry_lines jel "
     " JOIN acc.journal_entries je ON je.journal_entry_id = jel.journal_entry_id WHERE je.company_id = :company_id)",
+    "DELETE FROM acc.fx_revaluations WHERE company_id = :company_id",  # R349؛ ردیف‌های اصلاح ارزی با ردیف سند پاک می‌شوند
     "DELETE FROM acc.journal_entry_lines WHERE journal_entry_id IN "
     "(SELECT journal_entry_id FROM acc.journal_entries WHERE company_id = :company_id)",
     "DELETE FROM acc.journal_entries WHERE company_id = :company_id",

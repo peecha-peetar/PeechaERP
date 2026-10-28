@@ -2197,6 +2197,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.moadian import MoadianScreen  # R348
 
         self.register_screen("moadian", lambda: MoadianScreen())
+        from peecha.ui.screens.fx_revaluation import FxRevaluationScreen  # R349
+
+        self.register_screen("fx_revaluation", lambda: FxRevaluationScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())
