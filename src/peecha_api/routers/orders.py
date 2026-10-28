@@ -20,6 +20,7 @@ from peecha.db.models.treasury import ReceivedCheck
 
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
+from peecha.services import promotions as promotions_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import currencies as currencies_service
@@ -189,6 +190,10 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
                 discount_amount=line.discount_amount, tax_percent=tax_percent, conversion_factor=factor,
             )
         )
+    # R353: پروموشن روی سفارش موبایل در سرور؛ فاکتور فوری پخش گرم نه، چون مبلغش را ویزیتور از قبل دریافت کرده است
+    promotion_note = None
+    if not (payload.document_type_code == "SALES_INVOICE" and payload.post_immediately):
+        promotion_note = promotions_service.auto_apply(document_id, ctx.company_id)
     documents_service.confirm_document(document_id, ctx.company_id, ctx.user_id)
     settlement_warning: str | None = None
     if payload.document_type_code == "SALES_INVOICE" and payload.post_immediately:
@@ -235,6 +240,8 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
     if unit_warnings:
         note = "هشدار واحد: " + "؛ ".join(unit_warnings)
         settlement_warning = f"{settlement_warning} | {note}" if settlement_warning else note
+    if promotion_note:
+        settlement_warning = f"{settlement_warning} | {promotion_note}" if settlement_warning else promotion_note
     return document_id, line_ids, document_no, settlement_warning
 
 

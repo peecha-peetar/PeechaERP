@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
+from peecha.services import promotions as promotions_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
@@ -1304,6 +1305,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
             self.status_label.setText("این فروش قبلاً تایید شده است.")
             return
         company_id = self._company_id()
+        self._auto_apply_promotions()
         doc, _lines = documents_service.get_document(self._document_id, company_id)
         decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         dialog = _SettlementPlanDialog(
@@ -1316,6 +1318,13 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
             return
         self._confirm_sale("MIXED", print_receipt=print_receipt)
 
+    def _auto_apply_promotions(self) -> None:
+        """R353: پیش از تسویه، تا مبلغ نهایی همان مبلغ پس از پروموشن باشد."""
+        note = promotions_service.auto_apply(self._document_id, self._company_id())
+        if note:
+            self._load_document()
+            self.status_label.setText(note)
+
     def _confirm_sale(self, payment_type: str, print_receipt: bool) -> None:
         if self._document_id is None or not self._lines:
             self.status_label.setText("ابتدا حداقل یک کالا به سبد اضافه کنید.")
@@ -1323,6 +1332,8 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         if self._is_confirmed:
             self.status_label.setText("این فروش قبلاً تایید شده است.")
             return
+        if payment_type != "MIXED":  # MIXED از پنجرهٔ تسویه می‌آید که پروموشن را پیش‌تر اعمال کرده است
+            self._auto_apply_promotions()
         # طبقِ درخواستِ صریح («سندِ در حالتِ اصلاح باید بعدِ تاییدِ دوباره،
         # فرمِ دریافت اجباری باز بشه»): اگر این فروش از یک فروشِ قبلاً‌
         # تسویه‌شده بازگشایی شده، کلیکِ سریعِ نقدی/نسیه دیگر کافی نیست --

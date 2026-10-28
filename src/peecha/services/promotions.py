@@ -258,3 +258,19 @@ def apply_to_document(document_id: int, company_id: int) -> list[PromotionEffect
         session.add_all(records)
         session.commit()
     return chosen
+
+
+FEATURE_AUTO_APPLY = "PROMOTION_AUTO_APPLY"
+
+
+def auto_apply(document_id: int, company_id: int) -> str | None:
+    """R353: اگر قابلیت «اعمال خودکار پروموشن» روشن است اعمال می‌کند و یادداشت کوتاهی برمی‌گرداند؛ خطا فروش را رد نمی‌کند."""
+    from peecha.services import commercial_settings as settings_service
+
+    if not settings_service.is_feature_enabled(company_id, FEATURE_AUTO_APPLY):
+        return None
+    try:
+        effects = apply_to_document(document_id, company_id)
+    except ValueError as exc:
+        return f"پروموشن اعمال نشد: {exc}"
+    return ("پروموشن: " + "، ".join(e.name for e in effects)) if effects else None
