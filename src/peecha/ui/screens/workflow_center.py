@@ -124,6 +124,10 @@ def open_work_item(main_window, item: inbox.WorkItem) -> bool:
     if item.source == "DOC":
         return my_tasks.open_operational_task(main_window, item.extra["kind"], item.extra["document_type_code"],
                                               item.extra["document_id"])
+    if item.source == "TICKET" and main_window is not None:   # R356
+        ticket_id = item.ref_id
+        main_window.open_screen("CRM_TICKETS", then=lambda s: s.open_ticket(ticket_id))
+        return True
     if item.source == "CRM" and main_window is not None and item.extra.get("customer_id"):
         cid = item.extra["customer_id"]
         main_window.open_screen("CRM_CUSTOMER360", then=lambda s: s.load_customer(cid))

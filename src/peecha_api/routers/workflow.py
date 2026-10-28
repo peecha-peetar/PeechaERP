@@ -54,7 +54,7 @@ def _item(w: inbox.WorkItem) -> dict:
             # R300: کارت گرافیکی موبایل (چه باید کرد، رنگ نوع کار، نقطه‌های مرحله)
             "action": w.action, "tone": w.tone, "quick": w.can_quick_decide, "step_no": w.step_no, "step_total": w.step_total,
             "path": [{"label": label, "state": state} for label, state in w.path],
-            "customer_id": w.extra.get("customer_id") if w.source in ("CUSTOMER", "CRM") else None}
+            "customer_id": w.extra.get("customer_id") if w.source in ("CUSTOMER", "CRM", "TICKET") else None}
 
 
 def _involved(ctx: AuthContext, task_id: int) -> bool:

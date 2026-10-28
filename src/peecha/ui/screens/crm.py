@@ -2366,6 +2366,25 @@ class TicketsScreen(QWidget):
         tid = _selected(self.t)
         return next((r for r in self.rows if r.ticket_id == tid), None)
 
+    def open_ticket(self, ticket_id: int) -> bool:
+        """R356: از کارتابل من؛ اگر فیلترها تیکت را پنهان کرده‌اند، برداشته می‌شوند."""
+        if not any(r.ticket_id == ticket_id for r in self.rows):
+            for w in (self.status, self.kind, self.priority):
+                w.blockSignals(True)
+                w.setCurrentIndex(0)
+                w.blockSignals(False)
+            for w in (self.open_only, self.mine, self.breached):
+                w.blockSignals(True)
+                w.setChecked(False)
+                w.blockSignals(False)
+            self.search.clear()
+            self.reload()
+        for i in range(self.t.rowCount()):
+            if self.t.item(i, 0).data(Qt.UserRole) == ticket_id:
+                self.t.selectRow(i)
+                return True
+        return False
+
     def _need(self):
         r = self._row()
         if r is None:

@@ -1,7 +1,7 @@
 """کارتابل یکپارچه: همهٔ کارهای منتظر یک کاربر و درخواست‌های در جریان خودش در یک جا (R293، یکپارچه در R300).
 
 منابع: کارها و تاییدهای موتور گردش کار، کارتابل اسناد (تایید چندمرحله‌ای قبلی)، مراحل منتظر اسناد خرید/فروش/انبار،
-پیگیری‌های باز ارتباط با مشتری و مشتریان تازهٔ منتظر تایید. هر منبع منطق خودش را نگه می‌دارد؛ این‌جا فقط کنار هم
+پیگیری‌های باز ارتباط با مشتری، تیکت‌های ارجاع‌شده (R356) و مشتریان جدید منتظر تایید. هر منبع منطق خودش را نگه می‌دارد؛ این‌جا فقط کنار هم
 دیده و از یک‌جا انجام می‌شوند. هر مورد یک «جملهٔ کار» (action) و رنگ (tone) دارد تا کاربر با یک نگاه بداند چه کند.
 """
 
@@ -14,7 +14,7 @@ from peecha.services.workflow import registry, tasks
 from peecha.services.workflow.common import PRIORITIES, WorkflowError, now
 
 SOURCES = {"WF": "گردش کار", "CARTABLE": "کارتابل اسناد", "DOC": "اسناد خرید، فروش و انبار", "CRM": "پیگیری مشتری",
-           "CUSTOMER": "مشتری جدید", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده",
+           "CUSTOMER": "مشتری جدید", "TICKET": "تیکت مشتری", "MINE": "درخواست‌های من", "STUCK": "مرحلهٔ بی‌گیرنده",
            "FAILED": "اقدام خودکار ناموفق"}
 KINDS = {"APPROVAL": "تایید", "TASK": "کار", "STEP": "مرحلهٔ سند", "FOLLOWUP": "پیگیری", "REQUEST": "درخواست من"}
 _REQUEST_TYPES = {"CREATE": "ثبت و تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
@@ -39,6 +39,10 @@ DOC_ACTIONS = {
     "OPN_ENTER": "اطلاعات افتتاحیهٔ این ماژول را وارد یا اصلاح کنید و برای بررسی بفرستید",
     "OPN_APPROVE": "اطلاعات افتتاحیهٔ این ماژول را بررسی و تأیید یا رد کنید",
     "OPN_POST": "ماژول تأییدشدهٔ افتتاحیه را ثبت قطعی کنید", "OPN_LOCK": "تطبیق را ببینید و افتتاحیه را قفل نهایی کنید",
+    "HR_LEAVE": "درخواست مرخصی را تایید یا رد کنید", "HR_ATTENDANCE": "ورود و خروج‌های ثبت‌شده را بررسی و تایید کنید",
+    "HR_OVERTIME": "اضافه‌کاری‌های ثبت‌شده را بررسی و تایید کنید",
+    "VAN_SETTLE_WAREHOUSE": "کالای برگشتی خودرو را بشمارید و تسویه را از نظر انبار تایید کنید",
+    "VAN_SETTLE_ACCOUNTING": "وجه نقد و فاکتورهای خودرو را بررسی و تسویه را از نظر حسابداری تایید کنید",
 }
 _CUSTOMER_FORM = "detail_dimensions"  # همان دسترسی ویرایش مشتریان که صندوق تایید قبلی موبایل می‌خواست
 
@@ -171,6 +175,22 @@ def _crm_items(company_id: int, user_id: int) -> list[WorkItem]:
     return out
 
 
+def _ticket_items(company_id: int, user_id: int) -> list[WorkItem]:
+    """R356: تیکت‌های باز ارجاع‌شده به کاربر؛ موعد همان موعد حل تعهد زمانی است."""
+    from peecha.services.crm import tickets
+
+    out = []
+    for t in tickets.list_tickets(company_id, open_only=True, assignee_user_id=user_id, limit=300):
+        state = t.sla_state()
+        out.append(WorkItem(f"TICKET:{t.ticket_id}", "TICKET", SOURCES["TICKET"], "FOLLOWUP", t.type_label, t.ticket_id,
+                            f"تیکت {t.ticket_no or t.ticket_id}: {t.subject}", t.customer_name or "", t.resolution_due_at,
+                            state == "BREACHED", t.priority_code or "NORMAL", PRIORITIES.get(t.priority_code or "NORMAL", ""),
+                            t.opened_at, False, t.status_label + (" — نزدیک به پایان مهلت" if state == "AT_RISK" else ""),
+                            {"ticket_id": t.ticket_id, "customer_id": t.customer_detail_account_id},
+                            "به تیکت رسیدگی و پاسخ کنید", "followup"))
+    return out
+
+
 def _can_approve_customers(company_id: int, user_id: int) -> bool:
     from peecha.services import roles as roles_service
 
@@ -283,7 +303,7 @@ def _failed_items(company_id: int, user_id: int) -> list[WorkItem]:
 
 
 _PROVIDERS = {"WF": _wf_items, "CARTABLE": _cartable_items, "DOC": _doc_items, "CRM": _crm_items, "CUSTOMER": _customer_items,
-              "STUCK": _stuck_items, "FAILED": _failed_items}
+              "TICKET": _ticket_items, "STUCK": _stuck_items, "FAILED": _failed_items}
 
 
 def my_work(company_id: int, user_id: int, *, sources: tuple[str, ...] | None = None) -> list[WorkItem]:
@@ -463,7 +483,7 @@ def detail(company_id: int, user_id: int, key: str) -> dict:
             context.insert(2, ("تاریخ", numerals.format_jalali_date(item.extra["document_date"])))
         return {**empty, "title": item.title, "requester": "شما", "path": item.path, "context": context,
                 "instructions": "برای دیدن یا ادامهٔ کار، سند را باز کنید."}
-    if source in ("DOC", "CRM"):
+    if source in ("DOC", "CRM", "TICKET"):
         item = next((w for w in my_work(company_id, user_id, sources=(source,)) if w.key == key), None)
         if item is None:
             raise WorkflowError("این کار دیگر منتظر شما نیست.")
@@ -474,9 +494,10 @@ def detail(company_id: int, user_id: int, key: str) -> dict:
 
             context.append(("تاریخ", numerals.format_jalali_date(item.extra["document_date"])))
         if item.status_note:
-            context.append(("اقدام بعدی", item.status_note))
+            context.append(("وضعیت" if source == "TICKET" else "اقدام بعدی", item.status_note))
+        instructions = {"DOC": "برای انجام، سند را باز کنید.", "TICKET": "برای پاسخ و رسیدگی، تیکت را باز کنید."}
         return {**empty, "title": item.title, "requester": item.subtitle, "context": context, "due_at": item.due_at,
-                "instructions": "برای انجام، سند را باز کنید." if source == "DOC" else "برای پیگیری، پروندهٔ مشتری را باز کنید."}
+                "instructions": instructions.get(source, "برای پیگیری، پروندهٔ مشتری را باز کنید.")}
     raise WorkflowError("برای این مورد تصمیم سریع وجود ندارد؛ سند را باز کنید.")
 
 

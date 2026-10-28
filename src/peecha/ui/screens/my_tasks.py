@@ -100,6 +100,15 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
     if kind == "BUD_EXCEPTION":
         main_window.open_screen("BUD_EXCEPTIONS", then=lambda screen: screen.open_exception(document_id))
         return True
+    if kind == "HR_LEAVE":   # R356
+        main_window.open_screen("HR_LEAVE_REQUESTS", then=lambda screen: screen.open_request(document_id))
+        return True
+    if kind in ("HR_ATTENDANCE", "HR_OVERTIME"):
+        main_window.open_screen("HR_ATTENDANCE_ENTRIES" if kind == "HR_ATTENDANCE" else "HR_PAYROLL_OVERTIME")
+        return True
+    if kind in ("VAN_SETTLE_WAREHOUSE", "VAN_SETTLE_ACCOUNTING"):
+        main_window.open_screen("SALES_DISTRIBUTION", then=lambda screen: screen.tabs.setCurrentWidget(screen.vehicle_settlement_tab))
+        return True
     nav_code = _TYPE_TO_NAV_CODE.get(document_type_code)
     if nav_code is None:
         return False
@@ -123,7 +132,8 @@ DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "PR_APPROVAL": "📝", "GOODS_RECEI
               "CONVERT_TO_INVOICE": "🔁", "POST_ORDER": "📌", "INVENTORY_RESIDUAL": "🧮", "PUTAWAY_PENDING": "📥", "QC_PENDING": "🧪", "EXPIRY_NEAR": "⏳", "EXPIRED_STOCK": "⌛", "TRANSIT_ARRIVING": "🚚", "CROSS_DOCK": "🔀",
               "MNT_MY_WORK": "🧰", "MNT_TO_VERIFY": "🛡️", "MNT_NEW_REQUEST": "📝", "MNT_APPROVAL": "🗓️",
               "BUD_REVIEW": "🔍", "BUD_APPROVE": "✅", "BUD_PUBLISH": "📢", "BUD_REVISE": "📝", "BUD_EXCEPTION": "🛂",
-              "OPN_ENTER": "📥", "OPN_APPROVE": "✅", "OPN_POST": "📌", "OPN_LOCK": "🔒"}
+              "OPN_ENTER": "📥", "OPN_APPROVE": "✅", "OPN_POST": "📌", "OPN_LOCK": "🔒",
+              "HR_LEAVE": "🌴", "HR_ATTENDANCE": "🕘", "HR_OVERTIME": "⏱️", "VAN_SETTLE_WAREHOUSE": "🚚", "VAN_SETTLE_ACCOUNTING": "💵"}
 _STEP_COLORS = {"done": "SUCCESS", "current": "INFO", "pending": "TEXT_DISABLED", "failed": "DANGER"}
 VIEWS = [("همهٔ کارهای من", "ALL"), ("منتظر تایید من", "APPROVAL"), ("کارهای انجام‌دادنی", "TASK"), ("مراحل اسناد", "STEP"),
          ("پیگیری مشتری", "FOLLOWUP"), ("درخواست‌های من", "MINE")]

@@ -58,6 +58,12 @@ KIND_LABELS = {
     "OPN_APPROVE": "بررسی و تأیید اطلاعات افتتاحیه",
     "OPN_POST": "ثبت قطعی افتتاحیه",
     "OPN_LOCK": "قفل نهایی افتتاحیه",
+    # R356
+    "HR_LEAVE": "تایید مرخصی",
+    "HR_ATTENDANCE": "تایید ورود و خروج",
+    "HR_OVERTIME": "تایید اضافه‌کاری",
+    "VAN_SETTLE_WAREHOUSE": "تایید انبار تسویهٔ خودرو",
+    "VAN_SETTLE_ACCOUNTING": "تایید حسابداری تسویهٔ خودرو",
 }
 
 
@@ -177,6 +183,8 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _maintenance_tasks(company_id, user_id, is_manager)
     tasks += _budget_tasks(company_id, user_id)
     tasks += _opening_tasks(company_id, user_id)
+    tasks += _hr_tasks(company_id, user_id, is_manager)
+    tasks += _van_settlement_tasks(company_id, user_id, is_manager)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -545,3 +553,71 @@ def list_my_orders_in_progress(company_id: int, user_id: int, limit: int = 100) 
             names.get(d.counterparty_detail_account_id) or "", d.document_date, d.created_at, path,
             steps[current][0], steps[current][2]))
     return out
+
+
+# --- R356: صف‌های منابع انسانی و تسویهٔ خودرو ----------------------------------------------------------------
+def _may(company_id: int, user_id: int, is_manager: bool, form_code: str, action: str) -> bool:
+    return is_manager or roles_service.user_has_permission(user_id, company_id, form_code, action)
+
+
+def _quantity(value) -> str:
+    return format(value.normalize(), "f") if value is not None else ""
+
+
+def _hr_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """مرخصی ارسال‌شده، و ورود و خروج و اضافه‌کاری منتظر تایید؛ برای مدیر یا دارندهٔ دسترسی همان فرم. مرخصی‌ای که گردش
+    کار تاییدش را در دست دارد از کارتابل گردش کار می‌آید و این‌جا تکرار نمی‌شود."""
+    from sqlalchemy import func
+
+    from peecha.db.models.hr import AttendanceRecord, Employee
+    from peecha.db.models.payroll import OvertimeEntry
+    from peecha.db.models.workflow import WfInstance
+    from peecha.services import hr_leave
+    from peecha.services.workflow.common import OPEN_INSTANCE_STATUSES
+
+    out: list[OperationalTask] = []
+    if _may(company_id, user_id, is_manager, "hr_leave_requests", "APPROVE"):
+        rows = hr_leave.list_requests(company_id, status="SUBMITTED")
+        with new_session() as session:
+            governed = set(session.scalars(select(WfInstance.entity_id).where(
+                WfInstance.company_id == company_id, WfInstance.entity_type == "LEAVE_REQUEST",
+                WfInstance.status_code.in_(OPEN_INSTANCE_STATUSES)))) if rows else set()
+        for r in reversed(rows):
+            amount = f"{_quantity(r.hours)} ساعت" if r.leave_type == "HOURLY" and r.hours else f"{_quantity(r.days)} روز"
+            if r.leave_request_id not in governed:
+                out.append(OperationalTask("HR_LEAVE", KIND_LABELS["HR_LEAVE"], r.leave_request_id, "HR_LEAVE",
+                                           f"مرخصی {r.leave_type_label} {r.employee_name} — {amount}", r.employee_name, r.from_date,
+                                           r.status_code))
+    with new_session() as session:
+        if _may(company_id, user_id, is_manager, "hr_attendance_entries", "EDIT"):
+            n = session.scalar(select(func.count()).where(AttendanceRecord.company_id == company_id,
+                                                          AttendanceRecord.status == "PENDING_APPROVAL"))
+            if n:
+                out.append(OperationalTask("HR_ATTENDANCE", KIND_LABELS["HR_ATTENDANCE"], 0, "",
+                                           f"{n} ردیف ورود و خروج منتظر تایید است", "", None, ""))
+        if _may(company_id, user_id, is_manager, "payroll_overtime_entries", "EDIT"):
+            n = session.scalar(select(func.count()).select_from(OvertimeEntry).join(
+                Employee, Employee.employee_id == OvertimeEntry.employee_id).where(
+                Employee.company_id == company_id, OvertimeEntry.status == "PENDING_APPROVAL"))
+            if n:
+                out.append(OperationalTask("HR_OVERTIME", KIND_LABELS["HR_OVERTIME"], 0, "",
+                                           f"{n} ردیف اضافه‌کاری منتظر تایید است", "", None, ""))
+    return out
+
+
+def _van_settlement_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """تسویهٔ آخر روز خودروی پخش: ارسال‌شده منتظر تایید انبار، تاییدشدهٔ انبار منتظر تایید حسابداری."""
+    if not _may(company_id, user_id, is_manager, "commercial_distribution_hub", "EDIT"):
+        return []
+    from peecha.db.models.inventory import VehicleSettlement, Warehouse
+
+    with new_session() as session:
+        rows = session.execute(select(VehicleSettlement, Warehouse.name).join(
+            Warehouse, Warehouse.warehouse_id == VehicleSettlement.vehicle_warehouse_id).where(
+            VehicleSettlement.company_id == company_id,
+            VehicleSettlement.status_code.in_(("SUBMITTED", "WAREHOUSE_APPROVED")))
+            .order_by(VehicleSettlement.settlement_date, VehicleSettlement.vehicle_settlement_id)).all()
+    return [OperationalTask(kind, KIND_LABELS[kind], s.vehicle_settlement_id, "VEHICLE_SETTLEMENT", f"تسویهٔ خودرو {name}", "",
+                            s.settlement_date, s.status_code)
+            for s, name in rows
+            for kind in ("VAN_SETTLE_WAREHOUSE" if s.status_code == "SUBMITTED" else "VAN_SETTLE_ACCOUNTING",)]
