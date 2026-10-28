@@ -2225,6 +2225,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.fx_revaluation import FxRevaluationScreen  # R349
 
         self.register_screen("fx_revaluation", lambda: FxRevaluationScreen())
+        from peecha.ui.screens.fleet import FleetScreen  # R357
+
+        self.register_screen("fleet", lambda: FleetScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())

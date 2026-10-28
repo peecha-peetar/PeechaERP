@@ -102,6 +102,7 @@ class WarehouseFields:
     vehicle_driver_detail_account_id: int | None = None
     vehicle_capacity_weight_kg: decimal.Decimal | None = None
     vehicle_capacity_volume_m3: decimal.Decimal | None = None
+    vehicle_asset_id: int | None = None  # R357: تجهیز همین خودرو در نگهداری
     # R247: ظرفیتِ وزنی/حجمیِ هر انبار (غیرِ خودرو)
     capacity_weight_kg: decimal.Decimal | None = None
     capacity_volume_m3: decimal.Decimal | None = None
@@ -209,9 +210,27 @@ def _validate_warehouse(fields: WarehouseFields) -> None:
             raise ValueError("نقطهٔ‌سفارش نمی‌تواند بیشتر از حداکثر موجودی باشد.")
 
 
+def _validate_vehicle_asset(session, company_id: int, warehouse_id: int | None, fields: WarehouseFields) -> None:
+    """R357: فقط برای انبار خودرو؛ تجهیز همین شرکت و نه وصل‌شده به خودروی دیگر."""
+    if fields.warehouse_type_code != "VEHICLE":
+        fields.vehicle_asset_id = None
+    if fields.vehicle_asset_id is None:
+        return
+    from peecha.db.models.fixed_assets import Asset
+
+    asset = session.get(Asset, fields.vehicle_asset_id)
+    if asset is None or asset.company_id != company_id:
+        raise ValueError("تجهیز انتخاب‌شده برای خودرو نامعتبر است.")
+    other = session.scalar(select(Warehouse.name).where(Warehouse.vehicle_asset_id == fields.vehicle_asset_id,
+                                                        Warehouse.warehouse_id != (warehouse_id or 0)))
+    if other is not None:
+        raise ValueError(f"این تجهیز قبلاً به خودروی «{other}» وصل شده است.")
+
+
 def create_warehouse(company_id: int, code: str, name: str, fields: WarehouseFields) -> int:
     _validate_warehouse(fields)
     with new_session() as session:
+        _validate_vehicle_asset(session, company_id, None, fields)
         if fields.is_default:
             session.query(Warehouse).filter(Warehouse.company_id == company_id).update({"is_default": False})
         warehouse = Warehouse(
@@ -233,6 +252,7 @@ def update_warehouse(warehouse_id: int, company_id: int, code: str, name: str, i
         warehouse = session.get(Warehouse, warehouse_id)
         if warehouse is None or warehouse.company_id != company_id:
             raise ValueError("انبار نامعتبر است.")
+        _validate_vehicle_asset(session, company_id, warehouse_id, fields)
         if fields.is_default and not warehouse.is_default:
             session.query(Warehouse).filter(Warehouse.company_id == company_id).update({"is_default": False})
         warehouse.code, warehouse.name, warehouse.is_active = code.strip(), name.strip(), is_active

@@ -570,6 +570,7 @@ NAV_ITEMS = [
             # مشترک» زیرِ همین آیتم نیست -- فقط چهار تبِ واقعاً مخصوصِ
             # خودرو/فروشِ خودرویی.
             {"code": "SALES_DISTRIBUTION", "label": "پخش گرم (فروش خودرویی)", "screen": "commercial_distribution_hub"},
+            {"code": "SALES_FLEET", "label": "سوخت و هزینهٔ خودروهای پخش", "screen": "fleet"},  # R357
             # فروشِ تلفنی: طبقِ همان تفکیک، مخصوصِ سفارش‌گیریِ پخشِ سرد
             # است، نه پخشِ گرم -- آیتمِ ناوبریِ مستقلِ خودش را گرفت.
             {"code": "SALES_TELESALES", "label": "فروش تلفنی", "screen": "commercial_telesales"},

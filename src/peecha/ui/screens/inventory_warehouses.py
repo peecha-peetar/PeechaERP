@@ -64,6 +64,20 @@ def _set_combo(combo: QComboBox, value) -> None:
     combo.setCurrentIndex(max(0, combo.findData(value)))
 
 
+def _vehicle_assets(company_id: int) -> list[tuple[int, str]]:
+    """R357: دارایی‌های نوع «خودرو» که واگذار نشده‌اند (تجهیزهای نگهداری)."""
+    from sqlalchemy import select
+
+    from peecha.db.base import new_session
+    from peecha.db.models.fixed_assets import Asset
+    from peecha.services.fixed_assets.common import CLOSED_STATUSES
+
+    with new_session() as session:
+        return [(a.asset_id, f"{a.asset_code} — {a.name}") for a in session.scalars(
+            select(Asset).where(Asset.company_id == company_id, Asset.asset_type_code == "VEHICLE",
+                                Asset.status_code.not_in(CLOSED_STATUSES)).order_by(Asset.asset_code))]
+
+
 def _decimal_or_none(text: str) -> decimal.Decimal | None:
     text = text.strip()
     if not text:
@@ -101,6 +115,8 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.project_combo, "پروژهٔ تفصیلی حسابداری مرتبط — فقط برای انبار نوع «پروژه‌ای» الزامی است."),
             (self.vehicle_plate_field, "پلاک خودرو — فقط برای انبار نوع «خودرو (سیار)»."),
             (self.vehicle_driver_combo, "راننده/مسئول همین خودروی سیار."),
+            (self.vehicle_asset_combo, "تجهیز همین خودرو در نگهداری و دارایی ثابت؛ کیلومتر سوخت‌گیری به کارکرد آن اضافه می‌شود و "
+                                       "هزینهٔ دستورهای کارش در هزینهٔ خودرو می‌آید."),
             (self.vehicle_capacity_weight_field, "حداکثر باری که این خودرو می‌تواند حمل کند — برای هشدار بارگیری بیش‌ازحد."),
             (self.vehicle_capacity_volume_field, "حداکثر حجم باری که این خودرو می‌تواند حمل کند."),
             (self.org_unit_combo, "واحد سازمانی مسئول این انبار — برای گزارش‌های سازمانی."),
@@ -283,6 +299,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.vehicle_plate_field = QLineEdit()
         self.vehicle_driver_combo = QComboBox()
+        self.vehicle_asset_combo = QComboBox()  # R357
         self.vehicle_capacity_weight_field = QDoubleSpinBox()
         self.vehicle_capacity_weight_field.setRange(0, 999_999)
         self.vehicle_capacity_weight_field.setDecimals(3)
@@ -305,6 +322,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("project", "پروژه", self.project_combo, span=3),
             FieldSpec("vehicle_plate", "پلاک خودرو", self.vehicle_plate_field, span=1),
             FieldSpec("vehicle_driver", "راننده", self.vehicle_driver_combo, span=1),
+            FieldSpec("vehicle_asset", "تجهیز نگهداری خودرو", self.vehicle_asset_combo, span=2),
             FieldSpec("vehicle_capacity_weight", "ظرفیت وزنی (کیلوگرم)", self.vehicle_capacity_weight_field, span=1),
             FieldSpec("vehicle_capacity_volume", "ظرفیت حجمی (مترمکعب)", self.vehicle_capacity_volume_field, span=1),
             FieldSpec("capacity_weight", "ظرفیت وزنی انبار (کیلوگرم)", self.capacity_weight_field, span=1),
@@ -686,6 +704,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.basic_grid.set_field_visible("project", is_project)
         self.basic_grid.set_field_visible("vehicle_plate", is_vehicle)
         self.basic_grid.set_field_visible("vehicle_driver", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_asset", is_vehicle)
         self.basic_grid.set_field_visible("vehicle_capacity_weight", is_vehicle)
         self.basic_grid.set_field_visible("vehicle_capacity_volume", is_vehicle)
         self.basic_grid.set_field_visible("capacity_weight", not is_vehicle)
@@ -755,6 +774,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.vehicle_driver_combo.addItem("(بدون)", None)
         for p in dimensions_service.list_personnel(company_id):
             self.vehicle_driver_combo.addItem(f"{p['code']} — {p['name'] or ''}", p["detail_account_id"])
+        self.vehicle_asset_combo.clear()
+        self.vehicle_asset_combo.addItem("(بدون)", None)
+        for a in _vehicle_assets(company_id):
+            self.vehicle_asset_combo.addItem(a[1], a[0])
 
         accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
         for combo in self._mapping_combos.values():
@@ -813,6 +836,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         _set_combo(self.project_combo, f.project_detail_account_id)
         self.vehicle_plate_field.setText(f.vehicle_plate_number or "")
         _set_combo(self.vehicle_driver_combo, f.vehicle_driver_detail_account_id)
+        _set_combo(self.vehicle_asset_combo, f.vehicle_asset_id)
         self.vehicle_capacity_weight_field.setValue(float(f.vehicle_capacity_weight_kg or 0))
         self.vehicle_capacity_volume_field.setValue(float(f.vehicle_capacity_volume_m3 or 0))
         self.capacity_weight_field.setValue(float(f.capacity_weight_kg or 0))
@@ -931,6 +955,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.project_combo.setCurrentIndex(0)
         self.vehicle_plate_field.clear()
         self.vehicle_driver_combo.setCurrentIndex(0)
+        self.vehicle_asset_combo.setCurrentIndex(0)
         self.vehicle_capacity_weight_field.setValue(0)
         self.vehicle_capacity_volume_field.setValue(0)
         self.capacity_weight_field.setValue(0)
@@ -1014,6 +1039,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             vehicle_driver_detail_account_id=(
                 self.vehicle_driver_combo.currentData() if warehouse_type_code == "VEHICLE" else None
             ),
+            vehicle_asset_id=self.vehicle_asset_combo.currentData() if warehouse_type_code == "VEHICLE" else None,
             vehicle_capacity_weight_kg=(
                 decimal.Decimal(str(self.vehicle_capacity_weight_field.value()))
                 if warehouse_type_code == "VEHICLE" and self.vehicle_capacity_weight_field.value()

@@ -528,6 +528,7 @@ class Warehouse(Base):
     )
     vehicle_capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
     vehicle_capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    vehicle_asset_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fa.assets.asset_id"))  # R357
     # R247: ظرفیتِ همهٔ انبارها (migration 184)
     capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
     capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
@@ -1220,6 +1221,27 @@ class VehicleSettlement(Base):
     accounting_approved_at: Mapped[datetime.datetime | None]
     return_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
     notes: Mapped[str | None] = mapped_column(Text)
+
+
+class VehicleFuelLog(Base):
+    """R357: سوخت‌گیری خودروی پخش با کیلومترشمار."""
+
+    __tablename__ = "vehicle_fuel_logs"
+    __table_args__ = ({"schema": "inv"},)
+
+    fuel_log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    log_date: Mapped[datetime.date] = mapped_column(Date)
+    odometer_km: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 1))
+    liters: Mapped[decimal.Decimal] = mapped_column(Numeric(10, 2))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    fuel_type_code: Mapped[str] = mapped_column(String(10), default="GASOLINE")
+    driver_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    usage_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fa.asset_usage.usage_id", ondelete="SET NULL"))
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class VehicleSettlementLine(Base):

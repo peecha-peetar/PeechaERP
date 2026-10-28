@@ -315,6 +315,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM inv.vehicle_settlement_lines WHERE vehicle_settlement_id IN "
     "(SELECT vehicle_settlement_id FROM inv.vehicle_settlements WHERE company_id = :company_id)",
     "DELETE FROM inv.vehicle_settlements WHERE company_id = :company_id",
+    "DELETE FROM inv.vehicle_fuel_logs WHERE company_id = :company_id",  # R357
     "DELETE FROM inv.vehicle_loading_lines WHERE vehicle_loading_id IN "
     "(SELECT vehicle_loading_id FROM inv.vehicle_loadings WHERE company_id = :company_id)",
     "DELETE FROM inv.vehicle_loadings WHERE company_id = :company_id",
@@ -342,6 +343,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM prd.production_orders WHERE company_id = :company_id",
     "DELETE FROM prd.work_center_machines WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
     "UPDATE prd.routing_operations SET asset_id = NULL WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
+    "UPDATE inv.warehouses SET vehicle_asset_id = NULL WHERE company_id = :company_id",  # R357
     # R262: دارایی‌هایِ ثابت -- ارقامِ دارایی از همین اسناد می‌آیند، پس شناسنامه‌ها هم پاک می‌شوند
     # (طبقه/محل/گروه/تنظیمات می‌مانند). دفترِ دارایی مثلِ دفترِ انبار فقط درونِ همین تراکنش باز می‌شود.
     "DELETE FROM fa.machine_cost_allocations WHERE company_id = :company_id",
