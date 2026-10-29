@@ -29,6 +29,7 @@ from peecha_api.routers import (
     pricing,
     products,
     routes,
+    self_service,
     smart_sales,
     sync,
     vehicle_settlement,
@@ -77,6 +78,7 @@ app.include_router(fixed_assets.router)  # R265: اسکنِ دارایی و شم
 app.include_router(crm.router)  # R281: CRM
 app.include_router(maintenance.router)  # R312: نگهداری و تعمیرات (تکنسین)
 app.include_router(dms.router)  # R343: مدیریت اسناد و عکس‌برداری با موبایل
+app.include_router(self_service.router)  # R360: سلف‌سرویس کارمند (فیش، مرخصی، حضور)
 
 
 @app.get("/health")

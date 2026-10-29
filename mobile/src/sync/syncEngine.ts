@@ -182,6 +182,9 @@ export class SyncEngine {
       case "MNT_ACTION":
         await this.api.workOrderAction(action.payload.workOrderId, action.payload.action, action.payload.body, action.idempotencyKey);
         return;
+      case "SELF_LEAVE_REQUEST":
+        await this.api.requestSelfLeave(action.payload, action.idempotencyKey);
+        return;
     }
   }
 

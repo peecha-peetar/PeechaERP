@@ -1,4 +1,5 @@
 import { MntEquipmentCard, MntRequestPayload, MntWorkOrderDetail, MntWorkOrderRow } from "./maintenanceTypes";
+import { SelfAttendance, SelfLeaveRequest, SelfLeaveRow, SelfPayslipDetail, SelfPayslipRow, SelfProfile } from "./selfTypes";
 import { TokenStore } from "../storage/tokenStore";
 import {
   ApprovalsResponse,
@@ -714,6 +715,35 @@ export class ApiClient {
 
   async createMaintenanceRequest(payload: MntRequestPayload, idempotencyKey?: string): Promise<{ request_id: number; request_no: number }> {
     return this.request("/maintenance/requests", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  // --- R360: سلف‌سرویس کارمند ---
+  async getSelfProfile(): Promise<SelfProfile> {
+    return this.request<SelfProfile>("/self/profile");
+  }
+
+  async getSelfPayslips(): Promise<SelfPayslipRow[]> {
+    return this.request<SelfPayslipRow[]>("/self/payslips");
+  }
+
+  async getSelfPayslip(payslipId: number): Promise<SelfPayslipDetail> {
+    return this.request<SelfPayslipDetail>(`/self/payslips/${payslipId}`);
+  }
+
+  async getSelfLeave(): Promise<SelfLeaveRow[]> {
+    return this.request<SelfLeaveRow[]>("/self/leave");
+  }
+
+  async requestSelfLeave(payload: SelfLeaveRequest, idempotencyKey?: string): Promise<SelfLeaveRow> {
+    return this.request<SelfLeaveRow>("/self/leave", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async cancelSelfLeave(leaveRequestId: number): Promise<SelfLeaveRow> {
+    return this.request<SelfLeaveRow>(`/self/leave/${leaveRequestId}/cancel`, { method: "POST" });
+  }
+
+  async getSelfAttendance(days = 31): Promise<SelfAttendance> {
+    return this.request<SelfAttendance>(`/self/attendance?days=${days}`);
   }
 
   async addMaintenancePhoto(requestId: number, fileName: string, contentBase64: string): Promise<{ attachment_id: number }> {

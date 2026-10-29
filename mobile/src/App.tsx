@@ -37,6 +37,7 @@ import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { WarehouseScreen } from "./screens/WarehouseScreen";
 import { MaintenanceScreen } from "./screens/MaintenanceScreen";
+import { SelfServiceScreen } from "./screens/SelfServiceScreen";
 import { createServices } from "./services";
 import { SignaturePadProvider, useSignaturePad } from "./signature/SignaturePadProvider";
 import { applyRtlLayout, ThemeProvider, useTheme } from "./theme";
@@ -88,6 +89,7 @@ export type RootStackParamList = {
   Maintenance: undefined;
   CrmTasks: undefined;
   WorkInbox: undefined;
+  SelfService: undefined;
   WorkTask: { taskId: number };
   CrmLead: undefined;
   CrmTicket: { detailAccountId: number; customerName?: string };
@@ -538,6 +540,18 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
           )}
         </RootStack.Screen>
 
+        <RootStack.Screen name="SelfService">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <SelfServiceScreen
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
         <RootStack.Screen name="WorkTask">
           {({ navigation, route }) => (
             <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -783,6 +797,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
               onOpenCrmTasks={() => navigation.navigate("CrmTasks")}
               onOpenWorkInbox={() => navigation.navigate("WorkInbox")}
               onOpenCaptureRequests={() => navigation.navigate("CaptureRequests")}
+              onOpenSelfService={() => navigation.navigate("SelfService")}
             />
           )}
         </MainTab.Screen>

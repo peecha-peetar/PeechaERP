@@ -24,6 +24,8 @@ interface Props {
   onOpenWorkInbox?: () => void;
   /** R343: درخواست‌های عکس‌برداری اسناد که از کامپیوتر ساخته شده */
   onOpenCaptureRequests?: () => void;
+  /** R360: خدمات من (فیش حقوقی، مرخصی، حضور و تأخیر) */
+  onOpenSelfService?: () => void;
 }
 
 /** صفحه‌یِ خانه -- طبقِ اصلِ صریحِ کاربر («در ۳ ثانیه اطلاعاتِ مهم را
@@ -33,7 +35,7 @@ interface Props {
  * نه یک درخواستِ شبکه‌یِ دیگر. */
 export function HomeScreen({
   apiClient, localCache, userFullName, onOpenVisit, hideVisitPlan, salesMode, onOpenCrmTasks, onOpenWorkInbox,
-  onOpenCaptureRequests,
+  onOpenCaptureRequests, onOpenSelfService,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [summary, setSummary] = useState<TodaySummaryResponse | null>(null);
@@ -86,6 +88,12 @@ export function HomeScreen({
         {onOpenWorkInbox ? (
           <Card onPress={onOpenWorkInbox}>
             <Text style={[typography.bodyBold, { color: colors.primary }]}>کارتابل: تاییدها، کارها و درخواست‌های من</Text>
+          </Card>
+        ) : null}
+
+        {onOpenSelfService ? (
+          <Card onPress={onOpenSelfService}>
+            <Text style={[typography.bodyBold, { color: colors.primary }]}>خدمات من: فیش حقوقی، مرخصی و حضور</Text>
           </Card>
         ) : null}
 
