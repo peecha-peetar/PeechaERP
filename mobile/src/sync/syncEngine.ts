@@ -185,6 +185,9 @@ export class SyncEngine {
       case "SELF_LEAVE_REQUEST":
         await this.api.requestSelfLeave(action.payload, action.idempotencyKey);
         return;
+      case "SELF_TIMESHEET":
+        await this.api.addSelfTimesheet(action.payload, action.idempotencyKey);
+        return;
     }
   }
 

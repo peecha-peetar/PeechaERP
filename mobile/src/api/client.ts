@@ -1,5 +1,8 @@
 import { MntEquipmentCard, MntRequestPayload, MntWorkOrderDetail, MntWorkOrderRow } from "./maintenanceTypes";
-import { SelfAttendance, SelfLeaveRequest, SelfLeaveRow, SelfPayslipDetail, SelfPayslipRow, SelfProfile } from "./selfTypes";
+import {
+  SelfAttendance, SelfLeaveRequest, SelfLeaveRow, SelfPayslipDetail, SelfPayslipRow, SelfProfile, SelfProject, SelfTimesheetRequest,
+  SelfTimesheetRow,
+} from "./selfTypes";
 import { TokenStore } from "../storage/tokenStore";
 import {
   ApprovalsResponse,
@@ -744,6 +747,19 @@ export class ApiClient {
 
   async getSelfAttendance(days = 31): Promise<SelfAttendance> {
     return this.request<SelfAttendance>(`/self/attendance?days=${days}`);
+  }
+
+  // R364: کارکرد پروژه
+  async getSelfProjects(): Promise<SelfProject[]> {
+    return this.request<SelfProject[]>("/self/projects");
+  }
+
+  async getSelfTimesheets(days = 31): Promise<SelfTimesheetRow[]> {
+    return this.request<SelfTimesheetRow[]>(`/self/timesheets?days=${days}`);
+  }
+
+  async addSelfTimesheet(payload: SelfTimesheetRequest, idempotencyKey?: string): Promise<SelfTimesheetRow> {
+    return this.request<SelfTimesheetRow>("/self/timesheets", { method: "POST", body: payload, idempotencyKey });
   }
 
   async addMaintenancePhoto(requestId: number, fileName: string, contentBase64: string): Promise<{ attachment_id: number }> {

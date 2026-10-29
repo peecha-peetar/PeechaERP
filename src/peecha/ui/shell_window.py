@@ -2229,6 +2229,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.projects import ProjectsScreen  # R363
 
         self.register_screen("projects", lambda: ProjectsScreen(self))
+        from peecha.ui.screens.project_timesheets import ProjectTimesheetsScreen  # R364
+
+        self.register_screen("project_timesheets", lambda: ProjectTimesheetsScreen(self))
         from peecha.ui.screens.qc_certificates import QcCertificatesScreen  # R362
 
         self.register_screen("qc_certificates", lambda: QcCertificatesScreen(self))

@@ -64,6 +64,7 @@ KIND_LABELS = {
     "HR_OVERTIME": "تایید اضافه‌کاری",
     "VAN_SETTLE_WAREHOUSE": "تایید انبار تسویهٔ خودرو",
     "VAN_SETTLE_ACCOUNTING": "تایید حسابداری تسویهٔ خودرو",
+    "PRJ_TIMESHEET": "تایید کارکرد پروژه",  # R364
 }
 
 
@@ -185,6 +186,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _opening_tasks(company_id, user_id)
     tasks += _hr_tasks(company_id, user_id, is_manager)
     tasks += _van_settlement_tasks(company_id, user_id, is_manager)
+    tasks += _project_tasks(company_id, user_id)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -621,3 +623,15 @@ def _van_settlement_tasks(company_id: int, user_id: int, is_manager: bool) -> li
                             s.settlement_date, s.status_code)
             for s, name in rows
             for kind in ("VAN_SETTLE_WAREHOUSE" if s.status_code == "SUBMITTED" else "VAN_SETTLE_ACCOUNTING",)]
+
+
+def _project_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R364: کارکرد ارسال‌شدهٔ پروژه برای مدیر همان پروژه یا دارندهٔ مجوز تایید کارکرد."""
+    from peecha.services.projects import timesheets
+
+    rows = timesheets.pending_for(company_id, user_id)
+    if not rows:
+        return []
+    hours = sum((r.hours for r in rows), timesheets.ZERO)
+    return [OperationalTask("PRJ_TIMESHEET", KIND_LABELS["PRJ_TIMESHEET"], 0, "",
+                            f"{len(rows)} ردیف کارکرد پروژه ({_quantity(hours)} ساعت) منتظر تایید است", "", None, "")]

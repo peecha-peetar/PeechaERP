@@ -15,10 +15,11 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha.services import hr as hr_service
 from peecha.services.projects import core as prj
+from peecha.services.projects import costs as prj_costs
 from peecha.services.projects import schedule as sch
 from peecha.ui import report_export, theme
 from peecha.ui.project_gantt import ZOOMS, GanttChart
-from peecha.ui.screens.fixed_assets import P, combo, company_id, dec, fill, selected_data, set_combo, table, user_id
+from peecha.ui.screens.fixed_assets import P, combo, company_id, dec, fill, money, selected_data, set_combo, table, user_id
 from peecha.ui.widgets import FieldGrid, FieldSpec, JalaliDateEdit, build_page_header
 
 _TASK_HEADERS = ["شماره", "فعالیت", "مدت (روز کاری)", "شروع", "پایان", "پیش‌نیازها", "شناوری", "پیشرفت", "مسئول", "وضعیت"]
@@ -72,6 +73,7 @@ class ProjectsScreen(QWidget):
         self.tabs.addTab(self._projects_tab(), "پروژه‌ها")
         self.tabs.addTab(self._tasks_tab(), "فاز و فعالیت")
         self.tabs.addTab(self._gantt_tab(), "نمودار گانت")
+        self.tabs.addTab(self._cost_tab(), "هزینه و کارکرد")
         layout.addWidget(self.tabs, 1)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
@@ -305,6 +307,7 @@ class ProjectsScreen(QWidget):
         if cid is None or self.project_id is None:
             self.summary_label.setText("ابتدا یک پروژه را در زبانهٔ «پروژه‌ها» انتخاب کنید.")
             self.gantt.set_schedule(None)
+            self.load_costs()
             return
         try:
             self.schedule = sch.compute(cid, self.project_id)
@@ -355,6 +358,7 @@ class ProjectsScreen(QWidget):
                                 f"{by_id[ln.successor_task_id].wbs} {by_id[ln.successor_task_id].name}", ln.type_label, ln.lag_days]
                                for ln in self.links], [ln.link_id for ln in self.links])
         self.gantt.set_schedule(s)
+        self.load_costs()
 
     def _selected_task(self):
         items = self.tree.selectedItems()
@@ -534,3 +538,85 @@ class ProjectsScreen(QWidget):
         scroll.setWidgetResizable(True)
         v.addWidget(scroll, 1)
         return w
+
+    # --- هزینه و کارکرد ------------------------------------------------------------------------------------------------
+    def _cost_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        row = QHBoxLayout()
+        self.cost_from_field, self.cost_to_field = JalaliDateEdit(allow_empty=True), JalaliDateEdit(allow_empty=True)
+        row.addWidget(FieldGrid([FieldSpec("cost_from", "از تاریخ", self.cost_from_field, span=1),
+                                 FieldSpec("cost_to", "تا تاریخ", self.cost_to_field, span=1)], columns=2), 1)
+        for label, glyph, kind, slot in (("نمایش هزینه", "🔎", "primary", self.load_costs),
+                                         ("چاپ هزینه و کارکرد", "🖨️", "", self.print_costs),
+                                         ("خروجی Excel هزینه و کارکرد", "📊", "", self.export_costs)):
+            button = _btn(label, glyph, kind)
+            button.clicked.connect(slot)
+            row.addWidget(button)
+        v.addLayout(row)
+        self.cost_label = QLabel("")
+        self.cost_label.setWordWrap(True)
+        v.addWidget(self.cost_label)
+        note = QLabel("هزینهٔ دفاتر از اسناد حسابداری با تفصیلی همین پروژه (حساب‌های هزینه و بهای تمام‌شده) و درآمد از حساب‌های درآمد "
+                      "می‌آید. هزینهٔ کارکرد = ساعت تاییدشده × نرخ ساعتی و فقط محاسباتی است؛ اگر حقوق را با تفصیلی پروژه در دفاتر ثبت "
+                      "می‌کنید آن را دوباره نشمارید.")
+        note.setWordWrap(True)
+        note.setObjectName("mutedLabel")
+        v.addWidget(note)
+        self.cost_table = table(["کد حساب", "حساب", "نوع", "مبلغ"])
+        v.addWidget(self.cost_table, 1)
+        self.labor_table = table(["شماره", "فعالیت", "ساعت برنامه‌ای", "ساعت تاییدشده", "هزینهٔ برنامه‌ای", "هزینهٔ کارکرد"])
+        v.addWidget(self.labor_table, 1)
+        self.costs = None
+        return w
+
+    def load_costs(self) -> None:
+        self.costs = None
+        self.cost_table.setRowCount(0)
+        self.labor_table.setRowCount(0)
+        if company_id() is None or self.project_id is None:
+            self.cost_label.setText("")
+            return
+        c = self.costs = prj_costs.project_cost(company_id(), self.project_id, self.cost_from_field.date(), self.cost_to_field.date())
+        budget = c.baseline_cost if c.baseline_cost is not None else c.planned_cost
+        text = (f"مبلغ قرارداد {money(c.contract_amount)} | بودجهٔ هزینه {money(budget)}"
+                f"{' (خط مبنا)' if c.baseline_cost is not None else ' (برنامه)'} | هزینهٔ دفاتر {money(c.gl_cost)} | "
+                f"کارکرد {P(f'{c.labor_hours.normalize():f}')} ساعت = {money(c.labor_cost)} | جمع هزینه {money(c.total_cost)} | "
+                f"ماندهٔ بودجه {money(c.budget_left)} | درآمد {money(c.revenue)} | سود ناخالص {money(c.margin)}")
+        if c.pending_hours:
+            text += f" | {P(f'{c.pending_hours.normalize():f}')} ساعت منتظر تایید"
+        if c.unpriced_hours:
+            text += f" | {P(f'{c.unpriced_hours.normalize():f}')} ساعت بدون نرخ ساعتی"
+        self.cost_label.setText(text)
+        rows = [[a.full_code, a.name, "هزینه", a.amount] for a in c.cost_accounts]
+        rows += [[a.full_code, a.name, "درآمد", a.amount] for a in c.revenue_accounts]
+        fill(self.cost_table, rows)
+        fill(self.labor_table, [[t.wbs or "—", t.name, P(f"{t.planned_hours.normalize():f}"), P(f"{t.hours.normalize():f}"),
+                                 t.planned_cost, t.cost] for t in c.tasks])
+
+    def _cost_report(self):
+        c = self.costs
+        headers = ["بخش", "شرح", "ساعت برنامه‌ای", "ساعت تاییدشده", "برنامه", "واقعی"]
+        rows = [["دفاتر", f"{a.full_code} {a.name}", "", "", "", a.amount] for a in c.cost_accounts]
+        rows += [["کارکرد", f"{t.wbs} {t.name}".strip(), t.planned_hours, t.hours, t.planned_cost, t.cost] for t in c.tasks]
+        rows += [["درآمد", f"{a.full_code} {a.name}", "", "", "", a.amount] for a in c.revenue_accounts]
+        project = next((p for p in self.projects if p.project_id == self.project_id), None)
+        head = [("پروژه", project.label if project else ""), ("جمع هزینه", money(c.total_cost)), ("درآمد", money(c.revenue)),
+                ("سود ناخالص", money(c.margin))]
+        return "هزینه و کارکرد پروژه", headers, rows, head
+
+    def print_costs(self) -> bool:
+        if self.costs is None:
+            self._status("یک پروژه را انتخاب کنید.", False)
+            return False
+        title, headers, rows, head = self._cost_report()
+        report_export.print_report(self, title, headers, rows, filters=head)
+        return True
+
+    def export_costs(self) -> bool:
+        if self.costs is None:
+            self._status("یک پروژه را انتخاب کنید.", False)
+            return False
+        title, headers, rows, head = self._cost_report()
+        report_export.export_report_excel(self, title, headers, rows, filters=head)
+        return True

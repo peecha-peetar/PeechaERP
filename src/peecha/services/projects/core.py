@@ -228,6 +228,10 @@ def delete_project(company_id: int, project_id: int) -> None:
         row = _project(session, company_id, project_id)
         if row.status_code not in ("PLANNING", "CANCELLED"):
             raise ValueError("فقط پروژهٔ در حال برنامه‌ریزی یا لغوشده حذف می‌شود؛ پروژهٔ در جریان را «لغوشده» یا «پایان‌یافته» کنید.")
+        from peecha.services.projects import timesheets
+
+        if timesheets.entries_exist(session, project_id=project_id):
+            raise ValueError("برای این پروژه کارکرد ثبت شده است؛ به‌جای حذف، آن را «لغوشده» کنید.")
         session.delete(row)
         session.commit()
 
@@ -293,6 +297,10 @@ def delete_task(company_id: int, task_id: int) -> None:
         if session.scalar(select(ProjectTask.task_id).where(ProjectTask.task_id.in_(ids), (ProjectTask.percent_complete > 0)
                                                             | ProjectTask.actual_start.is_not(None)).limit(1)):
             raise ValueError("فعالیتی که پیشرفت یا شروع واقعی دارد (یا زیرمجموعه‌اش) حذف نمی‌شود.")
+        from peecha.services.projects import timesheets
+
+        if timesheets.entries_exist(session, task_ids=ids):
+            raise ValueError("برای این فعالیت (یا زیرمجموعه‌اش) کارکرد ثبت شده است و حذف نمی‌شود.")
         session.delete(task)
         session.commit()
 

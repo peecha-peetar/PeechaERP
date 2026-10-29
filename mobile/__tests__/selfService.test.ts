@@ -1,5 +1,5 @@
 import { ApiClient, Fetcher } from "../src/api/client";
-import { buildLeaveRequest, minutesLabel, payslipTitle } from "../src/selfService";
+import { buildLeaveRequest, buildTimesheetRequest, minutesLabel, payslipTitle } from "../src/selfService";
 import { InMemoryKeyValueStore } from "../src/storage/keyValueStore";
 import { LocalCache } from "../src/storage/localCache";
 import { TokenStore } from "../src/storage/tokenStore";
@@ -86,5 +86,31 @@ describe("Self-service (R360)", () => {
     expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
       "GET /self/payslips", "GET /self/payslips/3", "GET /self/attendance?days=14", "POST /self/leave/7/cancel",
     ]);
+  });
+});
+
+describe("Project timesheet (R364)", () => {
+  const base = { projectId: 7, taskId: 3, dateText: "", hoursText: "۷٫۵", description: " نصب " };
+
+  it("فرم کارکرد: روز خالی = امروز، ساعت فارسی، و خطاهای روشن", () => {
+    const ok = buildTimesheetRequest(base, "2026-11-06");
+    expect(ok).toEqual({ payload: { project_id: 7, task_id: 3, work_date: "2026-11-06", hours: "7.5", description: "نصب" } });
+    expect(buildTimesheetRequest({ ...base, dateText: "۱۴۰۵/۰۸/۱۵" }, "2026-11-30")).toMatchObject({ payload: { work_date: "2026-11-06" } });
+    expect(buildTimesheetRequest({ ...base, projectId: null }, "2026-11-06")).toEqual({ error: "پروژه را انتخاب کنید." });
+    expect(buildTimesheetRequest({ ...base, hoursText: "25" }, "2026-11-06")).toHaveProperty("error");
+    expect(buildTimesheetRequest({ ...base, dateText: "۱۴۰۵/۰۹/۲۰" }, "2026-11-06")).toEqual({ error: "روز کارکرد نمی‌تواند بعد از امروز باشد." });
+  });
+
+  it("کارکرد از صف آفلاین با کلید تکرارنشدن به /self/timesheets می‌رود", async () => {
+    const { calls, queue, engine } = await build(() => jsonResponse(201, { entry_id: 1 }));
+    const built = buildTimesheetRequest(base, "2026-11-06");
+    if ("error" in built) throw new Error(built.error);
+    await queue.enqueue({ type: "SELF_TIMESHEET", payload: built.payload });
+    await engine.pushQueue();
+    const post = calls.find((c) => c.url === "/self/timesheets");
+    expect(post?.method).toBe("POST");
+    expect(post?.body).toMatchObject({ project_id: 7, hours: "7.5" });
+    expect(post?.idem).toBeTruthy();
+    expect(await queue.size()).toBe(0);
   });
 });

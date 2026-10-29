@@ -68,3 +68,39 @@ class TaskLink(Base):
     successor_task_id: Mapped[int] = mapped_column(ForeignKey("prj.tasks.task_id", ondelete="CASCADE"))
     link_type: Mapped[str] = mapped_column(String(2), default="FS")
     lag_days: Mapped[int] = mapped_column(default=0)
+
+
+class LaborRate(Base):
+    """R364: نرخ ساعتی هزینهٔ کارکرد از تاریخ؛ employee_id خالی = نرخ پیش‌فرض همهٔ کارکنان."""
+
+    __tablename__ = "labor_rates"
+    __table_args__ = _PRJ
+
+    rate_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    employee_id: Mapped[int | None] = mapped_column(ForeignKey("hr.employees.employee_id", ondelete="CASCADE"))
+    valid_from: Mapped[datetime.date] = mapped_column(Date)
+    hourly_cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+
+
+class TimesheetEntry(Base):
+    """R364: کارکرد یک کارمند روی پروژه (و فعالیت) در یک روز؛ نرخ ساعتی هنگام تایید ثابت می‌شود."""
+
+    __tablename__ = "timesheet_entries"
+    __table_args__ = _PRJ
+
+    entry_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    project_id: Mapped[int] = mapped_column(ForeignKey("prj.projects.project_id"))
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("prj.tasks.task_id"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    work_date: Mapped[datetime.date] = mapped_column(Date)
+    hours: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2))
+    description: Mapped[str | None] = mapped_column(String(500))
+    status_code: Mapped[str] = mapped_column(String(20), default="DRAFT")
+    hourly_cost: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))

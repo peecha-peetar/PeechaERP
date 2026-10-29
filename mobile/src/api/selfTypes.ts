@@ -81,3 +81,40 @@ export interface SelfAttendance {
     extra_minutes: number;
   } | null;
 }
+
+/** R364: کارکرد پروژه */
+export interface SelfProjectTask {
+  task_id: number;
+  wbs: string;
+  name: string;
+  mine: boolean;
+}
+
+export interface SelfProject {
+  project_id: number;
+  code: string;
+  name: string;
+  tasks: SelfProjectTask[];
+}
+
+export interface SelfTimesheetRow {
+  entry_id: number;
+  project_id: number;
+  project: string;
+  task_id: number | null;
+  task: string;
+  work_date: string;
+  hours: string;
+  description: string;
+  status_code: string;
+  status_label: string;
+  decision_note: string;
+}
+
+export interface SelfTimesheetRequest {
+  project_id: number;
+  task_id: number | null;
+  work_date: string;
+  hours: string;
+  description: string;
+}

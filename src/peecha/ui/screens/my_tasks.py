@@ -109,6 +109,9 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
     if kind in ("VAN_SETTLE_WAREHOUSE", "VAN_SETTLE_ACCOUNTING"):
         main_window.open_screen("SALES_DISTRIBUTION", then=lambda screen: screen.tabs.setCurrentWidget(screen.vehicle_settlement_tab))
         return True
+    if kind == "PRJ_TIMESHEET":   # R364
+        main_window.open_screen("PRJ_TIMESHEETS", then=lambda screen: screen.show_approvals())
+        return True
     nav_code = _TYPE_TO_NAV_CODE.get(document_type_code)
     if nav_code is None:
         return False
@@ -133,7 +136,8 @@ DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "PR_APPROVAL": "📝", "GOODS_RECEI
               "MNT_MY_WORK": "🧰", "MNT_TO_VERIFY": "🛡️", "MNT_NEW_REQUEST": "📝", "MNT_APPROVAL": "🗓️",
               "BUD_REVIEW": "🔍", "BUD_APPROVE": "✅", "BUD_PUBLISH": "📢", "BUD_REVISE": "📝", "BUD_EXCEPTION": "🛂",
               "OPN_ENTER": "📥", "OPN_APPROVE": "✅", "OPN_POST": "📌", "OPN_LOCK": "🔒",
-              "HR_LEAVE": "🌴", "HR_ATTENDANCE": "🕘", "HR_OVERTIME": "⏱️", "VAN_SETTLE_WAREHOUSE": "🚚", "VAN_SETTLE_ACCOUNTING": "💵"}
+              "HR_LEAVE": "🌴", "HR_ATTENDANCE": "🕘", "HR_OVERTIME": "⏱️", "VAN_SETTLE_WAREHOUSE": "🚚", "VAN_SETTLE_ACCOUNTING": "💵",
+              "PRJ_TIMESHEET": "⏱️"}
 _STEP_COLORS = {"done": "SUCCESS", "current": "INFO", "pending": "TEXT_DISABLED", "failed": "DANGER"}
 VIEWS = [("همهٔ کارهای من", "ALL"), ("منتظر تایید من", "APPROVAL"), ("کارهای انجام‌دادنی", "TASK"), ("مراحل اسناد", "STEP"),
          ("پیگیری مشتری", "FOLLOWUP"), ("درخواست‌های من", "MINE")]

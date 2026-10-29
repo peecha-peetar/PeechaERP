@@ -10,7 +10,7 @@ import {
 } from "../api/types";
 import { CrmActivityCompleteRequest, CrmActivityRequest, CrmLeadRequest, CrmTicketRequest } from "../api/crmTypes";
 import { MntRequestPayload } from "../api/maintenanceTypes";
-import { SelfLeaveRequest } from "../api/selfTypes";
+import { SelfLeaveRequest, SelfTimesheetRequest } from "../api/selfTypes";
 import { generateIdempotencyKey } from "./idempotency";
 
 const QUEUE_KEY = "peecha.offline_queue";
@@ -87,7 +87,9 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "MNT_TASK"; payload: { taskId: number; done: boolean; valueNumeric?: string | null; valueText?: string | null } }
   | { idempotencyKey: string; createdAt: string; type: "MNT_ACTION"; payload: { workOrderId: number; action: "start" | "hold" | "resume" | "complete" | "labor"; body: Record<string, unknown> } }
   // R360: درخواست مرخصی کارمند
-  | { idempotencyKey: string; createdAt: string; type: "SELF_LEAVE_REQUEST"; payload: SelfLeaveRequest };
+  | { idempotencyKey: string; createdAt: string; type: "SELF_LEAVE_REQUEST"; payload: SelfLeaveRequest }
+  // R364: کارکرد پروژه
+  | { idempotencyKey: string; createdAt: string; type: "SELF_TIMESHEET"; payload: SelfTimesheetRequest };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -114,7 +116,8 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "MNT_CREATE_REQUEST" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "MNT_TASK" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "MNT_ACTION" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "SELF_LEAVE_REQUEST" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "SELF_LEAVE_REQUEST" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "SELF_TIMESHEET" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

@@ -1,6 +1,6 @@
-import { SelfLeaveRequest } from "./api/selfTypes";
+import { SelfLeaveRequest, SelfTimesheetRequest } from "./api/selfTypes";
 import { toAsciiDigits } from "./format";
-import { parseJalaliDate } from "./jalali";
+import { parseJalaliDate, todayIsoDate } from "./jalali";
 
 /** R360: منطقِ خالصِ سلف‌سرویس کارمند (بدونِ UI، قابلِ آزمون). */
 
@@ -52,4 +52,24 @@ export function buildLeaveRequest(form: LeaveForm): { payload: SelfLeaveRequest 
     if (to !== from) return { error: "مرخصی ساعتی فقط برای یک روز است." };
   }
   return { payload: { leave_type: form.leaveType, from_date: from, to_date: to, hours, reason: form.reason.trim() } };
+}
+
+export interface TimesheetForm {
+  projectId: number | null;
+  taskId: number | null;
+  dateText: string;
+  hoursText: string;
+  description: string;
+}
+
+/** R364: فرمِ کارکردِ پروژه → بدنهٔ درخواست، یا پیامِ خطا (روزِ خالی = امروز). */
+export function buildTimesheetRequest(form: TimesheetForm, today: string = todayIsoDate()): { payload: SelfTimesheetRequest } | { error: string } {
+  if (form.projectId === null) return { error: "پروژه را انتخاب کنید." };
+  const day = form.dateText.trim() ? parseJalaliDate(form.dateText) : today;
+  if (!day) return { error: "روز کارکرد نامعتبر است (مثلاً ۱۴۰۵/۰۸/۱۵)." };
+  if (day > today) return { error: "روز کارکرد نمی‌تواند بعد از امروز باشد." };
+  const hours = toAsciiDigits(form.hoursText).replace("٫", ".").trim();
+  const n = Number(hours);
+  if (!hours || !Number.isFinite(n) || n <= 0 || n > 24) return { error: "ساعت کارکرد را بین ۰ و ۲۴ وارد کنید." };
+  return { payload: { project_id: form.projectId, task_id: form.taskId, work_date: day, hours, description: form.description.trim() } };
 }

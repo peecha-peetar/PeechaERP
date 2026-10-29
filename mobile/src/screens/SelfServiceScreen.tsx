@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { SelfAttendance, SelfLeaveRow, SelfPayslipDetail, SelfPayslipRow, SelfProfile } from "../api/selfTypes";
+import {
+  SelfAttendance, SelfLeaveRow, SelfPayslipDetail, SelfPayslipRow, SelfProfile, SelfProject, SelfTimesheetRow,
+} from "../api/selfTypes";
 import { Button, Card, EmptyState, ErrorState, Input, SkeletonList, StatusBadge, useToast } from "../components";
 import { formatAmount } from "../format";
 import { formatJalaliDate } from "../jalali";
-import { buildLeaveRequest, minutesLabel, payslipTitle, toPersianDigits } from "../selfService";
+import { buildLeaveRequest, buildTimesheetRequest, minutesLabel, payslipTitle, toPersianDigits } from "../selfService";
 import { OfflineQueue } from "../sync/offlineQueue";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -15,13 +17,14 @@ interface Props {
   onBack: () => void;
 }
 
-type Tab = "PAYSLIPS" | "LEAVE" | "ATTENDANCE";
+type Tab = "PAYSLIPS" | "LEAVE" | "ATTENDANCE" | "TIMESHEET";
 const TABS: { key: Tab; label: string }[] = [
   { key: "PAYSLIPS", label: "فیش حقوقی" }, { key: "LEAVE", label: "مرخصی" }, { key: "ATTENDANCE", label: "حضور و تأخیر" },
+  { key: "TIMESHEET", label: "کارکرد پروژه" },
 ];
 
 /** خدماتِ من (R360): فیشِ حقوقیِ قطعی‌شده، درخواست و پیگیریِ مرخصی، و حضور و تأخیرِ روزهایِ اخیر -- فقط پروندهٔ پرسنلیِ
- * خودِ کاربر. درخواستِ مرخصی از صفِ آفلاین می‌رود تا بی‌اینترنت هم ثبت شود. */
+ * خودِ کاربر. درخواستِ مرخصی (و کارکردِ پروژه، R364) از صفِ آفلاین می‌رود تا بی‌اینترنت هم ثبت شود. */
 export function SelfServiceScreen({ apiClient, offlineQueue, onBack }: Props) {
   const { colors, spacing, typography } = useTheme();
   const toast = useToast();
@@ -41,6 +44,13 @@ export function SelfServiceScreen({ apiClient, offlineQueue, onBack }: Props) {
   const [hoursText, setHoursText] = useState("");
   const [reason, setReason] = useState("");
   const [queued, setQueued] = useState(0);
+  const [projects, setProjects] = useState<SelfProject[]>([]);
+  const [timesheets, setTimesheets] = useState<SelfTimesheetRow[]>([]);
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [taskId, setTaskId] = useState<number | null>(null);
+  const [workDateText, setWorkDateText] = useState("");
+  const [workHoursText, setWorkHoursText] = useState("");
+  const [workNote, setWorkNote] = useState("");
 
   const load = useCallback(async () => {
     setError(null);
@@ -54,6 +64,12 @@ export function SelfServiceScreen({ apiClient, offlineQueue, onBack }: Props) {
       setLeave(leaves);
       setAttendance(att);
       setQueued(0);
+      // R364: سرورِ قدیمی‌تر این دو را ندارد؛ نبودنشان «پروندهٔ وصل‌نشده» نیست
+      const [prj, ts] = await Promise.all([
+        apiClient.getSelfProjects().catch(() => [] as SelfProject[]), apiClient.getSelfTimesheets(31).catch(() => [] as SelfTimesheetRow[]),
+      ]);
+      setProjects(prj);
+      setTimesheets(ts);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setNotLinked(true);
       else setError(e instanceof ApiError ? e.message : "دریافت اطلاعات ناموفق بود.");
@@ -88,6 +104,19 @@ export function SelfServiceScreen({ apiClient, offlineQueue, onBack }: Props) {
     setReason("");
     setQueued((n) => n + 1);
     toast.show("درخواست ثبت شد؛ پس از اتصال برای تایید فرستاده می‌شود.", "success");
+  };
+
+  const submitTimesheet = async () => {
+    const built = buildTimesheetRequest({ projectId, taskId, dateText: workDateText, hoursText: workHoursText, description: workNote });
+    if ("error" in built) {
+      toast.show(built.error, "danger");
+      return;
+    }
+    await offlineQueue.enqueue({ type: "SELF_TIMESHEET", payload: built.payload });
+    setWorkHoursText("");
+    setWorkNote("");
+    setQueued((n) => n + 1);
+    toast.show("کارکرد ثبت شد؛ پس از اتصال برای تایید فرستاده می‌شود.", "success");
   };
 
   const cancelLeave = async (row: SelfLeaveRow) => {
@@ -237,6 +266,50 @@ export function SelfServiceScreen({ apiClient, offlineQueue, onBack }: Props) {
             ))}
           </>
         ) : <EmptyState title="شیفتی برای شما تعریف نشده یا روزی ثبت نشده است" />
+      ) : null}
+
+      {tab === "TIMESHEET" ? (
+        <>
+          <Card>
+            <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>ثبت کارکرد</Text>
+            {projects.length === 0 ? <Text style={muted}>پروژهٔ بازی برای ثبت کارکرد نیست.</Text> : null}
+            <View style={{ flexDirection: "row", gap: spacing.xs, flexWrap: "wrap", marginTop: spacing.sm }}>
+              {projects.map((p) => (
+                <Button key={p.project_id} label={p.name || p.code} size="md" fullWidth={false}
+                  variant={projectId === p.project_id ? "primary" : "ghost"} onPress={() => { setProjectId(p.project_id); setTaskId(null); }} />
+              ))}
+            </View>
+            {projectId !== null ? (
+              <View style={{ flexDirection: "row", gap: spacing.xs, flexWrap: "wrap", marginTop: spacing.sm }}>
+                {(projects.find((p) => p.project_id === projectId)?.tasks ?? []).map((t) => (
+                  <Button key={t.task_id} label={`${toPersianDigits(t.wbs)} ${t.name}${t.mine ? " (مسئول)" : ""}`} size="md"
+                    fullWidth={false} variant={taskId === t.task_id ? "primary" : "secondary"}
+                    onPress={() => setTaskId(taskId === t.task_id ? null : t.task_id)} />
+                ))}
+              </View>
+            ) : null}
+            <Input label="روز کارکرد (شمسی، برای امروز خالی بگذارید)" value={workDateText} onChangeText={setWorkDateText} placeholder="۱۴۰۵/۰۸/۱۵" />
+            <Input label="ساعت" value={workHoursText} onChangeText={setWorkHoursText} numeric keyboardType="decimal-pad" />
+            <Input label="شرح کار" value={workNote} onChangeText={setWorkNote} multiline />
+            <Button label="ثبت و ارسال برای تایید" onPress={submitTimesheet} />
+            {queued ? <Text style={[typography.caption, { color: colors.info, marginTop: spacing.xs }]}>
+              {toPersianDigits(queued)} مورد در صف ارسال است.
+            </Text> : null}
+          </Card>
+          {timesheets.length === 0 ? <EmptyState title="کارکردی در یک ماه اخیر ثبت نکرده‌اید" /> : timesheets.map((r) => (
+            <Card key={r.entry_id}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>
+                  {formatJalaliDate(r.work_date)} — {toPersianDigits(Number(r.hours))} ساعت
+                </Text>
+                <StatusBadge statusCode={r.status_code} label={r.status_label} />
+              </View>
+              <Text style={muted}>{toPersianDigits(r.project)}{r.task ? ` — ${r.task}` : ""}</Text>
+              {r.description ? <Text style={muted}>{r.description}</Text> : null}
+              {r.decision_note ? <Text style={muted}>نظر تاییدکننده: {r.decision_note}</Text> : null}
+            </Card>
+          ))}
+        </>
       ) : null}
     </ScrollView>
   );

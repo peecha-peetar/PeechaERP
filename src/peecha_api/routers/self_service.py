@@ -1,4 +1,5 @@
 """R360: سلف‌سرویس کارمند در موبایل — فیش حقوقی قطعی‌شده، درخواست و لغو مرخصی، و حضور و تأخیر خود کاربر.
+R364: کارکرد پروژه — فهرست پروژه‌های باز و فعالیت‌هایشان، ثبت کارکرد (ارسال برای تایید) و کارکردهای اخیر خود کاربر.
 
 فقط دادهٔ کارمندی که به همین کاربر وصل است (پروندهٔ پرسنلی ← کاربر)؛ فرم و مجوز جداگانه لازم نیست چون هر کس فقط
 پروندهٔ خودش را می‌بیند. نازک: منطق در hr_leave، payroll_payslip و hr_shifts.
@@ -17,6 +18,9 @@ from peecha.db.base import new_session
 from peecha.db.models.hr import Employee
 from peecha.db.models.payroll import PayrollPeriod, Payslip
 from peecha.services import hr_leave, hr_shifts, payroll_payslip
+from peecha.services.projects import core as prj
+from peecha.services.projects import schedule as prj_schedule
+from peecha.services.projects import timesheets
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 
@@ -143,3 +147,59 @@ def my_attendance(days: int = 31, ctx: AuthContext = _CTX) -> dict:
                 "workdays": summary.workdays, "present": summary.present, "absent": summary.absent, "leave": summary.leave,
                 "late_days": summary.late_days, "late_minutes": summary.late_minutes, "early_minutes": summary.early_minutes,
                 "extra_minutes": summary.extra_minutes}}
+
+
+# --- R364: کارکرد پروژه -----------------------------------------------------------------------------------------------
+@router.get("/projects")
+def my_projects(ctx: AuthContext = _CTX) -> list[dict]:
+    """پروژه‌های در حال برنامه‌ریزی یا اجرا با فعالیت‌هایشان (فعالیت‌هایی که مسئولش همین کارمند است جلوتر)."""
+    employee_id = _employee(ctx).employee_id
+    out = []
+    for p in prj.list_projects(ctx.company_id, timesheets.OPEN_PROJECT_STATUSES):
+        tasks = [t for t in prj_schedule.compute(ctx.company_id, p.project_id).tasks if not t.is_summary and t.percent < 100]
+        tasks.sort(key=lambda t: t.responsible_employee_id != employee_id)
+        out.append({"project_id": p.project_id, "code": p.code, "name": p.name,
+                    "tasks": [{"task_id": t.task_id, "wbs": t.wbs, "name": t.name, "mine": t.responsible_employee_id == employee_id}
+                              for t in tasks]})
+    return out
+
+
+def _entry(r: timesheets.EntryRow) -> dict:
+    return {"entry_id": r.entry_id, "project_id": r.project_id, "project": r.project_label, "task_id": r.task_id, "task": r.task_name,
+            "work_date": r.work_date.isoformat(), "hours": _num(r.hours), "description": r.description,
+            "status_code": r.status_code, "status_label": r.status_label, "decision_note": r.decision_note}
+
+
+@router.get("/timesheets")
+def my_timesheets(days: int = 31, ctx: AuthContext = _CTX) -> list[dict]:
+    employee_id = _employee(ctx).employee_id
+    start = datetime.date.today() - datetime.timedelta(days=max(1, min(days, 92)) - 1)
+    return [_entry(r) for r in timesheets.list_entries(ctx.company_id, employee_id=employee_id, date_from=start)]
+
+
+class TimesheetIn(BaseModel):
+    project_id: int
+    task_id: int | None = None
+    work_date: datetime.date
+    hours: decimal.Decimal
+    description: str = ""
+
+
+@router.post("/timesheets", status_code=status.HTTP_201_CREATED)
+def add_timesheet(body: TimesheetIn, ctx: AuthContext = _CTX, idempotency_key: str | None = _KEY) -> dict:
+    """ثبت کارکرد خود کاربر و ارسال برای تایید."""
+    employee_id = _employee(ctx).employee_id
+
+    def compute():
+        return timesheets.save_entry(ctx.company_id, ctx.user_id, timesheets.EntryFields(
+            body.project_id, employee_id, body.work_date, body.hours, body.task_id, body.description), submit=True)
+
+    def view(entry_id: int) -> dict:
+        return _entry(next(r for r in timesheets.list_entries(ctx.company_id, employee_id=employee_id) if r.entry_id == entry_id))
+
+    try:
+        return run_idempotent(idempotency_key, "self_timesheet", ctx.user_id, ctx.company_id, status.HTTP_201_CREATED, compute, view)
+    except IdempotentReplay as replay:
+        return replay.body
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
