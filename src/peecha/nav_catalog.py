@@ -457,6 +457,7 @@ NAV_ITEMS = [
             {"code": "INV_STOCK_COUNT", "label": "انبارگردانی", "screen": "stock_count"},
             # R247: وظایفِ جانمایی/برداشت و برنامهٔ شمارشِ دوره‌ای
             {"code": "INV_WMS_TASKS", "label": "چیدن در قفسه، جمع‌آوری کالا و برنامهٔ شمارش", "screen": "warehouse_operations"},
+            {"code": "INV_WMS_PACKING", "label": "بسته‌بندی و کنترل ارسال", "screen": "wms_packing"},  # R361
             # R248: نقشهٔ تعاملی و مدیریتِ محل‌هایِ انبار (Zone/Aisle/Rack/Level/Bin)
             {"code": "INV_WAREHOUSE_MAP", "label": "نقشه و محل‌های انبار", "screen": "warehouse_map"},
             {"code": "INV_LOT_TRACE", "label": "ردیابی بچ/سریال/امانی", "screen": "lot_trace"},

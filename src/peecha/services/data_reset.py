@@ -280,6 +280,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM comm.delivery_confirmation_lines WHERE delivery_confirmation_id IN "
     "(SELECT delivery_confirmation_id FROM comm.delivery_confirmations WHERE company_id = :company_id)",
     "DELETE FROM comm.delivery_confirmations WHERE company_id = :company_id",
+    "DELETE FROM inv.pack_packages WHERE company_id = :company_id",  # R361 (ردیف‌های بسته با خود بسته پاک می‌شوند)
     "DELETE FROM comm.shipments WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     # طبقِ رفعِ باگِ واقعیِ گزارش‌شده (پخشِ سرد -- تیمِ پخش): الصاقِ

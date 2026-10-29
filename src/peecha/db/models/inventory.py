@@ -1223,6 +1223,41 @@ class VehicleSettlement(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
 
+class PackPackage(Base):
+    """R361: بستهٔ یک سند فروش در بسته‌بندی."""
+
+    __tablename__ = "pack_packages"
+    __table_args__ = ({"schema": "inv"},)
+
+    package_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    package_no: Mapped[int]
+    status_code: Mapped[str] = mapped_column(String(10), default="OPEN")
+    weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 3))
+    length_cm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    width_cm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    height_cm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    shipment_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.shipments.shipment_id"))
+    packed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    closed_at: Mapped[datetime.datetime | None]
+    notes: Mapped[str | None] = mapped_column(String(300))
+
+
+class PackPackageLine(Base):
+    __tablename__ = "pack_package_lines"
+    __table_args__ = ({"schema": "inv"},)
+
+    package_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    package_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.pack_packages.package_id", ondelete="CASCADE"))
+    document_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    packed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    packed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
 class VehicleFuelLog(Base):
     """R357: سوخت‌گیری خودروی پخش با کیلومترشمار."""
 
