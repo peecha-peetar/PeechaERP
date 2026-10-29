@@ -25,6 +25,7 @@ from peecha.ui.screens.commercial_settings import (
     _VoipSettingsTab,
 )
 from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
+from peecha.ui.screens.road_routing_settings import RoadRoutingSettingsTab
 from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
@@ -442,6 +443,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
                 ("حاشیهٔ سود و پیشنهاد قیمت", _PricingPolicyTab),
                 ("سانترال / وویپ", _VoipSettingsTab),
                 ("درگاه پیامک", _SmsGatewaySettingsTab),
+                ("مسیریابی جاده‌ای", RoadRoutingSettingsTab),  # R358
                 # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط
                 # سفارش‌هایِ فروشِ مشتری بیاید، و تنظیمات به تبِ تنظیماتِ
                 # فروشِ اینترنتی برود»): اتصالات/نگاشتِ کالا-مشتری/سینکِ

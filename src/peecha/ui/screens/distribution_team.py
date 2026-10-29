@@ -521,12 +521,13 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             return
         parts = [f"{numerals.to_persian_digits(str(len(plan.stops)))} توقف"]
         if plan.total_km:
-            parts.append(f"حدود {numerals.to_persian_digits(f'{plan.total_km:.1f}')} کیلومتر خط مستقیم")
+            kind = "جاده‌ای (نشان)" if plan.road else "خط مستقیم"
+            parts.append(f"حدود {numerals.to_persian_digits(f'{plan.total_km:.1f}')} کیلومتر {kind}")
         if plan.start is None:
             parts.append("نقطهٔ شروع تعیین نشده")
         if plan.missing:
             parts.append(f"{numerals.to_persian_digits(str(len(plan.missing)))} مشتری بی‌موقعیت در انتهای فهرست")
-        self.route_label.setText("، ".join(parts))
+        self.route_label.setText("، ".join(parts) + (f"\n{plan.note}" if plan.note else ""))
 
     def suggest_route(self) -> bool:
         if self._current_run is None:

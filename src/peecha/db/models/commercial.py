@@ -2166,6 +2166,23 @@ class MoadianSettings(Base):
     last_serial: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
+class RoadRoutingSettings(Base):
+    """R358: سرویس فاصلهٔ جاده‌ای مسیر پخش هر شرکت."""
+
+    __tablename__ = "road_routing_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    provider_code: Mapped[str] = mapped_column(String(10), default="NONE")
+    api_url: Mapped[str | None] = mapped_column(String(300))
+    api_key_encrypted: Mapped[bytes | None]
+    vehicle_type: Mapped[str] = mapped_column(String(12), default="car")
+    last_error: Mapped[str | None] = mapped_column(String(1000))
+    last_error_at: Mapped[datetime.datetime | None]
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
 class MoadianInvoice(Base):
     """R348: صورتحساب الکترونیکی ساخته‌شده از یک سند فروش و وضعیت آن در سامانه."""
 

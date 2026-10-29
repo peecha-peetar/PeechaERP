@@ -1,8 +1,9 @@
 """R320: پیشنهاد مسیر پخش سرد بر اساس موقعیت مشتری (پشت کلید DIST_ROUTE_SUGGEST).
 
 ترتیب تحویل فاکتورهای یک تیم پخش از روی مختصات ثبت‌شدهٔ مشتری پیشنهاد می‌شود: نزدیک‌ترین مقصد بعدی، سپس
-بهبود با جابه‌جایی دوبه‌دو (2-opt) روی مسیر باز. فاصله خط مستقیم روی کرهٔ زمین است (بدون سرویس نقشه)؛ هدف
-ترتیب منطقی تحویل است، نه مسیریابی خیابانی. مشتری بی‌موقعیت آخر فهرست می‌آید و جدا گزارش می‌شود.
+بهبود با جابه‌جایی دوبه‌دو (2-opt) روی مسیر باز. فاصله خط مستقیم روی کرهٔ زمین است، مگر سرویس نقشهٔ نشان در تنظیمات
+روشن باشد (R358) که فاصلهٔ جاده‌ای از آن گرفته می‌شود و در خطای سرویس دوباره خط مستقیم. مشتری بی‌موقعیت آخر فهرست
+می‌آید و جدا گزارش می‌شود.
 هیچ سند مالی یا موجودی تغییر نمی‌کند؛ فقط ستون route_seq ردیف‌های تیم پخش پر می‌شود."""
 
 from __future__ import annotations
@@ -40,6 +41,8 @@ class RoutePlan:
     missing: list[RouteStop] = field(default_factory=list)
     total_km: float = 0.0
     start: tuple[float, float] | None = None
+    road: bool = False  # R358: فاصله‌ها جاده‌ای است
+    note: str = ""  # R358: مثلاً خطای سرویس نقشه و برگشت به خط مستقیم
 
 
 def is_on(company_id: int) -> bool:
@@ -57,8 +60,8 @@ def distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 2 * 6371.0 * math.asin(min(1.0, math.sqrt(h)))
 
 
-def order_points(points: dict, start: tuple[float, float] | None = None) -> list:
-    """کلیدهای points ({کلید: (عرض، طول)}) به ترتیب پیشنهادی تحویل."""
+def order_points(points: dict, start: tuple[float, float] | None = None, dist=distance_km) -> list:
+    """کلیدهای points ({کلید: (عرض، طول)}) به ترتیب پیشنهادی تحویل؛ dist(نقطه، نقطه) فاصله به کیلومتر."""
     keys = list(points)
     if len(keys) <= 1:
         return keys
@@ -68,17 +71,17 @@ def order_points(points: dict, start: tuple[float, float] | None = None) -> list
         centre = (sum(p[0] for p in points.values()) / len(keys), sum(p[1] for p in points.values()) / len(keys))
         first = max(keys, key=lambda k: (distance_km(centre, points[k]), -idx[k]))
     else:
-        first = min(keys, key=lambda k: (distance_km(start, points[k]), idx[k]))
+        first = min(keys, key=lambda k: (dist(start, points[k]), idx[k]))
     route, left = [first], [k for k in keys if k != first]
     while left:
         here = points[route[-1]]
-        nxt = min(left, key=lambda k: (distance_km(here, points[k]), idx[k]))
+        nxt = min(left, key=lambda k: (dist(here, points[k]), idx[k]))
         route.append(nxt)
         left.remove(nxt)
-    return _two_opt(route, points, start)
+    return _two_opt(route, points, start, dist)
 
 
-def _two_opt(route: list, points: dict, start) -> list:
+def _two_opt(route: list, points: dict, start, dist=distance_km) -> list:
     def pos(i):
         return start if i < 0 else points[route[i]]
 
@@ -91,8 +94,8 @@ def _two_opt(route: list, points: dict, start) -> list:
                 a = pos(i - 1) if (i > 0 or start is not None) else None
                 b, c = pos(i), pos(j)
                 d = pos(j + 1) if j + 1 < n else None
-                before = (distance_km(a, b) if a else 0) + (distance_km(c, d) if d else 0)
-                after = (distance_km(a, c) if a else 0) + (distance_km(b, d) if d else 0)
+                before = (dist(a, b) if a else 0) + (dist(c, d) if d else 0)
+                after = (dist(a, c) if a else 0) + (dist(b, d) if d else 0)
                 if after + 1e-9 < before:
                     route[i:j + 1] = reversed(route[i:j + 1])
                     improved = True
@@ -166,15 +169,39 @@ def set_start_point(company_id: int, run_id: int, latitude: float | None, longit
         session.commit()
 
 
-def _plan(stops: list[RouteStop], start, ordered: bool) -> RoutePlan:
+def _metric(company_id: int, stops: list[RouteStop], start) -> tuple:
+    """(تابع فاصله، جاده‌ای؟، یادداشت) — R358: فاصلهٔ جاده‌ای نشان اگر روشن است، وگرنه خط مستقیم."""
+    from peecha.services import road_distance
+
+    coords = list(dict.fromkeys(([start] if start is not None else [])
+                                + [(s.latitude, s.longitude) for s in stops if s.latitude is not None]))
+    if len(coords) < 2:
+        return distance_km, False, ""
+    try:
+        matrix = road_distance.road_matrix(company_id, coords)
+    except road_distance.RoadDistanceError as exc:
+        return distance_km, False, f"فاصلهٔ جاده‌ای در دسترس نبود و خط مستقیم به کار رفت: {exc}"
+    if matrix is None:
+        return distance_km, False, ""
+    index = {p: i for i, p in enumerate(coords)}
+
+    def dist(a, b):
+        value = matrix[index[a]][index[b]] if a in index and b in index else None
+        return value if value is not None else distance_km(a, b)
+
+    return dist, True, ""
+
+
+def _plan(stops: list[RouteStop], start, ordered: bool, company_id: int | None = None) -> RoutePlan:
     located = {s.document_id: s for s in stops if s.latitude is not None}
     missing = [s for s in stops if s.latitude is None]
-    keys = list(located) if ordered else order_points({k: (s.latitude, s.longitude) for k, s in located.items()}, start)
-    plan, prev = RoutePlan(missing=missing, start=start), start
+    dist, road, note = _metric(company_id, stops, start) if company_id is not None else (distance_km, False, "")
+    keys = list(located) if ordered else order_points({k: (s.latitude, s.longitude) for k, s in located.items()}, start, dist)
+    plan, prev = RoutePlan(missing=missing, start=start, road=road, note=note), start
     for k in keys:
         stop = located[k]
         here = (stop.latitude, stop.longitude)
-        stop.leg_km = round(distance_km(prev, here), 2) if prev is not None else None
+        stop.leg_km = round(dist(prev, here), 2) if prev is not None else None
         plan.total_km += stop.leg_km or 0.0
         prev = here
         plan.stops.append(stop)
@@ -195,12 +222,12 @@ def _stops(company_id: int, run_id: int) -> list[RouteStop]:
 def suggest(company_id: int, run_id: int) -> RoutePlan:
     """ترتیب پیشنهادی (ذخیره نمی‌شود)."""
     _require_on(company_id)
-    return _plan(_stops(company_id, run_id), start_point(company_id, run_id), ordered=False)
+    return _plan(_stops(company_id, run_id), start_point(company_id, run_id), ordered=False, company_id=company_id)
 
 
 def current(company_id: int, run_id: int) -> RoutePlan:
     """ترتیب فعلی تیم با فاصلهٔ هر توقف از قبلی."""
-    return _plan(_stops(company_id, run_id), start_point(company_id, run_id), ordered=True)
+    return _plan(_stops(company_id, run_id), start_point(company_id, run_id), ordered=True, company_id=company_id)
 
 
 def apply(company_id: int, run_id: int, document_ids: list[int]) -> None:

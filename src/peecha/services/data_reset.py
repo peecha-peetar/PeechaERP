@@ -720,6 +720,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM wf.settings WHERE company_id = :company_id",
     "DELETE FROM doc.dms_settings WHERE company_id = :company_id",  # R343
     "DELETE FROM comm.moadian_settings WHERE company_id = :company_id",  # R348
+    "DELETE FROM comm.road_routing_settings WHERE company_id = :company_id",  # R358
     "DELETE FROM payroll.company_settings WHERE company_id = :company_id",
     "DELETE FROM payroll.description_templates WHERE company_id = :company_id",
     "DELETE FROM payroll.insurance_configs WHERE company_id = :company_id",
