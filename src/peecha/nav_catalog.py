@@ -689,6 +689,14 @@ NAV_ITEMS = [
             {"code": "DMS_SETTINGS", "label": "تنظیمات اسناد", "screen": "dms_settings"},
         ],
     },
+    # R363: مدیریت پروژه روی همان تفصیلی «پروژه»
+    {
+        "code": "PRJ",
+        "label": "مدیریت پروژه",
+        "children": [
+            {"code": "PRJ_PROJECTS", "label": "پروژه‌ها و زمان‌بندی", "screen": "projects"},
+        ],
+    },
     {
         "code": "PURCH",
         "label": "خرید و تدارکات",
@@ -989,6 +997,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("BUD_RPT_BUD_DETAIL", "🔎"),
     ],
     "DMS": [("DMS_DOCUMENTS", "🗂️"), ("DMS_DASHBOARD", "📊")],
+    "PRJ": [("PRJ_PROJECTS", "📐")],
     "OPN": [
         ("OPN_SHEET", "🧾"),
         ("OPN_CENTER", "🧭"),

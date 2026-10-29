@@ -82,6 +82,7 @@ _NAV_ICONS = {
     "BUD": "💹",
     "OPN": "🧭",
     "DMS": "🗂️",
+    "PRJ": "📐",
     "PURCH": "🧺",
     "HR": "👥",
     "INVOICES": "🧾",
@@ -2225,6 +2226,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.fx_revaluation import FxRevaluationScreen  # R349
 
         self.register_screen("fx_revaluation", lambda: FxRevaluationScreen())
+        from peecha.ui.screens.projects import ProjectsScreen  # R363
+
+        self.register_screen("projects", lambda: ProjectsScreen(self))
         from peecha.ui.screens.qc_certificates import QcCertificatesScreen  # R362
 
         self.register_screen("qc_certificates", lambda: QcCertificatesScreen(self))

@@ -16,6 +16,7 @@ from peecha.db.models import (  # noqa: F401
     opening,
     payroll,
     production,
+    projects,
     quality,
     reporting,
     security,

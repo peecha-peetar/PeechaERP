@@ -58,6 +58,7 @@ _MODULES = [
     ("BUD", "بودجه‌ریزی", "cash-check", 18),
     ("OPN", "افتتاحیه و انتقال اطلاعات", "database-import-outline", 19),
     ("DMS", "مدیریت اسناد", "folder-file-outline", 20),
+    ("PRJ", "مدیریت پروژه", "clipboard-text-clock-outline", 21),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()

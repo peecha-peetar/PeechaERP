@@ -488,6 +488,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM fa.asset_groups WHERE company_id = :company_id",
     "DELETE FROM fa.asset_locations WHERE company_id = :company_id",
     "DELETE FROM payroll.pay_item_definitions WHERE company_id = :company_id",
+    "DELETE FROM prj.projects WHERE company_id = :company_id",  # R363 (فعالیت‌ها و پیوندها با پروژه پاک می‌شوند)
     "DELETE FROM hr.employee_shift_assignments WHERE company_id = :company_id",  # R359
     "DELETE FROM hr.employees WHERE company_id = :company_id",
     "DELETE FROM hr.work_shifts WHERE company_id = :company_id",  # R359
