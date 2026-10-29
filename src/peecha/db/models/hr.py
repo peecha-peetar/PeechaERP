@@ -163,6 +163,35 @@ class AttendanceRecord(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
 
+class WorkShift(Base):
+    """R359: شیفت کاری؛ off_weekdays روزهای استراحت هفته (شمارهٔ روز پایتون، ۴ = جمعه) با ویرگول."""
+
+    __tablename__ = "work_shifts"
+    __table_args__ = {"schema": "hr"}
+
+    shift_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(100))
+    start_time: Mapped[datetime.time] = mapped_column(Time)
+    end_time: Mapped[datetime.time] = mapped_column(Time)
+    break_minutes: Mapped[int] = mapped_column(default=0)
+    grace_minutes: Mapped[int] = mapped_column(default=0)
+    off_weekdays: Mapped[str] = mapped_column(String(20), default="4")
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class EmployeeShiftAssignment(Base):
+    __tablename__ = "employee_shift_assignments"
+    __table_args__ = {"schema": "hr"}
+
+    assignment_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id", ondelete="CASCADE"))
+    shift_id: Mapped[int] = mapped_column(ForeignKey("hr.work_shifts.shift_id"))
+    valid_from: Mapped[datetime.date] = mapped_column(Date)
+
+
 class AttendanceImportTemplate(Base):
     __tablename__ = "attendance_import_templates"
     __table_args__ = {"schema": "hr"}
