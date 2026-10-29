@@ -196,6 +196,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # R311: عدم‌انطباق/اقدام و نتایج پارامترها پیش از خود بازرسی‌ها
     "DELETE FROM qms.capa_actions WHERE company_id = :company_id",
     "DELETE FROM qms.nonconformances WHERE company_id = :company_id",
+    "DELETE FROM qms.certificates WHERE company_id = :company_id",  # R362
     "DELETE FROM qms.inspection_results WHERE company_id = :company_id",
     "DELETE FROM inv.qc_inspections WHERE company_id = :company_id",
     "DELETE FROM inv.serial_numbers WHERE company_id = :company_id",

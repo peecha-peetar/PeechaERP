@@ -632,6 +632,7 @@ NAV_ITEMS = [
             {"code": "QC_CAPA", "label": "اقدام‌های اصلاحی و پیشگیرانه", "screen": "qc_capa"},
             {"code": "QC_PLANS", "label": "طرح‌های کنترل کیفیت", "screen": "qc_plans"},
             {"code": "QC_CARDS", "label": "کارت کیفیت کالا و تامین‌کننده", "screen": "qc_cards"},
+            {"code": "QC_COA", "label": "گواهی آنالیز", "screen": "qc_certificates"},  # R362
             {"code": "QC_REPORTS", "label": "گزارش‌ها", "children": _report_menu("QC_RPT", "warehouse_report_", QC_REPORT_MENU)},
             {"code": "QC_SETTINGS", "label": "تنظیمات کنترل کیفیت", "screen": "qc_settings", "hidden_from_sidebar": True},
         ],

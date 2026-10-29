@@ -165,3 +165,28 @@ class QmsSettings(Base):
     auto_ncr_on_reject: Mapped[bool] = mapped_column(default=True)
     updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class Certificate(Base):
+    """R362: گواهی آنالیز؛ snapshot نتایج و مشخصات هنگام صدور است و با تغییر بعدی بازرسی عوض نمی‌شود."""
+
+    __tablename__ = "certificates"
+    __table_args__ = _QMS
+
+    certificate_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    certificate_no: Mapped[int]
+    qc_inspection_id: Mapped[int] = mapped_column(ForeignKey("inv.qc_inspections.qc_inspection_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    batch_no: Mapped[str | None] = mapped_column(String(50))
+    customer_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    sales_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    issue_date: Mapped[datetime.date]
+    status_code: Mapped[str] = mapped_column(String(10), default="ISSUED")
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    issued_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    issued_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    revoked_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    revoked_at: Mapped[datetime.datetime | None]
+    revoke_reason: Mapped[str | None] = mapped_column(String(500))
