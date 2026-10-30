@@ -2153,6 +2153,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.production_oee import ProductionOeeScreen  # R370
 
         self.register_screen("prd_oee", lambda: ProductionOeeScreen(self))
+        from peecha.ui.screens.production_scheduling import ProductionSchedulingScreen  # R371
+
+        self.register_screen("prd_scheduling", lambda: ProductionSchedulingScreen(self))
         self.register_screen("prd_master", lambda: prd_screens.MasterDataScreen())
         self.register_screen("prd_costing", lambda: prd_screens.PrdCostingScreen())
         self.register_screen("prd_settings", lambda: prd_screens.PrdSettingsScreen())
