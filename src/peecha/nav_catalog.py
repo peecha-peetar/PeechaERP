@@ -773,6 +773,7 @@ NAV_ITEMS = [
         # خودشان را این‌جا می‌گیرند.
         "children": [
             # R245: گزارش‌هایِ حسابداری در زیرگروه‌هایِ جمع‌شونده (کدهایِ قبلی بدونِ تغییر)
+            {"code": "REPORTS_BUILDER", "label": "گزارش‌ساز", "screen": "report_builder"},  # R374
             {"code": "REPORTS_GL", "label": "حسابداری", "children": _report_menu("ACC_RPT", "accounting_report_", ACCOUNTING_REPORT_MENU)},
             # R246: گزارش‌ها و تحلیلِ انبار (services/warehouse_reports.py) -- کاردکسِ قبلی با همان کد
             {"code": "REPORTS_INV", "label": "انبار", "children": _report_menu("INV_RPT", "warehouse_report_", WAREHOUSE_REPORT_MENU)},
@@ -938,6 +939,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("HR_ATTENDANCE_SUMMARY", "📋"),
     ],
     "REPORTS": [
+        ("REPORTS_BUILDER", "🧱"),
         ("REPORTS_TRIAL_BALANCE", "⚖️"),
         ("REPORTS_JOURNAL_BOOK", "📖"),
         ("REPORTS_ACCOUNT_LEDGER", "📒"),

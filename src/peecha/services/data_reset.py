@@ -731,6 +731,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM comm.fulfillment_routing_rules WHERE company_id = :company_id",
     "DELETE FROM comm.report_views WHERE company_id = :company_id",
     "DELETE FROM rpt.report_templates WHERE company_id = :company_id",
+    "DELETE FROM rpt.custom_reports WHERE company_id = :company_id",  # R374
     "DELETE FROM fa.asset_settings WHERE company_id = :company_id",
     "DELETE FROM hr.attendance_import_templates WHERE company_id = :company_id",
     "DELETE FROM wf.approval_workflows WHERE company_id = :company_id",
