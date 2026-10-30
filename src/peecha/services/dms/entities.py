@@ -73,6 +73,9 @@ ENTITY_TYPES: dict[str, EntityType] = {e.code: e for e in (
     EntityType("project", "پروژه", ("projects", "project_portfolio"), "prj.projects", "project_id",
                "(SELECT d.code || ' — ' || COALESCE(d.name, '') FROM acc.detail_accounts d "
                "WHERE d.detail_account_id = project_detail_account_id)", "status_code <> 'CANCELLED'", date_sql="start_date"),
+    # R372: نقشه، مشخصات فنی و نتیجهٔ آزمون نمونهٔ تغییر مهندسی
+    EntityType("eco", "تغییر مهندسی محصول", ("prd_eco",), "prd.eco_orders", "eco_id",
+               "'ECO-' || lpad(eco_no::text, 4, '0') || ' — ' || title", "status_code <> 'CANCELLED'", date_sql="effective_date"),
 )}
 
 

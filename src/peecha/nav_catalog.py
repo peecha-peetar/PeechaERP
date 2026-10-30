@@ -520,6 +520,7 @@ NAV_ITEMS = [
             {"code": "PRD_OEE", "label": "اثربخشی کلی تجهیزات", "screen": "prd_oee"},  # R370
             {"code": "PRD_SCHEDULING", "label": "زمان‌بندی با ظرفیت محدود", "screen": "prd_scheduling"},  # R371
             {"code": "PRD_MASTER", "label": "اطلاعات پایه (فهرست مواد، مسیر، مرکز کاری)", "screen": "prd_master"},
+            {"code": "PRD_ECO", "label": "تغییر مهندسی محصول", "screen": "prd_eco"},  # R372
             {"code": "PRD_COSTING", "label": "بهای تمام‌شده، سربار و بستن دوره", "screen": "prd_costing"},
             {"code": "PRD_SETTINGS", "label": "تنظیمات تولید", "screen": "prd_settings", "hidden_from_sidebar": True},
             {"code": "PRD_REPORTS", "label": "گزارش‌ها", "children": [
@@ -894,6 +895,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("PRD_OEE", "📈"),
         ("PRD_SCHEDULING", "🗓️"),
         ("PRD_MASTER", "🧩"),
+        ("PRD_ECO", "🛠️"),
         ("PRD_COSTING", "🧮"),
         ("PRD_RPT_ORDERS", "📋"),
         ("PRD_RPT_COST", "💵"),

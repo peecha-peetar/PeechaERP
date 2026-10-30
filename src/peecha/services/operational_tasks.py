@@ -71,6 +71,8 @@ KIND_LABELS = {
     "HR_APPRAISAL_SELF": "خودارزیابی عملکرد",  # R368
     "HR_APPRAISAL_REVIEW": "ارزیابی عملکرد کارکنان",  # R368
     "HR_TRAINING_GAPS": "دوره‌های الزامی آموزش",  # R369
+    "PRD_ECO_APPROVE": "تایید تغییر مهندسی محصول",  # R372
+    "PRD_ECO_IMPLEMENT": "اجرای تغییر مهندسی محصول",  # R372
 }
 
 
@@ -197,6 +199,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _recruitment_tasks(company_id, user_id, is_manager)
     tasks += _appraisal_tasks(company_id, user_id)
     tasks += _training_tasks(company_id, user_id, is_manager)
+    tasks += _eco_tasks(company_id, user_id)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -717,3 +720,13 @@ def _training_tasks(company_id: int, user_id: int, is_manager: bool) -> list[Ope
     return [OperationalTask("HR_TRAINING_GAPS", KIND_LABELS["HR_TRAINING_GAPS"], 0, "",
                             f"دورهٔ الزامی: {g['EXPIRED']} منقضی، {g['EXPIRING']} رو به انقضا، {g['MISSING']} انجام‌نشده",
                             "", None, "")]
+
+
+def _eco_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R372: تغییر مهندسی ارسال‌شده برای تایید و تاییدشده برای اجرا، نزد دارندهٔ مجوز تایید همان فرم."""
+    from peecha.services.production import eco
+
+    waiting, ready = eco.pending_for(company_id, user_id)
+    return [OperationalTask(kind, KIND_LABELS[kind], r.eco_id, kind, f"{r.code} {r.item_label}: {r.title}", "",
+                            r.created_at.date(), r.status_code)
+            for kind, rows in (("PRD_ECO_APPROVE", waiting), ("PRD_ECO_IMPLEMENT", ready)) for r in rows]

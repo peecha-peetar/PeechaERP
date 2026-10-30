@@ -127,6 +127,9 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
     if kind == "HR_TRAINING_GAPS":   # R369
         main_window.open_screen("HR_TRAINING", then=lambda screen: screen.open_matrix())
         return True
+    if kind in ("PRD_ECO_APPROVE", "PRD_ECO_IMPLEMENT"):   # R372
+        main_window.open_screen("PRD_ECO", then=lambda screen: screen.open_eco(document_id))
+        return True
     nav_code = _TYPE_TO_NAV_CODE.get(document_type_code)
     if nav_code is None:
         return False
@@ -154,7 +157,7 @@ DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "PR_APPROVAL": "📝", "GOODS_RECEI
               "HR_LEAVE": "🌴", "HR_ATTENDANCE": "🕘", "HR_OVERTIME": "⏱️", "VAN_SETTLE_WAREHOUSE": "🚚", "VAN_SETTLE_ACCOUNTING": "💵",
               "PRJ_TIMESHEET": "⏱️", "PRJ_CHANGE": "📝",
               "HR_INTERVIEW": "🗣️", "HR_APPLICATIONS": "📨", "HR_APPRAISAL_SELF": "🪞", "HR_APPRAISAL_REVIEW": "📊",
-              "HR_TRAINING_GAPS": "🎓"}
+              "HR_TRAINING_GAPS": "🎓", "PRD_ECO_APPROVE": "🛠️", "PRD_ECO_IMPLEMENT": "🛠️"}
 _STEP_COLORS = {"done": "SUCCESS", "current": "INFO", "pending": "TEXT_DISABLED", "failed": "DANGER"}
 VIEWS = [("همهٔ کارهای من", "ALL"), ("منتظر تایید من", "APPROVAL"), ("کارهای انجام‌دادنی", "TASK"), ("مراحل اسناد", "STEP"),
          ("پیگیری مشتری", "FOLLOWUP"), ("درخواست‌های من", "MINE")]

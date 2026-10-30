@@ -619,3 +619,48 @@ class OeeStop(Base):
     reason_code: Mapped[str] = mapped_column(String(20))
     minutes: Mapped[int]
     note: Mapped[str | None] = mapped_column(String(300))
+
+
+# --- R372: تغییر مهندسی محصول ---------------------------------------------------------
+class EcoOrder(Base):
+    """درخواست تغییر روی یک نسخهٔ فهرست مواد؛ با اجرا نسخهٔ جدید (new_bom_id) ساخته می‌شود."""
+
+    __tablename__ = "eco_orders"
+    __table_args__ = _PRD
+
+    eco_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    eco_no: Mapped[int]
+    title: Mapped[str] = mapped_column(String(200))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    base_bom_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.bom_headers.bom_id"))
+    new_bom_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.bom_headers.bom_id"))
+    reason_code: Mapped[str] = mapped_column(String(20), default="DESIGN")
+    description: Mapped[str | None] = mapped_column(String(1000))
+    effective_date: Mapped[datetime.date]
+    stock_disposition: Mapped[str] = mapped_column(String(10), default="USE_UP")
+    status_code: Mapped[str] = mapped_column(String(12), default="DRAFT")
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_at: Mapped[datetime.datetime | None]
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    implemented_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    implemented_at: Mapped[datetime.datetime | None]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class EcoLine(Base):
+    __tablename__ = "eco_lines"
+    __table_args__ = _PRD
+
+    eco_line_id: Mapped[int] = mapped_column(primary_key=True)
+    eco_id: Mapped[int] = mapped_column(ForeignKey("prd.eco_orders.eco_id", ondelete="CASCADE"))
+    line_no: Mapped[int] = mapped_column(SmallInteger)
+    action_code: Mapped[str] = mapped_column(String(10))
+    base_line_no: Mapped[int | None] = mapped_column(SmallInteger)
+    component_item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    new_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    old_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    new_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    new_scrap_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    notes: Mapped[str | None] = mapped_column(String(300))
