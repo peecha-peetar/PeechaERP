@@ -118,6 +118,12 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
     if kind in ("HR_INTERVIEW", "HR_APPLICATIONS"):   # R367
         main_window.open_screen("HR_RECRUITMENT", then=lambda screen: screen.open_interviews())
         return True
+    if kind == "HR_APPRAISAL_SELF":   # R368
+        main_window.open_screen("HR_APPRAISALS", then=lambda screen: screen.open_self())
+        return True
+    if kind == "HR_APPRAISAL_REVIEW":
+        main_window.open_screen("HR_APPRAISALS", then=lambda screen: screen.open_appraisal(document_id))
+        return True
     nav_code = _TYPE_TO_NAV_CODE.get(document_type_code)
     if nav_code is None:
         return False
@@ -144,7 +150,7 @@ DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "PR_APPROVAL": "📝", "GOODS_RECEI
               "OPN_ENTER": "📥", "OPN_APPROVE": "✅", "OPN_POST": "📌", "OPN_LOCK": "🔒",
               "HR_LEAVE": "🌴", "HR_ATTENDANCE": "🕘", "HR_OVERTIME": "⏱️", "VAN_SETTLE_WAREHOUSE": "🚚", "VAN_SETTLE_ACCOUNTING": "💵",
               "PRJ_TIMESHEET": "⏱️", "PRJ_CHANGE": "📝",
-              "HR_INTERVIEW": "🗣️", "HR_APPLICATIONS": "📨"}
+              "HR_INTERVIEW": "🗣️", "HR_APPLICATIONS": "📨", "HR_APPRAISAL_SELF": "🪞", "HR_APPRAISAL_REVIEW": "📊"}
 _STEP_COLORS = {"done": "SUCCESS", "current": "INFO", "pending": "TEXT_DISABLED", "failed": "DANGER"}
 VIEWS = [("همهٔ کارهای من", "ALL"), ("منتظر تایید من", "APPROVAL"), ("کارهای انجام‌دادنی", "TASK"), ("مراحل اسناد", "STEP"),
          ("پیگیری مشتری", "FOLLOWUP"), ("درخواست‌های من", "MINE")]

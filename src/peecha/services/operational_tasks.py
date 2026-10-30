@@ -68,6 +68,8 @@ KIND_LABELS = {
     "PRJ_CHANGE": "تایید درخواست تغییر پروژه",  # R366
     "HR_INTERVIEW": "مصاحبهٔ استخدامی",  # R367
     "HR_APPLICATIONS": "بررسی درخواست‌های استخدام",  # R367
+    "HR_APPRAISAL_SELF": "خودارزیابی عملکرد",  # R368
+    "HR_APPRAISAL_REVIEW": "ارزیابی عملکرد کارکنان",  # R368
 }
 
 
@@ -192,6 +194,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _project_tasks(company_id, user_id)
     tasks += _project_change_tasks(company_id, user_id)
     tasks += _recruitment_tasks(company_id, user_id, is_manager)
+    tasks += _appraisal_tasks(company_id, user_id)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -675,4 +678,26 @@ def _recruitment_tasks(company_id: int, user_id: int, is_manager: bool) -> list[
         if n:
             out.append(OperationalTask("HR_APPLICATIONS", KIND_LABELS["HR_APPLICATIONS"], 0, "",
                                        f"{n} درخواست استخدام جدید منتظر بررسی اولیه است", "", None, ""))
+    return out
+
+
+def _appraisal_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R368: خودارزیابی باز کارمند، و ارزیابی‌های منتظر مدیر برای ارزیاب آن‌ها (فقط در دورهٔ باز)."""
+    from peecha.services import hr_appraisals as ap, hr_leave
+
+    employee_id = hr_leave.employee_of_user(company_id, user_id)
+    if employee_id is None:
+        return []
+    open_cycles = {c.cycle_id: c.title for c in ap.list_cycles(company_id) if c.status_code == "OPEN"}
+    if not open_cycles:
+        return []
+    out = [OperationalTask("HR_APPRAISAL_SELF", KIND_LABELS["HR_APPRAISAL_SELF"], a.appraisal_id, "HR_APPRAISAL",
+                           f"خودارزیابی دورهٔ «{a.cycle_title}»", "", None, a.status_code)
+           for a in ap.list_appraisals(company_id, employee_id=employee_id)
+           if a.cycle_id in open_cycles and a.status_code == "PENDING_SELF"]
+    waiting = [a for a in ap.list_appraisals(company_id, reviewer_employee_id=employee_id)
+               if a.cycle_id in open_cycles and a.status_code == "PENDING_MANAGER"]
+    if waiting:
+        out.append(OperationalTask("HR_APPRAISAL_REVIEW", KIND_LABELS["HR_APPRAISAL_REVIEW"], waiting[0].appraisal_id, "HR_APPRAISAL",
+                                   f"{len(waiting)} ارزیابی عملکرد کارکنان منتظر شماست", "", None, ""))
     return out

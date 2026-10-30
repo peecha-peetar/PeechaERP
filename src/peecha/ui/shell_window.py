@@ -2247,6 +2247,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.hr_recruitment import HrRecruitmentScreen  # R367
 
         self.register_screen("hr_recruitment", lambda: HrRecruitmentScreen(self))
+        from peecha.ui.screens.hr_appraisals import HrAppraisalsScreen  # R368
+
+        self.register_screen("hr_appraisals", lambda: HrAppraisalsScreen(self))
         from peecha.ui.screens.fleet import FleetScreen  # R357
 
         self.register_screen("fleet", lambda: FleetScreen())

@@ -1,4 +1,4 @@
-"""R367: جذب و استخدام (و در نسخه‌های بعد ارزیابی عملکرد و آموزش) روی پرونده‌های پرسنلی hr."""
+"""R367: جذب و استخدام؛ R368: ارزیابی عملکرد (و در نسخهٔ بعد آموزش) روی پرونده‌های پرسنلی hr."""
 
 from __future__ import annotations
 
@@ -100,3 +100,72 @@ class Interview(Base):
     score: Mapped[int | None] = mapped_column(SmallInteger)
     recommendation_code: Mapped[str | None] = mapped_column(String(20))
     notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+# --- R368: ارزیابی عملکرد ---------------------------------------------------------------------------------------------
+class AppraisalTemplate(Base):
+    __tablename__ = "appraisal_templates"
+    __table_args__ = _HR
+
+    template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class AppraisalCriterion(Base):
+    __tablename__ = "appraisal_criteria"
+    __table_args__ = _HR
+
+    criterion_id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("hr.appraisal_templates.template_id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(500))
+    weight: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2))
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+
+class AppraisalCycle(Base):
+    __tablename__ = "appraisal_cycles"
+    __table_args__ = _HR
+
+    cycle_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    title: Mapped[str] = mapped_column(String(200))
+    template_id: Mapped[int] = mapped_column(ForeignKey("hr.appraisal_templates.template_id"))
+    period_from: Mapped[datetime.date] = mapped_column(Date)
+    period_to: Mapped[datetime.date] = mapped_column(Date)
+    self_assessment: Mapped[bool] = mapped_column(default=True)
+    status_code: Mapped[str] = mapped_column(String(20), default="DRAFT")
+
+
+class Appraisal(Base):
+    __tablename__ = "appraisals"
+    __table_args__ = _HR
+
+    appraisal_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    cycle_id: Mapped[int] = mapped_column(ForeignKey("hr.appraisal_cycles.cycle_id", ondelete="CASCADE"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    reviewer_employee_id: Mapped[int | None] = mapped_column(ForeignKey("hr.employees.employee_id", ondelete="SET NULL"))
+    status_code: Mapped[str] = mapped_column(String(20), default="PENDING_SELF")
+    self_comment: Mapped[str | None] = mapped_column(String(1000))
+    manager_comment: Mapped[str | None] = mapped_column(String(1000))
+    strengths: Mapped[str | None] = mapped_column(String(1000))
+    improvements: Mapped[str | None] = mapped_column(String(1000))
+    goals: Mapped[str | None] = mapped_column(String(1000))
+    overall_score: Mapped[decimal.Decimal | None] = mapped_column(Numeric(4, 2))
+    finalized_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    finalized_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AppraisalScore(Base):
+    __tablename__ = "appraisal_scores"
+    __table_args__ = _HR
+
+    appraisal_id: Mapped[int] = mapped_column(ForeignKey("hr.appraisals.appraisal_id", ondelete="CASCADE"), primary_key=True)
+    criterion_id: Mapped[int] = mapped_column(ForeignKey("hr.appraisal_criteria.criterion_id"), primary_key=True)
+    self_score: Mapped[int | None] = mapped_column(SmallInteger)
+    manager_score: Mapped[int | None] = mapped_column(SmallInteger)
+    comment: Mapped[str | None] = mapped_column(String(500))
