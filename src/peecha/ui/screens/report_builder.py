@@ -8,7 +8,7 @@ import decimal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSpinBox,
-    QSplitter, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QSplitter, QStackedWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from peecha import decimals, numerals
@@ -65,7 +65,13 @@ class ReportBuilderScreen(QWidget):
         layout.addWidget(self.status_label)
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self._build_saved())
-        splitter.addWidget(self._build_editor())
+        from peecha.ui.screens.report_schedules import ReportSchedulePanel  # R375
+
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self._build_editor(), "طراحی و نتیجه")
+        self.schedule_panel = ReportSchedulePanel(self._status)
+        self.tabs.addTab(self.schedule_panel, "زمان‌بندی و ارسال")
+        splitter.addWidget(self.tabs)
         splitter.setStretchFactor(1, 4)
         layout.addWidget(splitter, 1)
 
@@ -195,6 +201,7 @@ class ReportBuilderScreen(QWidget):
             set_combo(self.dataset_combo, current)
         self._dataset_changed()
         self._load_saved()
+        self.schedule_panel.set_report(self.report_id)
 
     def _load_saved(self) -> None:
         self.reports = engine.list_reports(company_id(), user_id())
@@ -375,6 +382,7 @@ class ReportBuilderScreen(QWidget):
             self._status(str(exc), False)
             return None
         self._load_saved()
+        self.schedule_panel.set_report(self.report_id)
         self._status("گزارش ذخیره شد.", True)
         return self.report_id
 
@@ -402,6 +410,7 @@ class ReportBuilderScreen(QWidget):
         self.sort_desc.setChecked(definition.sort_desc)
         self.limit_field.setValue(int(definition.limit or 0))
         self._show_aggregate()
+        self.schedule_panel.set_report(r.report_id)
 
     def new_report(self) -> None:
         self.report_id = None
@@ -413,6 +422,7 @@ class ReportBuilderScreen(QWidget):
         self.sort_desc.setChecked(False)
         self.limit_field.setValue(0)
         self._dataset_changed()
+        self.schedule_panel.set_report(None)
 
     def delete_report(self) -> bool:
         if self.report_id is None:

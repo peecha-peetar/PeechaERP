@@ -1025,6 +1025,12 @@ class MainWindow(QMainWindow):
         self._auto_backup_timer.timeout.connect(self._tick_auto_backup)
         self._auto_backup_timer.start()
         QTimer.singleShot(30_000, self._tick_auto_backup)
+        # R375: گزارش‌های زمان‌بندی‌شدهٔ سررسیده، هر ۵ دقیقه در رشتهٔ جدا
+        self._scheduled_reports_thread = None
+        self._scheduled_reports_timer = QTimer(self)
+        self._scheduled_reports_timer.setInterval(300_000)
+        self._scheduled_reports_timer.timeout.connect(self._tick_scheduled_reports)
+        self._scheduled_reports_timer.start()
         # R287: قاعده‌های فعال اتوماسیون CRM و بررسی SLA تیکت‌ها (هر ۱۰ دقیقه، بی‌صدا)
         self._crm_automation_timer = QTimer(self)
         self._crm_automation_timer.setInterval(600_000)
@@ -1248,6 +1254,22 @@ class MainWindow(QMainWindow):
         toast.show()
         toast.raise_()
         QTimer.singleShot(8000, toast.hide)
+
+    def _tick_scheduled_reports(self) -> None:
+        if self._scheduled_reports_thread is not None and self._scheduled_reports_thread.is_alive():
+            return
+        import threading
+
+        def work() -> None:
+            try:
+                from peecha.services.report_builder import schedule as report_schedule
+
+                report_schedule.run_due()
+            except Exception:  # noqa: BLE001 -- خطای هر اجرا در فهرست اجراها ثبت و به سازنده اعلان می‌شود
+                pass
+
+        self._scheduled_reports_thread = threading.Thread(target=work, name="peecha-scheduled-reports", daemon=True)
+        self._scheduled_reports_thread.start()
 
     def _tick_auto_backup(self) -> None:
         if self._auto_backup_thread is not None and self._auto_backup_thread.is_alive():

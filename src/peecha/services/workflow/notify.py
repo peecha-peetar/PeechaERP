@@ -29,6 +29,7 @@ OTHER_TYPES = {
     "CRM_TASK_ASSIGNED": "کار جدید ارتباط با مشتری", "CRM_LEAD_ASSIGNED": "سرنخ واگذارشده",
     "CRM_OPPORTUNITY_ASSIGNED": "فرصت فروش واگذارشده", "CRM_TICKET_ASSIGNED": "تیکت واگذارشده",
     "CRM_TICKET_SLA": "مهلت تیکت", "CRM_MESSAGE": "پیام ارتباط با مشتری", "CRM_AUTOMATION": "اقدام خودکار ارتباط با مشتری",
+    "RPT_SCHEDULED": "گزارش زمان‌بندی‌شده",  # R375
 }
 CHANNELS = {"in_app": "داخل برنامه", "desktop": "پیام روی صفحه", "sms": "پیامک", "email": "ایمیل", "push": "اعلان گوشی"}
 EXTERNAL = ("sms", "email", "push")
