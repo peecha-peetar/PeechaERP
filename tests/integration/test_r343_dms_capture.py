@@ -212,11 +212,11 @@ capped = new_request()
 tok(capped.token, "open", keeper_h)
 codes = [up(capped.token, keeper_h, [{"name": "a.pdf", "data_base64": pdf}]).status_code for _ in range(6)]
 check(codes[:5] == [422] * 5 and codes[5] == 429, f"after five failed attempts the request is locked ({codes})")
-rate_limit._buckets.clear()
+rate_limit.reset()
 burst = new_request()
 statuses = [tok(burst.token, "capturing", keeper_h).status_code for _ in range(32)]
 check(429 in statuses, "too many calls on one request are throttled")
-rate_limit._buckets.clear()
+rate_limit.reset()
 
 # --- ۱۹) شرکت دیگر: درخواست شرکت دوم برای کاربر همان شرکت؛ رکورد شرکت دیگر پیوست نمی‌شود -------------------------------------
 users_service.grant_company_access(keeper.user_id, other.company_id)

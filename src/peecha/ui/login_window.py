@@ -394,6 +394,10 @@ class LoginWindow(QStackedWidget):
         self.connection_status_label.setObjectName("statusError")
         self.connection_status_label.setStyleSheet("")
         self.connection_status_label.setText("")
+        from peecha.config import password_is_protected
+
+        if password_is_protected():  # R378
+            self._set_connection_status("رمز اتصال در انبار امن سیستم‌عامل نگه داشته می‌شود، نه در فایل.", ok=True)
         self.setCurrentWidget(self._connection_page)
         self.conn_host_field.setFocus()
 

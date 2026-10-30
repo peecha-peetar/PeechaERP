@@ -8,8 +8,8 @@
 
 فایل تنظیمات کاربر در پوشه‌ی home کاربر ذخیره می‌شود (نه داخل پوشهٔ پروژه)
 چون در نسخهٔ نصب‌شده/توزیع‌شدهٔ برنامه، پوشهٔ پروژه لزوماً قابل‌نوشتن یا
-حتی موجود نیست. فعلاً به‌صورت JSON ساده (بدون رمزنگاری) ذخیره می‌شود —
-برای نسخهٔ توسعه کافی است؛ رمزنگاری رمز عبور یک بهبود آتی است.
+حتی موجود نیست. R378: رمز عبور در انبار امن سیستم‌عامل (DPAPI ویندوز یا keyring) نگه داشته می‌شود و
+در فایل فقط نشانهٔ آن می‌ماند؛ فایل قدیمی با رمز ساده در اولین خواندن منتقل می‌شود (secret_store).
 """
 
 from __future__ import annotations
@@ -89,7 +89,13 @@ def load_database_config() -> DatabaseConfig:
     فیلد همیشه برنده است؛ متغیرهای محیطی فقط برای فیلدهایی که هنوز در
     فایل ذخیره نشده‌اند به‌کار می‌روند (سازگاری کامل با محیط توسعه/CI
     که هنوز هیچ فایل تنظیماتی نساخته)."""
+    from peecha import secret_store
+
     file_values = _read_settings_file()
+    if "password_store" in file_values and "password" not in file_values:
+        account = _account(file_values)
+        file_values["password"] = secret_store.unprotect(file_values["password_store"], file_values.get("password_token", ""),
+                                                         account) or ""
     values = {}
     for field, env_key in _ENV_KEYS.items():
         if field in file_values:
@@ -97,18 +103,44 @@ def load_database_config() -> DatabaseConfig:
         else:
             env_value = os.environ.get(env_key)
             values[field] = env_value if env_value is not None else _DEFAULTS[field]
-    return DatabaseConfig(
+    config = DatabaseConfig(
         host=str(values["host"]),
         port=int(values["port"]),
         name=str(values["name"]),
         user=str(values["user"]),
         password=str(values["password"]),
     )
+    if "password_store" not in file_values and file_values.get("password"):
+        try:  # R378: انتقال فایل قدیمی با رمز ساده به انبار امن
+            save_database_config(config)
+        except OSError:
+            pass
+    return config
+
+
+def _account(values: dict) -> str:
+    return f"{values.get('user', '')}@{values.get('host', '')}:{values.get('port', '')}/{values.get('name', '')}"
 
 
 def save_database_config(config: DatabaseConfig) -> None:
+    from peecha import secret_store
+
     SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(asdict(config), ensure_ascii=False, indent=2), encoding="utf-8")
+    data = asdict(config)
+    protected = secret_store.protect(config.password, _account(data))
+    if protected is not None:
+        del data["password"]
+        data["password_store"], data["password_token"] = protected
+    SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        os.chmod(SETTINGS_FILE, 0o600)
+    except OSError:
+        pass
+
+
+def password_is_protected() -> bool:
+    """R378: آیا رمز ذخیره‌شده در انبار امن است (برای نمایش در فرم تنظیمات اتصال)."""
+    return "password_store" in _read_settings_file()
 
 
 def test_connection(config: DatabaseConfig) -> tuple[bool, str]:
