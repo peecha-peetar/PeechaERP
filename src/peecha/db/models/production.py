@@ -586,3 +586,36 @@ class MrpLine(Base):
     release_date: Mapped[datetime.date | None]
     converted_ref: Mapped[str | None] = mapped_column(String(60))
     details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+# --- R370: اثربخشی کلی تجهیزات -------------------------------------------------------
+class OeeLog(Base):
+    """گزارش تولید یک شیفت ایستگاه؛ دسترس‌پذیری، عملکرد و کیفیت از همین ردیف و توقف‌هایش محاسبه می‌شود."""
+
+    __tablename__ = "oee_logs"
+    __table_args__ = _PRD
+
+    log_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    work_center_id: Mapped[int] = mapped_column(ForeignKey("prd.work_centers.work_center_id"))
+    log_date: Mapped[datetime.date]
+    shift_no: Mapped[int] = mapped_column(SmallInteger, default=1)
+    planned_minutes: Mapped[int]
+    ideal_rate_per_hour: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 4))
+    total_qty: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 3), default=decimal.Decimal(0))
+    reject_qty: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 3), default=decimal.Decimal(0))
+    order_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("prd.production_orders.order_id"))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class OeeStop(Base):
+    __tablename__ = "oee_stops"
+    __table_args__ = _PRD
+
+    stop_id: Mapped[int] = mapped_column(primary_key=True)
+    log_id: Mapped[int] = mapped_column(ForeignKey("prd.oee_logs.log_id", ondelete="CASCADE"))
+    reason_code: Mapped[str] = mapped_column(String(20))
+    minutes: Mapped[int]
+    note: Mapped[str | None] = mapped_column(String(300))

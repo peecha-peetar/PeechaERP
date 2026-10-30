@@ -337,6 +337,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM prd.order_variances WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
     "DELETE FROM prd.order_cost_summaries WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
     "DELETE FROM inv.stock_reservations WHERE company_id = :company_id AND source_type_code = 'PRODUCTION_ORDER'",
+    "DELETE FROM prd.oee_logs WHERE company_id = :company_id",  # R370 (توقف‌ها با گزارش پاک می‌شوند)
     "ALTER TABLE prd.order_transactions DISABLE TRIGGER tr_prd_order_txn_immutable",
     "DELETE FROM prd.order_transactions WHERE company_id = :company_id",
     "ALTER TABLE prd.order_transactions ENABLE TRIGGER tr_prd_order_txn_immutable",
