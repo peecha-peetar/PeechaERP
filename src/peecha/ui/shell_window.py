@@ -2187,6 +2187,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_builder import ReportBuilderScreen  # R374
 
         self.register_screen("report_builder", lambda: ReportBuilderScreen(self))
+        from peecha.ui.screens.assistant import AssistantScreen  # R376
+
+        self.register_screen("assistant", lambda: AssistantScreen(self))
         self.register_screen("prd_master", lambda: prd_screens.MasterDataScreen())
         self.register_screen("prd_costing", lambda: prd_screens.PrdCostingScreen())
         self.register_screen("prd_settings", lambda: prd_screens.PrdSettingsScreen())

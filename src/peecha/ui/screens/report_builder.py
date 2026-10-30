@@ -412,6 +412,25 @@ class ReportBuilderScreen(QWidget):
         self._show_aggregate()
         self.schedule_panel.set_report(r.report_id)
 
+    def load_definition(self, definition: engine.Definition, name: str = "") -> bool:
+        """R376: طرح ساخته‌شده در دستیار، به‌صورت گزارش جدید (ذخیره‌نشده) و اجراشده."""
+        self.new_report()
+        self.name_field.setText(name[:150])
+        self.dataset_combo.blockSignals(True)
+        set_combo(self.dataset_combo, definition.dataset)
+        self.dataset_combo.blockSignals(False)
+        self.filters, self.aggregates = list(definition.filters), dict(definition.aggregates)
+        self._dataset_changed(definition.columns)
+        self._show_filters()
+        self.group_box.setChecked(definition.group)
+        set_combo(self.date_group, definition.date_group)
+        self.count_box.setChecked(definition.count_rows)
+        set_combo(self.sort_combo, definition.sort_key)
+        self.sort_desc.setChecked(definition.sort_desc)
+        self.limit_field.setValue(int(definition.limit or 0))
+        self._show_aggregate()
+        return self.run()
+
     def new_report(self) -> None:
         self.report_id = None
         self.saved_table.clearSelection()
