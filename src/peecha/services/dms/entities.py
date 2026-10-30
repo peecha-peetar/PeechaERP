@@ -69,6 +69,10 @@ ENTITY_TYPES: dict[str, EntityType] = {e.code: e for e in (
     EntityType("service_ticket", "تیکت", ("crm_tickets",), "comm.service_tickets", "ticket_id", "'تیکت ' || ticket_no::text"),
     EntityType("employee", "پرسنل", _DETAIL_FORMS, "hr.employees", "employee_id",
                "employee_code || ' — ' || COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')"),
+    # R366: قرارداد، نقشه و صورت‌جلسه‌های پروژه
+    EntityType("project", "پروژه", ("projects", "project_portfolio"), "prj.projects", "project_id",
+               "(SELECT d.code || ' — ' || COALESCE(d.name, '') FROM acc.detail_accounts d "
+               "WHERE d.detail_account_id = project_detail_account_id)", "status_code <> 'CANCELLED'", date_sql="start_date"),
 )}
 
 

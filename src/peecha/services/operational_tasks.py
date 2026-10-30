@@ -65,6 +65,7 @@ KIND_LABELS = {
     "VAN_SETTLE_WAREHOUSE": "تایید انبار تسویهٔ خودرو",
     "VAN_SETTLE_ACCOUNTING": "تایید حسابداری تسویهٔ خودرو",
     "PRJ_TIMESHEET": "تایید کارکرد پروژه",  # R364
+    "PRJ_CHANGE": "تایید درخواست تغییر پروژه",  # R366
 }
 
 
@@ -187,6 +188,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _hr_tasks(company_id, user_id, is_manager)
     tasks += _van_settlement_tasks(company_id, user_id, is_manager)
     tasks += _project_tasks(company_id, user_id)
+    tasks += _project_change_tasks(company_id, user_id)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -635,3 +637,17 @@ def _project_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
     hours = sum((r.hours for r in rows), timesheets.ZERO)
     return [OperationalTask("PRJ_TIMESHEET", KIND_LABELS["PRJ_TIMESHEET"], 0, "",
                             f"{len(rows)} ردیف کارکرد پروژه ({_quantity(hours)} ساعت) منتظر تایید است", "", None, "")]
+
+
+def _project_change_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R366: درخواست تغییر ارسال‌شده برای دارندهٔ مجوز تایید پروژه‌ها (جز درخواست خود او)."""
+    from peecha.services.projects import changes, core
+
+    if not changes.can_decide(company_id, user_id):
+        return []
+    rows = [r for r in changes.list_changes(company_id, status="SUBMITTED") if r.requested_by_user_id != user_id
+            or roles_service.is_manager(user_id, company_id)]
+    labels = {p.project_id: p.label for p in core.list_projects(company_id)} if rows else {}
+    return [OperationalTask("PRJ_CHANGE", KIND_LABELS["PRJ_CHANGE"], r.project_id, "PRJ_CHANGE",
+                            f"درخواست تغییر {r.change_no} پروژهٔ {labels.get(r.project_id, '')}: {r.title}", "", r.created_at.date(),
+                            r.status_code) for r in rows]

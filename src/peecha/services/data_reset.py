@@ -492,6 +492,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM payroll.pay_item_definitions WHERE company_id = :company_id",
     "DELETE FROM prj.timesheet_entries WHERE company_id = :company_id",  # R364
     "DELETE FROM prj.progress_statements WHERE company_id = :company_id",  # R365 (ردیف‌ها با صورت‌وضعیت پاک می‌شوند)
+    "DELETE FROM prj.change_orders WHERE company_id = :company_id",  # R366 (ردیف‌ها با درخواست پاک می‌شوند)
     "DELETE FROM prj.labor_rates WHERE company_id = :company_id",  # R364
     "DELETE FROM prj.projects WHERE company_id = :company_id",  # R363 (فعالیت‌ها و پیوندها با پروژه پاک می‌شوند)
     "DELETE FROM hr.employee_shift_assignments WHERE company_id = :company_id",  # R359

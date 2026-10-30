@@ -696,6 +696,7 @@ NAV_ITEMS = [
         "children": [
             {"code": "PRJ_PROJECTS", "label": "پروژه‌ها و زمان‌بندی", "screen": "projects"},
             {"code": "PRJ_TIMESHEETS", "label": "ثبت و تایید کارکرد", "screen": "project_timesheets"},  # R364
+            {"code": "PRJ_PORTFOLIO", "label": "سبد پروژه‌ها", "screen": "project_portfolio"},  # R366
         ],
     },
     {
@@ -998,7 +999,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("BUD_RPT_BUD_DETAIL", "🔎"),
     ],
     "DMS": [("DMS_DOCUMENTS", "🗂️"), ("DMS_DASHBOARD", "📊")],
-    "PRJ": [("PRJ_PROJECTS", "📐"), ("PRJ_TIMESHEETS", "⏱️")],
+    "PRJ": [("PRJ_PROJECTS", "📐"), ("PRJ_TIMESHEETS", "⏱️"), ("PRJ_PORTFOLIO", "📊")],
     "OPN": [
         ("OPN_SHEET", "🧾"),
         ("OPN_CENTER", "🧭"),

@@ -78,6 +78,11 @@ class ProjectsScreen(QWidget):
 
         self.billing_tab = ProjectBillingTab(self._status)
         self.tabs.addTab(self.billing_tab, "فهرست بها و صورت‌وضعیت")
+        from peecha.ui.screens.project_changes import ProjectChangesTab  # R366
+
+        self.changes_tab = ProjectChangesTab(self._status)
+        self.changes_tab.on_decided = self._reload_project
+        self.tabs.addTab(self.changes_tab, "درخواست تغییر")
         layout.addWidget(self.tabs, 1)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
@@ -114,8 +119,13 @@ class ProjectsScreen(QWidget):
             FieldSpec("prj_contract", "مبلغ قرارداد", self.contract_field, span=1),
             FieldSpec("prj_desc", "شرح", self.description_field, span=3),
         ]))
-        v.addLayout(_bar(("ذخیرهٔ پروژه", "💾", "primary", self.save_project), ("پروژهٔ جدید", "🆕", "", self.new_project),
-                         ("حذف پروژه", "🗑️", "danger", self.delete_project), ("به‌روزرسانی", "🔄", "", self.refresh)))
+        bar = _bar(("ذخیرهٔ پروژه", "💾", "primary", self.save_project), ("پروژهٔ جدید", "🆕", "", self.new_project),
+                   ("حذف پروژه", "🗑️", "danger", self.delete_project), ("به‌روزرسانی", "🔄", "", self.refresh))
+        from peecha.ui.screens.dms_related import related_documents_button  # R366
+
+        self.related_documents_button = related_documents_button(self, "project", lambda: self.project_id)
+        bar.insertWidget(bar.count() - 1, self.related_documents_button)
+        v.addLayout(bar)
         return w
 
     def _detail_changed(self) -> None:
@@ -174,6 +184,21 @@ class ProjectsScreen(QWidget):
         self.contract_field.setText(P(f"{p.contract_amount.normalize():f}") if p.contract_amount else "")
         self.description_field.setText(p.description)
         self.load_schedule()
+
+    def _reload_project(self) -> None:
+        self.refresh()
+        self._load_project()
+
+    def open_project(self, project_id: int, tab: str | None = None) -> None:
+        """باز کردن یک پروژه از سبد پروژه‌ها یا کارتابل (tab = "changes" برای درخواست تغییر)."""
+        self.refresh()
+        row = next((i for i, p in enumerate(self.projects) if p.project_id == project_id), None)
+        if row is None:
+            return
+        self.project_table.setCurrentCell(row, 0)
+        self.project_id = project_id
+        self._load_project()
+        self.tabs.setCurrentWidget(self.changes_tab if tab == "changes" else self.tabs.widget(1))
 
     def new_project(self) -> None:
         self.project_id = None
@@ -313,6 +338,7 @@ class ProjectsScreen(QWidget):
             self.gantt.set_schedule(None)
             self.load_costs()
             self.billing_tab.set_project(None)
+            self.changes_tab.set_project(None)
             return
         try:
             self.schedule = sch.compute(cid, self.project_id)
@@ -365,6 +391,7 @@ class ProjectsScreen(QWidget):
         self.gantt.set_schedule(s)
         self.load_costs()
         self.billing_tab.set_project(project)
+        self.changes_tab.set_project(project)
 
     def _selected_task(self):
         items = self.tree.selectedItems()
