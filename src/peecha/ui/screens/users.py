@@ -243,7 +243,37 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # R276: حذف (اگر سابقه دارد غیرفعال می‌شود)
         delete = delete_button()
         delete.clicked.connect(self._delete)
-        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, delete])
+        # R377: برای کاربری که گوشی و کدهای بازیابی را گم کرده
+        self.mfa_reset_button = QPushButton("🔓")
+        self.mfa_reset_button.setObjectName("iconButton")
+        self.mfa_reset_button.setFixedWidth(44)
+        self.mfa_reset_button.setToolTip("بازنشانی ورود دومرحله‌ای این کاربر")
+        self.mfa_reset_button.setAccessibleName("بازنشانی ورود دومرحله‌ای")
+        self.mfa_reset_button.clicked.connect(self.reset_mfa)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, delete, self.mfa_reset_button])
+
+    def reset_mfa(self) -> bool:
+        from PySide6.QtWidgets import QMessageBox
+
+        from peecha.services import mfa
+
+        if self._editing_id is None or app_session.current_user is None or app_session.current_company is None:
+            self.status_label.setText("یک کاربر را انتخاب کنید.")
+            return False
+        if not mfa.status(self._editing_id).enabled:
+            self.status_label.setText("ورود دومرحله‌ای این کاربر فعال نیست.")
+            return False
+        ask = getattr(self, "confirm_runner", None)  # برای آزمون
+        question = "ورود دومرحله‌ای این کاربر بازنشانی شود؟ در ورود بعدی باید دوباره فعالش کند (اگر الزامی باشد)."
+        if not (ask(question) if ask else QMessageBox.question(self, "بازنشانی ورود دومرحله‌ای", question) == QMessageBox.Yes):
+            return False
+        try:
+            mfa.reset_by_admin(app_session.current_user.user_id, app_session.current_company.company_id, self._editing_id)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return False
+        self.status_label.setText("ورود دومرحله‌ای کاربر بازنشانی شد.")
+        return True
 
     def refresh(self) -> None:
         self._company_options = users_service.list_companies_for_picker()

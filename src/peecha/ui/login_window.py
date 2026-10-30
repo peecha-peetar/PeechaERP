@@ -243,10 +243,32 @@ class LoginWindow(QStackedWidget):
                 self.status_label.setText("برای ورود، رمز جدیدی انتخاب کنید.")
                 return
             user.must_change_password = False
+        if not self._second_factor(user.user_id):
+            return
 
         session.current_user = user
         self._load_default_company(user.user_id)
         self._open_shell()
+
+    def _second_factor(self, user_id: int) -> bool:
+        """R377: کد ورود دومرحله‌ای، یا فعال‌سازی همان لحظه اگر در شرکت کاربر الزامی است."""
+        from PySide6.QtWidgets import QDialog
+
+        from peecha.services import mfa
+        from peecha.ui.mfa_dialogs import MfaCodeDialog, MfaEnrollDialog
+
+        step = mfa.next_step(user_id)
+        if step is None:
+            return True
+        dialog = MfaCodeDialog(self, user_id) if step == "VERIFY" else MfaEnrollDialog(self, user_id, forced=True)
+        runner = getattr(self, "dialog_runner", None)  # برای آزمون
+        if (runner(dialog) if runner else dialog.exec() == QDialog.Accepted):
+            return True
+        self.status_label.setObjectName("statusError")
+        self.status_label.setStyleSheet("")
+        self.status_label.setText("برای ورود، کد ورود دومرحله‌ای لازم است." if step == "VERIFY"
+                                  else "برای ورود، ورود دومرحله‌ای را فعال کنید.")
+        return False
 
     def _load_default_company(self, user_id: int) -> None:
         with new_session() as db_session:

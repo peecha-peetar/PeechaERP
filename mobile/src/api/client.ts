@@ -183,11 +183,11 @@ export class ApiClient {
     await this.request<unknown>("/health", { auth: false });
   }
 
-  async login(username: string, password: string, deviceName?: string): Promise<LoginResponse> {
+  async login(username: string, password: string, deviceName?: string, otp?: string): Promise<LoginResponse> {
     const data = await this.request<LoginResponse>("/auth/login", {
       method: "POST",
       auth: false,
-      body: { username, password, device_name: deviceName ?? null },
+      body: { username, password, device_name: deviceName ?? null, otp: otp ?? null },
     });
     await this.tokenStore.setTokens(data.access_token, data.refresh_token);
     return data;

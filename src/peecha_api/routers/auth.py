@@ -43,6 +43,26 @@ def _resolve_company_for_user(user_id: int) -> tuple[int, str]:
         return company.company_id, company.display_name
 
 
+def _second_factor(user_id: int, otp: str | None) -> None:
+    """R377: ۴۲۸ یعنی اپ باید کد شش‌رقمی را بپرسد؛ فعال‌سازی فقط در دسکتاپ (نمایش QR) انجام می‌شود."""
+    from peecha.services import mfa
+
+    step = mfa.next_step(user_id)
+    if step == "ENROLL":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="ورود دومرحله‌ای برای حساب شما الزامی است؛ اول آن را در برنامهٔ دسکتاپ فعال کنید.")
+    if step != "VERIFY":
+        return
+    if not (otp or "").strip():
+        raise HTTPException(status_code=status.HTTP_428_PRECONDITION_REQUIRED, detail="کد شش‌رقمی ورود دومرحله‌ای را وارد کنید.")
+    try:
+        auth_service.verify_second_factor(user_id, otp)
+    except auth_service.AccountLockedError as exc:
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request) -> TokenResponse:
     enforce_login_rate_limit(request, payload.username)
@@ -52,6 +72,7 @@ def login(payload: LoginRequest, request: Request) -> TokenResponse:
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(exc)) from exc
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="نام‌کاربری یا رمز عبور نادرست است.")
+    _second_factor(user.user_id, payload.otp)
     company_id, company_name = _resolve_company_for_user(user.user_id)
     _device_token_id, refresh_token = security.create_device_token(user.user_id, company_id, payload.device_name)
     access_token = security.create_access_token(user.user_id, company_id)

@@ -30,7 +30,9 @@ _ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "�
                   "MERGE": "ادغام", "SUBMIT": "ارسال", "REJECT": "رد", "DELEGATE": "واگذاری", "ESCALATE": "ارجاع به مافوق",
                   "EXECUTE": "ثبت نهایی", "PUBLISH": "انتشار", "CANCEL": "لغو", "RETRY": "تلاش دوباره", "RESOLVE": "حل",
                   "COMMENT": "یادداشت", "START": "شروع", "COMPLETE": "انجام", "LOGIN": "ورود", "LOGIN_FAIL": "ورود ناموفق",
-                  "LOCK": "قفل حساب"}
+                  "LOCK": "قفل حساب", "MFA_ON": "فعال‌سازی ورود دومرحله‌ای", "MFA_OFF": "خاموش کردن ورود دومرحله‌ای",
+                  "MFA_RESET": "بازنشانی ورود دومرحله‌ای", "MFA_FAIL": "کد ورود دومرحله‌ای نادرست", "MFA_BACKUP": "ورود با کد بازیابی",
+                  "MFA_CODES": "کدهای بازیابی جدید"}
 _ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سند حسابداری", "StockDocument": "سند انبار",
                        "WarehouseTask": "وظیفهٔ انبار", "CycleCountSession": "شمارش انبار", "CommercialDocument": "سند فروش/خرید",
                        "BinLocation": "محل انبار", "ItemStorageProfile": "شرایط نگهداری کالا", "ProductionOrder": "دستور تولید",

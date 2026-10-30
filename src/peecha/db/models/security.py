@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -322,3 +323,18 @@ role_field_permissions_history = Table(
     Column("valid_from", DateTime(timezone=True)), Column("valid_to", DateTime(timezone=True)),
     schema="sec",
 )
+
+
+class UserMfa(Base):
+    """R377: ورود دومرحله‌ای کاربر (راز TOTP، کدهای بازیابی درهم‌سازی‌شده)."""
+
+    __tablename__ = "user_mfa"
+    __table_args__ = {"schema": "sec"}
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id", ondelete="CASCADE"), primary_key=True)
+    secret: Mapped[str] = mapped_column(String(64))
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled_at: Mapped[datetime.datetime | None]
+    recovery_hashes: Mapped[list] = mapped_column(JSONB, default=list)
+    last_step: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

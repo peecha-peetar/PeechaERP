@@ -59,6 +59,8 @@ VALUE_LABELS = {
     "CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف", "APPROVE": "تایید", "REJECT": "رد", "REVERSE": "برگشت",
     "POST": "ثبت قطعی", "CANCEL": "لغو", "MERGE": "ادغام", "SUBMIT": "ارسال", "CLOSE": "بستن", "REOPEN": "بازگشایی",
     "LOGIN": "ورود", "LOGIN_FAIL": "ورود ناموفق", "LOCK": "قفل حساب",
+    "MFA_ON": "فعال‌سازی ورود دومرحله‌ای", "MFA_OFF": "خاموش کردن ورود دومرحله‌ای", "MFA_RESET": "بازنشانی ورود دومرحله‌ای",
+    "MFA_FAIL": "کد ورود دومرحله‌ای نادرست", "MFA_BACKUP": "ورود با کد بازیابی", "MFA_CODES": "کدهای بازیابی جدید",
     "QC_RECORD": "ثبت نتیجهٔ بازرسی کیفیت", "QC_CANCEL": "لغو بازرسی کیفیت", "QC_RELEASE": "آزادسازی از قرنطینه",
     "QC_RETURN_TO_SUPPLIER": "برگشت به تامین‌کننده پس از بازرسی", "CROSS_DOCK": "ارسال مستقیم", "STOCK_RESERVE": "رزرو موجودی",
     "STOCK_RELEASE": "آزادسازی رزرو", "REVERSE_CANCEL": "برگشت و لغو", "RETURN_TO_SUPPLIER": "برگشت به تامین‌کننده",

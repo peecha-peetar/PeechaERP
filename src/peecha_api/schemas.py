@@ -13,6 +13,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     device_name: str | None = None
+    otp: str | None = None  # R377: کد ورود دومرحله‌ای یا کد بازیابی
 
 
 class TokenResponse(BaseModel):

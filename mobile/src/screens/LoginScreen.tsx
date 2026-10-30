@@ -6,6 +6,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { LoginResponse } from "../api/types";
 import { KeyValueStore } from "../storage/keyValueStore";
 import { describeConnectionError, normalizeServerUrl, serverUrlWarning } from "../serverUrl";
+import { isOtpRequired, normalizeOtp } from "../mfa";
 
 interface Props {
   apiClient: ApiClient;
@@ -28,6 +29,8 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
   const [showServerField, setShowServerField] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [needOtp, setNeedOtp] = useState(false);
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,9 +69,15 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
     setLoading(true);
     let data: LoginResponse;
     try {
-      data = await apiClient.login(username.trim(), password);
+      data = await apiClient.login(username.trim(), password, undefined, needOtp ? normalizeOtp(otp) : undefined);
     } catch (err) {
-      setError(describeConnectionError(err, apiClient.getBaseUrl()));
+      if (isOtpRequired(err)) {
+        setNeedOtp(true);
+        setInfo("کد شش‌رقمی برنامهٔ احراز هویت گوشی (یا یکی از کدهای بازیابی) را وارد کنید.");
+      } else {
+        setError(describeConnectionError(err, apiClient.getBaseUrl()));
+        setOtp("");
+      }
       setLoading(false);
       return;
     }
@@ -115,9 +124,21 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
         onChangeText={setPassword}
         secureTextEntry
       />
+      {needOtp ? (
+        <TextInput
+          style={[inputStyle, { textAlign: "center" }]}
+          placeholder="کد ورود دومرحله‌ای"
+          placeholderTextColor={colors.textSecondary}
+          value={otp}
+          onChangeText={setOtp}
+          autoCapitalize="characters"
+          keyboardType="default"
+          maxLength={12}
+        />
+      ) : null}
       {error !== null ? <Text style={[typography.caption, { color: colors.danger, marginBottom: spacing.md }]}>{error}</Text> : null}
       {info !== null ? <Text style={[typography.caption, { color: colors.success, marginBottom: spacing.md }]}>{info}</Text> : null}
-      <Button label="ورود" onPress={handleLogin} loading={loading} disabled={!username || !password} />
+      <Button label="ورود" onPress={handleLogin} loading={loading} disabled={!username || !password || (needOtp && !otp)} />
 
       {showServerField ? (
         <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>

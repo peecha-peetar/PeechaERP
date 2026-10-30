@@ -1626,6 +1626,14 @@ class MainWindow(QMainWindow):
         password_button.setCursor(Qt.PointingHandCursor)
         password_button.clicked.connect(self._change_password)
         layout.addWidget(password_button)
+        mfa_button = QToolButton()  # R377
+        mfa_button.setObjectName("fieldHelpToggle")
+        mfa_button.setText("🔐")
+        mfa_button.setToolTip("ورود دومرحله‌ای")
+        mfa_button.setAccessibleName("ورود دومرحله‌ای")
+        mfa_button.setCursor(Qt.PointingHandCursor)
+        mfa_button.clicked.connect(self._mfa_settings)
+        layout.addWidget(mfa_button)
 
         logout_button = QPushButton("خروج")
         logout_button.setObjectName("flatButton")
@@ -1933,6 +1941,12 @@ class MainWindow(QMainWindow):
 
         if session.current_user is not None and ChangePasswordDialog(self, session.current_user.user_id).exec():
             QMessageBox.information(self, "تغییر رمز عبور", "رمز عبور عوض شد.")
+
+    def _mfa_settings(self) -> None:
+        from peecha.ui.mfa_dialogs import MfaSettingsDialog
+
+        if session.current_user is not None:
+            MfaSettingsDialog(self, session.current_user.user_id).exec()
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow

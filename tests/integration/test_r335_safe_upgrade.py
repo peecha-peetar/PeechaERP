@@ -108,8 +108,8 @@ after = rows(spec)
 SYSTEM_TEXT = {"inv.feature_definitions"}
 lost = {name: before[name] - after[name] for name in spec if before[name] - after[name] and name not in SYSTEM_TEXT}
 check(not lost, f"no existing row changed or disappeared ({list(lost)[:5]})")
-check(all(sum(before[name].values()) == sum(after[name].values()) for name in SYSTEM_TEXT),
-      "system definitions keep every row (only their display text may be reworded)")
+check(all(sum(before[name].values()) <= sum(after[name].values()) for name in SYSTEM_TEXT),
+      "system definitions keep every row (only their display text may be reworded; new ones may be added)")
 cols = {c["name"] for c in sa_inspect(engine).get_columns("distribution_runs", schema="comm")}
 check({"start_latitude", "start_longitude"} <= cols, "the new columns are there")
 status, files, backup_path, version, source, error = last_upgrade()
