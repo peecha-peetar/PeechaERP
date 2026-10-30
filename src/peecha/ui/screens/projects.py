@@ -74,6 +74,10 @@ class ProjectsScreen(QWidget):
         self.tabs.addTab(self._tasks_tab(), "فاز و فعالیت")
         self.tabs.addTab(self._gantt_tab(), "نمودار گانت")
         self.tabs.addTab(self._cost_tab(), "هزینه و کارکرد")
+        from peecha.ui.screens.project_billing import ProjectBillingTab  # R365
+
+        self.billing_tab = ProjectBillingTab(self._status)
+        self.tabs.addTab(self.billing_tab, "فهرست بها و صورت‌وضعیت")
         layout.addWidget(self.tabs, 1)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
@@ -308,6 +312,7 @@ class ProjectsScreen(QWidget):
             self.summary_label.setText("ابتدا یک پروژه را در زبانهٔ «پروژه‌ها» انتخاب کنید.")
             self.gantt.set_schedule(None)
             self.load_costs()
+            self.billing_tab.set_project(None)
             return
         try:
             self.schedule = sch.compute(cid, self.project_id)
@@ -359,6 +364,7 @@ class ProjectsScreen(QWidget):
                                for ln in self.links], [ln.link_id for ln in self.links])
         self.gantt.set_schedule(s)
         self.load_costs()
+        self.billing_tab.set_project(project)
 
     def _selected_task(self):
         items = self.tree.selectedItems()

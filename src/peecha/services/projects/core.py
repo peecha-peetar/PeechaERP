@@ -232,6 +232,10 @@ def delete_project(company_id: int, project_id: int) -> None:
 
         if timesheets.entries_exist(session, project_id=project_id):
             raise ValueError("برای این پروژه کارکرد ثبت شده است؛ به‌جای حذف، آن را «لغوشده» کنید.")
+        from peecha.db.models.projects import ProgressStatement
+
+        if session.scalar(select(ProgressStatement.statement_id).where(ProgressStatement.project_id == project_id).limit(1)):
+            raise ValueError("برای این پروژه صورت‌وضعیت ثبت شده است؛ به‌جای حذف، آن را «لغوشده» کنید.")
         session.delete(row)
         session.commit()
 

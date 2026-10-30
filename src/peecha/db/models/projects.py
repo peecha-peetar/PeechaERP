@@ -104,3 +104,68 @@ class TimesheetEntry(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     decided_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ContractItem(Base):
+    """R365: ردیف فهرست بهای پیمان (شرح، واحد، مقدار و بهای واحد)."""
+
+    __tablename__ = "contract_items"
+    __table_args__ = _PRJ
+
+    contract_item_id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("prj.projects.project_id", ondelete="CASCADE"))
+    code: Mapped[str] = mapped_column(String(30))
+    description: Mapped[str] = mapped_column(String(300))
+    unit: Mapped[str] = mapped_column(String(30))
+    contract_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 3))
+    unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+
+class BillingSettings(Base):
+    """R365: کالای خدماتی فاکتور صورت‌وضعیت و درصد کسور هر پروژه."""
+
+    __tablename__ = "billing_settings"
+    __table_args__ = _PRJ
+
+    project_id: Mapped[int] = mapped_column(ForeignKey("prj.projects.project_id", ondelete="CASCADE"), primary_key=True)
+    service_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    retention_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=0)
+    insurance_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=0)
+    advance_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    advance_recovery_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=0)
+
+
+class ProgressStatement(Base):
+    """R365: صورت‌وضعیت؛ مبالغ هنگام ذخیره و تایید ثابت می‌شوند."""
+
+    __tablename__ = "progress_statements"
+    __table_args__ = _PRJ
+
+    statement_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    project_id: Mapped[int] = mapped_column(ForeignKey("prj.projects.project_id"))
+    statement_no: Mapped[int] = mapped_column()
+    period_end: Mapped[datetime.date] = mapped_column(Date)
+    status_code: Mapped[str] = mapped_column(String(20), default="DRAFT")
+    gross_to_date: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    previous_gross: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    retention_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    insurance_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    advance_recovery: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    sales_invoice_id: Mapped[int | None] = mapped_column(ForeignKey("comm.commercial_documents.document_id"))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    confirmed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    confirmed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProgressStatementLine(Base):
+    __tablename__ = "progress_statement_lines"
+    __table_args__ = _PRJ
+
+    statement_id: Mapped[int] = mapped_column(ForeignKey("prj.progress_statements.statement_id", ondelete="CASCADE"), primary_key=True)
+    contract_item_id: Mapped[int] = mapped_column(ForeignKey("prj.contract_items.contract_item_id"), primary_key=True)
+    cumulative_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 3))
+    unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
