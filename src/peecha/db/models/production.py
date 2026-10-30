@@ -9,7 +9,7 @@ import datetime
 import decimal
 from typing import Any
 
-from sqlalchemy import BigInteger, ForeignKey, Numeric, SmallInteger, String
+from sqlalchemy import BigInteger, ForeignKey, Numeric, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -690,3 +690,19 @@ class AtpScenarioLine(Base):
     line_date: Mapped[datetime.date]
     quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     note: Mapped[str | None] = mapped_column(String(300))
+
+
+class SubcontractOrder(Base):
+    """R383: دستور تولیدی که پیمانکار بیرونی می‌سازد؛ انبار مواد دستور، انبار نزد پیمانکار است."""
+
+    __tablename__ = "subcontract_orders"
+    __table_args__ = _PRD
+
+    order_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("prd.production_orders.order_id", ondelete="CASCADE"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    subcontractor_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    fee_per_unit: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

@@ -516,6 +516,7 @@ NAV_ITEMS = [
         "children": [
             {"code": "PRD_DASHBOARD", "label": "داشبورد تولید", "screen": "prd_dashboard"},
             {"code": "PRD_ORDERS", "label": "دستورهای تولید", "screen": "prd_orders"},
+            {"code": "PRD_SUBCONTRACT", "label": "پیمانکاری تولید", "screen": "prd_subcontracting"},  # R383
             {"code": "PRD_PLANNING", "label": "برنامه‌ریزی، نیاز مواد و ظرفیت", "screen": "prd_planning"},
             {"code": "PRD_OEE", "label": "اثربخشی کلی تجهیزات", "screen": "prd_oee"},  # R370
             {"code": "PRD_SCHEDULING", "label": "زمان‌بندی با ظرفیت محدود", "screen": "prd_scheduling"},  # R371

@@ -42,7 +42,8 @@ STATUS_LABELS = {"DRAFT": "پیش‌نویس", "PLANNED": "برنامه‌ریز
                  "ON_HOLD": "متوقف", "COMPLETED": "تکمیل‌شده", "CLOSED": "بسته‌شده", "CANCELLED": "لغوشده"}
 TXN_LABELS = {"ISSUE": "مصرف مواد", "RETURN": "برگشت مواد", "RECEIPT": "رسید محصول", "BY_PRODUCT": "محصول جانبی",
               "CO_PRODUCT": "محصول مشترک", "SCRAP": "ضایعات", "LABOR": "دستمزد", "MACHINE": "ماشین", "OVERHEAD": "سربار",
-              "VARIANCE": "انحراف", "REVERSAL": "برگشت تولید", "OPENING": "افتتاحیه (کالای در جریان ساخت)"}
+              "VARIANCE": "انحراف", "REVERSAL": "برگشت تولید", "OPENING": "افتتاحیه (کالای در جریان ساخت)",
+              "SUBCONTRACT": "دستمزد پیمانکار"}
 ACTIVE_STATUSES = ("RELEASED", "IN_PROGRESS", "ON_HOLD")
 WORKING_STATUSES = ("RELEASED", "IN_PROGRESS")
 EDITABLE_STATUSES = ("DRAFT", "PLANNED")
@@ -217,9 +218,9 @@ def _apply_defaults(session, company_id: int, f: OrderFields) -> None:
 
 
 # R337: حساب‌هایی که دستور تولید رویشان سند می‌زند (همراه حساب موجودی)
-_POSTING_ROLES = (c.WIP, c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.VARIANCE, c.SCRAP_LOSS)
+_POSTING_ROLES = (c.WIP, c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.VARIANCE, c.SCRAP_LOSS, c.SUBCONTRACT_APPLIED)
 # R340: نقش‌هایی که فقط سند خود تولید رویشان می‌نشیند (نه سند انبار)؛ گروه الزامی دیگرشان در خود دستور انتخاب می‌شود
-_ORDER_ONLY_ROLES = (c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.SCRAP_LOSS)
+_ORDER_ONLY_ROLES = (c.LABOR_APPLIED, c.MACHINE_APPLIED, c.OVERHEAD_APPLIED, c.SCRAP_LOSS, c.SUBCONTRACT_APPLIED)
 
 
 def _dimension_rules(session, company_id: int) -> SimpleNamespace:
@@ -266,7 +267,7 @@ def _dimension_rules(session, company_id: int) -> SimpleNamespace:
                 continue
             empty = not session.scalar(select(func.count()).select_from(DetailAccount).where(
                 DetailAccount.dimension_type_id == type_id, DetailAccount.is_active.is_(True)))
-            role_label = c.ROLE_LABELS.get(role) or engine.MAPPING_LABELS.get(role, role)
+            role_label = c.ROLE_LABELS.get(role) or c.OPTIONAL_ROLE_LABELS.get(role) or engine.MAPPING_LABELS.get(role, role)
             if role in _ORDER_ONLY_ROLES:
                 group = extra.setdefault(type_id, SimpleNamespace(type_id=type_id, label=label, accounts=[], roles=[],
                                                                   empty=empty, with_order_dims=False))
@@ -1422,7 +1423,7 @@ def _checklist(session, order: ProductionOrder) -> list[SimpleNamespace]:
         StockReservation.source_record_id.in_(select(OrderMaterial.material_id).where(OrderMaterial.order_id == order.order_id))))
     missing_je = [t.txn_id for t in txns if t.stock_document_id and t.amount and t.journal_entry_id is None]
     st = c.settings(session, order.company_id)
-    has_conversion = bool(types & {"LABOR", "MACHINE", "OVERHEAD"})
+    has_conversion = bool(types & {"LABOR", "MACHINE", "OVERHEAD", "SUBCONTRACT"})
     has_ops = session.scalar(select(func.count()).select_from(OrderOperation).where(OrderOperation.order_id == order.order_id))
     item = lambda key, label, ok, note="": SimpleNamespace(key=key, label=label, ok=bool(ok), note=note)  # noqa: E731
     return [

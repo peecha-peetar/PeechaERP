@@ -369,7 +369,7 @@ def wip_report(company_id: int, f) -> ReportResult:
             v = decimal.Decimal(v or 0)
             if t in ("ISSUE", "RETURN"):
                 agg[oid][0] += v
-            elif t in ("LABOR", "MACHINE", "OVERHEAD"):
+            elif t in ("LABOR", "MACHINE", "OVERHEAD", "SUBCONTRACT"):
                 agg[oid][1] += v
             else:
                 agg[oid][2] += v

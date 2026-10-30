@@ -337,6 +337,7 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM prd.cost_allocations WHERE pool_id IN (SELECT pool_id FROM prd.cost_pools WHERE company_id = :company_id)",
     "DELETE FROM prd.cost_pools WHERE company_id = :company_id",
     "DELETE FROM prd.cost_closings WHERE company_id = :company_id",
+    "DELETE FROM prd.subcontract_orders WHERE company_id = :company_id",  # R383
     "DELETE FROM prd.labor_entries WHERE company_id = :company_id",
     "DELETE FROM prd.machine_entries WHERE company_id = :company_id",
     "DELETE FROM prd.order_variances WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",

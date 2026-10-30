@@ -454,13 +454,14 @@ def order_costs(session, order: ProductionOrder) -> SimpleNamespace:
     ratio = produced / planned if planned else ZERO
     material = _sum(session, oid, ("ISSUE",)) - _sum(session, oid, ("RETURN",))
     labor, machine, overhead = (_sum(session, oid, (t,)) for t in ("LABOR", "MACHINE", "OVERHEAD"))
+    subcontract = _sum(session, oid, ("SUBCONTRACT",))  # R383
     by_credit = _sum(session, oid, ("BY_PRODUCT",)) - _sum(session, oid, ("REVERSAL",), where=OrderTransaction.details["of"].astext == "BY_PRODUCT")
     scrap_recovery = _sum(session, oid, ("SCRAP",))
     abnormal = _sum(session, oid, ("VARIANCE",), where=OrderTransaction.reason == "ABNORMAL_SCRAP")
     residual = _sum(session, oid, ("VARIANCE",), where=OrderTransaction.reason == "CLOSE_RESIDUAL")
     co_amount = sum((decimal.Decimal(o.produced_amount) for o in session.scalars(select(OrderOutput).where(
         OrderOutput.order_id == oid, OrderOutput.output_type == "CO_PRODUCT"))), ZERO)
-    gross = material + labor + machine + overhead
+    gross = material + labor + machine + overhead + subcontract
     net = gross - by_credit - scrap_recovery - abnormal
     main_amount = decimal.Decimal(session.scalar(select(func.coalesce(func.sum(OrderOutput.produced_amount), 0)).where(
         OrderOutput.order_id == oid, OrderOutput.output_type == "MAIN")) or 0)
@@ -483,6 +484,7 @@ def order_costs(session, order: ProductionOrder) -> SimpleNamespace:
     actual_unit = c.qty(to_main / produced) if produced else ZERO
     return SimpleNamespace(
         material=c.money(material), labor=c.money(labor), machine=c.money(machine), overhead=c.money(overhead),
+        subcontract=c.money(subcontract),
         gross=c.money(gross), byproduct_credit=c.money(by_credit), scrap_recovery=c.money(scrap_recovery),
         abnormal_scrap=c.money(abnormal), co_product_amount=c.money(co_amount), total=c.money(net),
         received_main=c.money(main_amount), close_residual=c.money(residual), actual_unit_cost=actual_unit,
@@ -702,6 +704,7 @@ def _period_numbers(session, company_id: int, code: str, start: datetime.date, e
         period_code=code, period_start=start, period_end=end, orders_count=len(order_ids), wip_balance=c.money(wip),
         material_total=c.money(total(("ISSUE",)) - total(("RETURN",))), labor_total=c.money(total(("LABOR",))),
         machine_total=c.money(total(("MACHINE",))), overhead_applied=c.money(total(("OVERHEAD",))),
+        subcontract_total=c.money(total(("SUBCONTRACT",))),
         overhead_pools=c.money(sum((decimal.Decimal(p.amount) for p in pools), ZERO)),
         output_total=c.money(total(("RECEIPT", "CO_PRODUCT", "BY_PRODUCT"))),
         variance_total=c.money(total(("VARIANCE",))), in_progress=in_progress, unclosed=unclosed, open_pools=open_pools,

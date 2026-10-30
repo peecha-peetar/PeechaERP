@@ -30,6 +30,7 @@ MACHINE_APPLIED = "PRODUCTION_MACHINE_APPLIED"
 OVERHEAD_APPLIED = "PRODUCTION_OVERHEAD_APPLIED"
 VARIANCE = "PRODUCTION_VARIANCE"
 SCRAP_LOSS = "PRODUCTION_SCRAP_LOSS"
+SUBCONTRACT_APPLIED = "PRODUCTION_SUBCONTRACT_APPLIED"  # R383
 ROLE_LABELS = {
     WIP: "کالای در جریان ساخت (WIP)",
     LABOR_APPLIED: "دستمزد جذب‌شدهٔ تولید",
@@ -38,6 +39,12 @@ ROLE_LABELS = {
     VARIANCE: "انحراف بهای تولید",
     SCRAP_LOSS: "زیان ضایعات غیرعادی تولید",
 }
+# R383: فقط وقتی لازم است که دستوری به پیمانکار سپرده شود؛ جزو «تنظیم کامل حساب‌های تولید» شمرده نمی‌شود
+OPTIONAL_ROLE_LABELS = {SUBCONTRACT_APPLIED: "دستمزد پیمانکاری جذب‌شدهٔ تولید"}
+
+
+def _role_label(role: str) -> str:
+    return ROLE_LABELS.get(role) or OPTIONAL_ROLE_LABELS.get(role, role)
 
 COMPONENT_TYPES = {"MATERIAL": "مادهٔ اولیه", "PACKAGING": "بسته‌بندی", "PART": "قطعه", "SEMI_FINISHED": "نیمه‌ساخته",
                    "CONSUMABLE": "مصرفی"}
@@ -125,11 +132,11 @@ def role_account(session, company_id: int, role: str) -> int | None:
 
 def missing_roles(company_id: int, roles: tuple[str, ...]) -> list[str]:
     with new_session() as session:
-        return [ROLE_LABELS.get(r, r) for r in roles if role_account(session, company_id, r) is None]
+        return [_role_label(r) for r in roles if role_account(session, company_id, r) is None]
 
 
 def require_roles(session, company_id: int, roles: tuple[str, ...]) -> None:
-    missing = [ROLE_LABELS.get(r, r) for r in roles if role_account(session, company_id, r) is None]
+    missing = [_role_label(r) for r in roles if role_account(session, company_id, r) is None]
     if missing:
         raise ValueError("تنظیم حساب تولید ناقص است (تنظیمات انبار ← تنظیم حساب‌ها): " + "، ".join(missing))
 
@@ -150,7 +157,7 @@ def post_journal(session, company_id: int, user_id: int, date: datetime.date, de
     for role, debit, credit, details in lines:
         account_id = role_account(session, company_id, role)
         if account_id is None:
-            raise ValueError(f"حساب «{ROLE_LABELS.get(role, role)}» در تنظیم حساب‌های انبار تعیین نشده است.")
+            raise ValueError(f"حساب «{_role_label(role)}» در تنظیم حساب‌های انبار تعیین نشده است.")
         mapping = session.get(InventoryAccountMapping, (company_id, role))
         ids = {d for d in details if d}
         if mapping is not None and mapping.detail_account_id:
