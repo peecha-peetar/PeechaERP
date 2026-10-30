@@ -721,6 +721,7 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
 _FEATURE_CATEGORIES = [
     ("WMS", "کنترل‌های انبار پیشرفته"), ("LOCATION", "انبار و محل"), ("TRACKING", "ردیابی"), ("QUALITY", "کیفیت"),
     ("CATALOG", "کالا"), ("PLANNING", "برنامه‌ریزی"), ("WORKFLOW", "گردش کار"), ("SECURITY", "امنیت"),
+    ("PURCHASE", "خرید"),  # R379
 ]
 
 

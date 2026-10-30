@@ -741,6 +741,12 @@ def allocate_settlement(
             raise ValueError("تسویه فقط برای فاکتور خرید/فروش یا سند باز افتتاحیه ممکن است.")
         if doc.status_code != "POSTED":
             raise ValueError("فقط فاکتور ثبت‌نهایی‌شده (و نه اصلاح‌شده/لغوشده) قابل‌تسویه است.")
+        if doc.document_type_code == "PURCHASE_INVOICE":  # R379: قفل اختیاری تطبیق سه‌طرفه
+            from peecha.services import three_way_lock
+
+            blocked = three_way_lock.block_reason(company_id, invoice_document_id)
+            if blocked:
+                raise ValueError(blocked)
         if journal_entry_id is not None:
             je = session.get(JournalEntry, journal_entry_id)
             if je is None or je.company_id != company_id:

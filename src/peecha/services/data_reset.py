@@ -218,6 +218,8 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # شود؛ و طرحِ اقساطِ بدونِ فاکتور (company_id مستقیم، document_id
     # خالی -- طبقِ موردِ ۵) هم قبلاً اصلاً پاک نمی‌شد، این‌جا اضافه شد.
     "DELETE FROM comm.invoice_settlements WHERE company_id = :company_id",
+    "DELETE FROM comm.three_way_releases WHERE company_id = :company_id",  # R379
+    "DELETE FROM comm.three_way_settings WHERE company_id = :company_id",  # R379
     "DELETE FROM comm.installment_collections WHERE line_id IN "
     "(SELECT line_id FROM comm.installment_lines WHERE plan_id IN "
     " (SELECT plan_id FROM comm.installment_plans WHERE company_id = :company_id OR document_id IN "

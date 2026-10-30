@@ -2204,6 +2204,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.assistant import AssistantScreen  # R376
 
         self.register_screen("assistant", lambda: AssistantScreen(self))
+        from peecha.ui.screens.purchase_three_way_lock import PurchaseThreeWayLockScreen  # R379
+
+        self.register_screen("purchase_three_way_lock", lambda: PurchaseThreeWayLockScreen(self))
         self.register_screen("prd_master", lambda: prd_screens.MasterDataScreen())
         self.register_screen("prd_costing", lambda: prd_screens.PrdCostingScreen())
         self.register_screen("prd_settings", lambda: prd_screens.PrdSettingsScreen())

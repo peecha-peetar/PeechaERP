@@ -2675,6 +2675,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             theme.set_status_label(self.status_label, "نرخ ارز را وارد کنید.", ok=False)
             return
 
+        if self._settle_invoices:  # R379: پیش از ثبت سند، نه پس از آن
+            from peecha.services import three_way_lock
+
+            blocked = next((b for b in (three_way_lock.block_reason(self.company_id, i) for i, _a in self._settle_invoices) if b), None)
+            if blocked:
+                theme.set_status_label(self.status_label, blocked, ok=False)
+                return
+
         try:
             result = treasury_service.create_treasury_voucher(
                 self.company_id,

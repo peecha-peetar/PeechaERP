@@ -729,6 +729,7 @@ NAV_ITEMS = [
             # نه تبی درونِ فرمِ سفارشِ خرید -- تا بشود فقط همین دسترسی
             # (بدونِ دسترسی به فرمِ کاملِ دارایِ قیمت) به انباردار داد.
             {"code": "PURCH_GOODS_RECEIPT", "label": "تایید رسید کالا", "screen": "purchase_goods_receipt"},
+            {"code": "PURCH_THREE_WAY_LOCK", "label": "قفل پرداخت تطبیق سه‌طرفه", "screen": "purchase_three_way_lock"},  # R379
             # R240: انواعِ خرید، علت‌هایِ لغو، سیاستِ سفارشِ کالا
             {"code": "PURCH_MASTERS", "label": "اطلاعات پایهٔ تدارکات", "screen": "procurement_masters"},
         ],
@@ -928,6 +929,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("PURCH_CONSIGNMENT_IN", "🤝"),
         ("PURCH_DOCUMENTS_LIST", "📚"),
         ("PURCH_EXTRAS", "🚢"),
+        ("PURCH_THREE_WAY_LOCK", "🔒"),
     ],
     "HR": [
         ("HR_ORG_UNITS", "🏢"),

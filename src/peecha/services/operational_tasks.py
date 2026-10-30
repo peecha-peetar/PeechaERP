@@ -73,6 +73,7 @@ KIND_LABELS = {
     "HR_TRAINING_GAPS": "دوره‌های الزامی آموزش",  # R369
     "PRD_ECO_APPROVE": "تایید تغییر مهندسی محصول",  # R372
     "PRD_ECO_IMPLEMENT": "اجرای تغییر مهندسی محصول",  # R372
+    "PUR_THREE_WAY": "پرداخت بستهٔ فاکتورهای خرید",  # R379
 }
 
 
@@ -200,6 +201,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _appraisal_tasks(company_id, user_id)
     tasks += _training_tasks(company_id, user_id, is_manager)
     tasks += _eco_tasks(company_id, user_id)
+    tasks += _three_way_tasks(company_id, user_id)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -730,3 +732,16 @@ def _eco_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
     return [OperationalTask(kind, KIND_LABELS[kind], r.eco_id, kind, f"{r.code} {r.item_label}: {r.title}", "",
                             r.created_at.date(), r.status_code)
             for kind, rows in (("PRD_ECO_APPROVE", waiting), ("PRD_ECO_IMPLEMENT", ready)) for r in rows]
+
+
+def _three_way_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
+    """R379: فاکتورهای خرید با پرداخت بسته (قفل تطبیق سه‌طرفه روشن) برای کسی که می‌تواند آزادشان کند."""
+    from peecha.services import three_way_lock as twl
+
+    if not twl.enabled(company_id) or not twl.can_release(company_id, user_id):
+        return []
+    rows = twl.list_invoices(company_id)
+    if not rows:
+        return []
+    return [OperationalTask("PUR_THREE_WAY", KIND_LABELS["PUR_THREE_WAY"], 0, "",
+                            f"پرداخت {len(rows)} فاکتور خرید به‌خاطر مغایرت تطبیق سه‌طرفه بسته است", "", None, "")]

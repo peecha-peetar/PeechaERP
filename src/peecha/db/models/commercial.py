@@ -2219,3 +2219,30 @@ class DocumentPromotion(Base):
     line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(String(10))
     discount_added: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+
+
+class ThreeWaySettings(Base):
+    """R379: حد مجاز اختلاف فی و مقدار برای قفل پرداخت تطبیق سه‌طرفه."""
+
+    __tablename__ = "three_way_settings"
+    __table_args__ = {"schema": "comm"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    price_tolerance_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=0)
+    qty_tolerance_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=0)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class ThreeWayRelease(Base):
+    """R379: آزادسازی دستی پرداخت یک فاکتور خرید دارای مغایرت."""
+
+    __tablename__ = "three_way_releases"
+    __table_args__ = {"schema": "comm"}
+
+    release_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    invoice_document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id", ondelete="CASCADE"))
+    reason: Mapped[str] = mapped_column(String(500))
+    released_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    released_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
