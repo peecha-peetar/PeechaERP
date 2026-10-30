@@ -651,6 +651,7 @@ NAV_ITEMS = [
             {"code": "MNT_BOARD", "label": "دستورهای کار", "screen": "mnt_work_orders"},
             {"code": "MNT_PM", "label": "نگهداری پیشگیرانه", "screen": "mnt_pm"},
             {"code": "MNT_EQUIPMENT", "label": "تجهیزات", "screen": "mnt_equipment"},
+            {"code": "MNT_CALIBRATION", "label": "کالیبراسیون", "screen": "mnt_calibration"},  # R382
             {"code": "MNT_AVAILABILITY", "label": "توقف‌ها و ظرفیت ماشین", "screen": "mnt_availability"},
             {"code": "MNT_REPORTS", "label": "گزارش‌ها", "children": _report_menu("MNT_RPT", "warehouse_report_", MNT_REPORT_MENU)},
             {"code": "MNT_SETTINGS", "label": "تنظیمات نگهداری", "screen": "mnt_settings", "hidden_from_sidebar": True},

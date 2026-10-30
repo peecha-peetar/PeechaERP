@@ -193,6 +193,8 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM mnt.pm_plan_tasks WHERE plan_id IN (SELECT plan_id FROM mnt.pm_plans WHERE company_id = :company_id)",
     "DELETE FROM mnt.pm_plan_parts WHERE plan_id IN (SELECT plan_id FROM mnt.pm_plans WHERE company_id = :company_id)",
     "DELETE FROM mnt.pm_plans WHERE company_id = :company_id",
+    "DELETE FROM mnt.calibration_records WHERE company_id = :company_id",  # R382
+    "DELETE FROM mnt.calibration_instruments WHERE company_id = :company_id",  # R382
     "DELETE FROM mnt.equipment_profiles WHERE company_id = :company_id",
     # R311: عدم‌انطباق/اقدام و نتایج پارامترها پیش از خود بازرسی‌ها
     "DELETE FROM qms.capa_actions WHERE company_id = :company_id",

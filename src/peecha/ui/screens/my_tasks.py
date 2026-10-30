@@ -91,6 +91,9 @@ def open_operational_task(main_window, kind: str, document_type_code: str, docum
     if kind == "MNT_APPROVAL":
         main_window.open_screen("MNT_AVAILABILITY")
         return True
+    if kind == "MNT_CALIBRATION":   # R382
+        main_window.open_screen("MNT_CALIBRATION")
+        return True
     if kind in ("BUD_REVIEW", "BUD_APPROVE", "BUD_PUBLISH", "BUD_REVISE"):   # R313
         main_window.open_screen("BUD_BUDGETS", then=lambda screen: screen.open_version(document_id))
         return True
@@ -158,7 +161,7 @@ TONES = {"approve": ("🖊️", "INFO"), "task": ("📋", "CHART_TEAL"), "doc": 
          "followup": ("📞", "CHART_ORANGE"), "customer": ("👤", "SUCCESS"), "mine": ("📨", "ACCENT")}
 DOC_GLYPHS = {"MANAGER_APPROVAL": "🖊️", "PR_APPROVAL": "📝", "GOODS_RECEIPT": "📦", "PRE_SALES_WAREHOUSE": "🏬", "SETTLEMENT_APPROVAL": "💰",
               "CONVERT_TO_INVOICE": "🔁", "POST_ORDER": "📌", "INVENTORY_RESIDUAL": "🧮", "PUTAWAY_PENDING": "📥", "QC_PENDING": "🧪", "EXPIRY_NEAR": "⏳", "EXPIRED_STOCK": "⌛", "TRANSIT_ARRIVING": "🚚", "CROSS_DOCK": "🔀",
-              "MNT_MY_WORK": "🧰", "MNT_TO_VERIFY": "🛡️", "MNT_NEW_REQUEST": "📝", "MNT_APPROVAL": "🗓️",
+              "MNT_MY_WORK": "🧰", "MNT_TO_VERIFY": "🛡️", "MNT_NEW_REQUEST": "📝", "MNT_APPROVAL": "🗓️", "MNT_CALIBRATION": "📏",
               "BUD_REVIEW": "🔍", "BUD_APPROVE": "✅", "BUD_PUBLISH": "📢", "BUD_REVISE": "📝", "BUD_EXCEPTION": "🛂",
               "OPN_ENTER": "📥", "OPN_APPROVE": "✅", "OPN_POST": "📌", "OPN_LOCK": "🔒",
               "HR_LEAVE": "🌴", "HR_ATTENDANCE": "🕘", "HR_OVERTIME": "⏱️", "VAN_SETTLE_WAREHOUSE": "🚚", "VAN_SETTLE_ACCOUNTING": "💵",

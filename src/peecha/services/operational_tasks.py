@@ -48,6 +48,7 @@ KIND_LABELS = {
     "MNT_TO_VERIFY": "آزمون دستور کار نگهداری",
     "MNT_NEW_REQUEST": "درخواست تعمیر بررسی‌نشده",
     "MNT_APPROVAL": "تأیید نگهداری",
+    "MNT_CALIBRATION": "کالیبراسیون ابزار اندازه‌گیری",  # R382
     # R313: بودجه‌ریزی
     "BUD_REVIEW": "بررسی نسخهٔ بودجه",
     "BUD_APPROVE": "تأیید نسخهٔ بودجه",
@@ -193,6 +194,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _expiry_alerts(company_id, user_id, is_manager)
     tasks += _flow_tasks(company_id, user_id, is_manager)
     tasks += _maintenance_tasks(company_id, user_id, is_manager)
+    tasks += _calibration_tasks(company_id, user_id, is_manager)
     tasks += _budget_tasks(company_id, user_id)
     tasks += _opening_tasks(company_id, user_id)
     tasks += _hr_tasks(company_id, user_id, is_manager)
@@ -765,3 +767,20 @@ def _mission_tasks(company_id: int, user_id: int, is_manager: bool) -> list[Oper
         out.append(OperationalTask("HR_MISSION_POST", KIND_LABELS["HR_MISSION_POST"], 0, "",
                                    f"{to_post} صورت‌حساب مأموریت تاییدشده هنوز سند حسابداری ندارد", "", None, ""))
     return out
+
+
+def _calibration_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R382: ابزارهای گذشته از سررسید، نزدیک سررسید یا خارج از خدمت؛ همه برای مدیر نگهداری، و ابزارهای خود مسئول ابزار."""
+    from peecha.services import stock_controls
+    from peecha.services.maintenance import calibration
+    from peecha.services.maintenance import common as mc
+
+    roles_on = stock_controls.is_on(company_id, stock_controls.MNT_ROLE_PERMISSIONS)
+    everything = is_manager or (roles_on and mc.can(company_id, user_id, mc.FORM_MANAGE))
+    counts = calibration.due_counts(company_id, None if everything else user_id)
+    if not any(counts.values()):
+        return []
+    parts = [f"{n} {label}" for key, label in (("OVERDUE", "گذشته از سررسید"), ("DUE", "نزدیک سررسید"), ("OUT_OF_SERVICE", "خارج از خدمت"))
+             if (n := counts[key])]
+    return [OperationalTask("MNT_CALIBRATION", KIND_LABELS["MNT_CALIBRATION"], 0, "", "ابزار اندازه‌گیری: " + "، ".join(parts),
+                            "", None, "")]

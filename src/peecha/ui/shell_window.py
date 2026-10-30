@@ -2253,6 +2253,9 @@ class MainWindow(QMainWindow):
         self.register_screen("mnt_work_orders", lambda: mnt_screens.WorkOrderBoardScreen(self))
         self.register_screen("mnt_pm", lambda: mnt_screens.PmScreen(self))
         self.register_screen("mnt_equipment", lambda: mnt_screens.EquipmentScreen(self))
+        from peecha.ui.screens.mnt_calibration import CalibrationScreen  # R382
+
+        self.register_screen("mnt_calibration", lambda: CalibrationScreen(self))
         self.register_screen("mnt_availability", lambda: mnt_screens.AvailabilityScreen(self))
         self.register_screen("mnt_settings", lambda: mnt_screens.MntSettingsScreen(self))
         # R313: بودجه‌ریزی و کنترل بودجه

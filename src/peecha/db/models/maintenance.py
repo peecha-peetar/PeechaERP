@@ -352,3 +352,55 @@ class PmPostponement(Base):
     requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     decided_at: Mapped[datetime.datetime | None]
+
+
+class CalibrationInstrument(Base):
+    """R382: ابزار اندازه‌گیری با دورهٔ کالیبراسیون."""
+
+    __tablename__ = "calibration_instruments"
+    __table_args__ = {"schema": "mnt"}
+
+    instrument_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(200))
+    asset_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fa.assets.asset_id"))
+    serial_no: Mapped[str | None] = mapped_column(String(100))
+    location_text: Mapped[str | None] = mapped_column(String(200))
+    measure_range: Mapped[str | None] = mapped_column(String(100))
+    tolerance: Mapped[str | None] = mapped_column(String(100))
+    interval_days: Mapped[int]
+    lead_days: Mapped[int] = mapped_column(default=14)
+    method_code: Mapped[str] = mapped_column(String(10), default="EXTERNAL")
+    lab_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    responsible_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="ACTIVE")
+    next_due_date: Mapped[datetime.date]
+    last_calibrated_on: Mapped[datetime.date | None]
+    notes: Mapped[str | None] = mapped_column(String(1000))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CalibrationRecord(Base):
+    """R382: نتیجهٔ یک کالیبراسیون."""
+
+    __tablename__ = "calibration_records"
+    __table_args__ = {"schema": "mnt"}
+
+    record_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    instrument_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("mnt.calibration_instruments.instrument_id", ondelete="CASCADE"))
+    record_no: Mapped[int]
+    calibrated_on: Mapped[datetime.date]
+    result_code: Mapped[str] = mapped_column(String(10))
+    performed_by: Mapped[str | None] = mapped_column(String(200))
+    certificate_no: Mapped[str | None] = mapped_column(String(100))
+    as_found: Mapped[str | None] = mapped_column(String(500))
+    as_left: Mapped[str | None] = mapped_column(String(500))
+    cost_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    next_due_date: Mapped[datetime.date | None]
+    ncr_id: Mapped[int | None] = mapped_column(ForeignKey("qms.nonconformances.ncr_id", ondelete="SET NULL"))
+    notes: Mapped[str | None] = mapped_column(String(1000))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
