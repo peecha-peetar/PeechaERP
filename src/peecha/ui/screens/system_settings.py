@@ -480,6 +480,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
             ("تعهد زمانی تیکت‌ها", crm.SlaPoliciesPanel),
             ("الگوهای پیام", crm.TemplatesPanel),
             ("پیام‌رسان‌ها", messaging.MessengersPanel),
+            ("ایمیل", messaging.EmailSettingsPanel),  # R380
             ("پیام پس از فرایند", messaging.ProcessMessagesPanel),
             ("تحلیل مشتری", crm.AnalyticsSettingsPanel),
         ])

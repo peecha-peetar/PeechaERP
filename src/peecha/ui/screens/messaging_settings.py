@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 from peecha.services import detail_dimensions as dims
@@ -288,3 +289,106 @@ class ProcessMessagesPanel(_CrmPanel):
 
 def _raise(message: str) -> None:
     raise ValueError(message)
+
+
+class EmailSettingsPanel(_CrmPanel):
+    """R380: سرور ایمیل (SMTP) شرکت برای پیام و کمپین ایمیلی و اعلان‌های کانال ایمیل."""
+
+    def __init__(self, host=None) -> None:
+        from PySide6.QtWidgets import QComboBox, QHBoxLayout, QSpinBox
+
+        from peecha.services import messaging_email
+        from peecha.ui.widgets import FieldGrid, FieldSpec
+
+        super().__init__(host)
+        lay = QVBoxLayout(self)
+        lay.addWidget(_hint("ایمیل‌های مرکز ارتباطات، کمپین‌های ایمیلی و اعلان‌هایی که کاربر کانال «ایمیل» را برایشان روشن کرده از این "
+                            "سرور فرستاده می‌شوند. مشخصات را از سرویس‌دهندهٔ ایمیل (یا سرور ایمیل سازمان) بگیرید؛ رمز رمزنگاری‌شده "
+                            "نگه داشته می‌شود و دوباره نمایش داده نمی‌شود."))
+        self.host_field, self.user_field, self.password_field = QLineEdit(), QLineEdit(), QLineEdit()
+        self.password_field.setEchoMode(QLineEdit.Password)
+        self.from_field, self.from_name_field, self.test_to_field = QLineEdit(), QLineEdit(), QLineEdit()
+        for f in (self.host_field, self.user_field, self.from_field, self.test_to_field):
+            f.setLayoutDirection(Qt.LeftToRight)
+        self.port_field = QSpinBox()
+        self.port_field.setRange(1, 65535)
+        self.port_field.setValue(587)
+        self.security_combo = QComboBox()
+        for code, label in messaging_email.SECURITY.items():
+            self.security_combo.addItem(label, code)
+        self.active_box = QCheckBox("روشن")
+        from peecha.ui.widgets import set_widget_help
+
+        for widget, text in (
+                (self.host_field, "نشانی سرور ارسال ایمیل (SMTP) که سرویس‌دهندهٔ ایمیل داده است، مثل smtp.example.com."),
+                (self.port_field, "درگاه سرور: معمولاً ۵۸۷ برای STARTTLS، ۴۶۵ برای SSL و ۲۵ برای بدون رمزنگاری."),
+                (self.security_combo, "نوع رمزنگاری اتصال؛ «بدون رمزنگاری» فقط برای سرور داخل شبکهٔ خود شرکت."),
+                (self.user_field, "نام کاربری ورود به سرور ایمیل؛ اگر سرور ورود نمی‌خواهد خالی بگذارید."),
+                (self.password_field, "رمز ورود به سرور ایمیل؛ خالی گذاشتن یعنی همان رمز قبلی بماند."),
+                (self.from_field, "نشانی‌ای که گیرنده به‌عنوان فرستنده می‌بیند؛ باید در همان سرور مجاز باشد."),
+                (self.from_name_field, "نامی که کنار نشانی فرستنده دیده می‌شود، مثل نام شرکت."),
+                (self.test_to_field, "یک نشانی ایمیل برای فرستادن ایمیل آزمون و دیدن درستی تنظیمات.")):
+            set_widget_help(widget, text)
+        lay.addWidget(FieldGrid([
+            FieldSpec("em_host", "نشانی سرور", self.host_field, span=2), FieldSpec("em_port", "درگاه", self.port_field, span=1),
+            FieldSpec("em_security", "امنیت اتصال", self.security_combo, span=1), FieldSpec("em_user", "نام کاربری", self.user_field, span=2),
+            FieldSpec("em_password", "رمز", self.password_field, span=2), FieldSpec("em_from", "ایمیل فرستنده", self.from_field, span=2),
+            FieldSpec("em_from_name", "نام فرستنده", self.from_name_field, span=2), FieldSpec("em_active", "وضعیت", self.active_box, span=1)]))
+        row = QHBoxLayout()
+        row.addWidget(FieldGrid([FieldSpec("em_test_to", "نشانی ایمیل آزمون", self.test_to_field, span=2)]), 1)
+        self.save_button = _icon("💾", "ذخیرهٔ تنظیمات ایمیل", "primary")
+        self.save_button.clicked.connect(self.save)
+        self.test_button = _icon("📧", "فرستادن ایمیل آزمون")
+        self.test_button.clicked.connect(self.test)
+        row.addWidget(self.save_button)
+        row.addWidget(self.test_button)
+        lay.addLayout(row)
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+        lay.addWidget(self.status_label)
+        lay.addStretch(1)
+
+    def refresh(self) -> None:
+        from peecha.services import messaging_email
+
+        cid = company_id()
+        if cid is None:
+            return
+        st = messaging_email.get_settings(cid)
+        self.host_field.setText(st.host)
+        self.port_field.setValue(st.port)
+        idx = self.security_combo.findData(st.security)
+        self.security_combo.setCurrentIndex(max(idx, 0))
+        self.user_field.setText(st.username)
+        self.password_field.clear()
+        self.password_field.setPlaceholderText("خالی = همان رمز قبلی" if st.has_password else "")
+        self.from_field.setText(st.from_address)
+        self.from_name_field.setText(st.from_name)
+        self.active_box.setChecked(st.is_active)
+        allowed = can(_FORM, "EDIT")
+        self.save_button.setEnabled(allowed)
+        self.test_button.setEnabled(allowed)
+        if st.last_error:
+            theme.set_status_label(self.status_label, f"آخرین خطا: {st.last_error}", ok=False)
+
+    def save(self) -> bool:
+        from peecha.services import messaging_email
+
+        try:
+            messaging_email.save_settings(company_id(), user_id(), host=self.host_field.text(), port=self.port_field.value(),
+                                          security=self.security_combo.currentData(), username=self.user_field.text(),
+                                          password=self.password_field.text() or None, from_address=self.from_field.text(),
+                                          from_name=self.from_name_field.text(), is_active=self.active_box.isChecked())
+        except ValueError as exc:
+            theme.set_status_label(self.status_label, str(exc), ok=False)
+            return False
+        self.refresh()
+        theme.set_status_label(self.status_label, "تنظیمات ایمیل ذخیره شد.", ok=True)
+        return True
+
+    def test(self) -> bool:
+        from peecha.services import messaging_email
+
+        ok, message = messaging_email.test_settings(company_id(), self.test_to_field.text())
+        theme.set_status_label(self.status_label, message, ok=ok)
+        return ok

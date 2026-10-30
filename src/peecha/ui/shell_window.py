@@ -1300,6 +1300,7 @@ class MainWindow(QMainWindow):
             from peecha.services.crm import campaigns as crm_campaigns  # R284: وضعیت ارسال مخاطبان کمپین CRM
 
             crm_campaigns.sync_delivery(session.current_company.company_id)
+            crm_campaigns.send_due_email_campaigns(session.current_company.company_id)  # R380
         except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
             pass
 

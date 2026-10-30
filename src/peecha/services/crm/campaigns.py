@@ -238,7 +238,8 @@ def set_member_status(company_id: int, user_id: int, member_id: int, status_code
 
 # --- اجرا ---------------------------------------------------------------------------------------------
 def launch(company_id: int, user_id: int, campaign_id: int, scheduled_at: datetime.datetime | None = None) -> dict:
-    """پیامک ← صف ارسال موجود؛ تماس/بازدید ← فعالیت برای مسئول کمپین؛ سایر انواع فقط فعال می‌شوند."""
+    """پیامک ← صف ارسال موجود؛ تماس/بازدید ← فعالیت برای مسئول کمپین؛ ایمیل (R380) ← ارسال از سرور ایمیل شرکت (اگر
+    زمان‌بندی‌شده باشد، در زمان خودش)؛ سایر انواع فقط فعال می‌شوند."""
     with new_session() as session:
         camp = _get(session, company_id, campaign_id)
         if camp.status_code != "DRAFT":
@@ -266,12 +267,15 @@ def launch(company_id: int, user_id: int, campaign_id: int, scheduled_at: dateti
                     m.status_code, m.note = "FAILED", "شمارهٔ تماس ندارد"
             camp.sms_campaign_id = sms.campaign_id
             result["sms_recipients"] = len(targets)
+        if camp.campaign_type == "EMAIL" and not (camp.message_text or "").strip():
+            raise ValueError("متن ایمیل کمپین خالی است.")
         camp.status_code = "SCHEDULED" if scheduled_at and scheduled_at > c.now() else "ACTIVE"
         camp.scheduled_at, camp.start_date = when, camp.start_date or when.date()
         camp.updated_at = c.now()
         task_type = _TASK_TYPES.get(camp.campaign_type)
         task_targets = [(m.customer_detail_account_id, m.lead_id) for m in members if m.status_code == "TARGETED"]
         owner, name, no = camp.owner_user_id or user_id, camp.name, camp.campaign_no
+        camp_type = camp.campaign_type
         c.audit(session, company_id, user_id, "Campaign", campaign_id, "LAUNCH", {"members": len(members), **result})
         session.commit()
     if task_type:
@@ -280,7 +284,54 @@ def launch(company_id: int, user_id: int, campaign_id: int, scheduled_at: dateti
                 task_type, f"کمپین {no}: {name}", customer_detail_account_id=customer_id,
                 lead_id=None if customer_id else lead_id, due_date=when.date(), assigned_to_user_id=owner))
             result["activities"] += 1
+    if camp_type == "EMAIL" and not (scheduled_at and scheduled_at > c.now()):
+        result.update(send_email_campaign(company_id, user_id, campaign_id))
     return result
+
+
+def send_email_campaign(company_id: int, user_id: int | None, campaign_id: int) -> dict:
+    """R380: ایمیل کمپین به مخاطبان «هدف» (هر کدام یک بار)؛ نتیجهٔ هر نفر در وضعیت مخاطب و دفتر پیام‌ها."""
+    from peecha.db.models.crm import Message
+    from peecha.services.crm import communication as comm
+
+    with new_session() as session:
+        camp = _get(session, company_id, campaign_id)
+        if camp.campaign_type != "EMAIL" or camp.status_code not in ("SCHEDULED", "ACTIVE"):
+            return {"emails_sent": 0, "emails_failed": 0}
+        targets = [(m.member_id, m.customer_detail_account_id, m.lead_id) for m in session.scalars(
+            select(CampaignMember).where(CampaignMember.campaign_id == campaign_id, CampaignMember.status_code == "TARGETED"))]
+        body, subject = camp.message_text or "", camp.name
+        if camp.status_code == "SCHEDULED":
+            camp.status_code = "ACTIVE"
+            session.commit()
+    sent = failed = 0
+    for member_id, customer_id, lead_id in targets:
+        try:
+            message_id = comm.send_message(company_id, user_id, "EMAIL", body, customer_id=customer_id,
+                                           lead_id=None if customer_id else lead_id, subject=subject, campaign_id=campaign_id)
+        except ValueError as exc:
+            ok, note = False, str(exc)
+        else:
+            with new_session() as session:
+                msg = session.get(Message, message_id)
+                ok, note = msg.status_code == "SENT", msg.error_message
+        with new_session() as session:
+            m = session.get(CampaignMember, member_id)
+            m.status_code, m.note = ("SENT", m.note) if ok else ("FAILED", (note or "ارسال نشد")[:300])
+            session.commit()
+        sent, failed = sent + ok, failed + (not ok)
+    return {"emails_sent": sent, "emails_failed": failed}
+
+
+def send_due_email_campaigns(company_id: int, user_id: int | None = None) -> int:
+    """کمپین‌های ایمیلی زمان‌بندی‌شده‌ای که زمانشان رسیده (از تیک کمپین‌ها)."""
+    with new_session() as session:
+        due = list(session.scalars(select(Campaign.campaign_id).where(
+            Campaign.company_id == company_id, Campaign.campaign_type == "EMAIL", Campaign.status_code == "SCHEDULED",
+            Campaign.scheduled_at <= c.now())))
+    for campaign_id in due:
+        send_email_campaign(company_id, user_id, campaign_id)
+    return len(due)
 
 
 def sync_delivery(company_id: int) -> int:

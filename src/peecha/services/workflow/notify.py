@@ -2,7 +2,7 @@
 
 هر اعلان یک ردیف sec.notifications است (همان که اپ موبایل و زنگولهٔ دسکتاپ می‌خوانند). کانال‌های بیرونی (پیامک،
 ایمیل، گوشی) در صف می‌مانند و زمان‌بند آن‌ها را جدا از تراکنش اصلی می‌فرستد، تا کندی یا قطعی سرویس بیرونی هیچ
-تاییدی را معطل نکند. ایمیل و اعلان گوشی فعلاً «رابط» دارند و با register_email_sender/register_push_sender وصل
+تاییدی را معطل نکند. ایمیل (R380) از سرور SMTP شرکت فرستاده می‌شود؛ اعلان گوشی فعلاً «رابط» دارد و با register_push_sender وصل
 می‌شوند.
 """
 
@@ -178,13 +178,20 @@ def _not_configured(company_id: int, user_id: int, title: str, body: str) -> str
     return "NOT_CONFIGURED"
 
 
-_EXTERNAL_SENDERS: dict[str, Callable[[int, int, str, str], str]] = {"sms": _sms_sender, "email": _not_configured,
+def _email_sender(company_id: int, user_id: int, title: str, body: str) -> str:
+    """R380: سرور ایمیل شرکت (تنظیمات › ارتباط با مشتری › ایمیل) و نشانی ایمیل کاربر."""
+    from peecha.services import messaging_email
+
+    return messaging_email.notify_user(company_id, user_id, title, body)
+
+
+_EXTERNAL_SENDERS: dict[str, Callable[[int, int, str, str], str]] = {"sms": _sms_sender, "email": _email_sender,
                                                                        "push": _not_configured}
 
 
 def register_email_sender(sender: Callable[[int, int, str, str], str] | None) -> None:
-    """sender(company_id, user_id, title, body) -> SENT|FAILED|NO_ADDRESS؛ None یعنی «وصل نیست»."""
-    _EXTERNAL_SENDERS["email"] = sender or _not_configured
+    """sender(company_id, user_id, title, body) -> SENT|FAILED|NO_ADDRESS؛ None یعنی همان سرور ایمیل شرکت."""
+    _EXTERNAL_SENDERS["email"] = sender or _email_sender
 
 
 def register_push_sender(sender: Callable[[int, int, str, str], str] | None) -> None:

@@ -200,7 +200,10 @@ class UrlGatewayProvider:
 
 def register_providers() -> None:
     """فقط جای «وصل‌نشده» را می‌گیرد؛ سرویسی که پیش‌تر با register_provider وصل شده دست نمی‌خورد."""
-    for ch, provider in [(ch, BotProvider(ch)) for ch in BOT_CHANNELS] + [(ch, UrlGatewayProvider(ch)) for ch in GATEWAY_CHANNELS]:
+    from peecha.services.messaging_email import EmailProvider
+
+    for ch, provider in [(ch, BotProvider(ch)) for ch in BOT_CHANNELS] + [(ch, UrlGatewayProvider(ch)) for ch in GATEWAY_CHANNELS] \
+            + [("EMAIL", EmailProvider())]:  # R380
         if isinstance(comm._providers.get(ch), comm.NotConfiguredProvider):
             comm.register_provider(ch, provider)
 
