@@ -70,6 +70,7 @@ KIND_LABELS = {
     "HR_APPLICATIONS": "بررسی درخواست‌های استخدام",  # R367
     "HR_APPRAISAL_SELF": "خودارزیابی عملکرد",  # R368
     "HR_APPRAISAL_REVIEW": "ارزیابی عملکرد کارکنان",  # R368
+    "HR_TRAINING_GAPS": "دوره‌های الزامی آموزش",  # R369
 }
 
 
@@ -195,6 +196,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _project_change_tasks(company_id, user_id)
     tasks += _recruitment_tasks(company_id, user_id, is_manager)
     tasks += _appraisal_tasks(company_id, user_id)
+    tasks += _training_tasks(company_id, user_id, is_manager)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -701,3 +703,17 @@ def _appraisal_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
         out.append(OperationalTask("HR_APPRAISAL_REVIEW", KIND_LABELS["HR_APPRAISAL_REVIEW"], waiting[0].appraisal_id, "HR_APPRAISAL",
                                    f"{len(waiting)} ارزیابی عملکرد کارکنان منتظر شماست", "", None, ""))
     return out
+
+
+def _training_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R369: دوره‌های الزامی منقضی، رو به انقضا یا انجام‌نشدهٔ کارکنان برای کارشناس آموزش."""
+    if not _may(company_id, user_id, is_manager, "hr_training", "EDIT"):
+        return []
+    from peecha.services import hr_training
+
+    g = hr_training.gaps(company_id)
+    if not (g["EXPIRED"] or g["EXPIRING"] or g["MISSING"]):
+        return []
+    return [OperationalTask("HR_TRAINING_GAPS", KIND_LABELS["HR_TRAINING_GAPS"], 0, "",
+                            f"دورهٔ الزامی: {g['EXPIRED']} منقضی، {g['EXPIRING']} رو به انقضا، {g['MISSING']} انجام‌نشده",
+                            "", None, "")]

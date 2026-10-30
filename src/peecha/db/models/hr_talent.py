@@ -1,4 +1,4 @@
-"""R367: جذب و استخدام؛ R368: ارزیابی عملکرد (و در نسخهٔ بعد آموزش) روی پرونده‌های پرسنلی hr."""
+"""R367: جذب و استخدام؛ R368: ارزیابی عملکرد؛ R369: آموزش — روی پرونده‌های پرسنلی hr."""
 
 from __future__ import annotations
 
@@ -169,3 +169,59 @@ class AppraisalScore(Base):
     self_score: Mapped[int | None] = mapped_column(SmallInteger)
     manager_score: Mapped[int | None] = mapped_column(SmallInteger)
     comment: Mapped[str | None] = mapped_column(String(500))
+
+
+# --- R369: آموزش -------------------------------------------------------------------------------------------------------
+class TrainingCourse(Base):
+    __tablename__ = "training_courses"
+    __table_args__ = _HR
+
+    course_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    title: Mapped[str] = mapped_column(String(200))
+    category_code: Mapped[str] = mapped_column(String(20), default="OTHER")
+    hours: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 1))
+    validity_months: Mapped[int | None] = mapped_column()
+    provider: Mapped[str | None] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class PositionTraining(Base):
+    """دورهٔ الزامی هر پست سازمانی."""
+
+    __tablename__ = "position_trainings"
+    __table_args__ = _HR
+
+    position_id: Mapped[int] = mapped_column(ForeignKey("hr.positions.position_id", ondelete="CASCADE"), primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("hr.training_courses.course_id", ondelete="CASCADE"), primary_key=True)
+
+
+class TrainingSession(Base):
+    __tablename__ = "training_sessions"
+    __table_args__ = _HR
+
+    session_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    course_id: Mapped[int] = mapped_column(ForeignKey("hr.training_courses.course_id"))
+    start_date: Mapped[datetime.date] = mapped_column(Date)
+    end_date: Mapped[datetime.date] = mapped_column(Date)
+    trainer: Mapped[str | None] = mapped_column(String(200))
+    location: Mapped[str | None] = mapped_column(String(200))
+    capacity: Mapped[int | None] = mapped_column()
+    cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    status_code: Mapped[str] = mapped_column(String(20), default="PLANNED")
+
+
+class TrainingEnrollment(Base):
+    __tablename__ = "training_enrollments"
+    __table_args__ = _HR
+
+    enrollment_id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("hr.training_sessions.session_id", ondelete="CASCADE"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    status_code: Mapped[str] = mapped_column(String(20), default="ENROLLED")
+    score: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    certificate_no: Mapped[str | None] = mapped_column(String(50))
+    completed_on: Mapped[datetime.date | None] = mapped_column(Date)
+    expires_on: Mapped[datetime.date | None] = mapped_column(Date)

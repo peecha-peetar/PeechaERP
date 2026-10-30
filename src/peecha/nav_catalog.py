@@ -750,6 +750,7 @@ NAV_ITEMS = [
             {"code": "HR_SHIFTS", "label": "شیفت، تأخیر و غیبت", "screen": "hr_shifts"},  # R359
             {"code": "HR_RECRUITMENT", "label": "جذب و استخدام", "screen": "hr_recruitment"},  # R367
             {"code": "HR_APPRAISALS", "label": "ارزیابی عملکرد", "screen": "hr_appraisals"},  # R368
+            {"code": "HR_TRAINING", "label": "آموزش کارکنان", "screen": "hr_training"},  # R369
             # طبقِ درخواستِ صریح: تنظیماتِ حقوق‌ودستمزد از یک آیتمِ مستقل به
             # تبی درونِ «تنظیماتِ سیستم» منتقل شد (هم‌الگو با نگاشتِ
             # صورت‌هایِ مالی) — دسترسی از طریقِ آیکونِ چرخ‌دنده‌یِ همین گروه
