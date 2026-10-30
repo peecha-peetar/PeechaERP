@@ -66,6 +66,8 @@ KIND_LABELS = {
     "VAN_SETTLE_ACCOUNTING": "تایید حسابداری تسویهٔ خودرو",
     "PRJ_TIMESHEET": "تایید کارکرد پروژه",  # R364
     "PRJ_CHANGE": "تایید درخواست تغییر پروژه",  # R366
+    "HR_INTERVIEW": "مصاحبهٔ استخدامی",  # R367
+    "HR_APPLICATIONS": "بررسی درخواست‌های استخدام",  # R367
 }
 
 
@@ -189,6 +191,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _van_settlement_tasks(company_id, user_id, is_manager)
     tasks += _project_tasks(company_id, user_id)
     tasks += _project_change_tasks(company_id, user_id)
+    tasks += _recruitment_tasks(company_id, user_id, is_manager)
 
     if is_manager:
         from peecha.services import inventory_residual as residual_service
@@ -651,3 +654,25 @@ def _project_change_tasks(company_id: int, user_id: int) -> list[OperationalTask
     return [OperationalTask("PRJ_CHANGE", KIND_LABELS["PRJ_CHANGE"], r.project_id, "PRJ_CHANGE",
                             f"درخواست تغییر {r.change_no} پروژهٔ {labels.get(r.project_id, '')}: {r.title}", "", r.created_at.date(),
                             r.status_code) for r in rows]
+
+
+def _recruitment_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R367: مصاحبه‌های پیش‌روی مصاحبه‌گر (تا هفت روز آینده و گذشته‌های بی‌نتیجه)، و درخواست‌های بررسی‌نشده برای کارشناس جذب."""
+    from peecha.numerals import format_jalali_datetime
+    from peecha.services import hr_leave, hr_recruitment as rec
+
+    out: list[OperationalTask] = []
+    employee_id = hr_leave.employee_of_user(company_id, user_id)
+    if employee_id is not None:
+        horizon = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+        for i in rec.list_interviews(company_id, interviewer_employee_id=employee_id, pending_only=True):
+            if i.scheduled_at <= horizon:
+                out.append(OperationalTask("HR_INTERVIEW", KIND_LABELS["HR_INTERVIEW"], i.application_id, "HR_INTERVIEW",
+                                           f"مصاحبه با {i.candidate_name} برای {i.opening_label} — {format_jalali_datetime(i.scheduled_at)}",
+                                           i.candidate_name, i.scheduled_at.date(), i.status_code))
+    if _may(company_id, user_id, is_manager, "hr_recruitment", "EDIT"):
+        n = sum(1 for a in rec.list_applications(company_id, open_only=True) if a.stage_code == "APPLIED")
+        if n:
+            out.append(OperationalTask("HR_APPLICATIONS", KIND_LABELS["HR_APPLICATIONS"], 0, "",
+                                       f"{n} درخواست استخدام جدید منتظر بررسی اولیه است", "", None, ""))
+    return out

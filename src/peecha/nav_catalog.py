@@ -748,6 +748,7 @@ NAV_ITEMS = [
             {"code": "HR_ATTENDANCE_ENTRIES", "label": "ورود و خروج کارکنان", "screen": "hr_attendance_entries"},
             {"code": "HR_ATTENDANCE_SUMMARY", "label": "خلاصهٔ کارکرد", "screen": "hr_attendance_summary"},
             {"code": "HR_SHIFTS", "label": "شیفت، تأخیر و غیبت", "screen": "hr_shifts"},  # R359
+            {"code": "HR_RECRUITMENT", "label": "جذب و استخدام", "screen": "hr_recruitment"},  # R367
             # طبقِ درخواستِ صریح: تنظیماتِ حقوق‌ودستمزد از یک آیتمِ مستقل به
             # تبی درونِ «تنظیماتِ سیستم» منتقل شد (هم‌الگو با نگاشتِ
             # صورت‌هایِ مالی) — دسترسی از طریقِ آیکونِ چرخ‌دنده‌یِ همین گروه

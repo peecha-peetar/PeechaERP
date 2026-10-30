@@ -11,6 +11,7 @@ from peecha.db.models import (  # noqa: F401
     documents,
     fixed_assets,
     hr,
+    hr_talent,
     inventory,
     maintenance,
     opening,
