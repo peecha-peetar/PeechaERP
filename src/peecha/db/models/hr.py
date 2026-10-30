@@ -227,3 +227,59 @@ class LeaveRequest(Base):
     decided_at: Mapped[datetime.datetime | None]
     decision_note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class MissionSettings(Base):
+    """R381: نرخ حق مأموریت و حساب‌های سند صورت‌حساب مأموریت."""
+
+    __tablename__ = "mission_settings"
+    __table_args__ = {"schema": "hr"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    per_diem_method: Mapped[str] = mapped_column(String(10), default="FIXED")
+    daily_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    daily_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=0)
+    expense_gl_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    expense_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    payable_gl_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class MissionClaim(Base):
+    """R381: صورت‌حساب مأموریت یک مرخصی «مأموریت» تاییدشده."""
+
+    __tablename__ = "mission_claims"
+    __table_args__ = {"schema": "hr"}
+
+    claim_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    claim_no: Mapped[int]
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    leave_request_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr.leave_requests.leave_request_id"), unique=True)
+    destination: Mapped[str] = mapped_column(String(200))
+    purpose: Mapped[str | None] = mapped_column(String(500))
+    days: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2))
+    daily_rate: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    per_diem_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    expenses_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    status_code: Mapped[str] = mapped_column(String(10), default="DRAFT")
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_at: Mapped[datetime.datetime | None]
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id", ondelete="SET NULL"))
+    posted_at: Mapped[datetime.datetime | None]
+
+
+class MissionClaimExpense(Base):
+    __tablename__ = "mission_claim_expenses"
+    __table_args__ = {"schema": "hr"}
+
+    expense_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr.mission_claims.claim_id", ondelete="CASCADE"))
+    expense_type: Mapped[str] = mapped_column(String(10))
+    description: Mapped[str | None] = mapped_column(String(300))
+    receipt_no: Mapped[str | None] = mapped_column(String(50))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))

@@ -748,6 +748,7 @@ NAV_ITEMS = [
             # است)؛ به‌جایش، ثبت/تاییدِ ساعاتِ اضافه‌کاری این‌جا اضافه شده.
             {"code": "HR_PAYROLL_OVERTIME", "label": "اضافه‌کاری", "screen": "payroll_overtime_entries"},
             {"code": "HR_LEAVE_REQUESTS", "label": "درخواست مرخصی", "screen": "hr_leave_requests"},  # R295
+            {"code": "HR_MISSIONS", "label": "حق مأموریت", "screen": "hr_missions"},  # R381
             # طبقِ گزارشِ صریح («فرمِ ورود و خروجِ کارمندان و فرمِ خلاصهٔ کارکرد
             # نداره»): حضوروغیابِ واقعیِ روزانه، مستقل از ثبتِ ساعاتِ اضافه‌کاری.
             {"code": "HR_ATTENDANCE_ENTRIES", "label": "ورود و خروج کارکنان", "screen": "hr_attendance_entries"},

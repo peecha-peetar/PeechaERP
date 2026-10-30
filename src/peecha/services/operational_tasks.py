@@ -71,6 +71,8 @@ KIND_LABELS = {
     "HR_APPRAISAL_SELF": "خودارزیابی عملکرد",  # R368
     "HR_APPRAISAL_REVIEW": "ارزیابی عملکرد کارکنان",  # R368
     "HR_TRAINING_GAPS": "دوره‌های الزامی آموزش",  # R369
+    "HR_MISSION_APPROVE": "تایید صورت‌حساب مأموریت",  # R381
+    "HR_MISSION_POST": "صدور سند مأموریت",  # R381
     "PRD_ECO_APPROVE": "تایید تغییر مهندسی محصول",  # R372
     "PRD_ECO_IMPLEMENT": "اجرای تغییر مهندسی محصول",  # R372
     "PUR_THREE_WAY": "پرداخت بستهٔ فاکتورهای خرید",  # R379
@@ -200,6 +202,7 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _recruitment_tasks(company_id, user_id, is_manager)
     tasks += _appraisal_tasks(company_id, user_id)
     tasks += _training_tasks(company_id, user_id, is_manager)
+    tasks += _mission_tasks(company_id, user_id, is_manager)
     tasks += _eco_tasks(company_id, user_id)
     tasks += _three_way_tasks(company_id, user_id)
 
@@ -745,3 +748,20 @@ def _three_way_tasks(company_id: int, user_id: int) -> list[OperationalTask]:
         return []
     return [OperationalTask("PUR_THREE_WAY", KIND_LABELS["PUR_THREE_WAY"], 0, "",
                             f"پرداخت {len(rows)} فاکتور خرید به‌خاطر مغایرت تطبیق سه‌طرفه بسته است", "", None, "")]
+
+
+def _mission_tasks(company_id: int, user_id: int, is_manager: bool) -> list[OperationalTask]:
+    """R381: صورت‌حساب‌های مأموریت منتظر تایید و تاییدشده‌های بی‌سند برای تاییدکنندهٔ مأموریت."""
+    from peecha.services import hr_missions
+
+    if not _may(company_id, user_id, is_manager, hr_missions.FORM_CODE, "APPROVE"):
+        return []
+    waiting, to_post = hr_missions.pending_counts(company_id)
+    out = []
+    if waiting:
+        out.append(OperationalTask("HR_MISSION_APPROVE", KIND_LABELS["HR_MISSION_APPROVE"], 0, "",
+                                   f"{waiting} صورت‌حساب مأموریت منتظر تایید شماست", "", None, ""))
+    if to_post:
+        out.append(OperationalTask("HR_MISSION_POST", KIND_LABELS["HR_MISSION_POST"], 0, "",
+                                   f"{to_post} صورت‌حساب مأموریت تاییدشده هنوز سند حسابداری ندارد", "", None, ""))
+    return out
