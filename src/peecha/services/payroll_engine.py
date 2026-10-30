@@ -1,12 +1,12 @@
-"""موتورِ محاسبهٔ حقوق (فصلِ ۱۱) — همه‌یِ اجزایِ فصل‌هایِ ۶ تا ۱۰ را برایِ
-یک دورهٔ حقوقی، برایِ همه‌یِ کارمندانِ واجدِ شرایط، یکپارچه اجرا می‌کند.
+"""موتور محاسبهٔ حقوق (فصل ۱۱) — همهٔ اجزای فصل‌های ۶ تا ۱۰ را برای
+یک دورهٔ حقوقی، برای همهٔ کارمندان واجد شرایط، یکپارچه اجرا می‌کند.
 
-ترتیبِ فازها دقیقاً طبقِ سند: EARNING → INSURANCE → TAX → DEDUCTION
-(مالیات باید بعدِ بیمه محاسبه شود چون درآمدِ مشمولِ مالیات، سهمِ بیمهٔ
-کارمند را کسر می‌کند — فصلِ ۱۰).
+ترتیب فازها دقیقاً طبق سند: EARNING → INSURANCE → TAX → DEDUCTION
+(مالیات باید بعد بیمه محاسبه شود چون درآمد مشمول مالیات، سهم بیمهٔ
+کارمند را کسر می‌کند — فصل ۱۰).
 
-Idempotent: اجرایِ دوباره‌یِ یک run در وضعیتِ غیرِنهایی (DRAFT/CALCULATED)
-نتایجِ قبلی را کامل بازنویسی می‌کند؛ خطایِ یک کارمندِ خاص کلِ run را
+Idempotent: اجرای دوبارهٔ یک run در وضعیت غیرنهایی (DRAFT/CALCULATED)
+نتایج قبلی را کامل بازنویسی می‌کند؛ خطای یک کارمند خاص کل run را
 متوقف نمی‌کند (آن کارمند در errors فهرست و بقیه ادامه می‌یابند)."""
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ import datetime
 import decimal
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.hr import Employee, EmploymentContract
-from peecha.db.models.payroll import PayItemDefinition, Payslip, PayslipLine, PayrollPeriod, PayrollRun
+from peecha.db.models.payroll import EmployeeAnnualTaxLedger, PayItemDefinition, Payslip, PayslipLine, PayrollPeriod, PayrollRun
 from peecha.services import hr_attendance
 from peecha.services import payroll as payroll_service
 from peecha.services import payroll_formula
@@ -30,6 +30,7 @@ _SYSTEM_INSURANCE_ITEM_CODE = "SOCIAL_INSURANCE_EMPLOYEE"
 _SYSTEM_TAX_ITEM_CODE = "INCOME_TAX"
 _SYSTEM_OVERTIME_ITEM_CODE = "OVERTIME_PAY"
 _SYSTEM_LOAN_ITEM_CODE = "LOAN_INSTALLMENT_DEDUCTION"
+_CENT = decimal.Decimal("0.01")
 
 
 @dataclass
@@ -93,10 +94,10 @@ def _target_employees(session, company_id: int, period_start: datetime.date, per
 
 
 def _resolve_worked_days(company_id: int, employee_id: int, period: PayrollPeriod, calendar_days: int) -> int:
-    """کارکردِ واقعی از رویِ حضوروغیابِ تاییدشده (services/hr_attendance.py)
-    برایِ همین کارمند در بازهٔ دوره؛ اگر هیچ رکوردی ثبت نشده باشد (شرکتی
-    که هنوز از این ماژول استفاده نمی‌کند)، طبقِ رفتارِ قبلی، کارکردِ
-    کامل فرض می‌شود تا رفتارِ موجود نشکند."""
+    """کارکرد واقعی از روی حضور و غیاب تاییدشده (services/hr_attendance.py)
+    برای همین کارمند در بازهٔ دوره؛ اگر هیچ رکوردی ثبت نشده باشد (شرکتی
+    که هنوز از این ماژول استفاده نمی‌کند)، طبق رفتار قبلی، کارکرد
+    کامل فرض می‌شود تا رفتار موجود نشکند."""
     summary = hr_attendance.compute_attendance_summary(
         company_id, period.period_start_date, period.period_end_date, employee_id
     )
@@ -114,9 +115,10 @@ def _calculate_employee(
     formula_asts: dict[str, object],
     execution_order: list[str],
     settings: payroll_service.CompanySettingsRow,
-) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal, list[tuple[int, str, str, decimal.Decimal, str]]]:
-    """یک کارمند را محاسبه می‌کند؛ (gross, total_deductions, net,
-    lines) را برمی‌گرداند. lines: (pay_item_id, code, name, amount, phase)."""
+) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal, list[tuple[int, str, str, decimal.Decimal, str]], decimal.Decimal,
+           decimal.Decimal, int]:
+    """یک کارمند را محاسبه می‌کند؛ (gross, total_deductions, net, lines, taxable_income, insurable_wage, worked_days)
+    را برمی‌گرداند. lines: (pay_item_id, code, name, amount, phase)."""
     calendar_days = settings.standard_month_days
     worked_days = _resolve_worked_days(company_id, employee.employee_id, period, calendar_days)
     variables = {
@@ -196,18 +198,18 @@ def _calculate_employee(
 
     # فازِ ۲: INSURANCE
     insurance_result = payroll_service.compute_insurance(company_id, period.period_start_date, insurable_total)
-    insurance_item_id = _ensure_system_pay_item(company_id, _SYSTEM_INSURANCE_ITEM_CODE, "بیمهٔ سهمِ کارمند", "INSURANCE", "INSURANCE_PHASE")
-    lines.append((insurance_item_id, _SYSTEM_INSURANCE_ITEM_CODE, "بیمهٔ سهمِ کارمند", insurance_result.employee_share, "INSURANCE_PHASE"))
+    insurance_item_id = _ensure_system_pay_item(company_id, _SYSTEM_INSURANCE_ITEM_CODE, "بیمهٔ سهم کارمند", "INSURANCE", "INSURANCE_PHASE")
+    lines.append((insurance_item_id, _SYSTEM_INSURANCE_ITEM_CODE, "بیمهٔ سهم کارمند", insurance_result.employee_share, "INSURANCE_PHASE"))
 
     # فازِ ۳: TAX (طبقِ فصلِ ۱۰: کسرِ سهمِ بیمهٔ کارمند از درآمدِ مشمولِ مالیات)
-    taxable_income_this_month = max(decimal.Decimal(0), taxable_total - insurance_result.employee_share)
+    taxable_income_this_month = max(decimal.Decimal(0), taxable_total - insurance_result.employee_share).quantize(_CENT)
     tax_year = period.jalali_year
     months_elapsed = period.jalali_month
     tax_amount = payroll_service.compute_monthly_tax(
         employee.employee_id, company_id, tax_year, months_elapsed, taxable_income_this_month, period.period_start_date
     )
-    tax_item_id = _ensure_system_pay_item(company_id, _SYSTEM_TAX_ITEM_CODE, "مالیاتِ حقوق", "TAX", "TAX_PHASE")
-    lines.append((tax_item_id, _SYSTEM_TAX_ITEM_CODE, "مالیاتِ حقوق", tax_amount, "TAX_PHASE"))
+    tax_item_id = _ensure_system_pay_item(company_id, _SYSTEM_TAX_ITEM_CODE, "مالیات حقوق", "TAX", "TAX_PHASE")
+    lines.append((tax_item_id, _SYSTEM_TAX_ITEM_CODE, "مالیات حقوق", tax_amount, "TAX_PHASE"))
 
     # فازِ ۴: DEDUCTION (اولویت: حکمِ دادگاه، سپس عددِ کوچک‌ترِ deduction_priority؛
     # اقساطِ وام/مساعده به‌عنوانِ اولویتِ ۴ — فصلِ ۱۳)
@@ -218,17 +220,34 @@ def _calculate_employee(
     lines.extend(dedn_lines)
 
     net_pay = gross - insurance_result.employee_share - tax_amount - total_deductions
-    return gross, total_deductions, net_pay, lines
+    return (gross, total_deductions, net_pay, lines, taxable_income_this_month,
+            decimal.Decimal(insurance_result.insurable_wage).quantize(_CENT), worked_days)
+
+
+def _reverse_tax_ledger(session, tax_year: int, payslips) -> None:
+    """R345: بازمحاسبهٔ همان اجرا، سهم قبلی فیش‌هایش را از دفتر مالیات سالانه برمی‌دارد تا مالیات دوبار حساب نشود.
+    فیش‌های پیش از R345 درآمد مشمول ذخیره‌شده ندارند و دست نمی‌خورند."""
+    for payslip in payslips:
+        if payslip.taxable_income is None:
+            continue
+        tax = session.scalar(select(func.coalesce(func.sum(PayslipLine.amount), 0)).where(
+            PayslipLine.payslip_id == payslip.payslip_id, PayslipLine.phase == "TAX_PHASE"))
+        ledger = session.scalar(select(EmployeeAnnualTaxLedger).where(
+            EmployeeAnnualTaxLedger.employee_id == payslip.employee_id, EmployeeAnnualTaxLedger.tax_year == tax_year)
+            .with_for_update())
+        if ledger is not None:
+            ledger.cumulative_taxable_income -= payslip.taxable_income
+            ledger.cumulative_tax_paid -= tax
 
 
 def resolve_deductions(
     employee_id: int, company_id: int, period_id: int, as_of_date: datetime.date, remaining: decimal.Decimal
 ) -> tuple[list[tuple[int, str, str, decimal.Decimal, str]], decimal.Decimal, list[tuple[int, decimal.Decimal, bool]]]:
-    """اعمالِ فازِ DEDUCTION رویِ remaining (خالص پیش از کسورات). عمومی
-    است تا هم موتور (هنگامِ محاسبه) و هم تسویه‌حسابِ فیش (فصلِ ۱۴، پس از
-    APPROVED شدنِ run) بتوانند دقیقاً همان نتیجه را بازتولید کنند.
-    خروجیِ سوم: (loan_installment_id, amount, was_applied) برایِ هر
-    قسطِ وام — تسویه‌حساب از رویِ همین لیست، DEDUCTED/DEFERRED می‌کند."""
+    """اعمال فاز DEDUCTION روی remaining (خالص پیش از کسورات). عمومی
+    است تا هم موتور (هنگام محاسبه) و هم تسویه‌حساب فیش (فصل ۱۴، پس از
+    APPROVED شدن run) بتوانند دقیقاً همان نتیجه را بازتولید کنند.
+    خروجی سوم: (loan_installment_id, amount, was_applied) برای هر
+    قسط وام — تسویه‌حساب از روی همین لیست، DEDUCTED/DEFERRED می‌کند."""
     deduction_requests = _collect_deduction_requests(employee_id, company_id, period_id, as_of_date)
     lines: list[tuple[int, str, str, decimal.Decimal, str]] = []
     total_deductions = decimal.Decimal(0)
@@ -266,11 +285,11 @@ def _employee_component_amount(employee_id: int, pay_item_id: int, as_of_date: d
 def _collect_deduction_requests(
     employee_id: int, company_id: int, period_id: int, as_of_date: datetime.date
 ) -> list[tuple[int, str, str, decimal.Decimal, int | None]]:
-    """اقلامِ فازِ DEDUCTION: کسوراتِ دستی/موردی، به‌علاوهٔ اقساطِ وامِ
-    سررسیدشده (فصلِ ۱۳) به‌عنوانِ اولویتِ ۴. آخرین عنصرِ هر تاپل،
-    loan_installment_id است (فقط برایِ ردیف‌هایِ وام؛ بقیه None) —
-    برایِ اینکه تسویه‌حسابِ فیش (فصلِ ۱۴) بتواند دقیقاً بفهمد کدام قسط
-    با چه مبلغی اعمال شد، بدونِ محاسبهٔ دوباره."""
+    """اقلام فاز DEDUCTION: کسورات دستی/موردی، به‌علاوهٔ اقساط وام
+    سررسیدشده (فصل ۱۳) به‌عنوان اولویت ۴. آخرین عنصر هر تاپل،
+    loan_installment_id است (فقط برای ردیف‌های وام؛ بقیه None) —
+    برای اینکه تسویه‌حساب فیش (فصل ۱۴) بتواند دقیقاً بفهمد کدام قسط
+    با چه مبلغی اعمال شد، بدون محاسبهٔ دوباره."""
     with new_session() as session:
         from peecha.db.models.payroll import DeductionEntry, EmployeePayComponent
 
@@ -304,10 +323,10 @@ def _collect_deduction_requests(
     due_installments = payroll_loans.list_due_installments(employee_id, period_id)
     if due_installments:
         loan_item_id = _ensure_system_pay_item(
-            company_id, _SYSTEM_LOAN_ITEM_CODE, "قسطِ وام/مساعده", "DEDUCTION", "DEDUCTION_PHASE"
+            company_id, _SYSTEM_LOAN_ITEM_CODE, "قسط وام/مساعده", "DEDUCTION", "DEDUCTION_PHASE"
         )
         requests += [
-            (loan_item_id, _SYSTEM_LOAN_ITEM_CODE, "قسطِ وام/مساعده", due.amount, False, 4, due.loan_installment_id)
+            (loan_item_id, _SYSTEM_LOAN_ITEM_CODE, "قسط وام/مساعده", due.amount, False, 4, due.loan_installment_id)
             for due in due_installments
         ]
 
@@ -321,7 +340,7 @@ def run_payroll(run_id: int) -> RunResult:
         if run is None:
             raise ValueError("این اجرا یافت نشد.")
         if run.status not in ("DRAFT", "CALCULATING", "CALCULATED"):
-            raise ValueError("این اجرا در وضعیتِ نهایی است و دیگر قابلِ بازاجرا نیست.")
+            raise ValueError("این اجرا در وضعیت نهایی است و دیگر قابل بازاجرا نیست.")
         period = session.get(PayrollPeriod, run.period_id)
         if period is None:
             raise ValueError("دورهٔ حقوقی یافت نشد.")
@@ -331,8 +350,10 @@ def run_payroll(run_id: int) -> RunResult:
         session.commit()
 
         # idempotency: بازنویسیِ کاملِ نتایجِ قبلیِ همین run
-        old_payslip_ids = [pid for (pid,) in session.execute(select(Payslip.payslip_id).where(Payslip.run_id == run_id))]
+        old_payslips = session.scalars(select(Payslip).where(Payslip.run_id == run_id)).all()
+        old_payslip_ids = [p.payslip_id for p in old_payslips]
         if old_payslip_ids:
+            _reverse_tax_ledger(session, period.jalali_year, old_payslips)
             session.execute(PayslipLine.__table__.delete().where(PayslipLine.payslip_id.in_(old_payslip_ids)))
             session.execute(Payslip.__table__.delete().where(Payslip.run_id == run_id))
             session.commit()
@@ -357,7 +378,7 @@ def run_payroll(run_id: int) -> RunResult:
 
     for employee, contract in targets:
         try:
-            gross, total_deductions, net_pay, lines = _calculate_employee(
+            gross, total_deductions, net_pay, lines, taxable_income, insurable_wage, worked_days = _calculate_employee(
                 company_id, employee, contract, period, pay_items, formula_asts, execution_order, settings
             )
         except ValueError as exc:
@@ -367,7 +388,8 @@ def run_payroll(run_id: int) -> RunResult:
             payslip = Payslip(
                 run_id=run_id, employee_id=employee.employee_id, contract_id=contract.contract_id,
                 period_id=period.period_id, gross_amount=gross, total_deductions=total_deductions,
-                net_pay=net_pay, status="DRAFT",
+                net_pay=net_pay, status="DRAFT", taxable_income=taxable_income,
+                insurable_wage=insurable_wage, worked_days=worked_days,
             )
             session.add(payslip)
             session.flush()
@@ -387,7 +409,7 @@ def run_payroll(run_id: int) -> RunResult:
         run = session.get(PayrollRun, run_id)
         run.status = "CALCULATED"
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
-        run.error_log = "; ".join(f"کارمندِ #{e.employee_id}: {e.message}" for e in errors) or None
+        run.error_log = "; ".join(f"کارمند #{e.employee_id}: {e.message}" for e in errors) or None
         session.commit()
 
     return RunResult(run_id, calculated, len(errors), total_gross, total_net, errors)
@@ -416,7 +438,7 @@ def approve_run(run_id: int) -> None:
         if run is None:
             raise ValueError("این اجرا یافت نشد.")
         if run.status != "CALCULATED":
-            raise ValueError("فقط اجرایی که محاسبه شده قابلِ تایید است.")
+            raise ValueError("فقط اجرایی که محاسبه شده قابل تایید است.")
         run.status = "APPROVED"
         session.commit()
 

@@ -1,7 +1,7 @@
 """سرویس کدینگ حسابداری — درخت سه‌سطحی گروه/کل/معین.
 
-سطح از روی والدِ انتخابی محاسبه می‌شود (نه ورودی کاربر): بدون والد یعنی
-سطح ۱ (گروه)، والدِ سطح ۱ یعنی سطح ۲ (کل)، والدِ سطح ۲ یعنی سطح ۳ (معین).
+سطح از روی والد انتخابی محاسبه می‌شود (نه ورودی کاربر): بدون والد یعنی
+سطح ۱ (گروه)، والد سطح ۱ یعنی سطح ۲ (کل)، والد سطح ۲ یعنی سطح ۳ (معین).
 معین دیگر نمی‌تواند زیرشاخه بگیرد — طبق طراحی دیتابیس (account_level) که
 فقط ۳ سطح را در نظر گرفته.
 """
@@ -96,28 +96,28 @@ def list_accounts(company_id: int) -> list[AccountRow]:
 
 
 def list_postable_accounts(company_id: int) -> list[AccountRow]:
-    """فقط حساب‌های قابل‌ثبت‌سند (معمولاً سطح معین) — برای انتخابگرِ ردیف سند."""
+    """فقط حساب‌های قابل‌ثبت‌سند (معمولاً سطح معین) — برای انتخابگر ردیف سند."""
     return [row for row in list_accounts(company_id) if row.is_postable]
 
 
 def _validate_segment_code(session, company_id: int, account_level: int, segment_code: str) -> None:
-    """اگر برایِ این سطح تنظیماتِ رقم/بازه در acc.chart_of_account_level_config
-    وجود داشته باشد (اختیاری)، کدِ واردشده باید دقیقاً همان طول و (اگر بازه
-    هم تنظیم شده) رقمی و در همان بازه باشد. طبقِ درخواستِ صریح، این تنظیمات
-    از ابتدا ست می‌شوند و بعدِ اولین سندِ شرکت دیگر قابلِ‌تغییر نیستند."""
+    """اگر برای این سطح تنظیمات رقم/بازه در acc.chart_of_account_level_config
+    وجود داشته باشد (اختیاری)، کد واردشده باید دقیقاً همان طول و (اگر بازه
+    هم تنظیم شده) رقمی و در همان بازه باشد. طبق درخواست صریح، این تنظیمات
+    از ابتدا ست می‌شوند و بعد اولین سند شرکت دیگر قابل‌تغییر نیستند."""
     level_config = session.get(ChartOfAccountLevelConfig, (company_id, account_level))
     if level_config is None:
         return
     if level_config.code_length is not None and len(segment_code) != level_config.code_length:
-        raise ValueError(f"طولِ کدِ سطحِ {account_level} باید دقیقاً {level_config.code_length} رقم باشد.")
+        raise ValueError(f"طول کد سطح {account_level} باید دقیقاً {level_config.code_length} رقم باشد.")
     if level_config.range_from is not None or level_config.range_to is not None:
         if not segment_code.isdigit():
-            raise ValueError(f"کدِ سطحِ {account_level} باید رقمی باشد (بازه‌ی از-تا تنظیم شده).")
+            raise ValueError(f"کد سطح {account_level} باید رقمی باشد (بازهٔ از-تا تنظیم شده).")
         value = int(segment_code)
         if level_config.range_from is not None and value < level_config.range_from:
-            raise ValueError(f"کدِ سطحِ {account_level} باید حداقل {level_config.range_from} باشد.")
+            raise ValueError(f"کد سطح {account_level} باید حداقل {level_config.range_from} باشد.")
         if level_config.range_to is not None and value > level_config.range_to:
-            raise ValueError(f"کدِ سطحِ {account_level} باید حداکثر {level_config.range_to} باشد.")
+            raise ValueError(f"کد سطح {account_level} باید حداکثر {level_config.range_to} باشد.")
 
 
 def create_account(
@@ -157,7 +157,7 @@ def create_account(
                     select(CashFlowSection).where(CashFlowSection.code == cash_flow_section_code)
                 )
                 if cash_flow_section is None:
-                    raise ValueError("مقدارِ بخشِ وجوهِ نقد نامعتبر است.")
+                    raise ValueError("مقدار بخش وجوه نقد نامعتبر است.")
                 cash_flow_section_id = cash_flow_section.cash_flow_section_id
             liquidity_class_id = None
             if liquidity_class_code:
@@ -165,7 +165,7 @@ def create_account(
                     select(LiquidityClass).where(LiquidityClass.code == liquidity_class_code)
                 )
                 if liquidity_class is None:
-                    raise ValueError("مقدارِ طبقه‌یِ نقدینگی نامعتبر است.")
+                    raise ValueError("مقدار طبقهٔ نقدینگی نامعتبر است.")
                 liquidity_class_id = liquidity_class.liquidity_class_id
             balance_sheet_side_id = None
             if balance_sheet_side_code:
@@ -173,7 +173,7 @@ def create_account(
                     select(BalanceSheetSide).where(BalanceSheetSide.code == balance_sheet_side_code)
                 )
                 if balance_sheet_side is None:
-                    raise ValueError("مقدارِ سمتِ ترازنامه نامعتبر است.")
+                    raise ValueError("مقدار سمت ترازنامه نامعتبر است.")
                 balance_sheet_side_id = balance_sheet_side.balance_sheet_side_id
         else:
             parent = session.get(ChartOfAccount, parent_account_id)
@@ -192,7 +192,7 @@ def create_account(
         # چون افزودنِ زیرشاخه به سطحِ آخر از قبل مسدود است، این تضمین می‌کند
         # حساب‌هایِ postable همیشه برگ بمانند.
         if is_postable and account_level != MAX_ACCOUNT_LEVEL:
-            raise ValueError(f"فقط حساب‌هایِ سطحِ {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابلِ ثبتِ سند باشند.")
+            raise ValueError(f"فقط حساب‌های سطح {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابل ثبت سند باشند.")
 
         _validate_segment_code(session, company_id, account_level, segment_code)
 
@@ -256,8 +256,8 @@ def create_account(
 
 
 def _descendant_accounts(session, account_id: int) -> list[ChartOfAccount]:
-    """همه‌ی زیرشاخه‌هایِ این حساب (فرزند و نوه، به‌صورتِ بازگشتی) —
-    برایِ کَسکِیدکردنِ ماهیت/دسته/نوعِ حسابِ سطحِ گروه به کلِ زیردرخت."""
+    """همهٔ زیرشاخه‌های این حساب (فرزند و نوه، به‌صورت بازگشتی) —
+    برای کَسک یدکردن ماهیت/دسته/نوع حساب سطح گروه به کل زیردرخت."""
     result: list[ChartOfAccount] = []
     frontier = [account_id]
     while frontier:
@@ -283,23 +283,23 @@ def update_account(
     liquidity_class_code: str | None = None,
     balance_sheet_side_code: str | None = None,
 ) -> ChartOfAccount:
-    """ویرایشِ حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
-    کد و والد (که full_code و سطحِ کل زیردرخت را تعیین می‌کنند) در این
-    نسخه ثابت می‌مانند تا ویرایش نیاز به بازمحاسبه‌ی زنجیره‌ای نداشته باشد.
+    """ویرایش حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
+    کد و والد (که full_code و سطح کل زیردرخت را تعیین می‌کنند) در این
+    نسخه ثابت می‌مانند تا ویرایش نیاز به بازمحاسبهٔ زنجیره‌ای نداشته باشد.
 
-    طبقِ درخواستِ صریح: اگر این حساب حتی یک سطرِ سند داشته باشد، اصلاً
-    قابلِ‌ویرایش نیست (نه فقط کد/والد که از قبل ثابت بودند).
+    طبق درخواست صریح: اگر این حساب حتی یک سطر سند داشته باشد، اصلاً
+    قابل‌ویرایش نیست (نه فقط کد/والد که از قبل ثابت بودند).
 
-    طبقِ درخواستِ صریحِ بعدی: ماهیت/دسته/نوعِ حساب فقط رویِ حسابِ سطحِ گروه
-    (بدونِ والد) قابلِ‌تغییرند — هر زیرشاخه (کل/معین) این سه مقدار را از
-    والدِ خودش به‌ارث می‌برد و نمی‌تواند مستقل از آن تغییر کند. با ویرایشِ
-    یک حسابِ گروه، این سه مقدار رویِ کلِ زیردرخت (کل‌ها و معین‌هایِ زیرش)
+    طبق درخواست صریح بعدی: ماهیت/دسته/نوع حساب فقط روی حساب سطح گروه
+    (بدون والد) قابل‌تغییرند — هر زیرشاخه (کل/معین) این سه مقدار را از
+    والد خودش به‌ارث می‌برد و نمی‌تواند مستقل از آن تغییر کند. با ویرایش
+    یک حساب گروه، این سه مقدار روی کل زیردرخت (کل‌ها و معین‌های زیرش)
     هم به‌روزرسانی می‌شود.
 
-    طبقِ درخواستِ صریحِ بعدی‌تر: این ویرایش/کَسکید باید «در هر حالتی»
-    ممکن باشد — حتی اگر یکی از زیرشاخه‌ها از قبل سند داشته باشد (چک/ردِ
-    قبلی که کلِ عملیات را در آن حالت رد می‌کرد، حذف شد؛ فقط ویرایشِ خودِ
-    این حسابِ مشخص، اگر مستقیماً سند داشته باشد، طبقِ قاعده‌یِ بالاترِ
+    طبق درخواست صریح بعدی‌تر: این ویرایش/کَسکید باید «در هر حالتی»
+    ممکن باشد — حتی اگر یکی از زیرشاخه‌ها از قبل سند داشته باشد (چک/رد
+    قبلی که کل عملیات را در آن حالت رد می‌کرد، حذف شد؛ فقط ویرایش خود
+    این حساب مشخص، اگر مستقیماً سند داشته باشد، طبق قاعدهٔ بالاتر
     همین تابع همچنان رد می‌شود — آن قاعده مستقل و بدون‌تغییر است)."""
     with new_session() as session:
         account = session.get(ChartOfAccount, account_id)
@@ -310,10 +310,10 @@ def update_account(
             select(func.count()).select_from(JournalEntryLine).where(JournalEntryLine.account_id == account_id)
         )
         if line_count:
-            raise ValueError("این حساب در سندهای حسابداری استفاده شده؛ قابلِ‌ویرایش نیست.")
+            raise ValueError("این حساب در سندهای حسابداری استفاده شده؛ قابل‌ویرایش نیست.")
 
         if is_postable and account.account_level != MAX_ACCOUNT_LEVEL:
-            raise ValueError(f"فقط حساب‌هایِ سطحِ {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابلِ ثبتِ سند باشند.")
+            raise ValueError(f"فقط حساب‌های سطح {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابل ثبت سند باشند.")
 
         descendants: list[ChartOfAccount] = []
         if account.parent_account_id is not None:
@@ -337,7 +337,7 @@ def update_account(
                     select(CashFlowSection).where(CashFlowSection.code == cash_flow_section_code)
                 )
                 if cash_flow_section is None:
-                    raise ValueError("مقدارِ بخشِ وجوهِ نقد نامعتبر است.")
+                    raise ValueError("مقدار بخش وجوه نقد نامعتبر است.")
                 cash_flow_section_id = cash_flow_section.cash_flow_section_id
             liquidity_class_id = None
             if liquidity_class_code:
@@ -345,7 +345,7 @@ def update_account(
                     select(LiquidityClass).where(LiquidityClass.code == liquidity_class_code)
                 )
                 if liquidity_class is None:
-                    raise ValueError("مقدارِ طبقه‌یِ نقدینگی نامعتبر است.")
+                    raise ValueError("مقدار طبقهٔ نقدینگی نامعتبر است.")
                 liquidity_class_id = liquidity_class.liquidity_class_id
             balance_sheet_side_id = None
             if balance_sheet_side_code:
@@ -353,7 +353,7 @@ def update_account(
                     select(BalanceSheetSide).where(BalanceSheetSide.code == balance_sheet_side_code)
                 )
                 if balance_sheet_side is None:
-                    raise ValueError("مقدارِ سمتِ ترازنامه نامعتبر است.")
+                    raise ValueError("مقدار سمت ترازنامه نامعتبر است.")
                 balance_sheet_side_id = balance_sheet_side.balance_sheet_side_id
 
             # طبقِ درخواستِ صریح: ویرایشِ ماهیت/دسته/نوع/بخشِ‌وجوهِ‌نقد/طبقه‌یِ‌نقدینگیِ
@@ -486,8 +486,8 @@ def delete_account(account_id: int, company_id: int, changed_by_user_id: int | N
 
 
 def account_has_posted_lines(account_id: int) -> bool:
-    """برایِ UI: پیش از تلاشِ ذخیره، فرم را غیرفعال کند اگر این حساب سند
-    دارد — منبعِ حقیقتِ نهایی همچنان چکِ داخلِ update_account است."""
+    """برای UI: پیش از تلاش ذخیره، فرم را غیرفعال کند اگر این حساب سند
+    دارد — منبع حقیقت نهایی همچنان چک داخل update_account است."""
     with new_session() as session:
         return (
             session.scalar(
@@ -524,10 +524,10 @@ _ACCOUNT_LEVEL_NAMES = {1: "گروه", 2: "کل", 3: "معین"}
 
 
 def account_level_has_accounts(company_id: int, account_level: int) -> bool:
-    """آیا حداقل یک حسابِ کدینگ‌شده در این سطح از قبل وجود دارد — طبقِ
-    درخواستِ صریح، تعدادِ رقم/بازه‌یِ هر سطح به‌محضِ اینکه خودِ آن سطح
-    حساب داشته باشد قفل می‌شود؛ نه فقط وقتی کلِ شرکت سندِ حسابداری دارد
-    (چون تغییرِ طولِ کد بعدِ ساختنِ حساب‌ها با آن طول، کدهایِ موجود را
+    """آیا حداقل یک حساب کدینگ‌شده در این سطح از قبل وجود دارد — طبق
+    درخواست صریح، تعداد رقم/بازهٔ هر سطح به‌محض اینکه خود آن سطح
+    حساب داشته باشد قفل می‌شود؛ نه فقط وقتی کل شرکت سند حسابداری دارد
+    (چون تغییر طول کد بعد ساختن حساب‌ها با آن طول، کدهای موجود را
     ناسازگار می‌کند، حتی اگر هنوز هیچ سندی ثبت نشده باشد)."""
     with new_session() as session:
         count = session.scalar(
@@ -539,22 +539,22 @@ def account_level_has_accounts(company_id: int, account_level: int) -> bool:
 
 
 def get_locked_account_levels(company_id: int) -> set[int]:
-    """سطح‌هایی که تعدادِ رقم/بازه‌شان دیگر قابلِ‌تغییر نیست — طبقِ بازخوردِ
-    صریح، فقط بر اساسِ اینکه خودِ آن سطح حساب دارد یا نه (نه اینکه کلِ
-    شرکت سند دارد یا نه؛ سندها به شناسه‌یِ حساب وصل‌اند نه به طولِ کد،
-    پس سطحی که الان هیچ حسابی ندارد، حتی اگر جایِ دیگرِ شرکت سند ثبت شده
-    باشد، بی‌خطر قابلِ‌تغییر است)."""
+    """سطح‌هایی که تعداد رقم/بازه‌شان دیگر قابل‌تغییر نیست — طبق بازخورد
+    صریح، فقط بر اساس اینکه خود آن سطح حساب دارد یا نه (نه اینکه کل
+    شرکت سند دارد یا نه؛ سندها به شناسهٔ حساب وصل‌اند نه به طول کد،
+    پس سطحی که الان هیچ حسابی ندارد، حتی اگر جای دیگر شرکت سند ثبت شده
+    باشد، بی‌خطر قابل‌تغییر است)."""
     return {level for level in range(1, MAX_ACCOUNT_LEVEL + 1) if account_level_has_accounts(company_id, level)}
 
 
 def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
-    """جایگزینیِ کاملِ تنظیماتِ کدینگِ حساب‌ها — levels یعنی {شماره‌ی سطح
+    """جایگزینی کامل تنظیمات کدینگ حساب‌ها — levels یعنی {شمارهٔ سطح
     (۱ تا ۳): {"code_length": ..|None, "range_from": ..|None, "range_to":
-    ..|None}}. طبقِ درخواستِ صریح: «تعداد ارقام حساب‌ها از ابتدا ست شود و
-    اگر سندی ثبت شود دیگر قابل تغییر نباشد» — و طبقِ بازخوردِ بعدی، هر
-    سطح به‌محضِ اینکه *خودش* حساب داشته باشد قفل می‌شود؛ صرفاً وجودِ سندِ
-    حسابداری در جایِ دیگرِ شرکت (بدونِ ربط به این سطح) دیگر مانعِ ذخیره
-    نیست، چون سندها به شناسه‌یِ حساب وصل‌اند نه طولِ کد."""
+    ..|None}}. طبق درخواست صریح: «تعداد ارقام حساب‌ها از ابتدا ست شود و
+    اگر سندی ثبت شود دیگر قابل تغییر نباشد» — و طبق بازخورد بعدی، هر
+    سطح به‌محض اینکه *خودش* حساب داشته باشد قفل می‌شود؛ صرفاً وجود سند
+    حسابداری در جای دیگر شرکت (بدون ربط به این سطح) دیگر مانع ذخیره
+    نیست، چون سندها به شناسهٔ حساب وصل‌اند نه طول کد."""
     with new_session() as session:
 
         # نکته: با select(...) رویِ ستون‌هایِ خام (نه select(ChartOfAccountLevelConfig))
@@ -575,25 +575,25 @@ def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
 
         for account_level, config in levels.items():
             if not (1 <= account_level <= MAX_ACCOUNT_LEVEL):
-                raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_ACCOUNT_LEVEL} باشد.")
+                raise ValueError(f"شمارهٔ سطح باید بین ۱ تا {MAX_ACCOUNT_LEVEL} باشد.")
             code_length = config.get("code_length")
             if code_length is not None and not (1 <= code_length <= 10):
-                raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
+                raise ValueError("تعداد رقم کد باید بین ۱ تا ۱۰ باشد.")
             range_from = config.get("range_from")
             range_to = config.get("range_to")
             if range_from is not None and range_to is not None and range_from > range_to:
-                raise ValueError("مقدارِ «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
+                raise ValueError("مقدار «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
             if code_length is not None:
                 max_value = 10**code_length - 1
                 if range_from is not None and range_from > max_value:
                     raise ValueError(
-                        f"مقدارِ «از» در سطحِ {account_level} نمی‌تواند بیشتر از {max_value} باشد "
-                        f"(تعدادِ رقمِ این سطح {code_length} رقم است)."
+                        f"مقدار «از» در سطح {account_level} نمی‌تواند بیشتر از {max_value} باشد "
+                        f"(تعداد رقم این سطح {code_length} رقم است)."
                     )
                 if range_to is not None and range_to > max_value:
                     raise ValueError(
-                        f"مقدارِ «تا» در سطحِ {account_level} نمی‌تواند بیشتر از {max_value} باشد "
-                        f"(تعدادِ رقمِ این سطح {code_length} رقم است)."
+                        f"مقدار «تا» در سطح {account_level} نمی‌تواند بیشتر از {max_value} باشد "
+                        f"(تعداد رقم این سطح {code_length} رقم است)."
                     )
 
             existing = existing_by_level.get(account_level)
@@ -608,7 +608,7 @@ def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
             if changed and account_level_has_accounts(company_id, account_level):
                 level_name = _ACCOUNT_LEVEL_NAMES.get(account_level, str(account_level))
                 raise ValueError(
-                    f"برایِ سطحِ «{level_name}» قبلاً حساب تعریف شده؛ تعدادِ رقم/بازه‌یِ این سطح دیگر قابلِ‌تغییر نیست."
+                    f"برای سطح «{level_name}» قبلاً حساب تعریف شده؛ تعداد رقم/بازهٔ این سطح دیگر قابل‌تغییر نیست."
                 )
 
         session.execute(

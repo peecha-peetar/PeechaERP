@@ -1,17 +1,17 @@
-"""پشتیبان‌گیری/بازیابیِ کاملِ دیتابیس — طبقِ گزارشِ صریحِ کاربر: بک‌آپِ
-گرفته‌شده قبل از ایجادِ ماژولِ حقوق‌ودستمزد، جدول‌ها/فیلدهایِ سفارشیِ
-اضافه‌شده بعداً را نداشت. راه‌حل: به‌جایِ فهرستِ ثابتِ جدول‌ها (که با هر
-ماژولِ تازه باید دستی به‌روز شود و دقیقاً همین باگ را دوباره می‌سازد)،
-ساختارِ *زنده*یِ دیتابیس در لحظه‌یِ بک‌آپ با SQLAlchemy reflect می‌شود —
-هر جدول یا فیلدی که این‌جا اضافه شود، خودکار در بک‌آپِ بعدی می‌آید، بدونِ
-هیچ تغییرِ کدی.
+"""پشتیبان‌گیری/بازیابی کامل دیتابیس — طبق گزارش صریح کاربر: بک‌آپ
+گرفته‌شده قبل از ایجاد ماژول حقوق‌ودستمزد، جدول‌ها/فیلدهای سفارشی
+اضافه‌شده بعداً را نداشت. راه‌حل: به‌جای فهرست ثابت جدول‌ها (که با هر
+ماژول تازه باید دستی به‌روز شود و دقیقاً همین باگ را دوباره می‌سازد)،
+ساختار *زنده*ی دیتابیس در لحظهٔ بک‌آپ با SQLAlchemy reflect می‌شود —
+هر جدول یا فیلدی که این‌جا اضافه شود، خودکار در بک‌آپ بعدی می‌آید، بدون
+هیچ تغییر کدی.
 
 بازیابی هم ابتدا db/schema/*.sql را تا آخرین نسخه اجرا می‌کند (همان
-مکانیزمِ apply_pending_schema_files) تا ساختارِ مقصد کاملاً به‌روز باشد،
-سپس ردیف‌هایِ فایلِ بک‌آپ را — فقط در ستون‌هایی که هنوز در جدولِ مقصد
-وجود دارند — درج می‌کند؛ ستون/جدولِ حذف‌شده نادیده گرفته می‌شود و
-خطایِ هر ردیف (مثلاً محدودیتِ NOT NULLِ تازه) فقط همان ردیف را متوقف
-می‌کند، نه کلِ بازیابی را."""
+مکانیزم apply_pending_schema_files) تا ساختار مقصد کاملاً به‌روز باشد،
+سپس ردیف‌های فایل بک‌آپ را — فقط در ستون‌هایی که هنوز در جدول مقصد
+وجود دارند — درج می‌کند؛ ستون/جدول حذف‌شده نادیده گرفته می‌شود و
+خطای هر ردیف (مثلاً محدودیت NOT NULL تازه) فقط همان ردیف را متوقف
+می‌کند، نه کل بازیابی را."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ import decimal
 import gzip
 import json
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from sqlalchemy import Engine, MetaData, func, inspect, select, text
 from sqlalchemy.dialects.postgresql import JSON, JSONB
@@ -70,11 +71,11 @@ def _full_name(table) -> str:
 
 
 def _reflect(engine: Engine) -> MetaData:
-    """طبقِ طراحی: schemaهایِ برنامه (core/sec/acc/hr/payroll/treasury/wf/doc/
-    audit/public و هر schemaیِ تازه‌ای که بعداً اضافه شود) به‌صورتِ پویا از
-    خودِ دیتابیس پرسیده می‌شوند — reflect بدونِ schema=، فقط schemaیِ
-    پیش‌فرضِ اتصال (public) را می‌بیند و اکثرِ جدول‌هایِ برنامه را که در
-    schemaهایِ دیگرند نادیده می‌گیرد."""
+    """طبق طراحی: schemaهای برنامه (core/sec/acc/hr/payroll/treasury/wf/doc/
+    audit/public و هر schemaی تازه‌ای که بعداً اضافه شود) به‌صورت پویا از
+    خود دیتابیس پرسیده می‌شوند — reflect بدون schema=، فقط schemaی
+    پیش‌فرض اتصال (public) را می‌بیند و اکثر جدول‌های برنامه را که در
+    schemaهای دیگرند نادیده می‌گیرد."""
     metadata = MetaData()
     inspector = inspect(engine)
     for schema_name in inspector.get_schema_names():
@@ -134,12 +135,32 @@ def _deserialize_value(value):
     return value
 
 
+def _missing_links(conn, table, raw_row: dict, cache: dict) -> dict[str, str]:
+    """R339: پیوندهای ردیف که ردیف والدشان هنوز در مقصد نیست: {ستون: جدول والد}."""
+    gaps: dict[str, str] = {}
+    for fk in table.foreign_key_constraints:
+        pairs = [(e.parent.name, e.column.name) for e in fk.elements]
+        values = [raw_row.get(local) for local, _remote in pairs]
+        if any(v is None for v in values):
+            continue
+        ref = fk.referred_table
+        quoted = f'"{ref.schema}"."{ref.name}"' if ref.schema else f'"{ref.name}"'
+        where = " AND ".join(f'"{remote}" = :v_{i}' for i, (_local, remote) in enumerate(pairs))
+        key = (quoted, where, json.dumps(values, sort_keys=True, default=str))
+        if key not in cache:
+            params = {f"v_{i}": _deserialize_value(v) for i, v in enumerate(values)}
+            cache[key] = conn.execute(text(f"SELECT 1 FROM {quoted} WHERE {where} LIMIT 1"), params).first() is not None
+        if not cache[key]:
+            gaps.update({local: _full_name(ref) for local, _remote in pairs})
+    return gaps
+
+
 def _open(path: str, mode: str):
     return gzip.open(path, mode, encoding="utf-8") if path.lower().endswith(".gz") else open(path, mode, encoding="utf-8")
 
 
 def export_backup(engine: Engine, path: str, selected_full_names: set[str] | None = None) -> dict:
-    """selected_full_names=None یعنی همه‌یِ جدول‌ها (به‌جز EXCLUDED_TABLES)."""
+    """selected_full_names=None یعنی همهٔ جدول‌ها (به‌جز EXCLUDED_TABLES)."""
     metadata = _reflect(engine)
     ordered = [t for t in metadata.sorted_tables if _full_name(t) not in EXCLUDED_TABLES]
     if selected_full_names is not None:
@@ -179,7 +200,7 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
     # طبقِ طراحی: اول ساختارِ مقصد را کاملاً به‌روز می‌کنیم — همان
     # مکانیزمِ استارت‌آپِ برنامه — تا بازیابی همیشه رویِ آخرین نسخهٔ
     # ساختار انجام شود، صرفِ‌نظر از اینکه فایلِ بک‌آپ چه زمانی گرفته شده.
-    apply_pending_schema_files(engine)
+    apply_pending_schema_files(engine, source="restore", backup=False)
 
     with _open(path, "rt") as f:
         payload = json.load(f)
@@ -192,11 +213,14 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
     skipped_unknown = [name for name in data if name not in tables_by_name]
 
     with engine.begin() as conn:
+        jobs: list[SimpleNamespace] = []
         for table in metadata.sorted_tables:
             full_name = _full_name(table)
             if full_name not in data or full_name in EXCLUDED_TABLES:
                 continue
-            target_columns = {c.name for c in table.columns}
+            # R339: ستون محاسبه‌شده (GENERATED ALWAYS AS ... STORED) را خود دیتابیس می‌سازد و مقدار صریح نمی‌پذیرد؛
+            # بدون این، ردیف‌های سند حسابداری، کارتکس، سندهای بازرگانی و... اصلاً بازیابی نمی‌شدند
+            target_columns = {c.name for c in table.columns if c.computed is None}
             # طبقِ نیازِ فنی: ستون‌هایِ GENERATED ALWAYS AS IDENTITY (که این
             # پروژه برایِ اکثرِ کلیدهایِ اصلی استفاده می‌کند) بدونِ
             # OVERRIDING SYSTEM VALUE اجازه‌یِ مقدارِ صریح نمی‌دهند — بدونِ
@@ -210,12 +234,12 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
             # خودِ SQL با ::jsonb/::json کست شود.
             json_columns = {c.name for c in table.columns if isinstance(c.type, (JSON, JSONB))}
             quoted_table = f'"{table.schema}"."{table.name}"' if table.schema else f'"{table.name}"'
-            inserted = skipped = errors = 0
-            error_samples: list[str] = []
 
-            def _try_insert_row(raw_row: dict) -> tuple[bool, bool, str | None]:
-                """یک ردیف را درج می‌کند. خروجی: (موفق؟, خطا_قابلِ‌رفعِ‌بعدی؟ (یعنی
-                IntegrityErrorِ ممکن‌است-به‌خاطرِ-ترتیب باشد, پیامِ خطا)."""
+            # R339: مقادیر همین جدول به تابع بسته می‌شوند، چون درج در دورهای بعدی (بیرون از این حلقه) هم انجام می‌شود
+            def _try_insert_row(raw_row: dict, target_columns=target_columns, always_identity_cols=always_identity_cols,
+                                json_columns=json_columns, quoted_table=quoted_table) -> tuple[bool, bool, str | None]:
+                """یک ردیف را درج می‌کند. خروجی: (موفق؟, خطا_قابل‌رفع‌بعدی؟ (یعنی
+                IntegrityError ممکن‌است-به‌خاطر-ترتیب باشد, پیام خطا)."""
                 row = {k: _deserialize_value(v) for k, v in raw_row.items() if k in target_columns}
                 if not row:
                     return True, False, None
@@ -263,32 +287,107 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
             # فرزندانشان را در پاسِ بعدی قابلِ‌درج می‌کنند. وقتی یک پاسِ کامل
             # هیچ پیشرفتی نداشته باشد (یعنی خطا واقعاً به‌خاطرِ ترتیب نبوده)،
             # باقیمانده قطعی شکست‌خورده/ردشده ثبت می‌شود.
-            pending = list(data[full_name])
-            last_errors: dict[int, str | None] = {}
-            while pending:
-                next_pending: list[dict] = []
+            jobs.append(SimpleNamespace(
+                full_name=full_name, insert=_try_insert_row, pending=list(data[full_name]), inserted=0, errors=0,
+                error_samples=[], last_errors={}, quoted_table=quoted_table, pk=[c.name for c in table.primary_key.columns],
+                table=table))
+
+        # R339: همین تکرار برای کل جدول‌ها: جدول‌های با کلید خارجی چرخه‌ای (مثلاً انبار ↔ محل پیش‌فرض) ترتیب مطمئنی ندارند و
+        # ردیفی که والدش در جدول بعدی بود، قبلاً بی‌صدا «ردشده» می‌ماند (انبارها، دستور تولید، کارتکس، ...).
+        def _run_passes() -> None:
+            progressed = True
+            while progressed:
                 progressed = False
-                for raw_row in pending:
-                    ok, retryable, message = _try_insert_row(raw_row)
-                    if ok:
-                        inserted += 1
+                for job in jobs:
+                    while job.pending:
+                        next_pending: list[dict] = []
+                        table_progress = False
+                        for raw_row in job.pending:
+                            ok, retryable, message = job.insert(raw_row)
+                            if ok:
+                                job.inserted += 1
+                                table_progress = True
+                            elif retryable:
+                                next_pending.append(raw_row)
+                                job.last_errors[id(raw_row)] = message
+                            else:
+                                job.errors += 1
+                                if len(job.error_samples) < 5 and message:
+                                    job.error_samples.append(message)
+                        job.pending = next_pending
+                        if not table_progress:
+                            break
                         progressed = True
-                    elif retryable:
-                        next_pending.append(raw_row)
-                        last_errors[id(raw_row)] = message
+
+        _run_passes()
+        # R339: چرخهٔ واقعی (انبار ← محل پیش‌فرض ← همان انبار): فقط ردیف‌های خود چرخه، با خالی‌کردن پیوند اختیاری‌ای که
+        # والدش هنوز نیامده، درج می‌شوند؛ بقیه پشتشان می‌آیند و در پایان همان پیوندها روی ردیف نوشته می‌شوند. ردیفی که
+        # فقط منتظر والدش است دست نمی‌خورد، چون بعضی جدول‌ها (مثل تراکنش تولید) اصلاح بعدی را نمی‌پذیرند.
+        deferred: list[tuple] = []
+        while True:
+            gaps_of: dict[int, dict[str, str]] = {}
+            waits: dict[str, set[str]] = {}
+            cache: dict = {}
+            for job in jobs:
+                for raw_row in job.pending:
+                    gaps = _missing_links(conn, job.table, raw_row, cache)
+                    if gaps:
+                        gaps_of[id(raw_row)] = gaps
+                        waits.setdefault(job.full_name, set()).update(gaps.values())
+            reach: dict[str, set[str]] = {}
+            for start in waits:
+                seen, stack = set(), [start]
+                while stack:
+                    for nxt in waits.get(stack.pop(), ()):
+                        if nxt not in seen:
+                            seen.add(nxt)
+                            stack.append(nxt)
+                reach[start] = seen
+            picked = False
+            for job in jobs:
+                if job.full_name not in reach.get(job.full_name, ()) or not job.pk:
+                    continue
+                cycle = {name for name in reach[job.full_name] if job.full_name in reach.get(name, ())}
+                nullable = {c.name for c in job.table.columns if c.nullable and c.computed is None}
+                still: list[dict] = []
+                for raw_row in job.pending:
+                    gaps = gaps_of.get(id(raw_row))
+                    ok = False
+                    if gaps and set(gaps) <= nullable and set(gaps.values()) <= cycle:
+                        ok, _retryable, _message = job.insert({**raw_row, **{c: None for c in gaps}})
+                    if ok:
+                        job.inserted += 1
+                        deferred.append((job, raw_row, {c: raw_row[c] for c in gaps}))
+                        picked = True
                     else:
-                        errors += 1
-                        if len(error_samples) < 5 and message:
-                            error_samples.append(message)
-                if not progressed:
-                    skipped += len(next_pending)
-                    for raw_row in next_pending:
-                        message = last_errors.get(id(raw_row))
-                        if len(error_samples) < 5 and message:
-                            error_samples.append(message)
+                        still.append(raw_row)
+                job.pending = still
+                if picked:
                     break
-                pending = next_pending
-            results.append(RestoreTableResult(full_name, inserted, skipped, errors, error_samples))
+            if not picked:
+                break
+            _run_passes()
+        if deferred:
+            for job, raw_row, links in deferred:
+                sets = ", ".join(f'"{c}" = :v_{i}' for i, c in enumerate(links))
+                where = " AND ".join(f'"{c}" = :k_{i}' for i, c in enumerate(job.pk))
+                params = {f"v_{i}": _deserialize_value(v) for i, v in enumerate(links.values())}
+                params.update({f"k_{i}": _deserialize_value(raw_row[c]) for i, c in enumerate(job.pk)})
+                savepoint = conn.begin_nested()
+                try:
+                    conn.execute(text(f"UPDATE {job.quoted_table} SET {sets} WHERE {where}"), params)
+                    savepoint.commit()
+                except Exception as exc:  # noqa: BLE001 - فقط همین پیوند برقرار نمی‌شود
+                    savepoint.rollback()
+                    job.errors += 1
+                    if len(job.error_samples) < 5:
+                        job.error_samples.append(f"پیوند ردیف برقرار نشد: {str(exc)[:160]}")
+        for job in jobs:
+            for raw_row in job.pending:
+                message = job.last_errors.get(id(raw_row))
+                if len(job.error_samples) < 5 and message:
+                    job.error_samples.append(message)
+            results.append(RestoreTableResult(job.full_name, job.inserted, len(job.pending), job.errors, job.error_samples))
 
         # طبقِ نیازِ فنی: بعدِ درجِ دستیِ مقادیرِ شناسه، دنباله‌یِ (sequence)
         # ستون‌هایِ identity باید هم‌گام شود، وگرنه اولین درجِ خودکارِ بعدی

@@ -1,0 +1,555 @@
+"""ساخت فرایند بدون کدنویسی: ویزارد ← گراف، توضیح فارسی گراف، چیدمان خودکار و مقایسهٔ نسخه‌ها.
+
+ویزارد فقط «گراف» تولید می‌کند (همان قالبی که طراح گرافیکی ویرایش می‌کند)؛ هیچ منطق اجرایی جدایی ندارد.
+"""
+
+from __future__ import annotations
+
+import copy
+import re
+from dataclasses import dataclass, field
+
+from peecha.services.workflow import conditions, definitions, registry, routing
+from peecha.services.workflow.common import NODE_TYPES, OUTCOMES, WorkflowError
+
+TRIGGER_LABELS = {"EVENT": "با رخ دادن یک رویداد", "MANUAL": "دستی (دکمهٔ «ارسال برای تایید» در سند)",
+                  "SCHEDULE": "زمان‌بندی‌شده", "SCAN": "بررسی دوره‌ای"}
+EVERY_LABELS = {"DAY": "هر روز", "WEEK": "هر هفته", "HOUR": "هر ساعت"}
+MODE_LABELS = {"SINGLE": "یک نفر", "ANY": "اولین تصمیم کافی است", "ALL": "همه باید تایید کنند",
+               "PERCENT": "درصدی از گیرندگان", "SEQUENTIAL": "به ترتیب، یکی پس از دیگری"}
+
+
+@dataclass
+class ApprovalLevel:
+    label: str
+    approvers: list[dict]
+    mode: str = "ANY"
+    percent: int | None = None
+    sla_policy_id: int | None = None
+    only_if: dict | None = None  # فقط وقتی این شرط برقرار است (مثلاً مبلغ بیش از ۵۰۰ میلیون)
+    allow_changes: bool = False
+    instructions: str = ""
+    fallback: list[dict] | None = None  # اگر کسی پیدا نشد (مثلاً مدیر مستقیم تعریف نشده)
+    kind: str = "APPROVAL"  # R323: «TASK» یعنی مرحلهٔ انجام کار (مثلاً استعلام قیمت) با فرم خودش
+    fields: list[dict] = field(default_factory=list)  # خانه‌های فرمی که انجام‌دهندهٔ مرحله پر می‌کند
+
+
+@dataclass
+class WizardSpec:
+    name: str
+    code: str
+    entity_type: str | None
+    description: str = ""
+    trigger: dict = field(default_factory=lambda: {"type": "MANUAL"})
+    start_condition: dict | None = None
+    levels: list[ApprovalLevel] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)  # کد اقدام‌ها پس از تایید نهایی (به ترتیب)
+    notify_on_approve: bool = True
+    notify_on_reject: bool = True
+    notify_extra: list[dict] = field(default_factory=list)  # گیرندگان بیشتر خبر پایان
+    reject_actions: list[str] = field(default_factory=list)  # اقدام‌ها پس از رد (مثلاً «رد درخواست» در خود سند)
+
+
+def build_graph(spec: WizardSpec) -> dict:
+    """گراف خطی: [شرط؟ ← تایید]... ← اقدام‌ها ← [انجام کار]... ← اعلان ← پایان؛ رد ← اعلان ← پایان «رد»؛ اصلاح ← کار درخواست‌کننده ← همان تایید."""
+    if not spec.levels and not spec.actions:
+        raise WorkflowError("دست‌کم یک مرحلهٔ تایید یا یک اقدام لازم است.")
+    trigger = copy.deepcopy(spec.trigger or {"type": "MANUAL"})
+    if spec.start_condition:
+        trigger["condition"] = copy.deepcopy(spec.start_condition)
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    tail: list[tuple[str, str | None]] = [(definitions.START, None)]  # (گره، برچسب مسیر) منتظر اتصال به گرهٔ بعد
+
+    def attach(target: str) -> None:
+        for src, when in tail:
+            edges.append({"from": src, "to": target, **({"when": when} if when else {})})
+        tail.clear()
+
+    def add_actions() -> None:
+        for j, code in enumerate(spec.actions, start=1):
+            action = registry.find_action(spec.entity_type, code)
+            if action is None:
+                raise WorkflowError(f"اقدام «{code}» شناخته نشده است.")
+            aid = f"act{j}"
+            nodes.append({"id": aid, "type": "ACTION", "label": action.label, "action": code,
+                          "retry": {"max": 3, "backoff_minutes": 5}})
+            attach(aid)
+            tail[:] = [(aid, None)]
+
+    # R330: اقدام‌ها (مثلاً «تصویب درخواست») درست پس از آخرین تایید؛ «انجام کار»های بعدی (مثلاً تبدیل به سفارش) روی سند
+    # تصویب‌شده انجام می‌شوند
+    approvals = [i for i, lv in enumerate(spec.levels, start=1) if lv.kind != "TASK"]
+    actions_after = approvals[-1] if approvals else len(spec.levels)
+    reject_needed = False
+    reject_target = "rja1" if spec.reject_actions else ("rej_note" if spec.notify_on_reject else "end_no")
+    if actions_after == 0:
+        add_actions()
+    for i, level in enumerate(spec.levels, start=1):
+        is_task = level.kind == "TASK"
+        if not level.approvers:
+            raise WorkflowError(f"برای مرحلهٔ «{level.label or i}» {'مسئول' if is_task else 'تاییدکننده'} تعیین نشده است.")
+        ap = f"tk{i}" if is_task else f"ap{i}"
+        if level.only_if:
+            cond = f"c{i}"
+            nodes.append({"id": cond, "type": "CONDITION", "label": f"نیاز به «{level.label}»؟", "rule": copy.deepcopy(level.only_if)})
+            attach(cond)
+            edges.append({"from": cond, "to": ap, "when": "yes"})
+            skip = [(cond, "no")]
+        else:
+            attach(ap)
+            skip = []
+        if is_task:
+            node = {"id": ap, "type": "TASK", "label": level.label or f"کار مرحلهٔ {i}", "assignees": copy.deepcopy(level.approvers),
+                    "mode": "ALL" if level.mode == "ALL" else "ANY"}
+            for key, value in (("sla_policy_id", level.sla_policy_id), ("instructions", level.instructions),
+                               ("fields", copy.deepcopy(level.fields)), ("fallback", copy.deepcopy(level.fallback))):
+                if value:
+                    node[key] = int(value) if key == "sla_policy_id" else value
+            nodes.append(node)
+            tail[:] = [(ap, "done")] + skip
+            if i == actions_after:
+                add_actions()
+            continue
+        node = {"id": ap, "type": "APPROVAL", "label": level.label or f"تایید مرحلهٔ {i}", "approvers": copy.deepcopy(level.approvers),
+                "mode": level.mode or "ANY"}
+        if level.fields:
+            node["fields"] = copy.deepcopy(level.fields)
+        if level.mode == "PERCENT":
+            node["percent"] = int(level.percent or 50)
+        if level.sla_policy_id:
+            node["sla_policy_id"] = int(level.sla_policy_id)
+        if level.instructions:
+            node["instructions"] = level.instructions
+        if level.fallback:
+            node["fallback"] = copy.deepcopy(level.fallback)
+        nodes.append(node)
+        edges.append({"from": ap, "to": reject_target, "when": "rejected"})
+        reject_needed = True
+        if level.allow_changes:
+            fix = f"fix{i}"
+            nodes.append({"id": fix, "type": "TASK", "label": f"اصلاح برای «{level.label}»", "assignees": [{"kind": "STARTER"}],
+                          "instructions": "موارد خواسته‌شده را در سند اصلاح کنید و دوباره بفرستید.",
+                          "fields": [{"key": "note", "label": "توضیح اصلاحات", "kind": "text", "required": True}]})
+            edges.append({"from": ap, "to": fix, "when": "changes"})
+            edges.append({"from": fix, "to": ap, "when": "done"})
+        tail[:] = [(ap, "approved")] + skip
+        if i == actions_after:
+            add_actions()
+    if spec.notify_on_approve or spec.notify_extra:
+        to = ([{"kind": "STARTER"}] if spec.notify_on_approve else []) + copy.deepcopy(spec.notify_extra)
+        nodes.append({"id": "ok_note", "type": "NOTIFY", "label": "خبر تایید", "to": to, "title": "«{عنوان}» تایید شد"})
+        attach("ok_note")
+        tail[:] = [("ok_note", None)]
+    nodes.append({"id": "end_ok", "type": "END", "label": "تایید نهایی", "outcome": "APPROVED" if spec.levels else "DONE"})
+    attach("end_ok")
+    if reject_needed:
+        after_reject = "rej_note" if spec.notify_on_reject else "end_no"
+        for k, code in enumerate(spec.reject_actions, start=1):
+            action = registry.find_action(spec.entity_type, code)
+            if action is None:
+                raise WorkflowError(f"اقدام «{code}» شناخته نشده است.")
+            nodes.append({"id": f"rja{k}", "type": "ACTION", "label": action.label, "action": code,
+                          "retry": {"max": 3, "backoff_minutes": 5}})
+            edges.append({"from": f"rja{k}", "to": f"rja{k + 1}" if k < len(spec.reject_actions) else after_reject})
+        if spec.notify_on_reject:
+            nodes.append({"id": "rej_note", "type": "NOTIFY", "label": "خبر رد", "to": [{"kind": "STARTER"}],
+                          "title": "«{عنوان}» رد شد"})
+            edges.append({"from": "rej_note", "to": "end_no"})
+        nodes.append({"id": "end_no", "type": "END", "label": "رد", "outcome": "REJECTED"})
+    return auto_layout({"trigger": trigger, "nodes": nodes, "edges": edges,
+                        "settings": {"allow_self_approval": False, "max_steps": 200}})
+
+
+# --- R333: روند کلی (چند فرایند و اقدام خودکار، پشت‌سرهم یا هم‌زمان) -------------------------------------------------
+@dataclass
+class FlowStep:
+    kind: str  # PROCESS | ACTION
+    ref: int | str  # شناسهٔ فرایند یا کد اقدام
+    label: str = ""
+    together: bool = False  # هم‌زمان با مرحلهٔ قبل
+    target: str = "SAME"  # SAME: همین سند | CREATED: سندهای ساخته‌شده در مراحل قبل
+
+
+TARGET_LABELS = {"SAME": "همین سند", "CREATED": "سندهای ساخته‌شده در مراحل قبل"}
+
+
+def build_flow(entity_type: str | None, trigger: dict, steps: list[FlowStep]) -> dict:
+    """مرحله‌ها به ترتیب؛ مرحله‌ای که «هم‌زمان با قبلی» است با قبلی در یک انشعاب اجرا می‌شود و روند پیش از مرحلهٔ بعد
+    منتظر پایان همه می‌ماند. رد شدن یک فرایند فرعی روند را با «رد شد» تمام می‌کند؛ شکست/لغوش با «متوقف شد»."""
+    if not steps:
+        raise WorkflowError("دست‌کم یک مرحله لازم است.")
+    stages: list[list[FlowStep]] = []
+    for st in steps:
+        if st.together and stages:
+            stages[-1].append(st)
+        else:
+            stages.append([st])
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    stops: set[str] = set()
+    counter = 0
+
+    def make(st: FlowStep) -> str:
+        nonlocal counter
+        counter += 1
+        if st.kind == "ACTION":
+            spec = registry.find_action(entity_type, str(st.ref))
+            if spec is None:
+                raise WorkflowError(f"اقدام «{st.ref}» شناخته نشده است.")
+            nid = f"act{counter}"
+            nodes.append({"id": nid, "type": "ACTION", "label": st.label or spec.label, "action": str(st.ref),
+                          "retry": {"max": 3, "backoff_minutes": 5}})
+            return nid
+        nid = f"sub{counter}"
+        nodes.append({"id": nid, "type": "SUBPROCESS", "label": st.label or "فرایند فرعی", "definition_id": int(st.ref),
+                      "target": st.target or "SAME"})
+        edges.append({"from": nid, "to": "end_rejected", "when": "rejected"})
+        edges.append({"from": nid, "to": "end_stopped", "when": "failed"})
+        stops.update({"end_rejected", "end_stopped"})
+        return nid
+
+    tail = [definitions.START]
+    for k, stage in enumerate(stages, start=1):
+        if len(stage) == 1:
+            nid = make(stage[0])
+            edges.extend({"from": t, "to": nid} for t in tail)
+            tail = [nid]
+            continue
+        fork, join = f"par{k}", f"join{k}"
+        nodes.append({"id": fork, "type": "PARALLEL", "label": "هم‌زمان"})
+        nodes.append({"id": join, "type": "JOIN", "label": "پایان مرحله‌های هم‌زمان"})
+        edges.extend({"from": t, "to": fork} for t in tail)
+        for st in stage:
+            nid = make(st)
+            edges.append({"from": fork, "to": nid})
+            edges.append({"from": nid, "to": join})
+        tail = [join]
+    nodes.append({"id": "end_ok", "type": "END", "label": "پایان روند", "outcome": "DONE"})
+    edges.extend({"from": t, "to": "end_ok"} for t in tail)
+    if "end_rejected" in stops:
+        nodes.append({"id": "end_rejected", "type": "END", "label": "روند متوقف شد: رد شد", "outcome": "REJECTED"})
+        nodes.append({"id": "end_stopped", "type": "END", "label": "روند متوقف شد", "outcome": "CANCELLED"})
+    return auto_layout({"trigger": copy.deepcopy(trigger or {"type": "MANUAL"}), "nodes": nodes, "edges": edges,
+                        "settings": {"allow_self_approval": False, "max_steps": 200}})
+
+
+def auto_layout(graph: dict, dx: int = 230, dy: int = 120) -> dict:
+    """لایه‌بندی از بالا به پایین بر اساس فاصله از «شروع» (یال برگشتی نادیده)."""
+    g = copy.deepcopy(graph)
+    ids = [definitions.START] + [n["id"] for n in g.get("nodes", [])]
+    depth = {definitions.START: 0}
+    queue = [definitions.START]
+    while queue:
+        nid = queue.pop(0)
+        for e in definitions.outgoing(g, nid):
+            if e["to"] not in depth:
+                depth[e["to"]] = depth[nid] + 1
+                queue.append(e["to"])
+    max_depth = max(depth.values(), default=0)
+    for nid in ids:
+        depth.setdefault(nid, max_depth + 1)
+    columns: dict[int, int] = {}
+    for n in g.get("nodes", []):
+        level = depth[n["id"]]
+        col = columns.get(level, 0)
+        columns[level] = col + 1
+        n["pos"] = [col * dx, level * dy]
+    g.setdefault("layout", {})["start"] = [0, 0]
+    return g
+
+
+def _approvers_text(company_id: int | None, specs: list[dict]) -> str:
+    if not specs:
+        return "—"
+    if company_id is None:
+        return "، ".join(routing.KINDS.get(s.get("kind"), str(s.get("kind"))) for s in specs)
+    from peecha.db.base import new_session
+    from peecha.services.workflow.common import user_names
+
+    with new_session() as session:
+        roles = routing.role_names(session, [s.get("role_id") for s in specs])
+        users = user_names(session, [s.get("user_id") for s in specs])
+    return "، ".join(routing.describe_spec(s, roles, users) for s in specs)
+
+
+def trigger_text(trigger: dict, entity_type: str | None) -> str:
+    ttype = (trigger or {}).get("type") or "MANUAL"
+    if ttype == "EVENT":
+        events = dict(registry.event_choices(entity_type))
+        names = "، ".join(events.get(e, e) for e in trigger.get("events") or []) or "—"
+        return f"با رویداد: {names}"
+    if ttype == "SCHEDULE":
+        return f"زمان‌بندی‌شده: {EVERY_LABELS.get(trigger.get('every') or 'DAY', '')} ساعت {trigger.get('at') or '۰۰:۰۰'}"
+    if ttype == "SCAN":
+        scan = registry.scans().get(trigger.get("scan") or "")
+        return f"بررسی دوره‌ای: {scan.label if scan else trigger.get('scan')}"
+    return TRIGGER_LABELS["MANUAL"]
+
+
+def describe_graph(graph: dict, entity_type: str | None, company_id: int | None = None) -> list[str]:
+    """خلاصهٔ فارسی خوانا برای بازبینی پیش از انتشار."""
+    adapter = registry.get_adapter(entity_type)
+    labels = adapter.labels() if adapter else {}
+    trigger = graph.get("trigger") or {}
+    lines = [f"شروع: {trigger_text(trigger, entity_type)}"]
+    if trigger.get("condition"):
+        lines.append(f"شرط شروع: {conditions.describe(trigger['condition'], labels)}")
+    for n in graph.get("nodes", []):
+        t, label = n.get("type"), n.get("label") or NODE_TYPES.get(n.get("type"), "")
+        if t == "APPROVAL":
+            extra = f" — {MODE_LABELS.get(n.get('mode') or 'ANY', '')}"
+            if n.get("mode") == "PERCENT":
+                extra += f" ({n.get('percent')}٪)"
+            lines.append(f"تایید «{label}»: {_approvers_text(company_id, n.get('approvers') or [])}{extra}")
+        elif t == "TASK":
+            lines.append(f"کار «{label}»: {_approvers_text(company_id, n.get('assignees') or [])}")
+        elif t == "CONDITION":
+            lines.append(f"شرط «{label}»: {conditions.describe(n.get('rule'), labels)}")
+        elif t == "ACTION":
+            spec = registry.find_action(entity_type, n.get("action") or "")
+            lines.append(f"اقدام خودکار: {spec.label if spec else n.get('action')}")
+        elif t == "NOTIFY":
+            lines.append(f"اعلان به {_approvers_text(company_id, n.get('to') or [])}: {n.get('title') or ''}")
+        elif t == "WAIT":
+            lines.append(f"انتظار «{label}»")
+        elif t == "SUBPROCESS":
+            lines.append(_sub_text(company_id, n))
+        elif t == "END":
+            lines.append(f"پایان «{label}» با نتیجهٔ {OUTCOMES.get(n.get('outcome') or 'DONE', '')}")
+    return lines
+
+
+def plan_lines(graph: dict, entity_type: str | None, company_id: int | None = None) -> list[str]:
+    """R331: فرایند گام‌به‌گام به ترتیب اجرا و به زبان ساده: چه کسی، کجا، چه کاری؛ کارهای خودکار جدا از کار آدم‌ها."""
+    from peecha import numerals
+
+    adapter = registry.get_adapter(entity_type)
+    labels = adapter.labels() if adapter else {}
+    nodes = definitions.nodes_by_id(graph)
+    trigger = graph.get("trigger") or {}
+    lines = [f"شروع: {trigger_text(trigger, entity_type)}"]
+    if trigger.get("condition"):
+        lines.append(f"فقط وقتی: {conditions.describe(trigger['condition'], labels)}")
+
+    def follow(nid: str, prefer: str | None) -> str | None:
+        outs = definitions.outgoing(graph, nid)
+        nxt = [e for e in outs if prefer and e.get("when") == prefer] or \
+            [e for e in outs if e.get("when") in (None, "", "default")]
+        return nxt[0]["to"] if nxt else None
+
+    count, auto, cond, reject_from = 0, [], None, None
+
+    def add(text: str) -> None:
+        nonlocal count
+        count += 1
+        lines.append(f"{numerals.to_persian_digits(str(count))}. {text}")
+
+    def flush() -> None:
+        if auto:
+            add(f"سیستم خودکار، بدون دخالت کسی: {'، '.join(auto)}")
+            auto.clear()
+
+    nid, seen = definitions.START, set()
+    while nid and nid not in seen:
+        seen.add(nid)
+        node = nodes.get(nid) or {}
+        t, label = node.get("type"), node.get("label") or NODE_TYPES.get(node.get("type"), "")
+        only = f" (فقط اگر {cond})" if cond else ""
+        if t == "ACTION":
+            auto.append(f"«{label}»")
+        elif t == "CONDITION":
+            flush()
+            cond = conditions.describe(node.get("rule"), labels)
+        elif t == "SUBPROCESS":
+            flush()
+            add(f"{_sub_text(company_id, node)} و روند تا پایان آن منتظر می‌ماند{only}")
+            if any(e.get("when") == "rejected" for e in definitions.outgoing(graph, nid)):
+                reject_from = reject_from or follow(nid, "rejected")
+            cond = None
+        elif t == "PARALLEL":
+            flush()
+            branches, join = [], None
+            for e in definitions.outgoing(graph, nid):
+                names, join = _branch(graph, e["to"], company_id)
+                branches.append(names)
+            add("هم‌زمان: " + " | ".join(" ← ".join(b) or "—" for b in branches) + "؛ پس از پایان همه ادامه می‌یابد")
+            nid = join
+            continue
+        elif t in ("APPROVAL", "TASK", "NOTIFY", "WAIT"):
+            flush()
+            if t == "APPROVAL":
+                back = "، یا برای اصلاح برمی‌گرداند" if any(e.get("when") == "changes" for e in definitions.outgoing(graph, nid)) else ""
+                add(f"«{label}»: {_approvers_text(company_id, node.get('approvers') or [])} در «کارتابل من» تایید یا رد "
+                    f"می‌کند{back}{only}")
+                reject_from = reject_from or follow(nid, "rejected")
+            elif t == "TASK":
+                add(f"«{label}»: {_approvers_text(company_id, node.get('assignees') or [])} در «کارتابل من» این کار را انجام "
+                    f"می‌دهد و «انجام شد» می‌زند{only}")
+            elif t == "NOTIFY":
+                title = re.sub(r"\{[^}]*\}", "…", (node.get("title") or label).replace("«{عنوان}»", "سند").replace("{عنوان}", "سند"))
+                add(f"خبر به {_approvers_text(company_id, node.get('to') or [])}: {title}")
+            else:
+                add(f"انتظار: «{label}»")
+            cond = None
+        elif t == "END":
+            flush()
+            lines.append(f"پایان: {OUTCOMES.get(node.get('outcome') or 'DONE', '')}")
+            break
+        nid = follow(nid, {"CONDITION": "yes", "APPROVAL": "approved", "TASK": "done"}.get(t))
+    lines.extend(chain_lines(graph, entity_type, company_id))
+    parts, nid, seen = [], reject_from, set()
+    while nid and nid not in seen:
+        seen.add(nid)
+        node = nodes.get(nid) or {}
+        t = node.get("type")
+        if t == "ACTION":
+            parts.append(f"«{node.get('label')}» (خودکار)")
+        elif t == "NOTIFY":
+            parts.append(f"خبر به {_approvers_text(company_id, node.get('to') or [])}")
+        elif t == "END":
+            parts.append(f"پایان «{OUTCOMES.get(node.get('outcome') or 'DONE', '')}»")
+            break
+        nid = follow(nid, None)
+    if parts:
+        lines.append("اگر رد شود: " + " ← ".join(parts))
+    return lines
+
+
+def _sub_text(company_id: int | None, node: dict) -> str:
+    name = node.get("label") or "فرایند فرعی"
+    if company_id is not None and node.get("definition_id"):
+        try:
+            name = definitions.get_definition(company_id, int(node["definition_id"])).name
+        except WorkflowError:
+            pass
+    return f"فرایند «{name}» روی {TARGET_LABELS.get(node.get('target') or 'SAME', 'همین سند')} اجرا می‌شود"
+
+
+def _branch(graph: dict, start: str, company_id: int | None) -> tuple[list[str], str | None]:
+    """گام‌های یک شاخهٔ هم‌زمان تا «پیوستن شاخه‌ها»: (نام‌ها، شناسهٔ پیوستن)."""
+    nodes = definitions.nodes_by_id(graph)
+    names, nid, seen = [], start, set()
+    while nid and nid not in seen and nid in nodes:
+        seen.add(nid)
+        node = nodes[nid]
+        if node.get("type") == "JOIN":
+            return names, nid
+        if node.get("type") == "SUBPROCESS":
+            names.append(_sub_text(company_id, node).split(" روی ")[0].replace("فرایند ", "", 1))
+        elif node.get("type") in ("APPROVAL", "TASK", "ACTION"):
+            names.append(f"«{node.get('label') or NODE_TYPES.get(node.get('type'), '')}»")
+        nxt = [e for e in definitions.outgoing(graph, nid) if e.get("when") in (None, "", "default", "approved", "done")]
+        nid = nxt[0]["to"] if nxt else None
+    return names, None
+
+
+def chain_lines(graph: dict, entity_type: str | None, company_id: int | None) -> list[str]:
+    """R332: پس از این فرایند چه فرایندی خودکار شروع می‌شود؛ اگر سند تازه فرایندی ندارد، راه ادامهٔ زنجیره."""
+    if company_id is None:
+        return []
+    produced = definitions.produced_events(graph, entity_type)
+    nxt = definitions.followers(company_id, produced)
+    out = [f"سپس خودکار: فرایند «{name}» شروع می‌شود" for _d, name, _e in nxt]
+    started = {e for _d, _n, e in nxt}
+    for node in graph.get("nodes") or []:
+        spec = registry.find_action(entity_type, node.get("action") or "") if node.get("type") == "ACTION" else None
+        if spec is not None and spec.creates and not started & set(spec.creates):
+            adapter = next((a for a in registry.adapters() if spec.creates[0] in a.events), None)
+            if adapter is not None:
+                out.append(f"«{node.get('label') or spec.label}» سند جدید می‌سازد؛ برای ادامهٔ خودکار، فرایندی برای "
+                           f"«{adapter.label}» با رویداد «{adapter.events[spec.creates[0]]}» بسازید.")
+    return out
+
+
+def diff_graphs(old: dict, new: dict) -> list[str]:
+    """تفاوت دو نسخه به زبان ساده (برای پیش از انتشار و تاریخچهٔ نسخه‌ها)."""
+    a = definitions.nodes_by_id(old or {})
+    b = definitions.nodes_by_id(new or {})
+    out = []
+    for nid in b.keys() - a.keys():
+        out.append(f"مرحلهٔ جدید: «{b[nid].get('label') or NODE_TYPES.get(b[nid].get('type'), nid)}»")
+    for nid in a.keys() - b.keys():
+        out.append(f"مرحلهٔ حذف‌شده: «{a[nid].get('label') or NODE_TYPES.get(a[nid].get('type'), nid)}»")
+    for nid in a.keys() & b.keys():
+        x = {k: v for k, v in a[nid].items() if k != "pos"}
+        y = {k: v for k, v in b[nid].items() if k != "pos"}
+        if x != y:
+            out.append(f"تغییر در «{b[nid].get('label') or nid}»")
+    ea = {(e["from"], e["to"], e.get("when")) for e in (old or {}).get("edges", [])}
+    eb = {(e["from"], e["to"], e.get("when")) for e in (new or {}).get("edges", [])}
+    if ea != eb:
+        out.append(f"مسیرها تغییر کرده‌اند ({len(eb - ea)} مسیر جدید، {len(ea - eb)} مسیر حذف‌شده)")
+    if (old or {}).get("trigger") != (new or {}).get("trigger"):
+        out.append("شرایط شروع تغییر کرده است")
+    return out or ["تفاوتی نیست"]
+
+
+# --- ویرایش گراف (برای طراح گرافیکی) ----------------------------------------------------------------------
+NEW_NODE_DEFAULTS = {
+    "CONDITION": {"label": "شرط جدید", "rule": {}},
+    "APPROVAL": {"label": "تایید جدید", "approvers": [], "mode": "ANY"},
+    "TASK": {"label": "کار جدید", "assignees": [], "fields": []},
+    "ACTION": {"label": "اقدام خودکار", "action": ""},
+    "NOTIFY": {"label": "اعلان", "to": [{"kind": "STARTER"}], "title": "{عنوان}"},
+    "WAIT": {"label": "انتظار", "hours": 24},
+    "PARALLEL": {"label": "انشعاب هم‌زمان"},
+    "JOIN": {"label": "پیوستن شاخه‌ها"},
+    "END": {"label": "پایان", "outcome": "DONE"},
+    "SUBPROCESS": {"label": "فرایند فرعی", "target": "SAME"},
+}
+
+
+def new_node_id(graph: dict, node_type: str) -> str:
+    prefix = {"CONDITION": "c", "APPROVAL": "ap", "TASK": "t", "ACTION": "act", "NOTIFY": "n", "WAIT": "w",
+              "PARALLEL": "p", "JOIN": "j", "END": "e", "SUBPROCESS": "sub"}.get(node_type, "x")
+    existing = set(definitions.nodes_by_id(graph))
+    i = 1
+    while f"{prefix}{i}" in existing:
+        i += 1
+    return f"{prefix}{i}"
+
+
+def add_node(graph: dict, node_type: str, pos: tuple[float, float] | None = None) -> str:
+    if node_type not in NEW_NODE_DEFAULTS:
+        raise WorkflowError("نوع مرحله نامعتبر است.")
+    nid = new_node_id(graph, node_type)
+    node = {"id": nid, "type": node_type, **copy.deepcopy(NEW_NODE_DEFAULTS[node_type])}
+    if pos is not None:
+        node["pos"] = [float(pos[0]), float(pos[1])]
+    graph.setdefault("nodes", []).append(node)
+    return nid
+
+
+def remove_node(graph: dict, node_id: str) -> None:
+    if node_id == definitions.START:
+        raise WorkflowError("گرهٔ شروع حذف نمی‌شود.")
+    graph["nodes"] = [n for n in graph.get("nodes", []) if n["id"] != node_id]
+    graph["edges"] = [e for e in graph.get("edges", []) if node_id not in (e["from"], e["to"])]
+
+
+def connect(graph: dict, src: str, dst: str, when: str | None = None) -> None:
+    if src == dst:
+        raise WorkflowError("مرحله نمی‌تواند به خودش وصل شود.")
+    nodes = definitions.nodes_by_id(graph)
+    if src != definitions.START and src not in nodes or dst not in nodes:
+        raise WorkflowError("مرحلهٔ مبدأ یا مقصد پیدا نشد.")
+    if nodes.get(src, {}).get("type") == "END":
+        raise WorkflowError("از مرحلهٔ پایان نمی‌توان ادامه داد.")
+    allowed = definitions.NODE_EDGE_LABELS.get(nodes.get(src, {}).get("type"))
+    if allowed and when not in allowed and not (None in allowed and not when):
+        raise WorkflowError("برای این مرحله، نتیجهٔ مسیر را انتخاب کنید.")
+    edge = {"from": src, "to": dst, **({"when": when} if when else {})}
+    if any(e["from"] == src and e.get("when") == (when or None) and nodes.get(src, {}).get("type") != "PARALLEL"
+           for e in graph.get("edges", [])):
+        graph["edges"] = [e for e in graph["edges"] if not (e["from"] == src and e.get("when") == (when or None))]
+    graph.setdefault("edges", []).append(edge)
+
+
+def edge_choices(graph: dict, src: str) -> list[tuple[str | None, str]]:
+    """نتیجه‌های مجاز مسیر خروجی از یک مرحله."""
+    t = (definitions.nodes_by_id(graph).get(src) or {}).get("type")
+    allowed = definitions.NODE_EDGE_LABELS.get(t)
+    if allowed:
+        return list(allowed.items())
+    return [(None, definitions.EDGE_LABELS[None])]

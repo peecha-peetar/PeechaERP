@@ -1,8 +1,8 @@
-"""سرویسِ وام، مساعده و اقساط با کسرِ خودکار (فصلِ ۱۳).
+"""سرویس وام، مساعده و اقساط با کسر خودکار (فصل ۱۳).
 
-قسط_ماهانه = (مبلغِ‌اصل × (۱ + نرخِ‌کارمزد)) ÷ تعدادِ‌اقساط، گردشده طبقِ
-rounding_rule (فصلِ ۴)؛ باقیماندهٔ گردکردن به آخرین قسط اضافه می‌شود تا
-مجموعِ اقساط دقیقاً برابرِ اصل+کارمزد باشد."""
+قسط_ماهانه = (مبلغ‌اصل × (۱ + نرخ‌کارمزد)) ÷ تعداد‌اقساط، گردشده طبق
+rounding_rule (فصل ۴)؛ باقیماندهٔ گردکردن به آخرین قسط اضافه می‌شود تا
+مجموع اقساط دقیقاً برابر اصل+کارمزد باشد."""
 
 from __future__ import annotations
 
@@ -94,13 +94,13 @@ def create_loan(
     installments_count: int, start_period_id: int, funding_source: str | None,
 ) -> int:
     if loan_type not in _LOAN_TYPES:
-        raise ValueError("نوعِ وام نامعتبر است.")
+        raise ValueError("نوع وام نامعتبر است.")
     if principal_amount <= 0:
-        raise ValueError("مبلغِ اصل باید بزرگ‌تر از صفر باشد.")
+        raise ValueError("مبلغ اصل باید بزرگ‌تر از صفر باشد.")
     if fee_rate < 0:
-        raise ValueError("نرخِ کارمزد نمی‌تواند منفی باشد.")
+        raise ValueError("نرخ کارمزد نمی‌تواند منفی باشد.")
     if installments_count < 1:
-        raise ValueError("تعدادِ اقساط باید حداقل ۱ باشد.")
+        raise ValueError("تعداد اقساط باید حداقل ۱ باشد.")
     with new_session() as session:
         loan = Loan(
             employee_id=employee_id, loan_type=loan_type, principal_amount=principal_amount, fee_rate=fee_rate,
@@ -118,7 +118,7 @@ def approve_loan(loan_id: int) -> None:
         if loan is None:
             raise ValueError("این وام یافت نشد.")
         if loan.status != "REQUESTED":
-            raise ValueError("فقط وامِ درخواست‌شده قابلِ تایید است.")
+            raise ValueError("فقط وام درخواست‌شده قابل تایید است.")
         loan.status = "APPROVED"
         session.commit()
 
@@ -129,7 +129,7 @@ def reject_loan(loan_id: int) -> None:
         if loan is None:
             raise ValueError("این وام یافت نشد.")
         if loan.status != "REQUESTED":
-            raise ValueError("فقط وامِ درخواست‌شده قابلِ رد است.")
+            raise ValueError("فقط وام درخواست‌شده قابل رد است.")
         loan.status = "REJECTED"
         session.commit()
 
@@ -140,19 +140,19 @@ def cancel_loan(loan_id: int) -> None:
         if loan is None:
             raise ValueError("این وام یافت نشد.")
         if loan.status not in ("REQUESTED", "APPROVED"):
-            raise ValueError("وامِ پرداخت‌شده دیگر قابلِ لغو نیست.")
+            raise ValueError("وام پرداخت‌شده دیگر قابل لغو نیست.")
         loan.status = "CANCELLED"
         session.commit()
 
 
 def disburse_loan(loan_id: int, company_id: int) -> None:
-    """وامِ APPROVED را DISBURSED می‌کند و جدولِ اقساط را طبقِ فرمولِ فصلِ ۱۳ می‌سازد."""
+    """وام APPROVED را DISBURSED می‌کند و جدول اقساط را طبق فرمول فصل ۱۳ می‌سازد."""
     with new_session() as session:
         loan = session.get(Loan, loan_id)
         if loan is None:
             raise ValueError("این وام یافت نشد.")
         if loan.status != "APPROVED":
-            raise ValueError("فقط وامِ تایید‌شده قابلِ پرداخت است.")
+            raise ValueError("فقط وام تایید‌شده قابل پرداخت است.")
         settings = payroll_service.get_company_settings(company_id)
         total_payable = loan.principal_amount * (decimal.Decimal(1) + loan.fee_rate)
         raw_installment = total_payable / decimal.Decimal(loan.installments_count)
@@ -160,7 +160,7 @@ def disburse_loan(loan_id: int, company_id: int) -> None:
 
         current_period = session.get(PayrollPeriod, loan.start_period_id)
         if current_period is None:
-            raise ValueError("دورهٔ شروعِ کسر یافت نشد.")
+            raise ValueError("دورهٔ شروع کسر یافت نشد.")
         allocated = decimal.Decimal(0)
         for installment_no in range(1, loan.installments_count + 1):
             if installment_no == loan.installments_count:
@@ -212,7 +212,7 @@ class DueInstallmentRow:
 
 
 def list_due_installments(employee_id: int, period_id: int) -> list[DueInstallmentRow]:
-    """اقساطِ سررسیدِ یک کارمند در یک دوره، به‌ترتیبِ تاریخِ ایجادِ وام (قدیمی‌تر اول) — فصلِ ۸/۱۳."""
+    """اقساط سررسید یک کارمند در یک دوره، به‌ترتیب تاریخ ایجاد وام (قدیمی‌تر اول) — فصل ۸/۱۳."""
     with new_session() as session:
         rows = session.execute(
             select(LoanInstallment, Loan)
@@ -245,21 +245,21 @@ def mark_installment_deducted(loan_installment_id: int) -> None:
         if installment is None:
             raise ValueError("این قسط یافت نشد.")
         if installment.status != "PENDING":
-            raise ValueError("فقط قسطِ در‌انتظار قابلِ کسر است.")
+            raise ValueError("فقط قسط در‌انتظار قابل کسر است.")
         installment.status = "DEDUCTED"
         _refresh_loan_status(session, installment.loan_id)
         session.commit()
 
 
 def defer_installment(loan_installment_id: int, company_id: int) -> int:
-    """طبقِ سناریوی سند: خالص کفافِ قسط را نمی‌دهد → این قسط DEFERRED و
-    یک ردیفِ تازه به‌همان مبلغ برایِ دورهٔ بعد ساخته می‌شود."""
+    """طبق سناریوی سند: خالص کفاف قسط را نمی‌دهد → این قسط DEFERRED و
+    یک ردیف تازه به‌همان مبلغ برای دورهٔ بعد ساخته می‌شود."""
     with new_session() as session:
         installment = session.get(LoanInstallment, loan_installment_id)
         if installment is None:
             raise ValueError("این قسط یافت نشد.")
         if installment.status != "PENDING":
-            raise ValueError("فقط قسطِ در‌انتظار قابلِ تعویق است.")
+            raise ValueError("فقط قسط در‌انتظار قابل تعویق است.")
         current_period = session.get(PayrollPeriod, installment.due_period_id)
         next_period = _get_or_create_next_period(session, company_id, current_period)
         max_no = session.scalar(
@@ -278,13 +278,13 @@ def defer_installment(loan_installment_id: int, company_id: int) -> int:
 
 def waive_installment(loan_installment_id: int, reason: str, company_id: int, user_id: int | None) -> None:
     if not reason or not reason.strip():
-        raise ValueError("برایِ بخششِ قسط ذکرِ دلیل الزامی است.")
+        raise ValueError("برای بخشش قسط ذکر دلیل الزامی است.")
     with new_session() as session:
         installment = session.get(LoanInstallment, loan_installment_id)
         if installment is None:
             raise ValueError("این قسط یافت نشد.")
         if installment.status != "PENDING":
-            raise ValueError("فقط قسطِ در‌انتظار قابلِ بخشش است.")
+            raise ValueError("فقط قسط در‌انتظار قابل بخشش است.")
         installment.status = "WAIVED"
         _refresh_loan_status(session, installment.loan_id)
         audit_service.log_activity(

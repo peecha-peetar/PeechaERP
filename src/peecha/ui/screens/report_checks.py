@@ -1,12 +1,12 @@
-"""گزارشِ چک‌ها — طبقِ درخواستِ صریح: فهرستِ ترکیبیِ همه‌یِ چک‌هایِ دریافتی و
-پرداختی (نه فقط درجریانِ وصول، بلکه با هر وضعیتی — «فیلترِ تمامِ ورودی‌ها»)،
-با فیلترِ نوعِ چک (دریافتی/پرداختی)، بازه‌یِ سررسید، بازه‌یِ تاریخِ
-دریافت/صدور، طرفِ‌حساب، وضعیتِ چک، و نامِ بانک؛ در پایان، چاپ/PDF/Excel.
+"""گزارش چک‌ها — طبق درخواست صریح: فهرست ترکیبی همهٔ چک‌های دریافتی و
+پرداختی (نه فقط درجریان وصول، بلکه با هر وضعیتی — «فیلتر تمام ورودی‌ها»)،
+با فیلتر نوع چک (دریافتی/پرداختی)، بازهٔ سررسید، بازهٔ تاریخ
+دریافت/صدور، طرف‌حساب، وضعیت چک، و نام بانک؛ در پایان، چاپ/PDF/Excel.
 
-طبقِ گزارشِ صریح («گزارشِ چک‌هایِ درجریانِ وصول» در treasury_reports.py):
-آن گزارش عمداً محدود به چک‌هایِ هنوز وصول‌نشده و نزدیکِ سررسید است — این
-یکی مکملِ آن است: بایگانیِ کاملِ همه‌یِ چک‌ها با هر وضعیتی، برایِ مرور/چاپِ
-گزارشِ عمومی."""
+طبق گزارش صریح («گزارش چک‌های درجریان وصول» در treasury_reports.py):
+آن گزارش عمداً محدود به چک‌های هنوز وصول‌نشده و نزدیک سررسید است — این
+یکی مکمل آن است: بایگانی کامل همهٔ چک‌ها با هر وضعیتی، برای مرور/چاپ
+گزارش عمومی."""
 
 from __future__ import annotations
 
@@ -28,24 +28,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import numerals, session
+from peecha import decimals, numerals, session
 from peecha.services import treasury as treasury_service
 from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable_with_footer
 
 _STATUS_LABELS = {
-    "IN_HAND": "نزدِ صندوق (دریافتی)",
+    "IN_HAND": "نزد صندوق (دریافتی)",
     "DEPOSITED": "واگذارشده به بانک (دریافتی)",
     "CLEARED": "وصول‌شده",
     "BOUNCED": "برگشت‌خورده",
-    "ENDORSED": "خرج‌شده نزدِ شخصِ ثالث (دریافتی)",
-    "ISSUED": "صادر/نزدِ گیرنده (پرداختی)",
+    "ENDORSED": "خرج‌شده نزد شخص ثالث (دریافتی)",
+    "ISSUED": "صادر/نزد گیرنده (پرداختی)",
     "VOIDED": "ابطال‌شده (پرداختی)",
 }
 _STATUS_OPTIONS: list[tuple[str | None, str]] = [(None, "— همه —")] + list(_STATUS_LABELS.items())
 
-_COLUMNS = ["نوع", "شماره‌یِ چک", "بانک", "طرفِ‌حساب", "مبلغ", "تاریخِ سررسید", "تاریخِ دریافت/صدور", "وضعیت"]
-_REPORT_TITLE = "گزارشِ چک‌ها"
+_COLUMNS = ["نوع", "شمارهٔ چک", "بانک", "طرف‌حساب", "مبلغ", "تاریخ سررسید", "تاریخ دریافت/صدور", "وضعیت"]
+_REPORT_TITLE = "گزارش چک‌ها"
 
 
 class ChecksReportScreen(FieldHelpMixin, QWidget):
@@ -66,7 +66,7 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         layout.addWidget(title)
 
         kind_row = QHBoxLayout()
-        kind_row.addWidget(QLabel("نوعِ چک:"))
+        kind_row.addWidget(QLabel("نوع چک:"))
         self.received_checkbox = QCheckBox("دریافتی")
         self.received_checkbox.setChecked(True)
         self.received_checkbox.stateChanged.connect(self.refresh)
@@ -86,7 +86,7 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         layout.addLayout(kind_row)
 
         due_row = QHBoxLayout()
-        self.due_filter_checkbox = QCheckBox("فیلترِ بازه‌یِ سررسید:")
+        self.due_filter_checkbox = QCheckBox("فیلتر بازهٔ سررسید:")
         self.due_filter_checkbox.stateChanged.connect(self.refresh)
         due_row.addWidget(self.due_filter_checkbox)
         self.due_from_field = JalaliDateEdit()
@@ -97,7 +97,7 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         self.due_to_field.textChanged.connect(self.refresh)
         due_row.addWidget(self.due_to_field)
 
-        self.received_date_filter_checkbox = QCheckBox("فیلترِ بازه‌یِ تاریخِ دریافت/صدور:")
+        self.received_date_filter_checkbox = QCheckBox("فیلتر بازهٔ تاریخ دریافت/صدور:")
         self.received_date_filter_checkbox.stateChanged.connect(self.refresh)
         due_row.addWidget(self.received_date_filter_checkbox)
         self.received_from_field = JalaliDateEdit()
@@ -111,15 +111,15 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         layout.addLayout(due_row)
 
         search_row = QHBoxLayout()
-        search_row.addWidget(QLabel("طرفِ‌حساب:"))
+        search_row.addWidget(QLabel("طرف‌حساب:"))
         self.counterparty_field = QLineEdit()
-        self.counterparty_field.setPlaceholderText("جستجو در نامِ طرفِ‌حساب")
+        self.counterparty_field.setPlaceholderText("جستجو در نام طرف‌حساب")
         self.counterparty_field.textChanged.connect(self.refresh)
         search_row.addWidget(self.counterparty_field, stretch=1)
 
         search_row.addWidget(QLabel("بانک:"))
         self.bank_field = QLineEdit()
-        self.bank_field.setPlaceholderText("جستجو در نامِ بانک")
+        self.bank_field.setPlaceholderText("جستجو در نام بانک")
         self.bank_field.textChanged.connect(self.refresh)
         search_row.addWidget(self.bank_field, stretch=1)
         layout.addLayout(search_row)
@@ -139,30 +139,30 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         print_button = QPushButton("🖨 چاپ")
         print_button.setObjectName("flatButton")
         print_button.clicked.connect(self._on_print)
-        pdf_button = QPushButton("📄 خروجیِ PDF")
+        pdf_button = QPushButton("📄 خروجی PDF")
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
-        excel_button = QPushButton("📊 خروجیِ Excel")
+        excel_button = QPushButton("📊 خروجی Excel")
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
 
         outer.addWidget(wrap_scrollable_with_footer(panel, [print_button, pdf_button, excel_button]))
 
         self.set_field_help([
-            (self.received_checkbox, "چک‌هایِ دریافتی در گزارش بیایند یا نه."),
-            (self.issued_checkbox, "چک‌هایِ پرداختی در گزارش بیایند یا نه."),
+            (self.received_checkbox, "چک‌های دریافتی در گزارش بیایند یا نه."),
+            (self.issued_checkbox, "چک‌های پرداختی در گزارش بیایند یا نه."),
             (
                 self.status_combo,
-                "فقط چک‌هایی با این وضعیتِ مشخص نشان داده شوند؛ «— همه —» یعنی بدونِ این فیلتر — "
-                "یعنی همه‌یِ وضعیت‌ها، نه فقط چک‌هایِ درجریانِ وصول.",
+                "فقط چک‌هایی با این وضعیت مشخص نشان داده شوند؛ «— همه —» یعنی بدون این فیلتر — "
+                "یعنی همهٔ وضعیت‌ها، نه فقط چک‌های درجریان وصول.",
             ),
             (self.due_filter_checkbox, "فقط چک‌هایی که سررسیدشان در این بازه است."),
             (
                 self.received_date_filter_checkbox,
-                "فقط چک‌هایی که تاریخِ دریافت (برایِ چکِ دریافتی) یا تاریخِ صدور (برایِ چکِ پرداختی)شان در این بازه است.",
+                "فقط چک‌هایی که تاریخ دریافت (برای چک دریافتی) یا تاریخ صدور (برای چک پرداختی)شان در این بازه است.",
             ),
-            (self.counterparty_field, "جستجویِ زنده در نامِ طرفِ‌حساب (پرداخت‌کننده‌یِ چکِ دریافتی یا گیرنده‌یِ چکِ پرداختی)."),
-            (self.bank_field, "جستجویِ زنده در نامِ بانک."),
+            (self.counterparty_field, "جستجوی زنده در نام طرف‌حساب (پرداخت‌کنندهٔ چک دریافتی یا گیرندهٔ چک پرداختی)."),
+            (self.bank_field, "جستجوی زنده در نام بانک."),
         ])
 
     def _company_id(self) -> int | None:
@@ -237,7 +237,7 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
             total += r[4]
             values = [
                 r[0], r[1], r[2], r[3],
-                numerals.format_money(r[4], 0, None),
+                decimals.format_amount(r[4]),
                 numerals.format_jalali_date(r[5]),
                 numerals.format_jalali_date(r[6]),
                 r[7],
@@ -246,18 +246,18 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
         self._total = total
         self.summary_label.setText(
-            f"{numerals.to_persian_digits(str(len(rows)))} چک — جمعِ مبلغ: {numerals.format_money(total, 0, None)}"
+            f"{numerals.to_persian_digits(str(len(rows)))} چک — جمع مبلغ: {decimals.format_amount(total)}"
         )
 
     def _export_rows(self) -> tuple[list[str], list[list], list]:
         table_rows = [
             [
-                r[0], r[1], r[2], r[3], numerals.format_money(r[4], 0, None),
+                r[0], r[1], r[2], r[3], decimals.format_amount(r[4]),
                 numerals.format_jalali_date(r[5]), numerals.format_jalali_date(r[6]), r[7],
             ]
             for r in self._rows
         ]
-        footer = ["", "", "", "جمعِ کل", numerals.format_money(self._total, 0, None), "", "", ""]
+        footer = ["", "", "", "جمع کل", decimals.format_amount(self._total), "", "", ""]
         return list(_COLUMNS), table_rows, footer
 
     def _filters_summary(self) -> list[tuple[str, str]]:
@@ -272,16 +272,16 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
             parts.append(("وضعیت", self.status_combo.currentText()))
         if self.due_filter_checkbox.isChecked():
             parts.append((
-                "بازه‌یِ سررسید",
+                "بازهٔ سررسید",
                 f"{numerals.format_jalali_date(self.due_from_field.date())} تا {numerals.format_jalali_date(self.due_to_field.date())}",
             ))
         if self.received_date_filter_checkbox.isChecked():
             parts.append((
-                "بازه‌یِ تاریخِ دریافت/صدور",
+                "بازهٔ تاریخ دریافت/صدور",
                 f"{numerals.format_jalali_date(self.received_from_field.date())} تا {numerals.format_jalali_date(self.received_to_field.date())}",
             ))
         if self.counterparty_field.text().strip():
-            parts.append(("طرفِ‌حساب", self.counterparty_field.text().strip()))
+            parts.append(("طرف‌حساب", self.counterparty_field.text().strip()))
         if self.bank_field.text().strip():
             parts.append(("بانک", self.bank_field.text().strip()))
         return parts

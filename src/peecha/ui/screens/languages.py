@@ -1,4 +1,4 @@
-"""مدیریتِ زبان‌ها — معادلِ Qt برایِ languages.py/.kv در Kivy."""
+"""مدیریت زبان‌ها — معادل Qt برای languages.py/.kv در Kivy."""
 
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import languages as languages_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable, wrap_scrollable_with_footer
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, wrap_scrollable, wrap_scrollable_with_footer
 
-_COLUMNS = ["فعال", "پیش‌فرض", "راست‌به‌چپ", "ترتیب", "نامِ بومی", "کد"]
+_COLUMNS = ["فعال", "پیش‌فرض", "راست‌به‌چپ", "ترتیب", "نام بومی", "کد"]
 
 
 class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
@@ -35,32 +35,35 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=1)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=1)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="زبان جدید")
 
         self.set_field_help([
             (
                 self.code_field,
-                "کدِ کوتاهِ زبان، مثلاً fa برایِ فارسی یا en برایِ انگلیسی. بعدِ ساختن قابلِ‌تغییر نیست.",
+                "کد کوتاه زبان، مثلاً fa برای فارسی یا en برای انگلیسی. بعد ساختن قابل‌تغییر نیست.",
             ),
             (
                 self.native_name_field,
-                "نامِ زبان به خودِ همان زبان، مثلاً «فارسی» یا English. همین نام در فهرستِ انتخابِ زبان نشان داده می‌شود.",
+                "نام زبان به خود همان زبان، مثلاً «فارسی» یا English. همین نام در فهرست انتخاب زبان نشان داده می‌شود.",
             ),
             (
                 self.sort_order_field,
-                "ترتیبِ نمایشِ این زبان در فهرست‌هایِ انتخابِ زبان. عددِ کوچک‌تر بالاتر می‌آید.",
+                "ترتیب نمایش این زبان در فهرست‌های انتخاب زبان. عدد کوچک‌تر بالاتر می‌آید.",
             ),
             (
                 self.is_rtl_checkbox,
-                "اگر این زبان راست‌به‌چپ نوشته می‌شود (مثلِ فارسی یا عربی) تیک بزنید. جهتِ متن و چیدمانِ فرم‌ها را تغییر می‌دهد.",
+                "اگر این زبان راست‌به‌چپ نوشته می‌شود (مثل فارسی یا عربی) تیک بزنید. جهت متن و چیدمان فرم‌ها را تغییر می‌دهد.",
             ),
             (
                 self.is_default_checkbox,
-                "زبانِ پیش‌فرضِ کلِ سیستم — وقتی کاربر یا شرکتی زبانِ خاصی انتخاب نکرده باشد، همین زبان استفاده می‌شود.",
+                "زبان پیش‌فرض کل سیستم — وقتی کاربر یا شرکتی زبان خاصی انتخاب نکرده باشد، همین زبان استفاده می‌شود.",
             ),
             (
                 self.is_active_checkbox,
-                "زبانِ غیرِفعال دیگر در فهرستِ انتخابِ زبان نشان داده نمی‌شود.",
+                "زبان غیرفعال دیگر در فهرست انتخاب زبان نشان داده نمی‌شود.",
             ),
         ])
 
@@ -90,7 +93,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
-        self.form_title = QLabel("زبانِ جدید")
+        self.form_title = QLabel("زبان جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
@@ -103,15 +106,15 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.is_rtl_checkbox = QCheckBox("راست‌به‌چپ")
 
-        self.is_default_checkbox = QCheckBox("زبانِ پیش‌فرض")
+        self.is_default_checkbox = QCheckBox("زبان پیش‌فرض")
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
 
         self.basic_grid = FieldGrid([
             FieldSpec("code", "کد (مثلاً fa)", self.code_field, span=1),
-            FieldSpec("native_name", "نامِ بومی", self.native_name_field, span=3),
-            FieldSpec("sort_order", "ترتیبِ نمایش", self.sort_order_field, span=1),
+            FieldSpec("native_name", "نام بومی", self.native_name_field, span=3),
+            FieldSpec("sort_order", "ترتیب نمایش", self.sort_order_field, span=1),
             FieldSpec("is_rtl", "", self.is_rtl_checkbox, span=1),
             FieldSpec("is_default", "", self.is_default_checkbox, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=1),
@@ -172,7 +175,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _load_into_form(self, lang: languages_service.LanguageRow) -> None:
         self._editing_id = lang.language_id
-        self.form_title.setText(f"ویرایشِ زبان — {lang.native_name}")
+        self.form_title.setText(f"ویرایش زبان — {lang.native_name}")
         self.status_label.setText("")
         self.code_field.setText(lang.code)
         self.code_field.setEnabled(False)
@@ -185,7 +188,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _reset_form(self) -> None:
         self._editing_id = None
-        self.form_title.setText("زبانِ جدید")
+        self.form_title.setText("زبان جدید")
         self.status_label.setText("")
         self.code_field.clear()
         self.code_field.setEnabled(True)
@@ -200,7 +203,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _save(self) -> None:
         native_name = self.native_name_field.text().strip()
         if not native_name:
-            self.status_label.setText("نامِ بومی را وارد کنید.")
+            self.status_label.setText("نام بومی را وارد کنید.")
             return
 
         try:
@@ -235,7 +238,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if self._editing_id is None:
             return
         confirm = QMessageBox.question(
-            self, "حذفِ زبان", "این زبان حذف شود؟", QMessageBox.Yes | QMessageBox.No
+            self, "حذف زبان", "این زبان حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
         if confirm != QMessageBox.Yes:
             return

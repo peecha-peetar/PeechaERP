@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- R320: طرح حرفه‌ای (راست‌به‌چپ) — ساخته‌شده با tools/report_designs/build_pro_templates.py از invoice.jrxml؛
+     پارامترها و فیلدها همان قالب پایه است. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="invoice_pro" pageWidth="595" pageHeight="842"
+              columnWidth="539" leftMargin="28" rightMargin="28" topMargin="20" bottomMargin="20"
+              whenNoDataType="AllSectionsNoDetail">
+    <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Title" fontName="Vazirmatn" fontSize="15" isBold="true"/>
+    <style name="TitleMeta" fontName="Vazirmatn" fontSize="8"/>
+    <style name="BoxTitle" fontName="Vazirmatn" fontSize="8" isBold="true" forecolor="#1F3A5F"/>
+    <style name="BoxStrong" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+    <style name="BoxText" fontName="Vazirmatn" fontSize="7.5"/>
+    <style name="MetaLabel" fontName="Vazirmatn" fontSize="7" forecolor="#5A6B82"/>
+    <style name="MetaValue" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+    <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
+    <style name="Cell" fontName="Vazirmatn" fontSize="8"/>
+    <style name="TotalLabel" fontName="Vazirmatn" fontSize="8.5" isBold="true" forecolor="#1F3A5F"/>
+    <style name="TotalValue" fontName="Vazirmatn" fontSize="8.5" isBold="true"/>
+    <style name="GrandLabel" fontName="Vazirmatn" fontSize="10.5" isBold="true"/>
+    <style name="GrandValue" fontName="Vazirmatn" fontSize="11" isBold="true"/>
+    <style name="Note" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Footer" fontName="Vazirmatn" fontSize="7" forecolor="#5A6B82"/>
+    <parameter name="companyDisplayName" class="java.lang.String">
+
+        <parameterDescription><![CDATA[نام نمایشی شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="companyLegalName" class="java.lang.String">
+        <parameterDescription><![CDATA[نام حقوقی شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="companyIdsLine" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسه‌های شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="documentTypeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[نوع سند]]></parameterDescription>
+    </parameter>
+    <parameter name="documentNoDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[شمارهٔ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="documentDateDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="dueDateDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخ سررسید]]></parameterDescription>
+    </parameter>
+    <parameter name="referenceNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شمارهٔ مرجع]]></parameterDescription>
+    </parameter>
+    <parameter name="statusLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[وضعیت]]></parameterDescription>
+    </parameter>
+    <parameter name="warehouseName" class="java.lang.String">
+        <parameterDescription><![CDATA[انبار]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyIdsLine" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسه‌های طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyContactLine" class="java.lang.String">
+        <parameterDescription><![CDATA[تماس طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyAddress" class="java.lang.String">
+        <parameterDescription><![CDATA[آدرس طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="headerDescription" class="java.lang.String">
+        <parameterDescription><![CDATA[شرح سرسند]]></parameterDescription>
+    </parameter>
+    <parameter name="subtotalDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع جزء]]></parameterDescription>
+    </parameter>
+    <parameter name="discountDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تخفیف]]></parameterDescription>
+    </parameter>
+    <parameter name="taxDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[مالیات]]></parameterDescription>
+    </parameter>
+    <parameter name="shippingDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[هزینهٔ حمل]]></parameterDescription>
+    </parameter>
+    <parameter name="totalDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع کل]]></parameterDescription>
+    </parameter>
+    <parameter name="totalInWordsDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمع کل به حروف]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخ تولید گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="companyNationalId" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسهٔ ملی شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="companyEconomicCode" class="java.lang.String">
+        <parameterDescription><![CDATA[کد اقتصادی شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="companyRegistrationNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شمارهٔ ثبت شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyPhone" class="java.lang.String">
+        <parameterDescription><![CDATA[تلفن طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyMobile" class="java.lang.String">
+        <parameterDescription><![CDATA[موبایل طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyNationalId" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسهٔ ملی طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyEconomicCode" class="java.lang.String">
+        <parameterDescription><![CDATA[کد اقتصادی طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyCreditLimitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[سقف اعتبار مشتری]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyBankAccountNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌حساب بانکی تامین‌کننده]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyNotes" class="java.lang.String">
+        <parameterDescription><![CDATA[یادداشت طرف‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="companyLogoPath" class="java.lang.String">
+        <defaultValueExpression><![CDATA[""]]></defaultValueExpression>
+    </parameter>
+    <parameter name="companyLogoPosition" class="java.lang.String">
+        <defaultValueExpression><![CDATA["NONE"]]></defaultValueExpression>
+    </parameter>
+    <field name="row_no_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="row_no_display"/>
+
+        <fieldDescription><![CDATA[ردیف]]></fieldDescription>
+
+    </field>
+    <field name="item_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_label"/>
+        <fieldDescription><![CDATA[کالا]]></fieldDescription>
+    </field>
+    <field name="uom_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="uom_display"/>
+        <fieldDescription><![CDATA[واحد]]></fieldDescription>
+    </field>
+    <field name="quantity_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_display"/>
+        <fieldDescription><![CDATA[تعداد/مقدار]]></fieldDescription>
+    </field>
+    <field name="unit_price_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="unit_price_display"/>
+        <fieldDescription><![CDATA[قیمت واحد]]></fieldDescription>
+    </field>
+    <field name="discount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="discount_display"/>
+        <fieldDescription><![CDATA[تخفیف]]></fieldDescription>
+    </field>
+    <field name="tax_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="tax_display"/>
+        <fieldDescription><![CDATA[مالیات]]></fieldDescription>
+    </field>
+    <field name="line_total_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_total_display"/>
+        <fieldDescription><![CDATA[جمع ردیف]]></fieldDescription>
+    </field>
+    <field name="item_code" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_code"/>
+        <fieldDescription><![CDATA[کد کالا]]></fieldDescription>
+    </field>
+    <field name="item_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_name"/>
+        <fieldDescription><![CDATA[نام کالا (بدون کد)]]></fieldDescription>
+    </field>
+    <field name="line_description" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_description"/>
+        <fieldDescription><![CDATA[توضیحات ردیف]]></fieldDescription>
+    </field>
+    <field name="discount_percent_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="discount_percent_display"/>
+        <fieldDescription><![CDATA[درصد تخفیف]]></fieldDescription>
+    </field>
+    <field name="tax_percent_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="tax_percent_display"/>
+        <fieldDescription><![CDATA[درصد مالیات]]></fieldDescription>
+    </field>
+    <field name="line_warehouse_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_warehouse_name"/>
+        <fieldDescription><![CDATA[انبار ردیف]]></fieldDescription>
+    </field>
+    <pageHeader>
+        <band height="180">
+            <rectangle radius="4"><reportElement x="0" y="0" width="539" height="50" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank"><reportElement x="477" y="5" width="56" height="40"><printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "RIGHT".equals($P{companyLogoPosition})]]></printWhenExpression></reportElement><imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression></image>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank"><reportElement x="6" y="5" width="56" height="40"><printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "LEFT".equals($P{companyLogoPosition})]]></printWhenExpression></reportElement><imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression></image>
+            <textField><reportElement style="Title" x="70" y="4" width="399" height="24" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{documentTypeLabel} + "   شمارهٔ " + $P{documentNoDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="TitleMeta" x="70" y="28" width="399" height="18" forecolor="#D6E2F2"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{companyDisplayName}]]></textFieldExpression></textField>
+            <rectangle radius="4"><reportElement x="274" y="58" width="265" height="76" mode="Opaque" backcolor="#FFFFFF" forecolor="#C9D3E0"></reportElement><graphicElement><pen lineWidth="0.6" lineColor="#C9D3E0"/></graphicElement></rectangle>
+            <rectangle radius="4"><reportElement x="274" y="58" width="265" height="16" mode="Opaque" backcolor="#E8EEF6" forecolor="#E8EEF6"></reportElement><graphicElement><pen lineWidth="0" lineColor="#E8EEF6"/></graphicElement></rectangle>
+            <staticText><reportElement style="BoxTitle" x="274" y="58" width="265" height="16"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[فروشنده]]></text></staticText>
+            <textField><reportElement style="BoxStrong" x="274" y="75" width="265" height="17"><printWhenExpression><![CDATA[$P{companyLegalName} != null && !$P{companyLegalName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{companyLegalName}]]></textFieldExpression></textField>
+            <textField><reportElement style="BoxText" x="274" y="92" width="265" height="13"><printWhenExpression><![CDATA[$P{companyIdsLine} != null && !$P{companyIdsLine}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{companyIdsLine}]]></textFieldExpression></textField>
+            <rectangle radius="4"><reportElement x="0" y="58" width="265" height="76" mode="Opaque" backcolor="#FFFFFF" forecolor="#C9D3E0"></reportElement><graphicElement><pen lineWidth="0.6" lineColor="#C9D3E0"/></graphicElement></rectangle>
+            <rectangle radius="4"><reportElement x="0" y="58" width="265" height="16" mode="Opaque" backcolor="#E8EEF6" forecolor="#E8EEF6"></reportElement><graphicElement><pen lineWidth="0" lineColor="#E8EEF6"/></graphicElement></rectangle>
+            <staticText><reportElement style="BoxTitle" x="0" y="58" width="265" height="16"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[خریدار / طرف حساب]]></text></staticText>
+            <textField><reportElement style="BoxStrong" x="0" y="75" width="265" height="17"><printWhenExpression><![CDATA[$P{counterpartyLabel} != null && !$P{counterpartyLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{counterpartyLabel}]]></textFieldExpression></textField>
+            <textField><reportElement style="BoxText" x="0" y="92" width="265" height="13"><printWhenExpression><![CDATA[$P{counterpartyIdsLine} != null && !$P{counterpartyIdsLine}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{counterpartyIdsLine}]]></textFieldExpression></textField>
+            <textField><reportElement style="BoxText" x="0" y="105" width="265" height="13"><printWhenExpression><![CDATA[$P{counterpartyContactLine} != null && !$P{counterpartyContactLine}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{counterpartyContactLine}]]></textFieldExpression></textField>
+            <textField><reportElement style="BoxText" x="0" y="118" width="265" height="13"><printWhenExpression><![CDATA[$P{counterpartyAddress} != null && !$P{counterpartyAddress}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{counterpartyAddress}]]></textFieldExpression></textField>
+            <rectangle radius="4"><reportElement x="0" y="142" width="539" height="30" mode="Opaque" backcolor="#E8EEF6" forecolor="#E8EEF6"></reportElement><graphicElement><pen lineWidth="0" lineColor="#E8EEF6"/></graphicElement></rectangle>
+            <staticText><reportElement style="MetaLabel" x="432" y="143" width="107" height="13"><printWhenExpression><![CDATA[$P{documentDateDisplay} != null && !$P{documentDateDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[تاریخ]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="432" y="156" width="107" height="15"><printWhenExpression><![CDATA[$P{documentDateDisplay} != null && !$P{documentDateDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{documentDateDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="325" y="143" width="107" height="13"><printWhenExpression><![CDATA[$P{dueDateDisplay} != null && !$P{dueDateDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[سررسید]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="325" y="156" width="107" height="15"><printWhenExpression><![CDATA[$P{dueDateDisplay} != null && !$P{dueDateDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{dueDateDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="218" y="143" width="107" height="13"><printWhenExpression><![CDATA[$P{statusLabel} != null && !$P{statusLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[وضعیت]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="218" y="156" width="107" height="15"><printWhenExpression><![CDATA[$P{statusLabel} != null && !$P{statusLabel}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{statusLabel}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="111" y="143" width="107" height="13"><printWhenExpression><![CDATA[$P{referenceNo} != null && !$P{referenceNo}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[ارجاع]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="111" y="156" width="107" height="15"><printWhenExpression><![CDATA[$P{referenceNo} != null && !$P{referenceNo}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{referenceNo}]]></textFieldExpression></textField>
+            <staticText><reportElement style="MetaLabel" x="4" y="143" width="107" height="13"><printWhenExpression><![CDATA[$P{warehouseName} != null && !$P{warehouseName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[انبار]]></text></staticText>
+            <textField textAdjust="ScaleFont"><reportElement style="MetaValue" x="4" y="156" width="107" height="15"><printWhenExpression><![CDATA[$P{warehouseName} != null && !$P{warehouseName}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{warehouseName}]]></textFieldExpression></textField>
+        </band>
+    </pageHeader>
+    <columnHeader>
+        <band height="22">
+            <rectangle radius="0"><reportElement x="0" y="0" width="539" height="22" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <staticText><reportElement style="Header" x="511" y="0" width="28" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[ردیف]]></text></staticText>
+            <staticText><reportElement style="Header" x="361" y="0" width="150" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[شرح کالا و خدمات]]></text></staticText>
+            <staticText><reportElement style="Header" x="321" y="0" width="40" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="273" y="0" width="48" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[مقدار]]></text></staticText>
+            <staticText><reportElement style="Header" x="203" y="0" width="70" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[فی واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="145" y="0" width="58" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[تخفیف]]></text></staticText>
+            <staticText><reportElement style="Header" x="87" y="0" width="58" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[مالیات و عوارض]]></text></staticText>
+            <staticText><reportElement style="Header" x="0" y="0" width="87" height="22" forecolor="#FFFFFF"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="2" leftIndent="2"/></textElement><text><![CDATA[مبلغ کل]]></text></staticText>
+        </band>
+    </columnHeader>
+    <detail>
+        <band height="18">
+            <rectangle radius="0"><reportElement x="0" y="0" width="539" height="18" mode="Opaque" backcolor="#F6F8FB" forecolor="#F6F8FB"><printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 == 0]]></printWhenExpression></reportElement><graphicElement><pen lineWidth="0" lineColor="#F6F8FB"/></graphicElement></rectangle>
+            <line><reportElement x="0" y="17" width="539" height="1" forecolor="#C9D3E0"/></line>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="511" y="0" width="28" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{row_no_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="361" y="0" width="150" height="17"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{item_label}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="321" y="0" width="40" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{uom_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="273" y="0" width="48" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{quantity_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="203" y="0" width="70" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{unit_price_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="145" y="0" width="58" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{discount_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="87" y="0" width="58" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{tax_display}]]></textFieldExpression></textField>
+            <textField textAdjust="ScaleFont"><reportElement style="Cell" x="0" y="0" width="87" height="17"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="3" leftIndent="3"/></textElement><textFieldExpression><![CDATA[$F{line_total_display}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+    <pageFooter>
+        <band height="20">
+            <line><reportElement x="0" y="2" width="539" height="1" forecolor="#1F3A5F"/></line>
+            <textField evaluationTime="Master"><reportElement style="Footer" x="379" y="5" width="160" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="1" leftIndent="1"/></textElement><textFieldExpression><![CDATA["صفحهٔ " + String.valueOf($V{MASTER_CURRENT_PAGE}).replace("0","۰").replace("1","۱").replace("2","۲").replace("3","۳").replace("4","۴").replace("5","۵").replace("6","۶").replace("7","۷").replace("8","۸").replace("9","۹") + " از " + String.valueOf($V{MASTER_TOTAL_PAGES}).replace("0","۰").replace("1","۱").replace("2","۲").replace("3","۳").replace("4","۴").replace("5","۵").replace("6","۶").replace("7","۷").replace("8","۸").replace("9","۹")]]></textFieldExpression></textField>
+            <textField><reportElement style="Footer" x="0" y="5" width="369" height="14"><printWhenExpression><![CDATA[$P{generatedAt} != null && !$P{generatedAt}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["تاریخ چاپ: " + $P{generatedAt}]]></textFieldExpression></textField>
+        </band>
+    </pageFooter>
+    <summary>
+        <band height="182">
+            <textField><reportElement style="TotalValue" x="110" y="6" width="120" height="18"/><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{subtotalDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="TotalLabel" x="120" y="6" width="110" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[جمع جزء]]></text></staticText>
+            <line><reportElement x="0" y="24" width="230" height="1" forecolor="#C9D3E0"/></line>
+            <textField><reportElement style="TotalValue" x="110" y="26" width="120" height="18"/><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{discountDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="TotalLabel" x="120" y="26" width="110" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[تخفیف]]></text></staticText>
+            <line><reportElement x="0" y="44" width="230" height="1" forecolor="#C9D3E0"/></line>
+            <textField><reportElement style="TotalValue" x="110" y="46" width="120" height="18"/><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{taxDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="TotalLabel" x="120" y="46" width="110" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[مالیات و عوارض]]></text></staticText>
+            <line><reportElement x="0" y="64" width="230" height="1" forecolor="#C9D3E0"/></line>
+            <textField><reportElement style="TotalValue" x="110" y="66" width="120" height="18"><printWhenExpression><![CDATA[$P{shippingDisplay} != null && !$P{shippingDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{shippingDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="TotalLabel" x="120" y="66" width="110" height="18"><printWhenExpression><![CDATA[$P{shippingDisplay} != null && !$P{shippingDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[هزینهٔ حمل]]></text></staticText>
+            <line><reportElement x="0" y="84" width="230" height="1" forecolor="#C9D3E0"/></line>
+            <rectangle radius="4"><reportElement x="0" y="88" width="230" height="26" mode="Opaque" backcolor="#1F3A5F" forecolor="#1F3A5F"></reportElement><graphicElement><pen lineWidth="0" lineColor="#1F3A5F"/></graphicElement></rectangle>
+            <textField><reportElement style="GrandValue" x="0" y="88" width="120" height="26" forecolor="#FFFFFF"/><textElement textAlignment="Left" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA[$P{totalDisplay}]]></textFieldExpression></textField>
+            <staticText><reportElement style="GrandLabel" x="120" y="88" width="110" height="26" forecolor="#FFFFFF"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[جمع کل]]></text></staticText>
+            <textField><reportElement style="Note" x="242" y="6" width="297" height="18"><printWhenExpression><![CDATA[$P{totalInWordsDisplay} != null && !$P{totalInWordsDisplay}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["مبلغ به حروف: " + $P{totalInWordsDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="Note" x="242" y="26" width="297" height="18"><printWhenExpression><![CDATA[$P{headerDescription} != null && !$P{headerDescription}.isEmpty()]]></printWhenExpression></reportElement><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><textFieldExpression><![CDATA["توضیح: " + $P{headerDescription}]]></textFieldExpression></textField>
+            <rectangle radius="4"><reportElement x="278" y="126" width="261" height="52" mode="Opaque" backcolor="#FFFFFF" forecolor="#C9D3E0"></reportElement><graphicElement><pen lineWidth="0.6" lineColor="#C9D3E0"/></graphicElement></rectangle>
+            <staticText><reportElement style="BoxTitle" x="278" y="128" width="261" height="14"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[مهر و امضای فروشنده]]></text></staticText>
+            <rectangle radius="4"><reportElement x="1" y="126" width="261" height="52" mode="Opaque" backcolor="#FFFFFF" forecolor="#C9D3E0"></reportElement><graphicElement><pen lineWidth="0.6" lineColor="#C9D3E0"/></graphicElement></rectangle>
+            <staticText><reportElement style="BoxTitle" x="1" y="128" width="261" height="14"/><textElement textAlignment="Center" verticalAlignment="Middle"><paragraph rightIndent="4" leftIndent="4"/></textElement><text><![CDATA[امضای خریدار]]></text></staticText>
+        </band>
+    </summary>
+</jasperReport>

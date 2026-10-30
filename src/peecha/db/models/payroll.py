@@ -1,7 +1,7 @@
-"""مدل‌های اطلاعاتِ پایه و قوانینِ حقوق و دستمزد (payroll.*).
+"""مدل‌های اطلاعات پایه و قوانین حقوق و دستمزد (payroll.*).
 
-معادل db/schema/044_payroll_core.sql (فصلِ ۴ و ۵) و
-db/schema/045_payroll_pay_items_engine.sql (فصلِ ۶ تا ۱۱).
+معادل db/schema/044_payroll_core.sql (فصل ۴ و ۵) و
+db/schema/045_payroll_pay_items_engine.sql (فصل ۶ تا ۱۱).
 """
 
 from __future__ import annotations
@@ -40,6 +40,11 @@ class CompanyPayrollSettings(Base):
     payslip_currency_id: Mapped[int | None] = mapped_column(ForeignKey("core.currencies.currency_id"))
     salary_payable_gl_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
     salary_payable_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    sso_workshop_code: Mapped[str | None] = mapped_column(String(20))
+    sso_workshop_name: Mapped[str | None] = mapped_column(String(200))
+    sso_employer_name: Mapped[str | None] = mapped_column(String(200))
+    sso_workshop_address: Mapped[str | None] = mapped_column(String(400))
+    sso_contract_row: Mapped[str | None] = mapped_column(String(10))
 
 
 class PayrollPolicy(Base):
@@ -101,8 +106,8 @@ class PayItemDefinition(Base):
 
 
 class PayrollDescriptionTemplate(Base):
-    """شرحِ خودکارِ ردیف‌هایِ سندِ حقوق برایِ حساب‌هایی که به یک pay_item
-    خاص وصل نیستند (حقوقِ پرداختنی/بانک، سهمِ کارفرمایِ بیمه) — هم‌الگو
+    """شرح خودکار ردیف‌های سند حقوق برای حساب‌هایی که به یک pay_item
+    خاص وصل نیستند (حقوق پرداختنی/بانک، سهم کارفرمای بیمه) — هم‌الگو
     با treasury.description_templates."""
 
     __tablename__ = "description_templates"
@@ -224,6 +229,9 @@ class Payslip(Base):
     net_pay: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")
     correction_of_payslip_id: Mapped[int | None] = mapped_column(ForeignKey("payroll.payslips.payslip_id"))
+    taxable_income: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    insurable_wage: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    worked_days: Mapped[int | None] = mapped_column(SmallInteger)
 
 
 class PayslipLine(Base):

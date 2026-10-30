@@ -1,4 +1,4 @@
-"""بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده (مرحلهٔ ۴)."""
+"""بهای تمام‌شدهٔ وارداتی و تخفیف حجمی تامین‌کننده (مرحلهٔ ۴)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount
 from peecha.db.models.commercial import (
     CommercialDocument,
-    CommercialDocumentLine,
     LandedCostAllocation,
     VendorRebateAccrual,
     VendorRebateAgreement,
@@ -28,20 +27,31 @@ def _money(value: decimal.Decimal) -> decimal.Decimal:
 
 
 # ---------------------------------------------------------------------
-# بهایِ تمام‌شدهٔ وارداتی
+# هزینه‌هایِ جانبیِ خرید (تسهیمِ ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر)
 # ---------------------------------------------------------------------
-def add_landed_cost_allocation(purchase_invoice_document_id: int, cost_type_code: str, amount: decimal.Decimal, allocation_method_code: str, notes: str | None = None) -> int:
-    if cost_type_code not in ("FREIGHT", "CUSTOMS", "INSURANCE", "HANDLING", "OTHER"):
-        raise ValueError("نوعِ هزینه نامعتبر است.")
-    if allocation_method_code not in ("BY_VALUE", "BY_QUANTITY", "BY_WEIGHT"):
-        raise ValueError("روشِ تسهیم نامعتبر است.")
+# طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ فاکتورِ خرید — مبلغ + حسابِ
+# معین و تفصیلیِ بستانکار برایِ هر ردیف»): برخلافِ نسخهٔ قبلی (که فقط یک
+# دسته‌بندیِ ثابت داشت و هیچ اثرِ حسابداری‌ای تولید نمی‌کرد)، هر ردیفِ
+# هزینه حالا یک حسابِ آزادانه دارد که با Postِ فاکتور بستانکار می‌شود —
+# تسهیمِ خودِ هزینه‌ها رویِ ردیف‌هایِ فاکتور (متناسب با ارزش) و ساختِ
+# ردیف‌هایِ اعتباریِ سندِ حسابداری، هردو درونِ commercial_documents.
+# post_document انجام می‌شود (همراهِ خودِ سندِ فاکتور، طبقِ تصمیمِ صریح).
+def add_landed_cost_line(
+    purchase_invoice_document_id: int, amount: decimal.Decimal, credit_account_id: int,
+    credit_detail_account_id: int | None = None, notes: str | None = None,
+) -> int:
+    if amount <= 0:
+        raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         doc = session.get(CommercialDocument, purchase_invoice_document_id)
         if doc is None or doc.document_type_code != "PURCHASE_INVOICE":
-            raise ValueError("فقط رویِ فاکتورِ خرید قابلِ‌ثبت است.")
+            raise ValueError("فقط روی فاکتور خرید قابل‌ثبت است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("پسِ Post، هزینهٔ تمام‌شدهٔ وارداتی فقط از طریقِ اصلاحیه قابلِ‌تغییر است.")
-        row = LandedCostAllocation(purchase_invoice_document_id=purchase_invoice_document_id, cost_type_code=cost_type_code, amount=amount, allocation_method_code=allocation_method_code, notes=notes)
+            raise ValueError("پس Post، هزینه‌های جانبی خرید فقط از طریق اصلاحیه قابل‌تغییر است.")
+        row = LandedCostAllocation(
+            purchase_invoice_document_id=purchase_invoice_document_id, amount=amount,
+            credit_account_id=credit_account_id, credit_detail_account_id=credit_detail_account_id, notes=notes,
+        )
         session.add(row)
         session.commit()
         return row.allocation_id
@@ -52,37 +62,17 @@ def list_landed_cost_allocations(purchase_invoice_document_id: int) -> list[Land
         return list(session.scalars(select(LandedCostAllocation).where(LandedCostAllocation.purchase_invoice_document_id == purchase_invoice_document_id)))
 
 
-def apply_landed_costs(purchase_invoice_document_id: int, company_id: int) -> None:
-    """تناسبیِ هر هزینه بینِ ردیف‌هایِ فاکتور توزیع و مستقیماً به
-    unit_price هر ردیف اضافه می‌شود — پیش از Confirm/Post فراخوانی شود
-    تا بهایِ واحدِ ورودی به موتورِ هزینه‌یابیِ انبار شاملِ این سهم باشد
-    (مرحلهٔ ۴، بخشِ ۲)."""
+def delete_landed_cost_line(allocation_id: int, company_id: int) -> None:
     with new_session() as session:
-        doc = session.get(CommercialDocument, purchase_invoice_document_id)
-        if doc is None or doc.company_id != company_id or doc.document_type_code != "PURCHASE_INVOICE":
+        row = session.get(LandedCostAllocation, allocation_id)
+        if row is None:
+            raise ValueError("ردیف نامعتبر است.")
+        doc = session.get(CommercialDocument, row.purchase_invoice_document_id)
+        if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("فقط سندِ پیش‌نویس قابلِ‌اعمالِ هزینهٔ تمام‌شده است.")
-        allocations = session.scalars(select(LandedCostAllocation).where(LandedCostAllocation.purchase_invoice_document_id == purchase_invoice_document_id)).all()
-        if not allocations:
-            return
-        lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == purchase_invoice_document_id)).all()
-        if not lines:
-            raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
-        total_value = sum((ln.quantity * ln.unit_price for ln in lines), _ZERO)
-        total_qty = sum((ln.quantity for ln in lines), _ZERO)
-
-        for allocation in allocations:
-            for line in lines:
-                if allocation.allocation_method_code == "BY_VALUE" and total_value > 0:
-                    share = (line.quantity * line.unit_price) / total_value
-                elif allocation.allocation_method_code in ("BY_QUANTITY", "BY_WEIGHT") and total_qty > 0:
-                    # BY_WEIGHT بدونِ وزنِ کالا در این نسخه به BY_QUANTITY تنزل می‌کند.
-                    share = line.quantity / total_qty
-                else:
-                    share = _ZERO
-                extra_per_unit = _money(allocation.amount * share / line.quantity) if line.quantity else _ZERO
-                line.unit_price = line.unit_price + extra_per_unit
+            raise ValueError("پس Post، هزینه‌های جانبی خرید فقط از طریق اصلاحیه قابل‌تغییر است.")
+        session.delete(row)
         session.commit()
 
 
@@ -91,12 +81,25 @@ def apply_landed_costs(purchase_invoice_document_id: int, company_id: int) -> No
 # ---------------------------------------------------------------------
 def create_rebate_agreement(supplier_detail_account_id: int, rebate_basis_code: str, valid_from: datetime.date, item_id: int | None = None, valid_to: datetime.date | None = None) -> int:
     if rebate_basis_code not in ("FLAT_PERCENT", "VOLUME_TIER"):
-        raise ValueError("مبنایِ ریبیت نامعتبر است.")
+        raise ValueError("مبنای تخفیف حجمی نامعتبر است.")
     with new_session() as session:
         row = VendorRebateAgreement(supplier_detail_account_id=supplier_detail_account_id, item_id=item_id, rebate_basis_code=rebate_basis_code, valid_from=valid_from, valid_to=valid_to)
         session.add(row)
         session.commit()
         return row.agreement_id
+
+
+def update_rebate_agreement(agreement_id: int, rebate_basis_code: str, valid_from: datetime.date, item_id: int | None = None,
+                            valid_to: datetime.date | None = None) -> None:
+    """R276: ویرایش قرارداد تخفیف حجمی (تامین‌کننده ثابت می‌ماند)."""
+    if rebate_basis_code not in ("FLAT_PERCENT", "VOLUME_TIER"):
+        raise ValueError("مبنای تخفیف حجمی نامعتبر است.")
+    with new_session() as session:
+        row = session.get(VendorRebateAgreement, agreement_id)
+        if row is None:
+            raise ValueError("قرارداد تخفیف حجمی نامعتبر است.")
+        row.rebate_basis_code, row.valid_from, row.item_id, row.valid_to = rebate_basis_code, valid_from, item_id, valid_to
+        session.commit()
 
 
 def list_rebate_agreements(company_id: int) -> list[VendorRebateAgreement]:
@@ -119,7 +122,7 @@ def add_rebate_tier(agreement_id: int, min_purchase_amount: decimal.Decimal, reb
     with new_session() as session:
         agreement = session.get(VendorRebateAgreement, agreement_id)
         if agreement is None:
-            raise ValueError("قراردادِ ریبیت نامعتبر است.")
+            raise ValueError("قرارداد تخفیف حجمی نامعتبر است.")
         row = VendorRebateTier(agreement_id=agreement_id, min_purchase_amount=min_purchase_amount, rebate_percent=rebate_percent)
         session.add(row)
         session.commit()
@@ -127,12 +130,12 @@ def add_rebate_tier(agreement_id: int, min_purchase_amount: decimal.Decimal, reb
 
 
 def accrue_rebate_for_invoice(purchase_invoice_document_id: int, company_id: int, period_from: datetime.date, period_to: datetime.date) -> None:
-    """پسِ Postِ فاکتورِ خرید فراخوانی شود؛ فقط تخمین می‌سازد/به‌روزرسانی
-    می‌کند — هرگز رویِ حساب‌ها اثر نمی‌گذارد (مرحلهٔ ۴، بخشِ ۴)."""
+    """پس Post فاکتور خرید فراخوانی شود؛ فقط تخمین می‌سازد/به‌روزرسانی
+    می‌کند — هرگز روی حساب‌ها اثر نمی‌گذارد (مرحلهٔ ۴، بخش ۴)."""
     with new_session() as session:
         doc = session.get(CommercialDocument, purchase_invoice_document_id)
         if doc is None or doc.status_code != "POSTED":
-            raise ValueError("فقط فاکتورِ Postشده قابلِ‌محاسبهٔ ریبیت است.")
+            raise ValueError("فقط فاکتور Postشده قابل‌محاسبهٔ تخفیف حجمی است.")
         agreements = session.scalars(
             select(VendorRebateAgreement).where(
                 VendorRebateAgreement.supplier_detail_account_id == doc.counterparty_detail_account_id,
@@ -171,14 +174,14 @@ def settle_rebate_accrual(accrual_id: int, company_id: int, posted_by_user_id: i
     with new_session() as session:
         accrual = session.get(VendorRebateAccrual, accrual_id)
         if accrual is None or accrual.status_code != "ACCRUING":
-            raise ValueError("فقط تعهدِ درحالِ‌تجمیع قابلِ‌تسویه است.")
+            raise ValueError("فقط تعهد درحال‌تجمیع قابل‌تسویه است.")
         amount = accrual.accrued_amount
 
     result = je_service.create_journal_entry(
-        company_id, posted_by_user_id, datetime.date.today(), "تسویهٔ ریبیتِ تامین‌کننده",
+        company_id, posted_by_user_id, datetime.date.today(), "تسویهٔ تخفیف حجمی تامین‌کننده",
         [
-            je_service.LineInput(account_id=rebate_receivable_account_id, description="تسویهٔ ریبیتِ تامین‌کننده", debit=amount, credit=_ZERO),
-            je_service.LineInput(account_id=purchase_discount_account_id, description="تسویهٔ ریبیتِ تامین‌کننده", debit=_ZERO, credit=amount),
+            je_service.LineInput(account_id=rebate_receivable_account_id, description="تسویهٔ تخفیف حجمی تامین‌کننده", debit=amount, credit=_ZERO),
+            je_service.LineInput(account_id=purchase_discount_account_id, description="تسویهٔ تخفیف حجمی تامین‌کننده", debit=_ZERO, credit=amount),
         ],
         entry_type_code="COMMERCIAL",
     )

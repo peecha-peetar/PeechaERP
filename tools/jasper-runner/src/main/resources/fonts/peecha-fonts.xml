@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fontFamilies>
+	<fontFamily name="Vazirmatn">
+		<normal>fonts/Vazirmatn-Regular.ttf</normal>
+		<bold>fonts/Vazirmatn-Bold.ttf</bold>
+		<italic>fonts/Vazirmatn-Regular.ttf</italic>
+		<boldItalic>fonts/Vazirmatn-Bold.ttf</boldItalic>
+		<pdfEncoding>Identity-H</pdfEncoding>
+		<pdfEmbedded>true</pdfEmbedded>
+		<exportFonts>
+			<export key="net.sf.jasperreports.html">'Vazirmatn', Tahoma, Arial, sans-serif</export>
+		</exportFonts>
+	</fontFamily>
+</fontFamilies>

@@ -1,9 +1,9 @@
-"""سرویسِ هستهٔ منابع انسانی (hr.*) — فازِ ۱ از ماژولِ حقوق و دستمزد.
+"""سرویس هستهٔ منابع انسانی (hr.*) — فاز ۱ از ماژول حقوق و دستمزد.
 
-طبقِ سندِ طراحی: personnel_detail_account_id هر کارمند به‌طورِ خودکار در
-گروهِ شخصیِ PERSONNEL موجود (detail_dimensions.create_personnel) ساخته
-می‌شود تا کارمند در اسنادِ حسابداری/خزانه‌داری به‌عنوانِ تفصیلی قابلِ‌انتخاب
-باشد — بدونِ بازسازیِ زیرساختِ تفصیلی‌هایِ موجود."""
+طبق سند طراحی: personnel_detail_account_id هر کارمند به‌طور خودکار در
+گروه شخصی PERSONNEL موجود (detail_dimensions.create_personnel) ساخته
+می‌شود تا کارمند در اسناد حسابداری/خزانه‌داری به‌عنوان تفصیلی قابل‌انتخاب
+باشد — بدون بازسازی زیرساخت تفصیلی‌های موجود."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.hr import (
     Employee,
@@ -65,6 +66,8 @@ class OrgUnitRow:
     parent_name: str | None
     cost_center_detail_account_id: int | None
     is_active: bool
+    manager_employee_id: int | None = None
+    manager_name: str = ""
 
 
 def list_org_units(company_id: int) -> list[OrgUnitRow]:
@@ -73,6 +76,8 @@ def list_org_units(company_id: int) -> list[OrgUnitRow]:
             select(OrganizationalUnit).where(OrganizationalUnit.company_id == company_id).order_by(OrganizationalUnit.code)
         ).all()
         names = {u.org_unit_id: u.name for u in units}
+        managers = {e.employee_id: f"{e.first_name} {e.last_name}".strip() for e in session.scalars(
+            select(Employee).where(Employee.employee_id.in_({u.manager_employee_id for u in units if u.manager_employee_id})))}
         return [
             OrgUnitRow(
                 org_unit_id=u.org_unit_id,
@@ -82,6 +87,8 @@ def list_org_units(company_id: int) -> list[OrgUnitRow]:
                 parent_name=names.get(u.parent_org_unit_id) if u.parent_org_unit_id else None,
                 cost_center_detail_account_id=u.cost_center_detail_account_id,
                 is_active=u.is_active,
+                manager_employee_id=u.manager_employee_id,
+                manager_name=managers.get(u.manager_employee_id, ""),
             )
             for u in units
         ]
@@ -127,15 +134,44 @@ def update_org_unit(
     if not name:
         raise ValueError("نام الزامی است.")
     if parent_org_unit_id == org_unit_id:
-        raise ValueError("یک واحد نمی‌تواند والدِ خودش باشد.")
+        raise ValueError("یک واحد نمی‌تواند والد خودش باشد.")
     with new_session() as session:
         unit = session.get(OrganizationalUnit, org_unit_id)
         if unit is None:
-            raise ValueError("واحدِ سازمانی یافت نشد.")
+            raise ValueError("واحد سازمانی یافت نشد.")
         unit.name = name
         unit.parent_org_unit_id = parent_org_unit_id
         unit.cost_center_detail_account_id = cost_center_detail_account_id
         unit.is_active = is_active
+        session.commit()
+
+
+def set_org_unit_manager(company_id: int, org_unit_id: int, manager_employee_id: int | None) -> None:
+    """مدیر واحد سازمانی (برای مسیر تایید «مدیر واحد» و «مدیر مستقیم» در گردش کار)."""
+    with new_session() as session:
+        unit = session.get(OrganizationalUnit, org_unit_id)
+        if unit is None or unit.company_id != company_id:
+            raise ValueError("واحد سازمانی یافت نشد.")
+        if manager_employee_id is not None:
+            emp = session.get(Employee, manager_employee_id)
+            if emp is None or emp.company_id != company_id:
+                raise ValueError("کارمند انتخاب‌شده یافت نشد.")
+        unit.manager_employee_id = manager_employee_id
+        session.commit()
+
+
+def set_employee_user(company_id: int, employee_id: int, user_id: int | None) -> None:
+    """کاربر سامانهٔ کارمند (هر کاربر حداکثر به یک کارمند در هر شرکت)."""
+    with new_session() as session:
+        emp = session.get(Employee, employee_id)
+        if emp is None or emp.company_id != company_id:
+            raise ValueError("کارمند یافت نشد.")
+        if user_id is not None:
+            taken = session.scalar(select(Employee).where(Employee.company_id == company_id, Employee.user_id == user_id,
+                                                          Employee.employee_id != employee_id))
+            if taken is not None:
+                raise ValueError(f"این کاربر قبلاً به کارمند «{taken.first_name} {taken.last_name}» وصل شده است.")
+        emp.user_id = user_id
         session.commit()
 
 
@@ -147,7 +183,7 @@ def delete_org_unit(org_unit_id: int) -> None:
         in_use = session.scalar(select(Position).where(Position.org_unit_id == org_unit_id))
         has_children = session.scalar(select(OrganizationalUnit).where(OrganizationalUnit.parent_org_unit_id == org_unit_id))
         if in_use is not None or has_children is not None:
-            raise ValueError("این واحد دارایِ پست یا زیرمجموعه است و قابلِ حذف نیست.")
+            raise ValueError("این واحد دارای پست یا زیرمجموعه است و قابل حذف نیست.")
         session.delete(unit)
         session.commit()
 
@@ -190,7 +226,7 @@ def create_job_grade(
     if not code or not title:
         raise ValueError("کد و عنوان الزامی است.")
     if min_base_salary is not None and max_base_salary is not None and min_base_salary > max_base_salary:
-        raise ValueError("حداقلِ حقوق نمی‌تواند بیشتر از حداکثر باشد.")
+        raise ValueError("حداقل حقوق نمی‌تواند بیشتر از حداکثر باشد.")
     with new_session() as session:
         exists = session.scalar(select(JobGrade).where(JobGrade.company_id == company_id, JobGrade.code == code))
         if exists is not None:
@@ -220,7 +256,7 @@ def update_job_grade(
     if not title:
         raise ValueError("عنوان الزامی است.")
     if min_base_salary is not None and max_base_salary is not None and min_base_salary > max_base_salary:
-        raise ValueError("حداقلِ حقوق نمی‌تواند بیشتر از حداکثر باشد.")
+        raise ValueError("حداقل حقوق نمی‌تواند بیشتر از حداکثر باشد.")
     with new_session() as session:
         grade = session.get(JobGrade, job_grade_id)
         if grade is None:
@@ -240,7 +276,7 @@ def delete_job_grade(job_grade_id: int) -> None:
             return
         in_use = session.scalar(select(Position).where(Position.job_grade_id == job_grade_id))
         if in_use is not None:
-            raise ValueError("این رده برایِ یک یا چند پست استفاده شده و قابلِ حذف نیست.")
+            raise ValueError("این رده برای یک یا چند پست استفاده شده و قابل حذف نیست.")
         session.delete(grade)
         session.commit()
 
@@ -345,7 +381,7 @@ def delete_position(position_id: int) -> None:
             return
         in_use = session.scalar(select(EmploymentContract).where(EmploymentContract.position_id == position_id))
         if in_use is not None:
-            raise ValueError("این پست دارایِ قرارداد است و قابلِ حذف نیست.")
+            raise ValueError("این پست دارای قرارداد است و قابل حذف نیست.")
         session.delete(position)
         session.commit()
 
@@ -419,6 +455,12 @@ class EmployeeDetail:
     base_salary: decimal.Decimal | None
     employment_type_lookup_id: int | None
     personnel_detail_account_id: int | None
+    gender_lookup_id: int | None = None
+    father_name: str | None = None
+    id_card_no: str | None = None
+    id_issue_place: str | None = None
+    nationality_code: str | None = None
+    insurance_job_code: str | None = None
 
 
 def get_employee(employee_id: int) -> EmployeeDetail | None:
@@ -451,6 +493,8 @@ def get_employee(employee_id: int) -> EmployeeDetail | None:
             base_salary=contract.base_salary if contract else None,
             employment_type_lookup_id=contract.employment_type_lookup_id if contract else None,
             personnel_detail_account_id=e.personnel_detail_account_id,
+            gender_lookup_id=e.gender_lookup_id, father_name=e.father_name, id_card_no=e.id_card_no,
+            id_issue_place=e.id_issue_place, nationality_code=e.nationality_code, insurance_job_code=e.insurance_job_code,
         )
 
 
@@ -475,32 +519,33 @@ def create_employee(
     address: str | None = None,
     notes: str | None = None,
     existing_personnel_detail_account_id: int | None = None,
+    **identity_fields,
 ) -> int:
-    """اگر existing_personnel_detail_account_id داده شود (طبقِ خواسته‌یِ
-    صریح: «تفصیلیِ کارکنانی که قبلاً دستی تعریف کرده بودم باید به همین
-    کارمندِ تازه وصل شود، نه اینکه یک تفصیلیِ تکراری ساخته شود»)، همان
-    تفصیلیِ ازپیش‌موجود استفاده و بلافاصله با اطلاعاتِ همین فرم به‌روزرسانی
-    می‌شود؛ در غیرِ این صورت (کارمندِ کاملاً تازه، بدونِ تفصیلیِ قبلی)،
-    طبقِ رفتارِ قبلی یک تفصیلیِ تازه در گروهِ PERSONNEL ساخته می‌شود."""
+    """اگر existing_personnel_detail_account_id داده شود (طبق خواستهٔ
+    صریح: «تفصیلی کارکنانی که قبلاً دستی تعریف کرده بودم باید به همین
+    کارمند تازه وصل شود، نه اینکه یک تفصیلی تکراری ساخته شود»)، همان
+    تفصیلی ازپیش‌موجود استفاده و بلافاصله با اطلاعات همین فرم به‌روزرسانی
+    می‌شود؛ در غیر این صورت (کارمند کاملاً تازه، بدون تفصیلی قبلی)،
+    طبق رفتار قبلی یک تفصیلی تازه در گروه PERSONNEL ساخته می‌شود."""
     employee_code = employee_code.strip()
     first_name = first_name.strip()
     last_name = last_name.strip()
     if not employee_code or not first_name:
-        raise ValueError("کدِ پرسنلی و نام الزامی است.")
+        raise ValueError("کد پرسنلی و نام الزامی است.")
     if base_salary <= 0:
-        raise ValueError("حقوقِ پایه باید مثبت باشد.")
+        raise ValueError("حقوق پایه باید مثبت باشد.")
 
     with new_session() as session:
         exists = session.scalar(select(Employee).where(Employee.company_id == company_id, Employee.employee_code == employee_code))
         if exists is not None:
-            raise ValueError("این کدِ پرسنلی قبلاً استفاده شده است.")
+            raise ValueError("این کد پرسنلی قبلاً استفاده شده است.")
 
         if existing_personnel_detail_account_id is not None:
             already_linked = session.scalar(
                 select(Employee).where(Employee.personnel_detail_account_id == existing_personnel_detail_account_id)
             )
             if already_linked is not None:
-                raise ValueError("این تفصیلیِ حسابداری قبلاً به کارمندِ دیگری وصل شده است.")
+                raise ValueError("این تفصیلی حسابداری قبلاً به کارمند دیگری وصل شده است.")
             personnel_detail_account_id = existing_personnel_detail_account_id
             existing_code = next(
                 (p["code"] for p in dimensions_service.list_personnel(company_id) if p["detail_account_id"] == existing_personnel_detail_account_id),
@@ -554,6 +599,7 @@ def create_employee(
             mobile=mobile,
             address=address,
             notes=notes,
+            **_identity_values(identity_fields),
         )
         session.add(employee)
         session.flush()
@@ -587,13 +633,15 @@ def update_employee(
     mobile: str | None = None,
     address: str | None = None,
     notes: str | None = None,
+    **identity_fields,
 ) -> None:
+    """identity_fields (R347: جنسیت، نام پدر، شناسنامه، ملیت، کد شغل بیمه) فقط اگر فرستاده شوند تغییر می‌کنند."""
     first_name = first_name.strip()
     last_name = last_name.strip()
     if not first_name:
         raise ValueError("نام الزامی است.")
     if status not in ("ACTIVE", "ON_LEAVE", "TERMINATED"):
-        raise ValueError("وضعیتِ نامعتبر.")
+        raise ValueError("وضعیت نامعتبر.")
     with new_session() as session:
         employee = session.get(Employee, employee_id)
         if employee is None:
@@ -610,6 +658,8 @@ def update_employee(
         employee.mobile = mobile
         employee.address = address
         employee.notes = notes
+        for key, value in _identity_values(identity_fields).items():
+            setattr(employee, key, value)
         session.commit()
 
 
@@ -620,15 +670,15 @@ def update_active_contract(
     base_salary: decimal.Decimal,
     employment_type_lookup_id: int | None,
 ) -> None:
-    """جابه‌جاییِ سازمانی/تغییرِ حقوق روی همان قراردادِ فعال — نسخه‌بندیِ
-    کاملِ تاریخچهٔ قرارداد (چندین ردیف) در فازِ بعدی افزوده می‌شود؛ فعلاً
-    برایِ سادگیِ فازِ ۱، تغییرات مستقیماً رویِ قراردادِ فعال اعمال می‌شوند."""
+    """جابه‌جایی سازمانی/تغییر حقوق روی همان قرارداد فعال — نسخه‌بندی
+    کامل تاریخچهٔ قرارداد (چندین ردیف) در فاز بعدی افزوده می‌شود؛ فعلاً
+    برای سادگی فاز ۱، تغییرات مستقیماً روی قرارداد فعال اعمال می‌شوند."""
     if base_salary <= 0:
-        raise ValueError("حقوقِ پایه باید مثبت باشد.")
+        raise ValueError("حقوق پایه باید مثبت باشد.")
     with new_session() as session:
         contract = session.get(EmploymentContract, contract_id)
         if contract is None or contract.status != "ACTIVE":
-            raise ValueError("قراردادِ فعال یافت نشد.")
+            raise ValueError("قرارداد فعال یافت نشد.")
         contract.org_unit_id = org_unit_id
         contract.position_id = position_id
         contract.base_salary = base_salary
@@ -650,9 +700,9 @@ def terminate_employee(
             select(EmploymentContract).where(EmploymentContract.employee_id == employee_id, EmploymentContract.status == "ACTIVE")
         )
         if contract is None:
-            raise ValueError("این کارمند قراردادِ فعالی ندارد.")
+            raise ValueError("این کارمند قرارداد فعالی ندارد.")
         if termination_date < contract.start_date:
-            raise ValueError("تاریخِ پایانِ همکاری نمی‌تواند قبل از تاریخِ شروعِ قرارداد باشد.")
+            raise ValueError("تاریخ پایان همکاری نمی‌تواند قبل از تاریخ شروع قرارداد باشد.")
 
         contract.status = "ENDED"
         contract.end_date = termination_date
@@ -687,15 +737,41 @@ def terminate_employee(
 
 
 _PERSONNEL_HR_FIELD_KEYS = ("org_unit_id", "position_id", "employment_type_lookup_id", "base_salary")
+# R347: مشخصات لازم در لیست بیمه، روی hr.employees
+_PERSONNEL_EMPLOYEE_FIELD_KEYS = ("social_security_no", "date_of_birth", "gender_lookup_id", "father_name", "id_card_no",
+                                  "id_issue_place", "nationality_code", "insurance_job_code")
 
 
 def _split_personnel_fields(person_fields: dict) -> tuple[dict, dict]:
-    """جداکردنِ فیلدهایِ سطحِ HR (قراردادِ استخدام) از فیلدهایِ سطحِ
-    PersonnelDetail که فرمِ واحدِ تفصیلی (detail_dimensions.py) با هم
-    می‌فرستد، چون این دو دسته به دو تابعِ سرویسِ متفاوت می‌روند."""
+    """جداکردن فیلدهای سطح HR (قرارداد استخدام) از فیلدهای سطح
+    PersonnelDetail که فرم واحد تفصیلی (detail_dimensions.py) با هم
+    می‌فرستد، چون این دو دسته به دو تابع سرویس متفاوت می‌روند."""
     hr_fields = {k: person_fields.get(k) for k in _PERSONNEL_HR_FIELD_KEYS}
-    detail_fields = {k: v for k, v in person_fields.items() if k not in _PERSONNEL_HR_FIELD_KEYS}
+    detail_fields = {k: v for k, v in person_fields.items()
+                     if k not in _PERSONNEL_HR_FIELD_KEYS and k not in _PERSONNEL_EMPLOYEE_FIELD_KEYS}
     return detail_fields, hr_fields
+
+
+def _employee_fields(person_fields: dict) -> dict:
+    return {k: person_fields[k] for k in _PERSONNEL_EMPLOYEE_FIELD_KEYS if k in person_fields}
+
+
+_IDENTITY_KEYS = ("gender_lookup_id", "father_name", "id_card_no", "id_issue_place", "nationality_code", "insurance_job_code")
+_DIGIT_KEYS = ("social_security_no", "id_card_no", "insurance_job_code")
+
+
+def _identity_values(fields: dict) -> dict:
+    unknown = set(fields) - set(_IDENTITY_KEYS)
+    if unknown:
+        raise TypeError(f"unexpected employee fields: {sorted(unknown)}")
+    out = {}
+    for key, value in fields.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+            if value and key in _DIGIT_KEYS:
+                value = numerals.to_ascii_digits(value)
+        out[key] = value
+    return out
 
 
 def _personnel_group_max_level_no(company_id: int) -> int:
@@ -705,11 +781,11 @@ def _personnel_group_max_level_no(company_id: int) -> int:
 
 
 def _is_personnel_leaf_level(company_id: int, level_no: int) -> bool:
-    """طبقِ گزارشِ صریح: وقتی گروهِ پرسنل چند سطح دارد (مثلاً واحد/زیرمجموعه
-    → کارمند)، فقط آخرین سطح یک «کارمندِ واقعی» است — سطوحِ بالاتر صرفاً
-    گره‌هایِ گروه‌بندی‌اند و نباید شغل/سازمان/رده‌یِ شغلی/حقوقِ پایه (که
-    فقط برایِ قراردادِ واقعیِ استخدام معنا دارند) از آن‌ها پرسیده شود یا
-    ردیفِ hr.employees برایشان ساخته شود."""
+    """طبق گزارش صریح: وقتی گروه پرسنل چند سطح دارد (مثلاً واحد/زیرمجموعه
+    → کارمند)، فقط آخرین سطح یک «کارمند واقعی» است — سطوح بالاتر صرفاً
+    گره‌های گروه‌بندی‌اند و نباید شغل/سازمان/ردهٔ شغلی/حقوق پایه (که
+    فقط برای قرارداد واقعی استخدام معنا دارند) از آن‌ها پرسیده شود یا
+    ردیف hr.employees برایشان ساخته شود."""
     return level_no >= _personnel_group_max_level_no(company_id)
 
 
@@ -724,12 +800,12 @@ def get_employee_by_personnel_detail_account_id(personnel_detail_account_id: int
     return get_employee(employee_id)
 
 
-def list_personnel_detail_accounts(company_id: int) -> list[dict]:
-    """جایگزینِ dimensions_service.list_personnel در _PERSON_GROUP_META
-    (detail_dimensions.py) — همان ردیف‌هایِ تفصیلیِ گروهِ PERSONNEL را با
-    اطلاعاتِ قراردادِ فعال (واحدِ سازمانی/پست/حقوقِ پایه/نوعِ استخدام) و
-    وضعیتِ استخدامِ کارمندِ متناظر تلفیق می‌کند، تا فرمِ تفصیلی دیگر نیازی
-    به فرمِ جداگانه‌یِ «تعریفِ کارکنان» نداشته باشد."""
+def list_personnel_detail_accounts(company_id: int, all_levels: bool = False) -> list[dict]:
+    """جایگزین dimensions_service.list_personnel در _PERSON_GROUP_META
+    (detail_dimensions.py) — همان ردیف‌های تفصیلی گروه PERSONNEL را با
+    اطلاعات قرارداد فعال (واحد سازمانی/پست/حقوق پایه/نوع استخدام) و
+    وضعیت استخدام کارمند متناظر تلفیق می‌کند، تا فرم تفصیلی دیگر نیازی
+    به فرم جداگانهٔ «تعریف کارکنان» نداشته باشد."""
     with new_session() as session:
         employees = session.scalars(select(Employee).where(Employee.company_id == company_id)).all()
         contracts = {
@@ -752,14 +828,16 @@ def list_personnel_detail_accounts(company_id: int) -> list[dict]:
                 "position_name": positions.get(contract.position_id) if contract else None,
                 "employment_type_lookup_id": contract.employment_type_lookup_id if contract else None,
                 "base_salary": contract.base_salary if contract else None,
+                **{k: getattr(e, k) for k in _PERSONNEL_EMPLOYEE_FIELD_KEYS},
             }
 
     _blank = {
         "employee_id": None, "employee_status": None, "org_unit_id": None, "org_unit_name": None,
         "position_id": None, "position_name": None, "employment_type_lookup_id": None, "base_salary": None,
+        **{k: None for k in _PERSONNEL_EMPLOYEE_FIELD_KEYS},
     }
     result = []
-    for p in dimensions_service.list_personnel(company_id):
+    for p in dimensions_service.list_personnel(company_id, all_levels):
         merged = dict(p)
         merged.update(by_detail_account_id.get(p["detail_account_id"], _blank))
         result.append(merged)
@@ -783,15 +861,16 @@ def create_personnel_detail_account(
 
     if is_leaf_level:
         if hr_fields["org_unit_id"] is None or hr_fields["position_id"] is None:
-            raise ValueError("واحدِ سازمانی و پست را انتخاب کنید.")
+            raise ValueError("واحد سازمانی و پست را انتخاب کنید.")
         if not hr_fields["base_salary"] or hr_fields["base_salary"] <= 0:
-            raise ValueError("حقوقِ پایه باید مثبت باشد.")
+            raise ValueError("حقوق پایه باید مثبت باشد.")
 
     detail_account_id = dimensions_service.create_personnel(
         company_id, code, name, custom_fields=custom_fields,
         parent_detail_account_id=parent_detail_account_id, personnel_no=code, **detail_fields,
     )
     if is_leaf_level:
+        identity = _employee_fields(person_fields)
         create_employee(
             company_id, code, name.strip() or code, "", detail_fields.get("national_id"),
             detail_fields.get("hire_date") or datetime.date.today(),
@@ -800,8 +879,16 @@ def create_personnel_detail_account(
             bank_account_no=detail_fields.get("bank_account_no"), phone=detail_fields.get("phone"),
             mobile=detail_fields.get("mobile"), notes=detail_fields.get("notes"),
             existing_personnel_detail_account_id=detail_account_id,
+            date_of_birth=identity.pop("date_of_birth", None),
+            social_security_no=_digits(identity.pop("social_security_no", None)), **identity,
         )
     return detail_account_id
+
+
+def _digits(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return value
+    return numerals.to_ascii_digits(value.strip()) or None
 
 
 def update_personnel_detail_account(
@@ -819,9 +906,9 @@ def update_personnel_detail_account(
 
     if is_leaf_level:
         if hr_fields["org_unit_id"] is None or hr_fields["position_id"] is None:
-            raise ValueError("واحدِ سازمانی و پست را انتخاب کنید.")
+            raise ValueError("واحد سازمانی و پست را انتخاب کنید.")
         if not hr_fields["base_salary"] or hr_fields["base_salary"] <= 0:
-            raise ValueError("حقوقِ پایه باید مثبت باشد.")
+            raise ValueError("حقوق پایه باید مثبت باشد.")
 
     dimensions_service.update_personnel(
         detail_account_id, company_id, code, name, is_active,
@@ -832,6 +919,7 @@ def update_personnel_detail_account(
         return
 
     employee = get_employee_by_personnel_detail_account_id(detail_account_id)
+    identity = _employee_fields(person_fields)
     if employee is None:
         # خودترمیمی: تفصیلیِ پرسنلِ یتیمِ ازپیش‌موجود (پیش از این یکپارچه‌سازی)
         create_employee(
@@ -842,15 +930,18 @@ def update_personnel_detail_account(
             bank_account_no=detail_fields.get("bank_account_no"), phone=detail_fields.get("phone"),
             mobile=detail_fields.get("mobile"), notes=detail_fields.get("notes"),
             existing_personnel_detail_account_id=detail_account_id,
+            date_of_birth=identity.pop("date_of_birth", None),
+            social_security_no=_digits(identity.pop("social_security_no", None)), **identity,
         )
         return
 
     update_employee(
         employee.employee_id, name.strip() or code, "", detail_fields.get("national_id"), employee.status,
-        date_of_birth=employee.date_of_birth, social_security_no=employee.social_security_no,
+        date_of_birth=identity.pop("date_of_birth", employee.date_of_birth),
+        social_security_no=_digits(identity.pop("social_security_no", employee.social_security_no)),
         bank_account_no=detail_fields.get("bank_account_no"), bank_iban=employee.bank_iban,
         phone=detail_fields.get("phone"), mobile=detail_fields.get("mobile"),
-        address=employee.address, notes=detail_fields.get("notes"),
+        address=employee.address, notes=detail_fields.get("notes"), **identity,
     )
     if employee.active_contract_id is not None:
         update_active_contract(
@@ -861,5 +952,5 @@ def update_personnel_detail_account(
 
 def delete_personnel_detail_account(detail_account_id: int, company_id: int) -> None:
     if get_employee_by_personnel_detail_account_id(detail_account_id) is not None:
-        raise ValueError("این تفصیلی به یک کارمند وصل است — به‌جایِ حذف، از «ثبتِ ترکِ کار» استفاده کنید.")
+        raise ValueError("این تفصیلی به یک کارمند وصل است — به‌جای حذف، از «ثبت ترک کار» استفاده کنید.")
     dimensions_service.delete_personnel(detail_account_id, company_id)

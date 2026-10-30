@@ -10,7 +10,7 @@ import decimal
 
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, SmallInteger, String, Time, func
+from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Numeric, SmallInteger, String, Time, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -108,6 +108,12 @@ class Employee(Base):
     hire_date: Mapped[datetime.date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     notes: Mapped[str | None] = mapped_column(String(1000))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    father_name: Mapped[str | None] = mapped_column(String(100))
+    id_card_no: Mapped[str | None] = mapped_column(String(20))
+    id_issue_place: Mapped[str | None] = mapped_column(String(100))
+    nationality_code: Mapped[str | None] = mapped_column(String(10))
+    insurance_job_code: Mapped[str | None] = mapped_column(String(20))
 
 
 class EmploymentContract(Base):
@@ -157,6 +163,35 @@ class AttendanceRecord(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
 
+class WorkShift(Base):
+    """R359: شیفت کاری؛ off_weekdays روزهای استراحت هفته (شمارهٔ روز پایتون، ۴ = جمعه) با ویرگول."""
+
+    __tablename__ = "work_shifts"
+    __table_args__ = {"schema": "hr"}
+
+    shift_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(100))
+    start_time: Mapped[datetime.time] = mapped_column(Time)
+    end_time: Mapped[datetime.time] = mapped_column(Time)
+    break_minutes: Mapped[int] = mapped_column(default=0)
+    grace_minutes: Mapped[int] = mapped_column(default=0)
+    off_weekdays: Mapped[str] = mapped_column(String(20), default="4")
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class EmployeeShiftAssignment(Base):
+    __tablename__ = "employee_shift_assignments"
+    __table_args__ = {"schema": "hr"}
+
+    assignment_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id", ondelete="CASCADE"))
+    shift_id: Mapped[int] = mapped_column(ForeignKey("hr.work_shifts.shift_id"))
+    valid_from: Mapped[datetime.date] = mapped_column(Date)
+
+
 class AttendanceImportTemplate(Base):
     __tablename__ = "attendance_import_templates"
     __table_args__ = {"schema": "hr"}
@@ -169,3 +204,82 @@ class AttendanceImportTemplate(Base):
     time_format: Mapped[str] = mapped_column(String(30), default="%H:%M")
     column_mapping: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class LeaveRequest(Base):
+    """R295: درخواست مرخصی (برای گردش کار تایید)."""
+
+    __tablename__ = "leave_requests"
+    __table_args__ = {"schema": "hr"}
+
+    leave_request_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    leave_type: Mapped[str] = mapped_column(String(10), default="ANNUAL")
+    from_date: Mapped[datetime.date] = mapped_column(Date)
+    to_date: Mapped[datetime.date] = mapped_column(Date)
+    hours: Mapped[decimal.Decimal | None] = mapped_column(Numeric(6, 2))
+    days: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=0)
+    reason: Mapped[str | None] = mapped_column(String(1000))
+    status_code: Mapped[str] = mapped_column(String(10), default="DRAFT")
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_at: Mapped[datetime.datetime | None]
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class MissionSettings(Base):
+    """R381: نرخ حق مأموریت و حساب‌های سند صورت‌حساب مأموریت."""
+
+    __tablename__ = "mission_settings"
+    __table_args__ = {"schema": "hr"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    per_diem_method: Mapped[str] = mapped_column(String(10), default="FIXED")
+    daily_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    daily_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=0)
+    expense_gl_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    expense_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    payable_gl_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class MissionClaim(Base):
+    """R381: صورت‌حساب مأموریت یک مرخصی «مأموریت» تاییدشده."""
+
+    __tablename__ = "mission_claims"
+    __table_args__ = {"schema": "hr"}
+
+    claim_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    claim_no: Mapped[int]
+    employee_id: Mapped[int] = mapped_column(ForeignKey("hr.employees.employee_id"))
+    leave_request_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr.leave_requests.leave_request_id"), unique=True)
+    destination: Mapped[str] = mapped_column(String(200))
+    purpose: Mapped[str | None] = mapped_column(String(500))
+    days: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2))
+    daily_rate: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    per_diem_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    expenses_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    status_code: Mapped[str] = mapped_column(String(10), default="DRAFT")
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    decided_at: Mapped[datetime.datetime | None]
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id", ondelete="SET NULL"))
+    posted_at: Mapped[datetime.datetime | None]
+
+
+class MissionClaimExpense(Base):
+    __tablename__ = "mission_claim_expenses"
+    __table_args__ = {"schema": "hr"}
+
+    expense_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    claim_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr.mission_claims.claim_id", ondelete="CASCADE"))
+    expense_type: Mapped[str] = mapped_column(String(10))
+    description: Mapped[str | None] = mapped_column(String(300))
+    receipt_no: Mapped[str | None] = mapped_column(String(50))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))

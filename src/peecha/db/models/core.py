@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, SmallInteger, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, LargeBinary, Numeric, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from peecha.db.base import Base
@@ -72,6 +72,10 @@ class Company(Base):
     default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    # R245: لوگویِ شرکت برایِ سربرگِ گزارش‌ها (بارگذاری با deferred تا خواندنِ شرکت سنگین نشود)
+    logo_image: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    logo_mime: Mapped[str | None] = mapped_column(String(30))
+    report_logo_position: Mapped[str] = mapped_column(String(10), default="RIGHT")
 
     base_currency: Mapped[Currency] = relationship(foreign_keys=[base_currency_id])
     default_language: Mapped[Language] = relationship(foreign_keys=[default_language_id])
@@ -95,3 +99,23 @@ class ExchangeRate(Base):
     currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     rate_date: Mapped[datetime.date] = mapped_column(Date)
     rate_to_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+
+
+class BackupSchedule(Base):
+    """R352: پشتیبان خودکار زمان‌بندی‌شده (یک ردیف)."""
+
+    __tablename__ = "backup_schedule"
+    __table_args__ = {"schema": "core"}
+
+    schedule_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder: Mapped[str | None] = mapped_column(String(500))
+    interval_hours: Mapped[int] = mapped_column(SmallInteger, default=24)
+    keep_count: Mapped[int] = mapped_column(SmallInteger, default=7)
+    last_backup_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_backup_path: Mapped[str | None] = mapped_column(String(600))
+    last_status: Mapped[str | None] = mapped_column(String(10))
+    last_error: Mapped[str | None] = mapped_column(String(1000))
+    last_check_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_check_ok: Mapped[bool | None] = mapped_column(Boolean)
+    last_check_note: Mapped[str | None] = mapped_column(String(2000))

@@ -1,8 +1,8 @@
-"""راه‌اندازی اولیه‌ی سیستم: وقتی دیتابیس تازه ساخته شده و هیچ کاربر/شرکتی
+"""راه‌اندازی اولیهٔ سیستم: وقتی دیتابیس تازه ساخته شده و هیچ کاربر/شرکتی
 ندارد، این تابع اولین زبان (fa-IR)، اولین ارز (IRR)، اولین شرکت، و اولین
 کاربر (مدیر سیستم) را یک‌جا می‌سازد — چون این‌ها به هم وابسته‌اند (کاربر به
-شرکت، شرکت به ارز/زبان) و بدون این مرحله هیچ صفحه‌ی دیگری (کدینگ حسابداری،
-داشبورد) داده‌ی معناداری برای کار کردن ندارد.
+شرکت، شرکت به ارز/زبان) و بدون این مرحله هیچ صفحهٔ دیگری (کدینگ حسابداری،
+داشبورد) دادهٔ معناداری برای کار کردن ندارد.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from peecha.db.base import new_session
 from peecha.db.models.core import Company, Currency, Language
 from peecha.db.models.security import User, UserCompany
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.services.auth import hash_password
+from peecha.services.auth import check_password_strength, hash_password
 
 
 def bootstrap_system(username: str, full_name: str, password: str, company_name: str) -> User:
+    check_password_strength(password)
     password_hash, password_salt = hash_password(password)
     with new_session() as db_session:
         language = db_session.scalar(select(Language).where(Language.code == "fa-IR"))
