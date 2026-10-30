@@ -313,20 +313,30 @@ def open_sales_demand(company_id: int) -> list[SimpleNamespace]:
     return out
 
 
-def open_purchase_supply(company_id: int) -> dict[int, decimal.Decimal]:
-    """ماندهٔ دریافت‌نشدهٔ سفارش‌های خرید باز به تفکیک کالا."""
+def open_purchase_receipts(company_id: int) -> list[SimpleNamespace]:
+    """R373: ماندهٔ دریافت‌نشدهٔ هر ردیف سفارش خرید باز با تاریخ تحویل مورد انتظار."""
     from peecha.services import purchase_reports as base
     from peecha.services.purchase_reports_ext import _OPEN_ORDER_STATUSES
 
     ctx = base._ctx(company_id)
     pairs = base._lines(company_id, ("PURCHASE_ORDER",), _OPEN_ORDER_STATUSES, None, ctx, dated=False)
     invoiced = base._invoiced_base_by_source_line(company_id, "PURCHASE_INVOICE", [ln.line_id for _d, ln in pairs])
-    out: dict[int, decimal.Decimal] = defaultdict(lambda: ZERO)
+    out = []
     for doc, ln in pairs:
         received = max(decimal.Decimal(base._received_base(doc, ln) or 0), invoiced.get(ln.line_id, ZERO))
         remaining = decimal.Decimal(ln.quantity_base) - received
         if remaining > 0:
-            out[ln.item_id] += remaining
+            date = ln.expected_delivery_date or doc.requested_delivery_date or doc.document_date
+            out.append(SimpleNamespace(item_id=ln.item_id, quantity=remaining, date=date, line_id=ln.line_id,
+                                       document_no=doc.document_no))
+    return out
+
+
+def open_purchase_supply(company_id: int) -> dict[int, decimal.Decimal]:
+    """ماندهٔ دریافت‌نشدهٔ سفارش‌های خرید باز به تفکیک کالا."""
+    out: dict[int, decimal.Decimal] = defaultdict(lambda: ZERO)
+    for r in open_purchase_receipts(company_id):
+        out[r.item_id] += r.quantity
     return out
 
 
@@ -339,11 +349,38 @@ def _stock(session, company_id: int) -> tuple[dict, dict]:
     return on_hand, reserved
 
 
+def open_production_receipts(session, company_id: int) -> list[SimpleNamespace]:
+    """R373: ماندهٔ تولیدنشدهٔ دستورهای باز در تاریخ موعد."""
+    return [SimpleNamespace(item_id=o.item_id, quantity=o.remaining_qty, date=o.due_date, order_code=o.order_code)
+            for o in session.scalars(select(ProductionOrder).where(ProductionOrder.company_id == company_id,
+                                                                  ProductionOrder.status_code.in_(_OPEN_PRODUCTION)))]
+
+
 def _production_supply(session, company_id: int) -> dict[int, decimal.Decimal]:
     out = defaultdict(lambda: ZERO)
+    for r in open_production_receipts(session, company_id):
+        out[r.item_id] += r.quantity
+    return out
+
+
+def open_order_material_demand(session, company_id: int) -> list[SimpleNamespace]:
+    """نیاز مواد دستورهای باز (ماندهٔ مصرف‌نشده و رزرونشده) در تاریخ شروع دستور."""
+    from peecha.services.production.orders import material_plan
+
+    out = []
     for o in session.scalars(select(ProductionOrder).where(ProductionOrder.company_id == company_id,
                                                            ProductionOrder.status_code.in_(_OPEN_PRODUCTION))):
-        out[o.item_id] += o.remaining_qty
+        mats = list(session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == o.order_id)))
+        if mats:
+            for m in mats:
+                rem = max(ZERO, decimal.Decimal(m.planned_qty) - m.consumed_qty - decimal.Decimal(m.reserved_qty))
+                if rem > 0 and not m.is_optional:
+                    out.append(SimpleNamespace(item_id=m.item_id, quantity=rem, date=o.start_date, order_code=o.order_code))
+        elif o.bom_id:
+            for r in material_plan(session, company_id, o.item_id, o.bom_id, o.planned_qty):
+                if not r.line.is_optional:
+                    out.append(SimpleNamespace(item_id=r.line.component_item_id, quantity=r.gross, date=o.start_date,
+                                               order_code=o.order_code))
     return out
 
 
@@ -425,22 +462,9 @@ def run_mrp(company_id: int, user_id: int | None = None, horizon_days: int = 30,
                 independent[ln.item_id] += decimal.Decimal(ln.quantity)
                 note(ln.item_id, ln.quantity, ln.planned_date, "PLAN")
         if include_orders:  # نیازِ موادِ دستورهایِ باز
-            for o in session.scalars(select(ProductionOrder).where(ProductionOrder.company_id == company_id,
-                                                                   ProductionOrder.status_code.in_(_OPEN_PRODUCTION))):
-                mats = list(session.scalars(select(OrderMaterial).where(OrderMaterial.order_id == o.order_id)))
-                if mats:
-                    for m in mats:
-                        rem = max(ZERO, decimal.Decimal(m.planned_qty) - m.consumed_qty - decimal.Decimal(m.reserved_qty))
-                        if rem > 0 and not m.is_optional:
-                            dependent[m.item_id] += rem
-                            note(m.item_id, rem, o.start_date, o.order_code)
-                elif o.bom_id:
-                    from peecha.services.production.orders import material_plan
-
-                    for r in material_plan(session, company_id, o.item_id, o.bom_id, o.planned_qty):
-                        if not r.line.is_optional:
-                            dependent[r.line.component_item_id] += r.gross
-                            note(r.line.component_item_id, r.gross, o.start_date, o.order_code)
+            for d in open_order_material_demand(session, company_id):
+                dependent[d.item_id] += d.quantity
+                note(d.item_id, d.quantity, d.date, d.order_code)
         min_stock = {i: decimal.Decimal(q or 0) for i, q in session.execute(
             select(ReorderPolicy.item_id, func.sum(ReorderPolicy.min_qty)).where(ReorderPolicy.company_id == company_id)
             .group_by(ReorderPolicy.item_id)).all()} if include_min_stock else {}

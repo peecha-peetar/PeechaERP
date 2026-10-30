@@ -572,6 +572,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM inv.item_uom_conversions WHERE item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
     # R266: اطلاعاتِ پایهٔ تولید (پیش از BOM/کالا/انبار)
     "DELETE FROM prd.eco_orders WHERE company_id = :company_id",  # R372 (ردیف‌ها با درخواست پاک می‌شوند)
+    "DELETE FROM prd.atp_scenarios WHERE company_id = :company_id",  # R373
     "DELETE FROM prd.bom_outputs WHERE item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id) OR bom_id IN "
     "(SELECT bom_id FROM inv.bom_headers WHERE finished_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id))",
     "UPDATE inv.bom_headers SET routing_id = NULL WHERE finished_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",

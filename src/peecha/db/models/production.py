@@ -664,3 +664,29 @@ class EcoLine(Base):
     new_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     new_scrap_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     notes: Mapped[str | None] = mapped_column(String(300))
+
+
+# --- R373: سناریوی تعهد تحویل -----------------------------------------------------------
+class AtpScenario(Base):
+    __tablename__ = "atp_scenarios"
+    __table_args__ = _PRD
+
+    scenario_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class AtpScenarioLine(Base):
+    __tablename__ = "atp_scenario_lines"
+    __table_args__ = _PRD
+
+    line_id: Mapped[int] = mapped_column(primary_key=True)
+    scenario_id: Mapped[int] = mapped_column(ForeignKey("prd.atp_scenarios.scenario_id", ondelete="CASCADE"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    kind_code: Mapped[str] = mapped_column(String(10))
+    line_date: Mapped[datetime.date]
+    quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    note: Mapped[str | None] = mapped_column(String(300))

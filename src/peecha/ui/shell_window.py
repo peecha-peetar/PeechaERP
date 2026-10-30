@@ -2159,6 +2159,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.production_eco import ProductionEcoScreen  # R372
 
         self.register_screen("prd_eco", lambda: ProductionEcoScreen(self))
+        from peecha.ui.screens.production_atp import ProductionAtpScreen  # R373
+
+        self.register_screen("prd_atp", lambda: ProductionAtpScreen(self))
         self.register_screen("prd_master", lambda: prd_screens.MasterDataScreen())
         self.register_screen("prd_costing", lambda: prd_screens.PrdCostingScreen())
         self.register_screen("prd_settings", lambda: prd_screens.PrdSettingsScreen())
